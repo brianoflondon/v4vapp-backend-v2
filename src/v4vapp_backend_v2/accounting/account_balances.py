@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from timeit import default_timer as timer
 from typing import Any, List, Mapping, Tuple
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
+    active_account_subs_pipeline,
     all_account_balances_pipeline,
     list_all_accounts_pipeline,
     list_all_ledger_types_pipeline,
@@ -44,15 +46,25 @@ UNIT_TOLERANCE = {
 
 # @async_time_stats_decorator()
 async def all_account_balances(
+    account: LedgerAccount | None = None,
+    account_name: str | None = None,
+    sub: str | None = None,
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
     filter: Mapping[str, Any] | None = None,
+    cust_ids: List[str] | None = None,
 ) -> AccountBalances:
     """
     Retrieve all account balances as of a specified date, optionally aged by a given timedelta.
+    The order of precedence for filtering is: `account` > `account_name` > `sub`. If none are provided, the pipeline will include all accounts.
     Args:
-        as_of_date (datetime | None): The date to calculate balances as of. Defaults to current UTC time if not provided.
-        age (timedelta | None): Optional age to filter or adjust balances.
+        account (LedgerAccount, optional): An instance of LedgerAccount to filter the transactions. If provided, the pipeline will match transactions for this specific account.
+        account_name (str, optional): The name of the account to filter transactions. Used if `account` is not provided.
+        sub (str, optional): The sub identifier to filter transactions. Used if `account` and `account_name` are not provided.
+        as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
+        age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
+        cust_ids (List[str] | None, optional): If provided, pre-filters ledger entries by cust_id (indexed) before the expensive aggregation. Used for restricting to active accounts.
+
     Returns:
         AccountBalances: An object containing the validated account balances.
     Raises:
@@ -61,14 +73,30 @@ async def all_account_balances(
 
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
-    pipeline = all_account_balances_pipeline(as_of_date=as_of_date, age=age, filter=filter)
+    _t0 = timer()
+    pipeline = all_account_balances_pipeline(
+        account=account,
+        account_name=account_name,
+        sub=sub,
+        as_of_date=as_of_date,
+        age=age,
+        filter=filter,
+        cust_ids=cust_ids,
+    )
+    _t1 = timer()
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    _t2 = timer()
     results = await cursor.to_list()
+    _t3 = timer()
     clean_results = convert_datetime_fields(results)
+    _t4 = timer()
 
     account_balances = AccountBalances.model_validate(clean_results)
+    _t5 = timer()
     all_held_result = await all_held_msats()
+    _t6 = timer()
     in_progress = InProgressResults(results=all_held_result)
+    _t7 = timer()
 
     # Find the most recent transaction date
     for account in account_balances.root:
@@ -80,6 +108,21 @@ async def all_account_balances(
                     max_timestamp = max(max_timestamp, last_item.timestamp or max_timestamp)
         account.in_progress_msats = in_progress.get(account.sub).net_held
         account.last_transaction_date = max_timestamp
+    _t8 = timer()
+
+    logger.info(
+        f"all_account_balances timing: "
+        f"pipeline_build={(_t1 - _t0):.3f}s, "
+        f"aggregate={(_t2 - _t1):.3f}s, "
+        f"to_list={(_t3 - _t2):.3f}s, "
+        f"clean={(_t4 - _t3):.3f}s, "
+        f"validate={(_t5 - _t4):.3f}s, "
+        f"held_msats={(_t6 - _t5):.3f}s, "
+        f"in_progress={(_t7 - _t6):.3f}s, "
+        f"post_process={(_t8 - _t7):.3f}s, "
+        f"total={(_t8 - _t0):.3f}s "
+        f"({len(account_balances.root)} accounts, {len(results)} result docs)"
+    )
 
     return account_balances
 
@@ -104,6 +147,7 @@ async def one_account_balance(
         - If `account` is provided as a string, it is converted to a LiabilityAccount.
         - If no balance data is found, returns a default LedgerAccountDetails instance.
     """
+    _t0 = timer()
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
     if isinstance(account, str):
@@ -112,10 +156,13 @@ async def one_account_balance(
             sub=account,
         )
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
+    _t1 = timer()
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
     clean_results = convert_datetime_fields(results)
+    _t2 = timer()
     account_balance = AccountBalances.model_validate(clean_results)
+    _t3 = timer()
     # If there are multiple entries (e.g., contra and non-contra groups), merge them so both show up
     if account_balance.root and len(account_balance.root) > 0:
         if len(account_balance.root) == 1:
@@ -158,7 +205,7 @@ async def one_account_balance(
             sub=account.sub,
             contra=account.contra,
         )
-
+    _t4 = timer()
     # Find the most recent transaction date
     if ledger_details.balances:
         max_timestamp = None
@@ -172,7 +219,15 @@ async def one_account_balance(
         all_held_result = await all_held_msats()
         in_progress = InProgressResults(results=all_held_result)
     ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
-
+    _t5 = timer()
+    logger.info(
+        f"pipeline_build={(_t1 - _t0):.3f}s, "
+        f"aggregate={(_t2 - _t1):.3f}s, "
+        f"to_list={(_t3 - _t2):.3f}s, "
+        f"clean={(_t4 - _t3):.3f}s, "
+        f"validate_and_merge={(_t5 - _t4):.3f}s, "
+        f"total={(_t5 - _t0):.3f}s for one_account_balance (account={account}, age={age}, "
+    )
     return ledger_details
 
 
@@ -741,6 +796,31 @@ async def account_balance_printout_grouped_by_customer(
     output_text = "\n".join(output)
 
     return output_text, ledger_account_details
+
+
+async def list_active_account_subs(
+    account_name: str,
+    min_transactions: int = 2,
+) -> List[str]:
+    """
+    Returns the list of account sub identifiers that have at least `min_transactions`
+    ledger entries for the given account name.
+
+    This is a lightweight query (no balance computation) intended to pre-filter
+    which accounts are worth running the expensive full balance aggregation on.
+
+    Args:
+        account_name: The account name to filter by (e.g. "VSC Liability").
+        min_transactions: Minimum number of transactions to consider an account active.
+            Defaults to 2.
+
+    Returns:
+        List[str]: Sorted list of active sub identifiers.
+    """
+    pipeline = active_account_subs_pipeline(account_name, min_transactions)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list()
+    return [doc["sub"] for doc in results]
 
 
 async def list_all_accounts() -> List[LedgerAccount]:

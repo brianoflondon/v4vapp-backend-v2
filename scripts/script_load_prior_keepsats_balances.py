@@ -8,7 +8,7 @@ from typing import List
 import aiofiles
 from bson import json_util
 from mongomock import DuplicateKeyError
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
@@ -36,7 +36,8 @@ class KeepsatsBalance(BaseModel):
     net_sats: int = Field(..., description="Net satoshis balance")
     rate_usd_btc: float = Field(..., description="USD to BTC exchange rate")
 
-    @validator("last_timestamp", pre=True, always=True)
+    @field_validator("last_timestamp", mode="before")
+    @classmethod
     def ensure_timestamp_tz_aware(cls, v):
         """
         Ensure the timestamp is timezone-aware and normalized to UTC.
@@ -284,12 +285,70 @@ if __name__ == "__main__":
     parser.add_argument(
         "-c",
         "--config",
-        # default="devhive.config.yaml",
-        default="production.fromhome.config.yaml",
-
-        help="Config filename (relative to config/ folder). Default: production.fromhome.config.yaml",
+        default=None,
+        help=(
+            "Config filename (relative to config/ folder). "
+            "If omitted, you'll be prompted to choose (default: dev server)."
+        ),
     )
     args = parser.parse_args()
+
+    # When no config was provided interactively prompt the user (default -> devhive).
+    # For non-interactive sessions (CI) we fall back to the dev config.
+    import sys
+
+    def _choose_config_interactive() -> str:
+        options = {
+            "1": ("dev server", "devhive.config.yaml"),
+            "2": ("live server", "production.fromhome.config.yaml"),
+        }
+        print("\nSelect which config to use (press Enter for default, or 'q' to quit):")
+        for key, (label, fname) in options.items():
+            default_mark = " (default)" if key == "1" else ""
+            print(f"  {key}) {label} -> {fname}{default_mark}")
+
+        if not sys.stdin.isatty():
+            # not interactive (e.g., CI) — return default
+            print("Non-interactive session detected; using default: devhive.config.yaml")
+            return options["1"][1]
+
+        try:
+            choice = input("Enter choice [1-2, q to quit]: ").strip()
+        except KeyboardInterrupt:
+            # Handle Ctrl-C cleanly
+            print("\nAborted by user (Ctrl-C). Exiting.")
+            sys.exit(0)
+
+        # explicit quit handling
+        if choice.lower() in ("q", "quit", "exit"):
+            print("User cancelled; exiting.")
+            sys.exit(0)
+
+        if choice == "":
+            return options["1"][1]
+        if choice in options:
+            return options[choice][1]
+
+        # accept short names or filename fragments
+        low = choice.lower()
+        if low.startswith("dev"):
+            return options["1"][1]
+        if low.startswith("live") or low.startswith("prod"):
+            return options["2"][1]
+
+        # Unknown input — warn and default
+        print(f"Unknown selection '{choice}', defaulting to devhive.config.yaml")
+        return options["1"][1]
+
+    if args.config is None:
+        args.config = _choose_config_interactive()
+    else:
+        # allow short names like 'dev' / 'live' when passed on the CLI
+        cfg_l = args.config.strip().lower()
+        if cfg_l in ("dev", "devhive"):
+            args.config = "devhive.config.yaml"
+        elif cfg_l in ("live", "production", "prod"):
+            args.config = "production.fromhome.config.yaml"
 
     # InternalConfig is a singleton — the FIRST call with a config_filename wins.
     # None of the top-level imports trigger InternalConfig(), so this is guaranteed

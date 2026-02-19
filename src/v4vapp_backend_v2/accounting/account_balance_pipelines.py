@@ -81,14 +81,25 @@ def list_all_ledger_types_pipeline() -> Sequence[Mapping[str, Any]]:
 
 def all_account_balances_pipeline(
     account: LedgerAccount | None = None,
+    account_name: str | None = None,
+    sub: str | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta | None = None,
     filter: Mapping[str, Any] | None = None,
+    cust_ids: Sequence[str] | None = None,
 ) -> Sequence[Mapping[str, Any]]:
     """
     Generates a MongoDB aggregation pipeline to retrieve the balances of all accounts in the ledger.
+    Notes:
+    - The pipeline can be filtered by specific account details (account object, account name, or sub).
+    - The pipeline considers transactions up to a specified date (`as_of_date`) and can be limited to a certain age (time window) if `age` is provided.
+    - The resulting documents include running totals for amounts and conversions in various currencies, grouped by account and unit.
+    The order of precedence for filtering is: `account` > `account_name` > `sub`. If none are provided, the pipeline will include all accounts.
 
     Args:
+        account (LedgerAccount, optional): An instance of LedgerAccount to filter the transactions. If provided, the pipeline will match transactions for this specific account.
+        account_name (str, optional): The name of the account to filter transactions. Used if `account` is not provided.
+        sub (str, optional): The sub identifier to filter transactions
         as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
         age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
 
@@ -109,23 +120,35 @@ def all_account_balances_pipeline(
     """
     filter = filter or {}
     if account:
-        facet_debit_match = {
-            "$match": {
-                "debit.name": account.name,
-                "debit.sub": account.sub,
-                "debit.account_type": account.account_type,
-            }
+        debit_match_query: dict[str, Any] = {
+            "debit.name": account.name,
+            "debit.sub": account.sub,
+            "debit.account_type": account.account_type,
         }
-        facet_credit_match = {
-            "$match": {
-                "credit.name": account.name,
-                "credit.sub": account.sub,
-                "credit.account_type": account.account_type,
-            }
+        credit_match_query: dict[str, Any] = {
+            "credit.name": account.name,
+            "credit.sub": account.sub,
+            "credit.account_type": account.account_type,
         }
+    elif account_name:
+        debit_match_query = {"debit.name": account_name}
+        credit_match_query = {"credit.name": account_name}
+    elif sub:
+        debit_match_query = {"debit.sub": sub}
+        credit_match_query = {"credit.sub": sub}
     else:
-        facet_debit_match = {"$match": {}}
-        facet_credit_match = {"$match": {}}
+        debit_match_query = {}
+        credit_match_query = {}
+
+    # When cust_ids is provided, restrict the facet matches to only those subs.
+    # This is the key optimisation: it ensures the expensive per-account
+    # aggregation inside the facet only processes the requested accounts.
+    if cust_ids is not None:
+        debit_match_query["debit.sub"] = {"$in": list(cust_ids)}
+        credit_match_query["credit.sub"] = {"$in": list(cust_ids)}
+
+    facet_debit_match = {"$match": debit_match_query}
+    facet_credit_match = {"$match": credit_match_query}
 
     if age:
         start_date = as_of_date - age
@@ -134,6 +157,7 @@ def all_account_balances_pipeline(
         date_range_query = {"$lte": as_of_date}
 
     pipeline: Sequence[Mapping[str, Any]] = [
+        {"$match": {"cust_id": {"$in": cust_ids}}} if cust_ids is not None else {"$match": {}},
         {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
         {"$match": filter},
         {
@@ -536,51 +560,6 @@ def all_account_balances_pipeline(
     return pipeline
 
 
-def net_held_msats_balance_pipeline(cust_id: str) -> Sequence[Mapping[str, Any]]:
-    """
-    Generates a MongoDB aggregation pipeline to calculate the net held balance for a given cust_id.
-
-    The net held balance is computed as the sum of debit_amount for 'hold_k' ledger types
-    minus the sum of debit_amount for 'release_k' ledger types. This represents the
-    customer's net held amount (e.g., positive means more held, negative means over-released).
-
-    This is a by customer pipeline and quite expensive.
-
-    Args:
-        cust_id (str): The customer ID to calculate the net held balance for.
-
-    Returns:
-        List[Mapping[str, Any]]: The aggregation pipeline as a list of stages.
-    """
-
-    pipeline: Sequence[Mapping[str, Any]] = [
-        {"$match": {"cust_id": cust_id, "ledger_type": {"$in": ["hold_k", "release_k"]}}},
-        {"$group": {"_id": "$ledger_type", "total": {"$sum": "$debit_amount"}}},
-        {
-            "$group": {
-                "_id": None,
-                "hold_total": {
-                    "$sum": {
-                        "$cond": {"if": {"$eq": ["$_id", "hold_k"]}, "then": "$total", "else": 0}
-                    }
-                },
-                "release_total": {
-                    "$sum": {
-                        "$cond": {
-                            "if": {"$eq": ["$_id", "release_k"]},
-                            "then": "$total",
-                            "else": 0,
-                        }
-                    }
-                },
-            }
-        },
-        {"$project": {"net_held": {"$subtract": ["$hold_total", "$release_total"]}}},
-        {"$project": {"_id": 0, "cust_id": cust_id, "net_held": "$net_held"}},
-    ]
-    return pipeline
-
-
 def all_held_msats_balance_pipeline(cust_id: str = "") -> Sequence[Mapping[str, Any]]:
     """
     Generates a MongoDB aggregation pipeline to calculate the net held balances for all customers.
@@ -624,5 +603,60 @@ def all_held_msats_balance_pipeline(cust_id: str = "") -> Sequence[Mapping[str, 
             }
         },
         {"$sort": {"net_held": -1}},
+    ]
+    return pipeline
+
+
+def active_account_subs_pipeline(
+    account_name: str,
+    min_transactions: int = 2,
+) -> Sequence[Mapping[str, Any]]:
+    """
+    Returns a lightweight MongoDB aggregation pipeline that identifies account subs
+    with at least `min_transactions` ledger entries for the given account name.
+
+    This is much cheaper than running the full balance aggregation and can be used
+    to pre-filter which accounts need the expensive balance calculation.
+
+    Args:
+        account_name: The account name to filter by (e.g. "VSC Liability").
+        min_transactions: Minimum number of transactions to consider an account active.
+            Defaults to 2 (accounts with only 1 entry are typically setup-only).
+
+    Returns:
+        Sequence[Mapping[str, Any]]: A MongoDB aggregation pipeline that returns
+            documents with 'sub' and 'transaction_count' fields.
+    """
+    pipeline: Sequence[Mapping[str, Any]] = [
+        # Project both debit and credit accounts into an array
+        {
+            "$project": {
+                "accounts": [
+                    {"name": "$debit.name", "sub": "$debit.sub"},
+                    {"name": "$credit.name", "sub": "$credit.sub"},
+                ]
+            }
+        },
+        {"$unwind": "$accounts"},
+        # Filter for the specific account name
+        {"$match": {"accounts.name": account_name}},
+        # Group by sub and count transactions
+        {
+            "$group": {
+                "_id": "$accounts.sub",
+                "transaction_count": {"$sum": 1},
+            }
+        },
+        # Filter for minimum transactions
+        {"$match": {"transaction_count": {"$gte": min_transactions}}},
+        # Project just the sub and count
+        {
+            "$project": {
+                "_id": 0,
+                "sub": "$_id",
+                "transaction_count": 1,
+            }
+        },
+        {"$sort": {"sub": 1}},
     ]
     return pipeline
