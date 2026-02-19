@@ -34,7 +34,7 @@
                             </select>
                         </div>
                         <div class="form-check me-3">
-                            <input class="form-check-input" type="checkbox" id="active-only">
+                            <input class="form-check-input" type="checkbox" id="active-only" checked>
                             <label class="form-check-label" for="active-only">
                                 Show only active users
                             </label>
@@ -146,8 +146,15 @@
         // Load user data asynchronously
         async function loadUserData() {
             try {
-                console.log('Starting to load user data...');
-                const response = await fetch('/admin/users/data');
+                // Show loading overlay
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'flex';
+                    loadingOverlay.style.opacity = '1';
+                }
+
+                const activeOnly = activeOnlyCheckbox.checked;
+                console.log('Starting to load user data... (active_only=' + activeOnly + ')');
+                const response = await fetch(`/admin/users/data?active_only=${activeOnly}`);
                 console.log('Fetch response:', response);
                 console.log('Response status:', response.status);
                 console.log('Response headers:', response.headers);
@@ -417,7 +424,10 @@
 
         // Event listeners
         searchInput.addEventListener('input', filterAndUpdate);
-        activeOnlyCheckbox.addEventListener('change', filterAndUpdate);
+        activeOnlyCheckbox.addEventListener('change', function () {
+            // Re-fetch from server when active-only changes (server-side filtering)
+            loadUserData();
+        });
         document.getElementById('active-period').addEventListener('change', filterAndUpdate);
         displayCurrencySelect.addEventListener('change', function () {
             currentCurrency = this.value;

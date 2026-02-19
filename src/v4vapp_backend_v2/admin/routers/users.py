@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from v4vapp_backend_v2.accounting.account_balances import (
     all_account_balances,
     check_hive_conversion_limits,
+    list_active_account_subs,
     list_all_accounts,
 )
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
@@ -65,10 +66,18 @@ def get_limit_entries():
 
 # @async_time_stats_decorator()
 @router.get("/data")
-async def users_data_api():
-    """API endpoint to fetch user data asynchronously"""
+async def users_data_api(active_only: bool = True):
+    """API endpoint to fetch user data asynchronously.
+
+    Args:
+        active_only: When True (default), pre-filters to accounts with more than
+            1 transaction before running the expensive balance aggregation.
+            This significantly speeds up the response for large account sets.
+    """
     start = timer()
-    logger.info(f"Fetching users data at {datetime.now(tz=timezone.utc).isoformat()}")
+    logger.info(
+        f"Fetching users data at {datetime.now(tz=timezone.utc).isoformat()} (active_only={active_only})"
+    )
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
 
@@ -78,13 +87,26 @@ async def users_data_api():
     except Exception:
         # If database is not available, show mock data for demo
         pass
+    logger.info(f"list_all_accounts done in {timer() - start:.2f} seconds")
 
-    account_balances = await all_account_balances()
+    # Build a filter to restrict the expensive aggregation to active accounts only
+    active_cust_ids = None
+    if active_only:
+        active_cust_ids = await list_active_account_subs(
+            account_name="VSC Liability", min_transactions=2
+        )
+        logger.info(
+            f"Pre-filtered to {len(active_cust_ids)} active cust_ids in {timer() - start:.2f} seconds"
+        )
+
+    account_balances = await all_account_balances(account_name="VSC Liability", cust_ids=active_cust_ids)
+
     logger.info(
         f"Fetched {len(account_balances.root)} account balances in {timer() - start:.2f} seconds"
     )
     # filter account_balances for all VSC Liability accounts
-    vsc_liability_balances = [ab for ab in account_balances.root if ab.name == "VSC Liability"]
+    # vsc_liability_balances = [ab for ab in account_balances.root if ab.name == "VSC Liability"]
+    vsc_liability_balances = account_balances.root
     vsc_liability_balances.sort(key=lambda x: x.sub)
     logger.info(
         f"Found {len(vsc_liability_balances)} VSC Liability accounts in {timer() - start:.2f} seconds"
@@ -100,8 +122,9 @@ async def users_data_api():
 
     # Run all limit checks concurrently
     limit_check_results = await asyncio.gather(*limit_check_tasks, return_exceptions=True)
-
-    time_now = datetime.now(tz=timezone.utc)
+    logger.info(
+        f"Limit checks done for {len(vsc_liability_balances)} accounts in {timer() - start:.2f} seconds"
+    )
 
     for i, account in enumerate(vsc_liability_balances):
         try:

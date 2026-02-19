@@ -237,7 +237,7 @@ class LedgerAccountDetails(LedgerAccount):
     @property
     def has_transactions(self) -> bool:
         """Returns True if there are any transactions in the combined balance other than an opening balance"""
-        if self.sats > Decimal(0) and len(self.combined_balance) > 1:
+        if len(self.combined_balance) > 1:
             return True
         return False
 
