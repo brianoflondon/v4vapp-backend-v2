@@ -131,7 +131,6 @@ async def all_account_balances(
     return account_balances
 
 
-
 async def one_account_balance(
     account: LedgerAccount | str,
     as_of_date: datetime | None = None,
@@ -177,10 +176,10 @@ async def one_account_balance(
                 in_progress = InProgressResults(results=all_held_result)
             cached_result.in_progress_msats = in_progress.get_net_held(account.sub)
             _t1 = timer()
-            logger.info(
-                f"cache_hit={(_t1 - _t0):.3f}s for one_account_balance "
-                f"(account={account}, age={age})"
-            )
+            # logger.info(
+            #     f"cache_hit={(_t1 - _t0):.3f}s for one_account_balance "
+            #     f"(account={account}, age={age})"
+            # )
             return cached_result
 
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
@@ -248,14 +247,14 @@ async def one_account_balance(
         in_progress = InProgressResults(results=all_held_result)
     ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
     _t5 = timer()
-    logger.info(
-        # f"pipeline_build={(_t1 - _t0):.3f}s, "
-        f"aggregate={(_t2 - _t1):.3f}s, "
-        f"to_list={(_t3 - _t2):.3f}s, "
-        # f"clean={(_t4 - _t3):.3f}s, "
-        # f"merge={(_t5 - _t4):.3f}s, "
-        f"total={(_t5 - _t0):.3f}s for one_account_balance (account={account}, age={age})"
-    )
+    # logger.info(
+    #     # f"pipeline_build={(_t1 - _t0):.3f}s, "
+    #     f"aggregate={(_t2 - _t1):.3f}s, "
+    #     f"to_list={(_t3 - _t2):.3f}s, "
+    #     # f"clean={(_t4 - _t3):.3f}s, "
+    #     # f"merge={(_t5 - _t4):.3f}s, "
+    #     f"total={(_t5 - _t0):.3f}s for one_account_balance (account={account}, age={age})"
+    # )
 
     # --- Cache store ---
     if use_cache:
