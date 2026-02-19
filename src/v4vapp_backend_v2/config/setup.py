@@ -1300,9 +1300,20 @@ class InternalConfig:
         if loop is None:
             InternalConfig.notification_lock = False
             return
-        while (loop.is_running() or InternalConfig.notification_lock) and (
-            time.time() - start
-        ) < max_wait_s:
+
+        # If notification_loop is the currently running event loop (set by
+        # main_async_start), is_running() will always be True — only wait
+        # on the lock in that case.
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+
+        loop_is_foreign = loop is not running_loop
+
+        while (
+            (loop_is_foreign and loop.is_running()) or InternalConfig.notification_lock
+        ) and (time.time() - start) < max_wait_s:
             print(
                 f"{ICON} Waiting for notifications to finish... "
                 f"Notification loop: {loop.is_running()} "
