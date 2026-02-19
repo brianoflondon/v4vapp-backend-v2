@@ -24,9 +24,11 @@ from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 ICON = "🔗"
 
 # Maximum seconds to wait for a new event before assuming the RPC node is
-# unresponsive and switching to the next one.  Two minutes is generous;
-# on a healthy node an event arrives at least every 3 seconds.
-STREAM_TIMEOUT = 4
+# unresponsive and switching to the next one.  Hive blocks arrive every
+# ~3 s, but the filtered stream only yields *matching* operations so gaps
+# of several blocks are normal.  30 s (~10 blocks) avoids false restarts
+# while still detecting genuinely dead nodes promptly.
+STREAM_TIMEOUT = 30
 
 
 class SwitchToLiveStream(Exception):

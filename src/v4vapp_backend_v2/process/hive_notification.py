@@ -311,7 +311,9 @@ async def send_transfer_custom_json(
     """
     try:
         hive_config = InternalConfig().config.hive
-        hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
+        hive_client = await get_verified_hive_client_for_accounts(
+            [transfer.from_account, transfer.to_account], nobroadcast=nobroadcast
+        )
         if hive_config.hive_accs.get(transfer.from_account):
             send_from = transfer.from_account
         else:
