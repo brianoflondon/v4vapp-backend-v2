@@ -553,8 +553,17 @@ async def invoices_loop(
     Returns:
         None
     """
+    logger.info(f"{lnd_client.icon} invoices_loop task started")
 
-    recent_invoice = await get_most_recent_invoice()
+    try:
+        recent_invoice = await asyncio.wait_for(get_most_recent_invoice(), timeout=30)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Timed out querying DB for most recent invoice in invoices_loop (30s). "
+            "Starting subscription from index 0.",
+            extra={"notification": True},
+        )
+        recent_invoice = None
     if recent_invoice:
         add_index = recent_invoice.add_index
         settle_index = recent_invoice.settle_index
@@ -610,6 +619,7 @@ async def invoices_loop(
 
 
 async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+    logger.info(f"{lnd_client.icon} payments_loop task started")
     request = routerrpc.TrackPaymentRequest(no_inflight_updates=False)
     while True:
         try:
@@ -649,6 +659,7 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
 
 
 async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+    logger.info(f"{lnd_client.icon} htlc_events_loop task started")
     request = routerrpc.SubscribeHtlcEventsRequest()
     while True:
         try:
@@ -738,6 +749,7 @@ async def get_channel_display_name(
 
 async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     """Subscribe to channel events from LND"""
+    logger.info(f"{lnd_client.icon} channel_events_loop task started")
     request = lnrpc.ChannelEventSubscription()
 
     while True:
@@ -1133,10 +1145,12 @@ async def get_most_recent_invoice() -> Invoice | None:
     query = {}
     sort = [("add_index", -1)]
     collection = Invoice.collection()
+    logger.debug(f"{DATABASE_ICON} get_most_recent_invoice: querying invoices collection...")
     cursor = collection.find(query).sort(sort).limit(1)
     invoice = None
     try:
         async for ans in cursor:
+            logger.debug(f"{DATABASE_ICON} get_most_recent_invoice: got result from cursor")
             invoice = Invoice(**ans)
             break
         if not invoice:
@@ -1172,10 +1186,12 @@ async def get_most_recent_payment() -> Payment | None:
     query = {}
     sort = [("creation_date", -1)]
     collection = Payment.collection()
+    logger.debug(f"{DATABASE_ICON} get_most_recent_payment: querying payments collection...")
     cursor = collection.find(query).sort(sort).limit(1)
     payment = None
     try:
         async for ans in cursor:
+            logger.debug(f"{DATABASE_ICON} get_most_recent_payment: got result from cursor")
             payment = Payment(**ans)
             break
         if not payment:
@@ -1292,7 +1308,6 @@ async def main_async_start(connection_name: str) -> None:
                     payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                     name="payments_loop",
                 ),
-                asyncio.create_task(status_api.start(), name="status_api"),
                 asyncio.create_task(
                     htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                     name="htlc_events_loop",
@@ -1306,6 +1321,7 @@ async def main_async_start(connection_name: str) -> None:
                     _background_sync(lnd_client),
                     name="synchronize_db",
                 ),
+                asyncio.create_task(status_api.start(), name="status_api"),
             ]
             lnd_node = InternalConfig().config.lnd_config.default
             icon = InternalConfig().config.lnd_config.connections[lnd_node].icon
@@ -1368,6 +1384,7 @@ async def _background_sync(lnd_client: LNDClient) -> None:
     the appropriate delay. This replaces the previous blocking sync that
     prevented subscription loops from starting.
     """
+    logger.info(f"{lnd_client.icon} _background_sync task started")
     try:
         pause_for_sync = await pause_for_database_sync()
         delay = 0 if pause_for_sync else 10
