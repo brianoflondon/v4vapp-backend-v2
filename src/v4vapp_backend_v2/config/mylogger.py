@@ -250,7 +250,11 @@ class CustomNotificationHandler(logging.Handler):
         if InternalConfig.notification_loop:
             pending_tasks = asyncio.all_tasks(loop=InternalConfig.notification_loop)
             if pending_tasks:
-                logger.info(f"Pending tasks: {len(pending_tasks)}")
+                task_names = [task.get_name() for task in pending_tasks]
+                logger.info(
+                    f"Pending tasks: {len(pending_tasks)}",
+                    extra={"notification": False, "task_names": task_names},
+                )
 
         log_message = record.getMessage()
 
