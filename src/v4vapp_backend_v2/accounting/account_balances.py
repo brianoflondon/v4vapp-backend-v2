@@ -111,16 +111,14 @@ async def all_account_balances(
     _t8 = timer()
 
     logger.info(
-        f"all_account_balances timing: "
-        f"pipeline_build={(_t1 - _t0):.3f}s, "
         f"aggregate={(_t2 - _t1):.3f}s, "
-        f"to_list={(_t3 - _t2):.3f}s, "
-        f"clean={(_t4 - _t3):.3f}s, "
-        f"validate={(_t5 - _t4):.3f}s, "
+        # f"to_list={(_t3 - _t2):.3f}s, "
+        # f"validate={(_t5 - _t4):.3f}s, "
         f"held_msats={(_t6 - _t5):.3f}s, "
-        f"in_progress={(_t7 - _t6):.3f}s, "
-        f"post_process={(_t8 - _t7):.3f}s, "
+        # f"in_progress={(_t7 - _t6):.3f}s, "
+        # f"post_process={(_t8 - _t7):.3f}s, "
         f"total={(_t8 - _t0):.3f}s "
+        f"all_account_balances timing "
         f"({len(account_balances.root)} accounts, {len(results)} result docs)"
     )
 
@@ -221,11 +219,11 @@ async def one_account_balance(
     ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
     _t5 = timer()
     logger.info(
-        f"pipeline_build={(_t1 - _t0):.3f}s, "
+        # f"pipeline_build={(_t1 - _t0):.3f}s, "
         f"aggregate={(_t2 - _t1):.3f}s, "
         f"to_list={(_t3 - _t2):.3f}s, "
-        f"clean={(_t4 - _t3):.3f}s, "
-        f"validate_and_merge={(_t5 - _t4):.3f}s, "
+        # f"clean={(_t4 - _t3):.3f}s, "
+        # f"merge={(_t5 - _t4):.3f}s, "
         f"total={(_t5 - _t0):.3f}s for one_account_balance (account={account}, age={age}, "
     )
     return ledger_details
