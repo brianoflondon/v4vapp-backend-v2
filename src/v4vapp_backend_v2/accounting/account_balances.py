@@ -201,7 +201,7 @@ async def one_account_balance(
                 for unit, lines in group.balances.items():
                     merged_balances.setdefault(unit, [])
                     # copy to avoid mutating original objects
-                    merged_balances[unit].extend([l.model_copy() for l in lines])
+                    merged_balances[unit].extend([line.model_copy() for line in lines])
 
             # Sort and recompute running totals (amount_running_total and conv_running_total)
             from datetime import datetime as _dt

@@ -40,8 +40,10 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
     nav_manager = nav
 
 
-def format_sats_for_label(sats: int) -> str:
+def format_sats_for_label(sats: int | Decimal) -> str:
     """Format sats for display in labels (e.g., 400000 -> '400k', 1200000 -> '1.2M')"""
+    if isinstance(sats, Decimal):
+        sats = int(sats)
     if sats >= 1_000_000:
         return f"{round(sats / 1_000_000, 1):.1f}M"
     elif sats >= 1_000:
@@ -65,7 +67,7 @@ def get_limit_entries():
 
 # @async_time_stats_decorator()
 @router.get("/data")
-async def users_data_api(active_only: bool = True):
+async def users_data_api(active_only: bool = True) -> dict[str, Any]:
     """API endpoint to fetch user data asynchronously.
 
     Args:
@@ -78,15 +80,11 @@ async def users_data_api(active_only: bool = True):
         raise RuntimeError("Templates and navigation not initialized")
 
     # Build a filter to restrict the expensive aggregation to active accounts only
-    active_cust_ids = None
+    active_cust_ids: list[str] = []
     if active_only:
         active_cust_ids = await list_active_account_subs(
             account_name="VSC Liability", min_transactions=2
         )
-        logger.info(
-            f"Pre-filtered to {len(active_cust_ids)} active cust_ids in {timer() - start:.2f} seconds"
-        )
-
     account_balances = await all_account_balances(
         account_name="VSC Liability", cust_ids=active_cust_ids
     )
