@@ -1311,9 +1311,9 @@ class InternalConfig:
 
         loop_is_foreign = loop is not running_loop
 
-        while (
-            (loop_is_foreign and loop.is_running()) or InternalConfig.notification_lock
-        ) and (time.time() - start) < max_wait_s:
+        while ((loop_is_foreign and loop.is_running()) or InternalConfig.notification_lock) and (
+            time.time() - start
+        ) < max_wait_s:
             print(
                 f"{ICON} Waiting for notifications to finish... "
                 f"Notification loop: {loop.is_running()} "
