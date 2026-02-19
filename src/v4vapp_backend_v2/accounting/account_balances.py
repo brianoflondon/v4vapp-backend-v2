@@ -20,6 +20,12 @@ from v4vapp_backend_v2.accounting.in_progress_results_class import (
     all_held_msats,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_cache import (
+    HISTORICAL_TTL_SECONDS,
+    LIVE_TTL_SECONDS,
+    get_cached_balance,
+    set_cached_balance,
+)
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
@@ -110,17 +116,17 @@ async def all_account_balances(
         account.last_transaction_date = max_timestamp
     _t8 = timer()
 
-    logger.info(
-        f"aggregate={(_t2 - _t1):.3f}s, "
-        # f"to_list={(_t3 - _t2):.3f}s, "
-        # f"validate={(_t5 - _t4):.3f}s, "
-        f"held_msats={(_t6 - _t5):.3f}s, "
-        # f"in_progress={(_t7 - _t6):.3f}s, "
-        # f"post_process={(_t8 - _t7):.3f}s, "
-        f"total={(_t8 - _t0):.3f}s "
-        f"all_account_balances timing "
-        f"({len(account_balances.root)} accounts, {len(results)} result docs)"
-    )
+    # logger.info(
+    #     f"aggregate={(_t2 - _t1):.3f}s, "
+    #     # f"to_list={(_t3 - _t2):.3f}s, "
+    #     # f"validate={(_t5 - _t4):.3f}s, "
+    #     f"held_msats={(_t6 - _t5):.3f}s, "
+    #     # f"in_progress={(_t7 - _t6):.3f}s, "
+    #     # f"post_process={(_t8 - _t7):.3f}s, "
+    #     f"total={(_t8 - _t0):.3f}s "
+    #     f"all_account_balances timing "
+    #     f"({len(account_balances.root)} accounts, {len(results)} result docs)"
+    # )
 
     return account_balances
 
@@ -130,6 +136,7 @@ async def one_account_balance(
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
     in_progress: InProgressResults | None = None,
+    use_cache: bool = True,
 ) -> LedgerAccountDetails:
     """
     Retrieve the balance details for a single ledger account as of a specified date.
@@ -137,6 +144,8 @@ async def one_account_balance(
         account (LedgerAccount | str): The ledger account object or its string identifier.
         as_of_date (datetime | None, optional): The date for which to retrieve the account balance. Defaults to current UTC time if not provided.
         age (timedelta | None, optional): Optional age filter for the balance calculation.
+        in_progress (InProgressResults | None, optional): Pre-computed in-progress results. If None, fetched fresh.
+        use_cache (bool): If True, try Redis cache before hitting the database. Defaults to True.
     Returns:
         LedgerAccountDetails: The details of the account balance as of the specified date.
     Raises:
@@ -144,8 +153,11 @@ async def one_account_balance(
     Notes:
         - If `account` is provided as a string, it is converted to a LiabilityAccount.
         - If no balance data is found, returns a default LedgerAccountDetails instance.
+        - Results are cached in Redis with generation-based invalidation.
+          Call ``invalidate_ledger_cache()`` to expire all entries at once.
     """
     _t0 = timer()
+    as_of_date_was_none = as_of_date is None
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
     if isinstance(account, str):
@@ -153,6 +165,23 @@ async def one_account_balance(
             name="VSC Liability",
             sub=account,
         )
+
+    # --- Cache lookup ---
+    if use_cache:
+        cached_result = await get_cached_balance(account, as_of_date, age)
+        if cached_result is not None:
+            # Always refresh in_progress_msats (changes independently of ledger)
+            if in_progress is None:
+                all_held_result = await all_held_msats()
+                in_progress = InProgressResults(results=all_held_result)
+            cached_result.in_progress_msats = in_progress.get_net_held(account.sub)
+            _t1 = timer()
+            # logger.info(
+            #     f"cache_hit={(_t1 - _t0):.3f}s for one_account_balance "
+            #     f"(account={account}, age={age})"
+            # )
+            return cached_result
+
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
     _t1 = timer()
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
@@ -172,7 +201,7 @@ async def one_account_balance(
                 for unit, lines in group.balances.items():
                     merged_balances.setdefault(unit, [])
                     # copy to avoid mutating original objects
-                    merged_balances[unit].extend([l.model_copy() for l in lines])
+                    merged_balances[unit].extend([line.model_copy() for line in lines])
 
             # Sort and recompute running totals (amount_running_total and conv_running_total)
             from datetime import datetime as _dt
@@ -218,14 +247,20 @@ async def one_account_balance(
         in_progress = InProgressResults(results=all_held_result)
     ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
     _t5 = timer()
-    logger.info(
-        # f"pipeline_build={(_t1 - _t0):.3f}s, "
-        f"aggregate={(_t2 - _t1):.3f}s, "
-        f"to_list={(_t3 - _t2):.3f}s, "
-        # f"clean={(_t4 - _t3):.3f}s, "
-        # f"merge={(_t5 - _t4):.3f}s, "
-        f"total={(_t5 - _t0):.3f}s for one_account_balance (account={account}, age={age}, "
-    )
+    # logger.info(
+    #     # f"pipeline_build={(_t1 - _t0):.3f}s, "
+    #     f"aggregate={(_t2 - _t1):.3f}s, "
+    #     f"to_list={(_t3 - _t2):.3f}s, "
+    #     # f"clean={(_t4 - _t3):.3f}s, "
+    #     # f"merge={(_t5 - _t4):.3f}s, "
+    #     f"total={(_t5 - _t0):.3f}s for one_account_balance (account={account}, age={age})"
+    # )
+
+    # --- Cache store ---
+    if use_cache:
+        ttl = LIVE_TTL_SECONDS if as_of_date_was_none else HISTORICAL_TTL_SECONDS
+        await set_cached_balance(account, as_of_date, age, ledger_details, ttl=ttl)
+
     return ledger_details
 
 

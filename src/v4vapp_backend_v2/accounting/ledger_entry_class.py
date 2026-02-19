@@ -29,7 +29,6 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     convert_decimals_for_mongodb,
-    lightning_memo,
     snake_case,
 )
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
@@ -592,6 +591,11 @@ class LedgerEntry(BaseModel):
                 f"\n{self}",
                 extra={"notification": False, "db_ans": ans, **self.log_extra},
             )
+
+            # Invalidate all cached ledger balances so subsequent reads reflect this entry
+            from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
+
+            await invalidate_ledger_cache()
 
             return ans
         except DuplicateKeyError as e:

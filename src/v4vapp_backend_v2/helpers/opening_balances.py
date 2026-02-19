@@ -50,7 +50,8 @@ async def reset_lightning_opening_balance():
         return
 
     check_account = AssetAccount(name="External Lightning Payments", sub=node)
-    account_ledger_balance = await one_account_balance(check_account)
+    # Bypass cache — opening balance checks must reflect current DB state
+    account_ledger_balance = await one_account_balance(check_account, use_cache=False)
     if account_ledger_balance.msats == balances.channel.local_msat:
         logger.info(
             f"Ledger balance for {check_account.name} (Sub: {check_account.sub}) is {account_ledger_balance.sats:,.0f} sats, "
@@ -195,7 +196,8 @@ async def reset_exchange_opening_balance(
         asset_entries.append(("hive", Currency.HIVE, hive_balance))
 
     for asset_label, currency, balance_value in asset_entries:
-        account_ledger_balance = await one_account_balance(check_account)
+        # Bypass cache — opening balance checks must reflect current DB state
+        account_ledger_balance = await one_account_balance(check_account, use_cache=False)
 
         # Determine existing balance in the relevant unit
         if currency == Currency.MSATS:
