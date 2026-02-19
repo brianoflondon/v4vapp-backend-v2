@@ -40,10 +40,8 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
     nav_manager = nav
 
 
-def format_sats_for_label(sats: int | Decimal) -> str:
+def format_sats_for_label(sats: int) -> str:
     """Format sats for display in labels (e.g., 400000 -> '400k', 1200000 -> '1.2M')"""
-    if isinstance(sats, Decimal):
-        sats = int(sats)
     if sats >= 1_000_000:
         return f"{round(sats / 1_000_000, 1):.1f}M"
     elif sats >= 1_000:
@@ -55,6 +53,7 @@ def format_sats_for_label(sats: int | Decimal) -> str:
 def get_limit_entries():
     """Get lightning rate limits from V4VConfig and format them with labels"""
     lightning_rate_limits = V4VConfig().data.lightning_rate_limits
+
     return [
         {
             "hours": limit.hours,
@@ -80,11 +79,12 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
         raise RuntimeError("Templates and navigation not initialized")
 
     # Build a filter to restrict the expensive aggregation to active accounts only
-    active_cust_ids: list[str] | None = None
     if active_only:
         active_cust_ids = await list_active_account_subs(
             account_name="VSC Liability", min_transactions=2
         )
+    else:
+        active_cust_ids = None  # No filtering, include all accounts
     account_balances = await all_account_balances(
         account_name="VSC Liability", cust_ids=active_cust_ids
     )
@@ -126,9 +126,9 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
             users_data.append(
                 {
                     "sub": account.sub,
-                    "balance_sats": balance_sats,
+                    "balance_sats": int(balance_sats),
                     "balance_sats_fmt": balance_sats_fmt,
-                    "balance_usd": balance_usd,
+                    "balance_usd": int(balance_usd),
                     "balance_usd_fmt": balance_usd_fmt,
                     "has_transactions": account.has_transactions,
                     "last_transaction_date": account.last_transaction_date.isoformat()
