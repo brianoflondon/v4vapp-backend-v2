@@ -70,6 +70,8 @@ def _compute_from_sample_balance(balance_json: dict):
 
 
 def test_sample_trading_pnl_matches_expected():
+    if not SAMPLE.exists():
+        pytest.skip("sample trading data not available")
     data = json.loads(SAMPLE.read_text())
     r = _compute_from_sample_balance(data)
 
