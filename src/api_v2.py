@@ -207,6 +207,32 @@ async def binance() -> Dict[str, str | int | float]:
     }
 
 
+@crypto_v1_router.get("/sats_to_hive/", response_model=Dict[str, Any])
+async def sats_to_hive(
+    sats: int = Query(..., description="The amount of sats to convert to Hive"),
+) -> Dict[str, Any]:
+    """
+    Convert a specified amount of Bitcoin Satoshis (sats) to Hive using current exchange rates.
+
+    Args:
+        sats (int): The amount of sats to convert to Hive.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing the original sats amount and the equivalent Hive amount.
+    """
+    try:
+        all_quotes = AllQuotes()
+        await all_quotes.get_all_quotes(store_db=False, use_cache=True)
+        conv = CryptoConversion(
+            conv_from=Currency.SATS, value=sats, quote=all_quotes.quote
+        ).conversion
+        answer = {"HIVE": conv.hive, "HBD": conv.hbd, "details": conv.model_dump()}
+        return answer
+    except Exception as e:
+        logger.error(f"Error converting sats to Hive: {e}")
+        raise HTTPException(status_code=500, detail="Error converting sats to Hive")
+
+
 # MARK: /lightning
 
 
@@ -240,7 +266,9 @@ async def keepsats(
         else:
             account_balance = account_balance.remove_balances()
 
-    return account_balance.to_api_response(hive_accname=hive_accname, line_items=line_items, admin=admin)
+    return account_balance.to_api_response(
+        hive_accname=hive_accname, line_items=line_items, admin=admin
+    )
 
 
 @lightning_v1_router.post("/keepsats/transfer")
