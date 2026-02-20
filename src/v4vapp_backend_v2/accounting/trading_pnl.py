@@ -1,14 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from v4vapp_backend_v2.accounting.account_balances import (
-    list_all_accounts,
-    one_account_balance,
-)
+from v4vapp_backend_v2.accounting.account_balances import list_all_accounts, one_account_balance
 from v4vapp_backend_v2.accounting.accounting_classes import AccountBalanceLine
-from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
-
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 
 
 async def generate_trading_pnl_report(
@@ -69,7 +65,9 @@ async def generate_trading_pnl_report(
             desc = (t.description or "").upper()
             # conv_signed holds signed conversion amounts
             conv = getattr(t, "conv_signed", None)
-            hive_amt = float(getattr(conv, "hive", 0)) if conv else float(getattr(t, "amount_signed", 0))
+            hive_amt = (
+                float(getattr(conv, "hive", 0)) if conv else float(getattr(t, "amount_signed", 0))
+            )
             sats_amt = 0.0
             if conv and getattr(conv, "sats", None) is not None:
                 sats_amt = float(conv.sats)
@@ -152,11 +150,17 @@ async def generate_trading_pnl_report(
     grand["net_hive_inventory_change"] = grand["hive_bought"] - grand["hive_sold"]
     grand["net_sats_cash_generated"] = grand["sats_received"] - grand["sats_spent"]
     # inventory valuation
-    grand["inventory_valuation_sats"] = grand["net_hive_inventory_change"] * grand.get("last_price_used", 0.0)
-    grand["total_trading_pnl_sats"] = grand["net_sats_cash_generated"] + grand["inventory_valuation_sats"]
+    grand["inventory_valuation_sats"] = grand["net_hive_inventory_change"] * grand.get(
+        "last_price_used", 0.0
+    )
+    grand["total_trading_pnl_sats"] = (
+        grand["net_sats_cash_generated"] + grand["inventory_valuation_sats"]
+    )
     # USD conversion of satoshi pnl if rate available
     if grand.get("last_usd_per_sat"):
-        grand["total_trading_pnl_usd"] = grand["total_trading_pnl_sats"] * grand["last_usd_per_sat"]
+        grand["total_trading_pnl_usd"] = (
+            grand["total_trading_pnl_sats"] * grand["last_usd_per_sat"]
+        )
     else:
         grand["total_trading_pnl_usd"] = 0.0
 
@@ -175,7 +179,7 @@ def trading_pnl_printout(report: Dict[str, Any]) -> str:
     # Top aligned table: Counts, Hive (3dp), Sats (integers)
     COL_L = 26
     COL_R = 18
-    out.append(f"{ '':<{COL_L}}{ 'SELLS':>{COL_R}}{ 'BUYS':>{COL_R}}")
+    out.append(f"{'':<{COL_L}}{'SELLS':>{COL_R}}{'BUYS':>{COL_R}}")
     out.append(
         f"{'Total':<{COL_L}}{totals.get('sells', 0):>{COL_R},d}{totals.get('buys', 0):>{COL_R},d}"
     )
@@ -189,12 +193,20 @@ def trading_pnl_printout(report: Dict[str, Any]) -> str:
     out.append("-" * 80)
 
     # Lower section — right-aligned numeric values; sats shown as integers, hive 3dp
-    out.append(f"{'Net Hive Inventory Change:':<40}{totals.get('net_hive_inventory_change', 0):>20,.3f} HIVE")
-    out.append(f"{'Net Sats Cash Generated:':<40}{totals.get('net_sats_cash_generated', 0):>20,.0f} SATS")
+    out.append(
+        f"{'Net Hive Inventory Change:':<40}{totals.get('net_hive_inventory_change', 0):>20,.3f} HIVE"
+    )
+    out.append(
+        f"{'Net Sats Cash Generated:':<40}{totals.get('net_sats_cash_generated', 0):>20,.0f} SATS"
+    )
     out.append(f"{'Last Price Used (sats/hive):':<40}{totals.get('last_price_used', 0):>20,.3f}")
-    out.append(f"{'Inventory Valuation:':<40}{totals.get('inventory_valuation_sats', 0):>20,.0f} SATS")
+    out.append(
+        f"{'Inventory Valuation:':<40}{totals.get('inventory_valuation_sats', 0):>20,.0f} SATS"
+    )
     out.append(f"{'TOTAL TRADING P&L:':<40}{totals.get('total_trading_pnl_sats', 0):>20,.0f} SATS")
-    out.append(f"{'TOTAL TRADING P&L (USD):':<40}{totals.get('total_trading_pnl_usd', 0):>20,.2f} USD")
+    out.append(
+        f"{'TOTAL TRADING P&L (USD):':<40}{totals.get('total_trading_pnl_usd', 0):>20,.2f} USD"
+    )
     out.append("\nPer-sub breakdown:\n")
 
     for sub, sreport in report.get("by_sub", {}).items():

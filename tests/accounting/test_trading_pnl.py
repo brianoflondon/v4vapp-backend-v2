@@ -5,8 +5,9 @@ import pytest
 
 from v4vapp_backend_v2.accounting.trading_pnl import trading_pnl_printout
 
-
-SAMPLE = Path(__file__).parent.parent / "data" / "trading_peformance" / "exchange_holdings_sample.json"
+SAMPLE = (
+    Path(__file__).parent.parent / "data" / "trading_peformance" / "exchange_holdings_sample.json"
+)
 
 
 def _compute_from_sample_balance(balance_json: dict):
