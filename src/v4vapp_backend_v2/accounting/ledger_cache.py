@@ -85,7 +85,7 @@ async def invalidate_ledger_cache() -> int:
     """
     try:
         new_gen: int = await InternalConfig.redis_async.incr(GENERATION_KEY)
-        logger.info(
+        logger.debug(
             f"🗑️  Ledger cache invalidated — generation now {new_gen}",
             extra={"notification": False},
         )
