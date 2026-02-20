@@ -96,10 +96,15 @@
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center">
                             <h6 class="text-muted">Report Data</h6>
-                            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse"
-                                data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
-                                <i class="fas fa-code me-1"></i>Toggle Raw Data
-                            </button>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
+                                    <i class="fas fa-code me-1"></i>Toggle Raw Data
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" type="button" onclick="downloadJsonFromPre('profitLossJson','profit_loss.json')">
+                                    <i class="fas fa-download me-1"></i>Download JSON
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -118,7 +123,7 @@
                                 <h6 class="mb-0">Raw Profit & Loss Data (JSON)</h6>
                             </div>
                             <div class="card-body">
-                                <pre class="bg-dark text-light p-3 rounded"
+                                <pre id="profitLossJson" class="bg-dark text-light p-3 rounded"
                                     style="font-size: 0.875rem; max-height: 400px; overflow-y: auto;"><code>{{ profit_loss_data | tojson(indent=2) }}</code></pre>
                             </div>
                         </div>
@@ -154,6 +159,29 @@
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+
+    function downloadJsonFromPre(preId, filename) {
+        const pre = document.getElementById(preId);
+        if (!pre) return alert('Raw JSON not available');
+        const now = new Date();
+        const stamp = now.getFullYear() + '-' +
+            String(now.getMonth() + 1).padStart(2, '0') + '-' +
+            String(now.getDate()).padStart(2, '0') + '_' +
+            String(now.getHours()).padStart(2, '0') + '-' +
+            String(now.getMinutes()).padStart(2, '0') + '-' +
+            String(now.getSeconds()).padStart(2, '0');
+        const name = filename.replace(/(\.json)?$/, '_' + stamp + '.json');
+        const text = pre.innerText || pre.textContent || '';
+        const blob = new Blob([text], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(url);
         document.body.removeChild(a);
     }
 

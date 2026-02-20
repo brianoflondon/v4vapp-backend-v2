@@ -420,11 +420,17 @@
                     </small>
                 </h5>
                 <div class="mt-2">
-                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
-                        data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
-                        <i class="bi bi-code-square me-1"></i>
-                        Show Raw Data
-                    </button>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
+                            <i class="bi bi-code-square me-1"></i>
+                            Show Raw Data
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="downloadAccountBalanceJson()">
+                            <i class="bi bi-download me-1"></i>
+                            Download JSON
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="card-body p-0">
@@ -448,7 +454,7 @@
                     </h6>
                 </div>
                 <div class="card-body">
-                    <pre class="bg-dark text-light p-3 rounded"
+                    <pre id="accountBalanceJson" class="bg-dark text-light p-3 rounded"
                         style="font-size: 0.875rem; max-height: 400px; overflow-y: auto;"><code>{{ details | tojson(indent=2) }}</code></pre>
                 </div>
             </div>
@@ -473,6 +479,32 @@
                     accountSelectorCard.style.display = 'none';
                 }
             }
+        }
+
+        function downloadAccountBalanceJson() {
+            // Build a safe filename from account name + sub and timestamp
+            const accName = "{{ (account.name or 'account') | replace(' ', '_') }}";
+            const accSub = "{{ (account.sub or 'all') | replace(' ', '_') }}";
+            const now = new Date();
+            const stamp = now.getFullYear() + '-' +
+                String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                String(now.getDate()).padStart(2, '0') + '_' +
+                String(now.getHours()).padStart(2, '0') + '-' +
+                String(now.getMinutes()).padStart(2, '0') + '-' +
+                String(now.getSeconds()).padStart(2, '0');
+            const filename = `${accName}_${accSub}_balance_${stamp}.json`;
+            const pre = document.getElementById('accountBalanceJson');
+            if (!pre) return alert('Raw JSON not available');
+            const text = pre.innerText || pre.textContent || '';
+            const blob = new Blob([text], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+            document.body.removeChild(a);
         }
 
         function refreshBalance() {

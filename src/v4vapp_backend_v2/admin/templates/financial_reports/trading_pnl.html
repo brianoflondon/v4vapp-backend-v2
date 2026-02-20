@@ -2,8 +2,7 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div
-        class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
         <h1 class="h2">{{ title }}</h1>
         <div class="btn-toolbar mb-2 mb-md-0">
             <div class="btn-group me-2">
@@ -21,70 +20,37 @@
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-balance-scale me-2"></i>Balance Sheet Report
-                    </h5>
-                    {% if balance_sheet_data and balance_sheet_data.get('as_of_date') %}
-                    <small class="text-muted">
-                        As of: {{ balance_sheet_data.as_of_date }}
-                    </small>
-                    {% else %}
-                    <small class="text-muted">
-                        Real-time data
-                    </small>
-                    {% endif %}
+                    <h5 class="card-title mb-0"><i class="fas fa-coins me-2"></i>Trading Performance - Exchange Holdings</h5>
+                    <small class="text-muted">Per-sub and consolidated view</small>
                 </div>
                 <div class="card-body">
-                    {% if balance_sheet_data and balance_sheet_data.get('is_balanced') %}
-                    <div class="alert alert-success" role="alert">
-                        <i class="fas fa-check-circle me-2"></i>
-                        <strong>Balance Sheet is Balanced</strong>
-                        {% if balance_sheet_data.get('tolerance') %}
-                        (Tolerance: {{ "%.1f"|format(balance_sheet_data.tolerance|float) }} msats)
-                        {% endif %}
-                    </div>
-                    {% elif balance_sheet_data and balance_sheet_data.get('is_balanced') == false %}
-                    <div class="alert alert-danger" role="alert">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Balance Sheet is NOT Balanced!</strong>
-                        {% if balance_sheet_data.get('tolerance') %}
-                        (Tolerance: {{ "%.1f"|format(balance_sheet_data.tolerance|float) }} msats)
-                        {% endif %}
-                    </div>
-                    {% endif %}
-
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center">
                             <h6 class="text-muted">Report Data</h6>
                             <div class="btn-group">
-                                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse"
-                                    data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
+                                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
                                     <i class="fas fa-code me-1"></i>Toggle Raw Data
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary" type="button" onclick="downloadJsonFromPre('balanceSheetJson','balance_sheet.json')">
+                                <button class="btn btn-sm btn-outline-secondary" type="button" onclick="downloadJsonFromPre('tradingPnlJson','trading_pnl.json')">
                                     <i class="fas fa-download me-1"></i>Download JSON
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Formatted Report -->
                     <div class="mb-4">
-                        <h6>Formatted Balance Sheet</h6>
-                        <div class="bg-light p-3 rounded"
-                            style="font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre-wrap; overflow-x: auto;">
-                            {{ balance_sheet_text }}</div>
+                        <h6>Formatted Trading P&L</h6>
+                        <div class="bg-light p-3 rounded" style="font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre-wrap; overflow-x: auto;">
+                            {{ trading_pnl_text }}</div>
                     </div>
 
-                    <!-- Raw Data (Collapsible) -->
                     <div class="collapse" id="rawData">
                         <div class="card">
                             <div class="card-header">
-                                <h6 class="mb-0">Raw Balance Sheet Data (JSON)</h6>
+                                <h6 class="mb-0">Raw Trading P&L Data (JSON)</h6>
                             </div>
                             <div class="card-body">
-                                <pre id="balanceSheetJson" class="bg-dark text-light p-3 rounded"
-                                    style="font-size: 0.875rem; max-height: 400px; overflow-y: auto;"><code>{{ balance_sheet_data | tojson(indent=2) }}</code></pre>
+                                <pre id="tradingPnlJson" class="bg-dark text-light p-3 rounded" style="font-size: 0.875rem; max-height: 400px; overflow-y: auto;"><code>{{ trading_pnl_data | tojson(indent=2) }}</code></pre>
                             </div>
                         </div>
                     </div>
@@ -102,7 +68,7 @@
 
 <script>
     function downloadReport() {
-        const reportContent = `{{ balance_sheet_text | replace('\n', '\\n') | replace('"', '\\"') }}`;
+        const reportContent = `{{ trading_pnl_text | replace('\n', '\\n') | replace('"', '\\"') }}`;
         const blob = new Blob([reportContent], { type: 'text/plain' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -115,7 +81,7 @@
             String(now.getHours()).padStart(2, '0') + '-' +
             String(now.getMinutes()).padStart(2, '0') + '-' +
             String(now.getSeconds()).padStart(2, '0');
-        a.download = 'balance_sheet_' + timestamp + '.txt';
+        a.download = 'trading_pnl_' + timestamp + '.txt';
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -150,15 +116,15 @@
         printWindow.document.write(`
         <html>
         <head>
-            <title>Balance Sheet Report</title>
+            <title>Trading P&L Report</title>
             <style>
                 body { font-family: 'Courier New', monospace; font-size: 12px; margin: 20px; }
                 pre { white-space: pre-wrap; }
             </style>
         </head>
         <body>
-            <h1>Balance Sheet Report</h1>
-            <pre>{{ balance_sheet_text }}</pre>
+            <h1>Trading P&L Report</h1>
+            <pre>{{ trading_pnl_text }}</pre>
         </body>
         </html>
     `);

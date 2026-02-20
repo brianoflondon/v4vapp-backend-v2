@@ -183,3 +183,4 @@ config/mongo-keyfile
 
 src/jupyter/data/*
 scripts/keepsats_data/*
+tests/data/trading_peformance/exchange_holdings_sample.json

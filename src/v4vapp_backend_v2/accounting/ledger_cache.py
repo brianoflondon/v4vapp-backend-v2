@@ -33,7 +33,7 @@ GENERATION_KEY = "ledger:__generation__"
 DEFAULT_TTL_SECONDS = 1200
 
 # Shorter TTL for "live" queries where as_of_date was not explicitly provided.
-LIVE_TTL_SECONDS = 60
+LIVE_TTL_SECONDS = 1200
 
 # Longer TTL for point-in-time / historical queries.
 HISTORICAL_TTL_SECONDS = 1200

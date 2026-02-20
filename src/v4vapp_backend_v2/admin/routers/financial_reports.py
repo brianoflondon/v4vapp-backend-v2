@@ -23,6 +23,10 @@ from v4vapp_backend_v2.accounting.profit_and_loss import (
     generate_profit_and_loss_report,
     profit_and_loss_printout,
 )
+from v4vapp_backend_v2.accounting.trading_pnl import (
+    generate_trading_pnl_report,
+    trading_pnl_printout,
+)
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.admin.navigation import NavigationManager
@@ -167,6 +171,59 @@ async def profit_loss_page(request: Request):
                 "nav_items": nav_items,
                 "error": str(e),
                 "report_type": "Profit & Loss",
+                "pending_transactions": await PendingTransaction.list_all_str(),
+                "breadcrumbs": [
+                    {"name": "Admin", "url": "/admin"},
+                    {"name": "Financial Reports", "url": "/admin/financial-reports"},
+                    {"name": "Error", "url": "#"},
+                ],
+                "sanity_results": SanityCheckResults(),
+            },
+        )
+
+
+@router.get("/trading-pnl", response_class=HTMLResponse)
+async def trading_pnl_page(request: Request, sub: Optional[str] = None):
+    """Trading P&L page (grouped by Exchange Holdings `sub`)."""
+    if not templates or not nav_manager:
+        raise RuntimeError("Templates and navigation not initialized")
+
+    try:
+        # Generate trading P&L report (per-sub). If `sub` is provided, limit to that sub.
+        subs = [sub] if sub else None
+        pnl_report = await generate_trading_pnl_report(subs=subs)
+        pnl_report = convert_decimals_to_float_or_int(pnl_report)
+        pnl_text = trading_pnl_printout(pnl_report)
+
+        nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
+        sanity_results = await run_all_sanity_checks()
+        return templates.TemplateResponse(
+            "financial_reports/trading_pnl.html",
+            {
+                "request": request,
+                "title": "Trading P&L (Exchange Holdings)",
+                "nav_items": nav_items,
+                "trading_pnl_text": pnl_text,
+                "trading_pnl_data": pnl_report,
+                "pending_transactions": await PendingTransaction.list_all_str(),
+                "breadcrumbs": [
+                    {"name": "Admin", "url": "/admin"},
+                    {"name": "Financial Reports", "url": "/admin/financial-reports"},
+                    {"name": "Trading P&L", "url": "/admin/financial-reports/trading-pnl"},
+                ],
+                "sanity_results": sanity_results,
+            },
+        )
+    except Exception as e:
+        nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
+        return templates.TemplateResponse(
+            "financial_reports/error.html",
+            {
+                "request": request,
+                "title": "Trading P&L Error",
+                "nav_items": nav_items,
+                "error": str(e),
+                "report_type": "Trading P&L",
                 "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},

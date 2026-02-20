@@ -38,7 +38,8 @@
                 "--port",
                 "8080",
                 "--config",
-                "devhive.config.yaml",
+                // "devhive.config.yaml",
+                "production.fromhome.config.yaml"
             ],
             "console": "integratedTerminal",
             "justMyCode": false,
