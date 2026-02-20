@@ -307,18 +307,26 @@ async def main_async_start():
         await db_conn.setup_database()
         logger.info(f"{ICON} Binance Monitor started.")
         # Get the current event loop
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         # Register signal handlers for SIGTERM and SIGINT
         loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
         loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
 
-        task = asyncio.create_task(check_binance_balances(), name="binance_monitor.check_balances")
-        await task
+        tasks = [
+            asyncio.create_task(check_binance_balances(), name="binance_monitor.check_balances"),
+        ]
+
+        # Wait until shutdown is requested
+        await shutdown_event.wait()
+        # Cancel tasks and wait for them to finish
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
-        logger.info(f"{ICON} 👋 Goodbye! from Binance Monitor", extra={"notification": True})
+        raise
     except DBConnConnectionException as e:
         logger.error(
             f"{ICON} Database connection error in Binance Monitor: {e}",
@@ -330,21 +338,16 @@ async def main_async_start():
         logger.error(f"{ICON} Irregular shutdown in Binance Monitor {e}", extra={"error": e})
         raise e
     finally:
-        await check_notifications()
-
-
-async def check_notifications() -> None:
-    await asyncio.sleep(1)
-    notification_loop = InternalConfig().notification_loop
-    while (
-        notification_loop and notification_loop.is_running()
-    ) or InternalConfig().notification_lock:
-        print(
-            f"Notification loop: {notification_loop.is_running() if notification_loop else False} "
-            f"Notification lock: {InternalConfig().notification_lock}"
-        )
-        await asyncio.sleep(0.1)
-    return
+        # Cancel all other tasks and exit cleanly
+        current_task = asyncio.current_task()
+        remaining = [task for task in asyncio.all_tasks() if task is not current_task]
+        for task in remaining:
+            task.cancel()
+        await asyncio.gather(*remaining, return_exceptions=True)
+        logger.info(f"{ICON} 👋 Goodbye! from Binance Monitor", extra={"notification": True})
+        logger.info(f"{ICON} Clearing notifications")
+        await asyncio.sleep(2)
+        InternalConfig().shutdown()
 
 
 @app.command()
@@ -389,7 +392,7 @@ if __name__ == "__main__":
     try:
         logger.name = "binance_monitor"
         app()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         print("👋 Goodbye!")
         sys.exit(0)
 

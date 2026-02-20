@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import socket
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict
@@ -206,6 +207,8 @@ class StatusAPI:
                 f"{Fore.WHITE}Shutting down Status API for {self.app.title} on port {self.port}{Style.RESET_ALL}"
             )
             if server_task and server:
+                # Suppress uvicorn/starlette CancelledError tracebacks during shutdown
+                logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
                 server.should_exit = True
                 try:
                     await asyncio.wait_for(server_task, timeout=shutdown_timeout)
