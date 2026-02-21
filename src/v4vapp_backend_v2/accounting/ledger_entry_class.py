@@ -22,6 +22,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
     LedgerAccountAny,
 )
+from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType, LedgerTypeIcon
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
@@ -593,9 +594,12 @@ class LedgerEntry(BaseModel):
             )
 
             # Invalidate all cached ledger balances so subsequent reads reflect this entry
-            from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
-
-            await invalidate_ledger_cache()
+            await invalidate_ledger_cache(
+                debit_name=self.debit.name,
+                debit_sub=self.debit.sub,
+                credit_name=self.credit.name,
+                credit_sub=self.credit.sub,
+            )
 
             return ans
         except DuplicateKeyError as e:

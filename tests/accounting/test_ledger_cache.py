@@ -18,7 +18,7 @@ from v4vapp_backend_v2.accounting.ledger_cache import (
     GENERATION_KEY,
     get_cache_generation,
     get_cached_balance,
-    invalidate_ledger_cache,
+    invalidate_all_ledger_cache,
     set_cached_balance,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
@@ -95,9 +95,9 @@ async def test_generation_starts_at_zero():
 async def test_invalidate_increments_generation():
     """Each call to invalidate_ledger_cache should increment the generation."""
     await InternalConfig.redis_async.delete(GENERATION_KEY)
-    gen1 = await invalidate_ledger_cache()
+    gen1 = await invalidate_all_ledger_cache()
     assert gen1 == 1
-    gen2 = await invalidate_ledger_cache()
+    gen2 = await invalidate_all_ledger_cache()
     assert gen2 == 2
 
 
@@ -148,7 +148,7 @@ async def test_invalidation_orphans_cached_entries():
     assert await get_cached_balance(account, as_of, None) is not None
 
     # Invalidate
-    await invalidate_ledger_cache()
+    await invalidate_all_ledger_cache()
 
     # Now the old cache entry should be missed (wrong generation)
     assert await get_cached_balance(account, as_of, None) is None

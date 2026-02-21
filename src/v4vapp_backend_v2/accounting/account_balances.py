@@ -1038,7 +1038,7 @@ async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal]
     return expiry, sats_freed
 
 
-# @async_time_decorator
+@async_time_decorator
 async def keepsats_balance(
     cust_id: CustIDType = "",
     as_of_date: datetime | None = None,
@@ -1059,8 +1059,6 @@ async def keepsats_balance(
         net_msats (int): The net balance of Keepsats in milisatoshis.
         LedgerAccountDetails: An object containing the balance details for the specified customer.
     """
-    if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
     account = LiabilityAccount(
         name="VSC Liability",
         sub=cust_id,
@@ -1068,7 +1066,7 @@ async def keepsats_balance(
     )
     account_balance = await one_account_balance(
         account=account,
-        as_of_date=as_of_date + timedelta(days=1),
+        as_of_date=as_of_date,
     )
 
     net_msats = account_balance.msats
