@@ -180,35 +180,58 @@ async def server_account_balances(in_progress: InProgressResults) -> SanityCheck
 
 
 async def server_account_hive_balances(in_progress: InProgressResults) -> SanityCheckResult:
-    # return SanityCheckResult(
-    #     name="server_account_hive_balances", is_valid=True, details="Placeholder implementation."
-    # )
+    """
+    Verify that the server's Hive blockchain account balances match the recorded customer deposits.
+
+    Compares the HIVE and HBD balances stored in the "Customer Deposits Hive" asset account
+    against the actual balances retrieved from the Hive blockchain. A small tolerance of 0.001
+    is applied to account for rounding differences.
+
+    Args:
+        in_progress: InProgressResults object for tracking ongoing operations.
+
+    Returns:
+        SanityCheckResult: Contains validation status and details about balance matching.
+            - is_valid=True: If both HIVE and HBD balances match within tolerance.
+            - is_valid=False: If balances mismatch or an exception occurs during validation.
+
+    Raises:
+        No exceptions are raised; all errors are caught and returned as failed SanityCheckResult.
+    """
+
     try:
         # Get customer deposits balance
         server_id = InternalConfig().server_id
         customer_deposits_account = AssetAccount(name="Customer Deposits Hive", sub=server_id)
+        escrow_account = AssetAccount(name="Escrow Hive", sub=server_id)
 
         tasks: dict[str, asyncio.Task] = {}
         async with asyncio.TaskGroup() as tg:
             tasks["deposits_details"] = tg.create_task(
                 one_account_balance(account=customer_deposits_account, in_progress=in_progress)
             )
+            tasks["escrow_details"] = tg.create_task(
+                one_account_balance(account=escrow_account, in_progress=in_progress)
+            )
             tasks["balances"] = tg.create_task(
                 asyncio.to_thread(account_hive_balances, hive_accname=server_id)
             )
 
         deposits_details = tasks["deposits_details"].result()
+        escrow_details = tasks["escrow_details"].result()
         balances = tasks["balances"].result()
 
         # Get balances with tolerance
         hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
         hbd_deposits = deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
+        hive_deposits += escrow_details.balances_net.get(Currency.HIVE, Decimal(0.0))
+        hbd_deposits += escrow_details.balances_net.get(Currency.HBD, Decimal(0.0))
 
         hive_actual = Amount(balances.get("HIVE", 0.0))
         hbd_actual = Amount(balances.get("HBD", 0.0))
 
         # Check with tolerance
-        tolerance = Decimal(0.001)
+        tolerance = Decimal("0.001")
         hive_delta = hive_deposits - hive_actual.amount_decimal
         hbd_delta = hbd_deposits - hbd_actual.amount_decimal
         hive_match = abs(hive_delta) <= tolerance
@@ -326,7 +349,7 @@ async def run_all_sanity_checks() -> SanityCheckResults:
         # Will hold (check_name, Task) pairs created inside the TaskGroup
         task_list: List[Tuple[str, asyncio.Task]] = []
 
-        async with asyncio.timeout(5.0):  # 5 seconds timeout for all checks
+        async with asyncio.timeout(30.0):  # 5 seconds timeout for all checks
             async with asyncio.TaskGroup() as tg:
                 for check_name, coro in coros:
                     task = tg.create_task(coro)
@@ -351,6 +374,7 @@ async def run_all_sanity_checks() -> SanityCheckResults:
         # Optionally filter logging elsewhere; always return the full model
         return SanityCheckResults(passed=passed, failed=failed, results=all_results)
     except Exception as e:
+        logger.exception(f"Error running sanity checks: {e}", extra={"notification": False})
         return SanityCheckResults(
             passed=[],
             failed=[
