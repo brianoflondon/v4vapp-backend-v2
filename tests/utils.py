@@ -12,6 +12,7 @@ from nectar.amount import Amount
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -173,6 +174,7 @@ async def clear_and_reset():
 
     logger.info("Resetting Lightning Node Balance.")
     await reset_lightning_node_balance()
+    await invalidate_all_ledger_cache()
 
 
 # TODO: #263 Add a call to something like this on startup of db_monitor if they Ledger is empty.

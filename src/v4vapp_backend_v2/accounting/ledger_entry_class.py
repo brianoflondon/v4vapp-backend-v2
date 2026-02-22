@@ -550,6 +550,30 @@ class LedgerEntry(BaseModel):
                         f"exc_fee msats do not net to zero: {msats_sum} msats for {self.group_id}"
                     )
 
+    async def _invalidate_cache(self) -> None:
+        """
+        Invalidates any cache entries that involve the two accounts affected by this ledger entry.
+        This is done to ensure that any cached balance lookups for these accounts are updated with the new ledger entry data.
+
+        This method should be called after saving the ledger entry to the database, and it should be very quick to execute.
+
+        Side effects:
+            - Invalidates cache entries related to the debit and credit accounts of this ledger entry.
+            - Logs any errors that occur during cache invalidation.
+        """
+        try:
+            await invalidate_ledger_cache(
+                debit_name=self.debit.name,
+                debit_sub=self.debit.sub,
+                credit_name=self.credit.name,
+                credit_sub=self.credit.sub,
+            )
+        except Exception as e:
+            logger.error(
+                f"Error invalidating ledger cache: {e}",
+                extra={"notification": True, **self.log_extra},
+            )
+
     async def save(
         self, ignore_duplicates: bool = False, upsert: bool = False
     ) -> InsertOneResult | UpdateResult | None:
@@ -569,24 +593,9 @@ class LedgerEntry(BaseModel):
 
         """
         self.db_checks()
-        try:
-            # Invalidate any cache entries that involve the two accounts
-            # affected by this entry.  We used to bump the global generation
-            # here (wiping the entire cache), but selective invalidation keeps
-            # unrelated balance lookups warm.
-            # Do this before saving, for extra safety. This call should be very quick.
-            await invalidate_ledger_cache(
-                debit_name=self.debit.name,
-                debit_sub=self.debit.sub,
-                credit_name=self.credit.name,
-                credit_sub=self.credit.sub,
-            )
-        except Exception as e:
-            logger.error(
-                f"Error invalidating ledger cache: {e}",
-                extra={"notification": True, **self.log_extra},
-            )
-
+        await (
+            self._invalidate_cache()
+        )  # Invalidate cache before saving to ensure any reads during save are consistent
         try:
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
             document: Any = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
@@ -605,12 +614,11 @@ class LedgerEntry(BaseModel):
                     f"Ledger Entry upserted: {self.group_id}",
                     extra={"notification": False, "db_ans": ans},
                 )
-            logger.debug(f"Ledger Entry saved: {self.group_id}")
+            logger.info(f"Ledger Entry saved: {self.group_id}")
             logger.debug(
                 f"\n{self}",
                 extra={"notification": False, "db_ans": ans, **self.log_extra},
             )
-
             return ans
         except DuplicateKeyError as e:
             if not ignore_duplicates:

@@ -20,6 +20,7 @@ from pymongo.errors import (
 
 from status.status_api import StatusAPI
 from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks
@@ -510,6 +511,7 @@ async def main_async_start(use_resume: bool = True):
 
     db_conn = DBConn()
     await db_conn.setup_database()
+    await invalidate_all_ledger_cache()
 
     await reset_lightning_opening_balance()
     await reset_exchange_opening_balance()

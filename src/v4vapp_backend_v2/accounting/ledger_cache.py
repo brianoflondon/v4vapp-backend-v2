@@ -21,13 +21,13 @@ return ``None`` / silently skip, and the caller falls back to the database.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from colorama import Fore
 
-from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 if TYPE_CHECKING:
@@ -98,7 +98,6 @@ async def get_cache_generation() -> int:
         return 0
 
 
-@async_time_decorator
 async def invalidate_all_ledger_cache() -> int:
     """Increment the generation counter, instantly orphaning every cached entry.
 
@@ -109,7 +108,7 @@ async def invalidate_all_ledger_cache() -> int:
     """
     try:
         new_gen: int = await InternalConfig.redis_async.incr(GENERATION_KEY)
-        logger.debug(
+        logger.info(
             f"🗑️  Ledger cache invalidated — generation now {new_gen}",
             extra={"notification": False},
         )
@@ -122,7 +121,6 @@ async def invalidate_all_ledger_cache() -> int:
         return 0
 
 
-@async_time_decorator
 async def invalidate_ledger_cache(
     debit_name: str, debit_sub: str, credit_name: str, credit_sub: str
 ) -> int:
@@ -139,14 +137,17 @@ async def invalidate_ledger_cache(
     returned.
     """
     # build glob patterns for the two account pairs
-    debit_key = f"ledger:bal:v*:{debit_name}:{debit_sub}:*"
-    credit_key = f"ledger:bal:v*:{credit_name}:{credit_sub}:*"
+    # These patterns MUST match the _make_cache_key format,
+    # especially the position of name/sub and the generation wildcard.
+    debit_key = f"ledger:bal:v*:{debit_sub}:{debit_name}:*"
+    credit_key = f"ledger:bal:v*:{credit_sub}:{credit_name}:*"
     try:
         # Use SCAN to locate and delete matching keys.  In a typical
         # deployment only a few cache entries will match the account pair, so
         # this loop completes quickly.  It avoids the O(n) cost of SCAN/DEL over
         # the whole ledger: namespace that we would incur with a naive
         # invalidation.
+        tasks = []
         for pattern in [debit_key, credit_key]:
             cursor_val = 0
             while True:
@@ -154,9 +155,15 @@ async def invalidate_ledger_cache(
                     cursor_val, match=pattern, count=100
                 )
                 if keys:
-                    await InternalConfig.redis_async.delete(*keys)
+                    tasks.append(InternalConfig.redis_async.delete(*keys))
+                    logger.info(
+                        f"🗑️  Deleted {len(keys)} cache keys matching pattern: {pattern}",
+                        extra={"notification": False},
+                    )
                 if cursor_val == 0:
                     break
+        if tasks:
+            await asyncio.gather(*tasks)
         logger.debug(
             f"🗑️  Ledger cache invalidated for accounts {debit_name}:{debit_sub} and {credit_name}:{credit_sub}",
             extra={"notification": False},
