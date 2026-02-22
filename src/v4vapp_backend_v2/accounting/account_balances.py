@@ -153,8 +153,10 @@ async def one_account_balance(
     Notes:
         - If `account` is provided as a string, it is converted to a LiabilityAccount.
         - If no balance data is found, returns a default LedgerAccountDetails instance.
-        - Results are cached in Redis with generation-based invalidation.
-          Call ``invalidate_ledger_cache()`` to expire all entries at once.
+        - Results are cached in Redis.  Most cache invalidations happen
+          via ``invalidate_ledger_cache(debit_name, debit_sub, credit_name,
+          credit_sub)``, which deletes only the relevant account(s).  A full
+          flush can be forced by calling ``invalidate_all_ledger_cache()``.
     """
     _t0 = timer()
     as_of_date_was_none = as_of_date is None

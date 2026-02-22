@@ -1,13 +1,19 @@
 """
-Ledger balance cache using Redis with generation-based invalidation.
+Ledger balance cache using Redis.  Keys embed a generation number but also
+include the account name/sub pair so that we can perform *selective invalidation*
+when only a few accounts change.
 
 Cache keys are constructed as:
     ledger:bal:v{generation}:{param_hash}
 
-To invalidate ALL cached ledger balances at once (e.g. when a new LedgerEntry
-is saved), call ``invalidate_ledger_cache()`` which increments the generation
-counter.  Old keys expire naturally via TTL — no SCAN/DEL needed, so
-invalidation is O(1).
+Operations fall into two categories:
+
+* **Full invalidation** – increment the generation counter and ignore every
+  existing key. This path is O(1) and is used as a fallback or when the
+  entire cache needs flushing.
+* **Selective invalidation** – delete only keys whose embedded account
+  information matches a supplied debit/credit pair. This uses a lightweight
+  SCAN/DEL loop and keeps unrelated entries alive.
 
 All operations are fault-tolerant: if Redis is unavailable the functions
 return ``None`` / silently skip, and the caller falls back to the database.
@@ -101,13 +107,27 @@ async def invalidate_all_ledger_cache() -> int:
 async def invalidate_ledger_cache(
     debit_name: str, debit_sub: str, credit_name: str, credit_sub: str
 ) -> int:
-    """Invalidate cache entries related to the given accounts."""
-    # For simplicity, we just invalidate all ledger cache entries on any change.
-    # More complex logic could be implemented here if needed.
+    """Remove cached balances matching either debit or credit account.
+
+    When a ledger entry is created or updated we only expect two accounts to be
+    affected.  Instead of bumping the global generation (which would trash the
+    entire cache), this function scans Redis for keys whose embedded name/sub
+    matches the supplied pairs and deletes them.  Only a handful of keys are
+    touched, and unrelated cache entries remain usable.
+
+    The return value is the current generation number (unchanged).  On error we
+    fall back to ``invalidate_all_ledger_cache()`` to guarantee no stale data is
+    returned.
+    """
+    # build glob patterns for the two account pairs
     debit_key = f"ledger:bal:v*:{debit_name}:{debit_sub}:*"
     credit_key = f"ledger:bal:v*:{credit_name}:{credit_sub}:*"
     try:
-        # Use SCAN to find and delete matching keys (small number expected)
+        # Use SCAN to locate and delete matching keys.  In a typical
+        # deployment only a few cache entries will match the account pair, so
+        # this loop completes quickly.  It avoids the O(n) cost of SCAN/DEL over
+        # the whole ledger: namespace that we would incur with a naive
+        # invalidation.
         for pattern in [debit_key, credit_key]:
             cursor_val = 0
             while True:

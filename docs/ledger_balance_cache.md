@@ -1,6 +1,9 @@
 # Ledger Balance Cache
 
-Redis-based caching for ledger account balance queries, using **generation-based invalidation** for O(1) bulk expiry.
+Redis-based caching for ledger account balance queries.  The system still
+supports **generation-based invalidation** for O(1) bulk expiry, but most
+cache flushes now use a faster **selective invalidation** mechanism that only
+removes entries for accounts affected by a new ledger entry.
 
 ## Overview
 
@@ -88,10 +91,19 @@ Set `use_cache=False` to bypass the cache for a specific call (e.g. debugging, f
 ```python
 from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
 
-new_generation = await invalidate_ledger_cache()
+new_generation = await invalidate_ledger_cache(
+    debit_name=str, debit_sub=str,
+    credit_name=str, credit_sub=str,
+)
 ```
 
-Called automatically inside `LedgerEntry.save()`. Can also be called manually if you need to force-invalidate from other code paths (e.g. bulk imports, admin tools).
+Deletes cached balances whose key contains either the supplied debit
+or credit account identifiers.  This is the routine that `LedgerEntry.save()`
+now invokes; only the two accounts involved in the transaction are cleared.
+
+For rare scenarios where you want to discard **all** cached balances, call
+``invalidate_all_ledger_cache()`` instead (it simply bumps the generation
+counter).
 
 ### `get_cache_generation()`
 
@@ -126,6 +138,7 @@ Log messages to watch for:
 |---|---|
 | `Ledger cache HIT: ledger:bal:v...` | DEBUG — served from cache |
 | `Ledger cache SET: ledger:bal:v... (ttl=60s)` | DEBUG — stored new entry |
-| `🗑️ Ledger cache invalidated — generation now N` | INFO — all entries orphaned |
+| `🗑️ Ledger cache invalidated — generation now N` | INFO — all entries orphaned (full invalidation) |
+| `🗑️ Ledger cache invalidated for accounts ...` | INFO — selective deletion of matching keys |
 | `cache_hit=0.003s for one_account_balance ...` | INFO — timing for cached response |
 | `Failed to set/invalidate ledger cache: ...` | WARNING — Redis issue, falling back to DB |
