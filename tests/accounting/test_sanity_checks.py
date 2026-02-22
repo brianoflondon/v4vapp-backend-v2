@@ -146,12 +146,57 @@ async def test_run_all_sanity_checks(module_monkeypatch):
             f"Sanity check '{check_name}' failed: {sanity_result.details}"
         )
 
-    # Bad ledger
+    # Bad ledger – historically this dataset produced an out-of-tolerance
+    # balance on one of the server accounts.  The `server_account_balances`
+    # check has since been tightened to only inspect the keepsats and
+    # configured hive server account, so the original "bad" file no longer
+    # triggers a failure by itself.  To keep the spirit of the test we
+    # explicitly introduce a tiny imbalance that the current checks will catch.
     await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger-bad-vsc-liability.json")
+
+    # inject a small ledger entry that pushes the keepsats account out of
+    # the 2‑sats tolerance used by server_account_balances
+    from datetime import datetime, timezone
+    from decimal import Decimal
+
+    from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
+    from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+    from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+
+    bad_entry = LedgerEntry(
+        group_id="test_bad",
+        short_id="test_bad",
+        ledger_type=LedgerType.UNSET,
+        timestamp=datetime.now(timezone.utc),
+        description="force keepsats imbalance",
+        cust_id="keepsats",
+        debit_amount=Decimal("3000"),
+        debit_unit="msats",
+        credit_amount=Decimal("3000"),
+        credit_unit="msats",
+        # conv_signed must exist or the balance pipeline will skip the entry
+        conv_signed={"debit": {"msats": Decimal("0")}, "credit": {"msats": Decimal("0")}},
+        # Use a permitted asset account name so validation passes
+        debit=AssetAccount(name="Exchange Holdings", sub="x"),
+        credit=LiabilityAccount(name="VSC Liability", sub="keepsats"),
+    )
+    await bad_entry.save()
+
+    # clear the cache so subsequent sanity checks see the new entry
+    from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
+
+    await invalidate_all_ledger_cache()
+
+    # sanity-check that the keepsats account reflects the injected entry
+    from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+
+    bal = await one_account_balance(account="keepsats", use_cache=False)
+    print("keepsats after injection", bal.msats)
+    assert abs(bal.msats) >= Decimal("3000"), "injected entry did not affect keepsats balance"
 
     results = await run_all_sanity_checks()
     pprint(results.model_dump())
-    assert results.failed, "Expected failure not found"
+    assert results.failed, "Expected failure not found (artificial imbalance was added)"
 
 
 async def test_server_account_hive_balances_formatting_handles_amount(module_monkeypatch):

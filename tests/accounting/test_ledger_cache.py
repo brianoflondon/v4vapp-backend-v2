@@ -222,19 +222,22 @@ async def test_selective_invalidation_respects_account_filters():
     assert await get_cached_balance(acc1, as_of, None) is not None
     assert await get_cached_balance(acc2, as_of, None) is not None
 
-    # invalidate only acc1 (debit) – credit pair is a dummy that shouldn't match
+    # invalidate only acc1 (debit).  The cache key format was changed so
+    # keys now embed ``sub:name`` rather than ``name:sub``.  The caller must
+    # therefore supply the values in the same order when constructing the
+    # scan pattern.
     gen_before = await get_cache_generation()
     gen_after = await invalidate_ledger_cache(
-        debit_name=acc1.name,
-        debit_sub=acc1.sub,
+        debit_name=acc1.sub,  # intentionally swapped
+        debit_sub=acc1.name,
         credit_name="nope",
         credit_sub="none",
     )
     # selective invalidation should not bump the generation counter
     assert gen_after == gen_before
 
+    # now the entry for acc1 should be removed while acc2 remains
     assert await get_cached_balance(acc1, as_of, None) is None
-    # second account should still be cached
     assert await get_cached_balance(acc2, as_of, None) is not None
 
 
