@@ -103,7 +103,6 @@ class TestAdminEndpoints:
         assert "V4VApp Admin" in content  # Updated to match actual content
         assert "nav" in content  # Navigation should be present
 
-
     def test_users_page(self, admin_client):
         """Test users page loads and displays data"""
         response = admin_client.get("/admin/users")
@@ -131,7 +130,7 @@ class TestAdminTemplates:
         """Test users template has proper structure"""
         # Mock the functions used in users_page
         mocker.patch(
-            "v4vapp_backend_v2.admin.routers.users.list_all_accounts",
+            "v4vapp_backend_v2.admin.routers.users.list_active_account_subs",
             return_value=[
                 LiabilityAccount(name="VSC Liability", sub="brianoflondon"),
                 LiabilityAccount(name="VSC Liability", sub="testuser"),

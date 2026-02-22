@@ -117,7 +117,10 @@ async def test_cache_miss_returns_none():
 
 
 async def test_set_and_get_cached_balance():
-    """Storing then retrieving a balance should return an equivalent object."""
+    """Storing then retrieving a balance should return an equivalent object.
+
+    This exercise covers both explicit-date and live (``None``) calls.
+    """
     account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
 
     # Get a real balance from the DB
@@ -126,8 +129,8 @@ async def test_set_and_get_cached_balance():
 
     from datetime import datetime, timezone
 
+    # explicit date case
     as_of = datetime.now(tz=timezone.utc)
-
     await set_cached_balance(account, as_of, None, balance, ttl=30)
     cached = await get_cached_balance(account, as_of, None)
 
@@ -138,6 +141,16 @@ async def test_set_and_get_cached_balance():
     assert cached.hive == balance.hive
     assert cached.hbd == balance.hbd
     assert cached.msats == balance.msats
+
+    # live query case (date=None) should use a stable key across calls
+    await set_cached_balance(account, None, None, balance, ttl=30)
+    live_cached = await get_cached_balance(account, None, None)
+    assert live_cached is not None
+    assert live_cached.sub == balance.sub
+    # a second lookup still hits the cache
+    live_cached2 = await get_cached_balance(account, None, None)
+    assert live_cached2 is not None
+    assert live_cached2.sub == balance.sub
 
 
 async def test_invalidation_orphans_cached_entries():

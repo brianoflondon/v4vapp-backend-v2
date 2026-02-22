@@ -71,7 +71,7 @@ class LedgerConvSummary(ConvertedSummary):
 
     cust_id: str = ""
     account: LedgerAccount | None = None
-    as_of_date: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    as_of_date: datetime | None = field(default_factory=lambda: datetime.now(tz=timezone.utc))
     age: timedelta | None = None
     by_ledger_type: Dict[str, ConvertedSummary] = field(default_factory=dict)
     ledger_entries: List[LedgerEntry] = field(default_factory=list)
@@ -393,7 +393,9 @@ class LedgerAccountDetails(LedgerAccount):
 
         return copy_balance
 
-    def to_api_response(self, hive_accname: str, line_items: bool = False, admin: bool = False) -> dict:
+    def to_api_response(
+        self, hive_accname: str, line_items: bool = False, admin: bool = False
+    ) -> dict:
         """
         Returns a dictionary representation of the account balance details, with numeric values
         rounded to 3 decimal places (half up) where applicable, formatted for API responses.

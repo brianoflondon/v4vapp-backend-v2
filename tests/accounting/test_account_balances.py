@@ -97,17 +97,63 @@ async def test_all_account_balances_pipeline():
     Test the account details pipeline.
     """
     account = LiabilityAccount(name="Keepsats Hold", sub="keepsats")
+    # call without specifying date (should default to "now", handled inside)
     pipeline = all_account_balances_pipeline(account=account)
     assert isinstance(pipeline, list)
     assert len(pipeline) > 0
 
+    # same call with explicit None should behave identically
+    pipeline_none = all_account_balances_pipeline(account=account, as_of_date=None)
+    assert isinstance(pipeline_none, list)
+    assert len(pipeline_none) == len(pipeline)
+
     # There should be an early top-level $match that short-circuits documents
     # by checking both `debit.*` and `credit.*` fields with an `$or` so the
     # `$facet` stage processes far fewer documents.
-    or_stage = next((s for s in pipeline if "$match" in s and isinstance(s["$match"], dict) and "$or" in s["$match"]), None)
+    or_stage = next(
+        (
+            s
+            for s in pipeline
+            if "$match" in s and isinstance(s["$match"], dict) and "$or" in s["$match"]
+        ),
+        None,
+    )
     assert or_stage is not None, "expected top-level $match with $or for account filtering"
-    assert {"debit.name": account.name, "debit.sub": account.sub, "debit.account_type": account.account_type} in or_stage["$match"]["$or"]
-    assert {"credit.name": account.name, "credit.sub": account.sub, "credit.account_type": account.account_type} in or_stage["$match"]["$or"]
+    assert {
+        "debit.name": account.name,
+        "debit.sub": account.sub,
+        "debit.account_type": account.account_type,
+    } in or_stage["$match"]["$or"]
+    assert {
+        "credit.name": account.name,
+        "credit.sub": account.sub,
+        "credit.account_type": account.account_type,
+    } in or_stage["$match"]["$or"]
+
+    # verify that the date match stage exists and contains a $lte clause
+    date_stage = next(
+        (
+            s
+            for s in pipeline
+            if "$match" in s and isinstance(s["$match"], dict) and "timestamp" in s["$match"]
+        ),
+        None,
+    )
+    assert date_stage is not None
+    assert "$lte" in date_stage["$match"]["timestamp"]
+
+    # when neither as_of_date nor age are provided, pipeline should omit
+    # timestamp filtering (only conv_signed check remains)
+    live_pipeline = all_account_balances_pipeline(account=account, as_of_date=None, age=None)
+    ts_stage = next(
+        (
+            s
+            for s in live_pipeline
+            if "$match" in s and isinstance(s["$match"], dict) and "timestamp" in s["$match"]
+        ),
+        None,
+    )
+    assert ts_stage is None, "expected no timestamp match on live / no-age query"
 
 
 async def test_all_account_balances():

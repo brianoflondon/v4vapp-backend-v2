@@ -434,8 +434,7 @@ async def get_account_balance(
         # Parse the account from string
         account = LedgerAccount.from_string(account_string)
 
-        # Parse the as_of_date if provided
-        as_of_date = datetime.now(tz=timezone.utc)
+        as_of_date = None
         if as_of_date_str:
             try:
                 as_of_date = datetime.fromisoformat(as_of_date_str.replace("Z", "+00:00"))
@@ -444,7 +443,7 @@ async def get_account_balance(
                 pass
 
         # Create age timedelta
-        age = timedelta(hours=age_hours) if age_hours and age_hours > 0 else timedelta(seconds=0)
+        age = timedelta(hours=age_hours) if age_hours and age_hours > 0 else None
 
         # Get the balance printout - choose function based on customer_grouping parameter
         if customer_grouping_bool:
@@ -516,6 +515,8 @@ async def get_account_balance(
                         "string_repr": str(details),
                     }
         sanity_results = await run_all_sanity_checks()
+        if as_of_date is None:
+            as_of_date = datetime.now(tz=timezone.utc)
         return templates.TemplateResponse(
             "accounts/balance_result.html",
             {

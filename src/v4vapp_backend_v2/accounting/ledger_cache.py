@@ -54,14 +54,28 @@ HISTORICAL_TTL_SECONDS = 1200
 def _make_cache_key(
     generation: int,
     account: LedgerAccount,
-    as_of_date: datetime,
+    as_of_date: datetime | None,
     age: timedelta | None,
 ) -> str:
-    """Build a deterministic Redis key from the query parameters."""
+    """Build a deterministic Redis key from the query parameters.
+
+    When ``as_of_date`` is ``None`` we treat the query as a "live" lookup and
+    omit any timestamp information from the hash.  This keeps keys stable
+    across minute boundaries when callers are repeatedly asking for the
+    current balance.
+    """
     account_part = f"{account.name}:{account.account_type.value}:{account.sub}:{account.contra}"
-    # Truncate to the minute so near-simultaneous "now" requests share a key.
-    date_part = as_of_date.replace(second=0, microsecond=0).isoformat()
-    age_part = str(int(age.total_seconds())) if age else "none"
+
+    if as_of_date is None:
+        date_part = "live"
+    else:
+        # Truncate to the minute so near-simultaneous "now" requests share a key.
+        date_part = as_of_date.replace(second=0, microsecond=0).isoformat()
+    if age is None or age.total_seconds() <= 0:
+        age_part = "none"
+    else:
+        # Round age to the nearest second for key stability.
+        age_part = str(int(age.total_seconds())) if age else "none"
 
     raw = f"{account_part}|{date_part}|{age_part}"
     key_hash = hashlib.sha256(raw.encode()).hexdigest()[:16]
@@ -153,13 +167,19 @@ async def invalidate_ledger_cache(
 # ---------------------------------------------------------------------------
 
 
-@async_time_decorator
 async def get_cached_balance(
     account: LedgerAccount,
-    as_of_date: datetime,
+    as_of_date: datetime | None,
     age: timedelta | None,
 ) -> LedgerAccountDetails | None:
-    """Return a cached ``LedgerAccountDetails`` or ``None`` on miss / error."""
+    """Return a cached ``LedgerAccountDetails`` or ``None`` on miss / error.
+
+    ``as_of_date`` may be ``None`` to indicate a live query.  The caller
+    should have recorded that fact (see ``one_account_balance``) in order to
+    keep the cache key consistent.
+    """
+    from v4vapp_backend_v2.accounting.account_balances import LedgerAccountDetails
+
     try:
         gen = await get_cache_generation()
         key = _make_cache_key(gen, account, as_of_date, age)
@@ -173,10 +193,9 @@ async def get_cached_balance(
     return None
 
 
-@async_time_decorator
 async def set_cached_balance(
     account: LedgerAccount,
-    as_of_date: datetime,
+    as_of_date: datetime | None,
     age: timedelta | None,
     result: LedgerAccountDetails,
     ttl: int = DEFAULT_TTL_SECONDS,
@@ -184,6 +203,9 @@ async def set_cached_balance(
     """Store a ``LedgerAccountDetails`` in the cache.
 
     Uses Pydantic JSON serialisation (preserves ``Decimal`` precision).
+    ``as_of_date`` may be ``None`` for live queries; callers are expected to
+    signal the original intent so that the key remains stable across minute
+    rolls.
     """
     try:
         gen = await get_cache_generation()
