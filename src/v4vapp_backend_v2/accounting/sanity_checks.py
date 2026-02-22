@@ -224,8 +224,11 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
         # Get balances with tolerance
         hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
         hbd_deposits = deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
-        hive_deposits += escrow_details.balances_net.get(Currency.HIVE, Decimal(0.0))
-        hbd_deposits += escrow_details.balances_net.get(Currency.HBD, Decimal(0.0))
+        hive_escrow = escrow_details.balances_net.get(Currency.HIVE, Decimal(0.0))
+        hbd_escrow = escrow_details.balances_net.get(Currency.HBD, Decimal(0.0))
+
+        hive_deposits += hive_escrow
+        hbd_deposits += hbd_escrow
 
         hive_actual = Amount(balances.get("HIVE", 0.0))
         hbd_actual = Amount(balances.get("HBD", 0.0))
@@ -242,8 +245,10 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 name="server_account_hive_balances",
                 is_valid=True,
                 details=(
-                    f"Server Hive balances match: HIVE deposits {hive_deposits:,.3f}, "
-                    f"HBD deposits {hbd_deposits:,.3f}."
+                    f"Server Hive balances match: \nHIVE deposits {hive_deposits:,.3f}, "
+                    f"HBD deposits {hbd_deposits:,.3f}.\n"
+                    f"Escrow Hive {hive_escrow:,.3f} HIVE\nEscrow HBD {hbd_escrow:,.3f}\n"
+                    f"Includes Customer Deposits Hive and Escrow Hive accounts. Tolerance is {tolerance} (1 thousandth of a token)."
                 ),
             )
         else:
@@ -251,9 +256,10 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 name="server_account_hive_balances",
                 is_valid=False,
                 details=(
-                    f"Server Hive Mismatch: {hive_delta:,.3f} HIVE, {hbd_delta:,.3f} HBD; "
-                    f"balances mismatch: HIVE deposits {hive_deposits:,.3f} vs actual {hive_actual.amount_decimal:,.3f}, "
-                    f"HBD deposits {hbd_deposits:,.3f} vs actual {hbd_actual.amount_decimal:,.3f}."
+                    f"Server Hive Mismatch: {hive_delta:,.3f} HIVE, {hbd_delta:,.3f} HBD; \n"
+                    f"balances mismatch: \nHIVE deposits {hive_deposits:,.3f} vs actual {hive_actual.amount_decimal:,.3f}, \n"
+                    f"HBD deposits {hbd_deposits:,.3f} vs actual {hbd_actual.amount_decimal:,.3f}.\n"
+                    f"Includes Customer Deposits Hive and Escrow Hive accounts. Tolerance is {tolerance} (1 thousandth of a token)."
                 ),
             )
 

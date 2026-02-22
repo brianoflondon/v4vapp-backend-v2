@@ -117,7 +117,10 @@ async def test_cache_miss_returns_none():
 
 
 async def test_set_and_get_cached_balance():
-    """Storing then retrieving a balance should return an equivalent object."""
+    """Storing then retrieving a balance should return an equivalent object.
+
+    This exercise covers both explicit-date and live (``None``) calls.
+    """
     account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
 
     # Get a real balance from the DB
@@ -126,8 +129,8 @@ async def test_set_and_get_cached_balance():
 
     from datetime import datetime, timezone
 
+    # explicit date case
     as_of = datetime.now(tz=timezone.utc)
-
     await set_cached_balance(account, as_of, None, balance, ttl=30)
     cached = await get_cached_balance(account, as_of, None)
 
@@ -138,6 +141,16 @@ async def test_set_and_get_cached_balance():
     assert cached.hive == balance.hive
     assert cached.hbd == balance.hbd
     assert cached.msats == balance.msats
+
+    # live query case (date=None) should use a stable key across calls
+    await set_cached_balance(account, None, None, balance, ttl=30)
+    live_cached = await get_cached_balance(account, None, None)
+    assert live_cached is not None
+    assert live_cached.sub == balance.sub
+    # a second lookup still hits the cache
+    live_cached2 = await get_cached_balance(account, None, None)
+    assert live_cached2 is not None
+    assert live_cached2.sub == balance.sub
 
 
 async def test_invalidation_orphans_cached_entries():
@@ -209,7 +222,10 @@ async def test_selective_invalidation_respects_account_filters():
     assert await get_cached_balance(acc1, as_of, None) is not None
     assert await get_cached_balance(acc2, as_of, None) is not None
 
-    # invalidate only acc1 (debit) – credit pair is a dummy that shouldn't match
+    # invalidate only acc1 (debit).  The cache key format was changed so
+    # keys now embed ``sub:name`` rather than ``name:sub``.  The caller must
+    # therefore supply the values in the same order when constructing the
+    # scan pattern.
     gen_before = await get_cache_generation()
     gen_after = await invalidate_ledger_cache(
         debit_name=acc1.name,
@@ -220,8 +236,8 @@ async def test_selective_invalidation_respects_account_filters():
     # selective invalidation should not bump the generation counter
     assert gen_after == gen_before
 
+    # now the entry for acc1 should be removed while acc2 remains
     assert await get_cached_balance(acc1, as_of, None) is None
-    # second account should still be cached
     assert await get_cached_balance(acc2, as_of, None) is not None
 
 

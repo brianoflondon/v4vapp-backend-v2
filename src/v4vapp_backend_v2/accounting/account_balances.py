@@ -159,9 +159,6 @@ async def one_account_balance(
           flush can be forced by calling ``invalidate_all_ledger_cache()``.
     """
     _t0 = timer()
-    as_of_date_was_none = as_of_date is None
-    if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
     if isinstance(account, str):
         account = LiabilityAccount(
             name="VSC Liability",
@@ -260,7 +257,8 @@ async def one_account_balance(
 
     # --- Cache store ---
     if use_cache:
-        ttl = LIVE_TTL_SECONDS if as_of_date_was_none else HISTORICAL_TTL_SECONDS
+        ttl = LIVE_TTL_SECONDS if as_of_date is None else HISTORICAL_TTL_SECONDS
+        # pass the original intent (None for live) so key doesn't drift
         await set_cached_balance(account, as_of_date, age, ledger_details, ttl=ttl)
 
     return ledger_details
@@ -391,8 +389,6 @@ async def account_balance_printout(
         Tuple[str, LedgerAccountDetails]: A tuple containing a formatted string with the balance printout and the LedgerAccountDetails object.
 
     """
-    if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
 
     if isinstance(account, str):
         account = LiabilityAccount(
@@ -409,7 +405,8 @@ async def account_balance_printout(
     if not quote:
         quote = await TrackedBaseModel.update_quote()
 
-    title_line = f"{account} balance as of {as_of_date:%Y-%m-%d %H:%M:%S} UTC"
+    as_of_date_printout = as_of_date if as_of_date else datetime.now(tz=timezone.utc)
+    title_line = f"{account} balance as of {as_of_date_printout:%Y-%m-%d %H:%M:%S} UTC"
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
@@ -567,8 +564,6 @@ async def account_balance_printout_grouped_by_customer(
     Returns:
         str: A formatted string containing the balance with customer-grouped transactions.
     """
-    if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
 
     if isinstance(account, str):
         account = LiabilityAccount(
@@ -584,9 +579,8 @@ async def account_balance_printout_grouped_by_customer(
     units = set(ledger_account_details.balances.keys())
     quote = await TrackedBaseModel.update_quote()
 
-    title_line = (
-        f"{account} balance as of {as_of_date:%Y-%m-%d %H:%M:%S} UTC (Grouped by Customer)"
-    )
+    as_of_date_printout = as_of_date if as_of_date else datetime.now(tz=timezone.utc)
+    title_line = f"{account} balance as of {as_of_date_printout:%Y-%m-%d %H:%M:%S} UTC (Grouped by Customer)"
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
@@ -916,8 +910,7 @@ async def ledger_pipeline_result(
         LedgerConvSummary: The result of the aggregation as a LedgerConvSummary.
     """
     # Get a brand new MongoDB client with defaults
-    if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
+
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     ans = LedgerConvSummary(
         cust_id=cust_id,
@@ -1040,7 +1033,6 @@ async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal]
     return expiry, sats_freed
 
 
-@async_time_decorator
 async def keepsats_balance(
     cust_id: CustIDType = "",
     as_of_date: datetime | None = None,
@@ -1069,6 +1061,7 @@ async def keepsats_balance(
     account_balance = await one_account_balance(
         account=account,
         as_of_date=as_of_date,
+        age=None,
     )
 
     net_msats = account_balance.msats

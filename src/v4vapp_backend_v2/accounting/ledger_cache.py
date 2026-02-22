@@ -21,11 +21,13 @@ return ``None`` / silently skip, and the caller falls back to the database.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from v4vapp_backend_v2.config.decorators import async_time_decorator
+from colorama import Fore
+
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 if TYPE_CHECKING:
@@ -54,18 +56,32 @@ HISTORICAL_TTL_SECONDS = 1200
 def _make_cache_key(
     generation: int,
     account: LedgerAccount,
-    as_of_date: datetime,
+    as_of_date: datetime | None,
     age: timedelta | None,
 ) -> str:
-    """Build a deterministic Redis key from the query parameters."""
+    """Build a deterministic Redis key from the query parameters.
+
+    When ``as_of_date`` is ``None`` we treat the query as a "live" lookup and
+    omit any timestamp information from the hash.  This keeps keys stable
+    across minute boundaries when callers are repeatedly asking for the
+    current balance.
+    """
     account_part = f"{account.name}:{account.account_type.value}:{account.sub}:{account.contra}"
-    # Truncate to the minute so near-simultaneous "now" requests share a key.
-    date_part = as_of_date.replace(second=0, microsecond=0).isoformat()
-    age_part = str(int(age.total_seconds())) if age else "none"
+
+    if as_of_date is None:
+        date_part = "live"
+    else:
+        # Truncate to the minute so near-simultaneous "now" requests share a key.
+        date_part = as_of_date.replace(second=0, microsecond=0).isoformat()
+    if age is None or age.total_seconds() <= 0:
+        age_part = "none"
+    else:
+        # Round age to the nearest second for key stability.
+        age_part = str(int(age.total_seconds())) if age else "none"
 
     raw = f"{account_part}|{date_part}|{age_part}"
     key_hash = hashlib.sha256(raw.encode()).hexdigest()[:16]
-    return f"ledger:bal:v{generation}:{account.name}:{account.sub}:{key_hash}"
+    return f"ledger:bal:v{generation}:{account.sub}:{account.name}:{key_hash}"
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +98,6 @@ async def get_cache_generation() -> int:
         return 0
 
 
-@async_time_decorator
 async def invalidate_all_ledger_cache() -> int:
     """Increment the generation counter, instantly orphaning every cached entry.
 
@@ -93,17 +108,19 @@ async def invalidate_all_ledger_cache() -> int:
     """
     try:
         new_gen: int = await InternalConfig.redis_async.incr(GENERATION_KEY)
-        logger.debug(
+        logger.info(
             f"🗑️  Ledger cache invalidated — generation now {new_gen}",
             extra={"notification": False},
         )
         return new_gen
     except Exception as e:
-        logger.warning(f"Failed to invalidate ledger cache: {e}")
+        logger.exception(
+            f"This shouldn't happen. Failed to invalidate ledger cache: {e}",
+            extra={"notification": True},
+        )
         return 0
 
 
-@async_time_decorator
 async def invalidate_ledger_cache(
     debit_name: str, debit_sub: str, credit_name: str, credit_sub: str
 ) -> int:
@@ -120,14 +137,17 @@ async def invalidate_ledger_cache(
     returned.
     """
     # build glob patterns for the two account pairs
-    debit_key = f"ledger:bal:v*:{debit_name}:{debit_sub}:*"
-    credit_key = f"ledger:bal:v*:{credit_name}:{credit_sub}:*"
+    # These patterns MUST match the _make_cache_key format,
+    # especially the position of name/sub and the generation wildcard.
+    debit_key = f"ledger:bal:v*:{debit_sub}:{debit_name}:*"
+    credit_key = f"ledger:bal:v*:{credit_sub}:{credit_name}:*"
     try:
         # Use SCAN to locate and delete matching keys.  In a typical
         # deployment only a few cache entries will match the account pair, so
         # this loop completes quickly.  It avoids the O(n) cost of SCAN/DEL over
         # the whole ledger: namespace that we would incur with a naive
         # invalidation.
+        tasks = []
         for pattern in [debit_key, credit_key]:
             cursor_val = 0
             while True:
@@ -135,16 +155,25 @@ async def invalidate_ledger_cache(
                     cursor_val, match=pattern, count=100
                 )
                 if keys:
-                    await InternalConfig.redis_async.delete(*keys)
+                    tasks.append(InternalConfig.redis_async.delete(*keys))
+                    logger.info(
+                        f"🗑️  Deleted {len(keys)} cache keys matching pattern: {pattern}",
+                        extra={"notification": False},
+                    )
                 if cursor_val == 0:
                     break
+        if tasks:
+            await asyncio.gather(*tasks)
         logger.debug(
             f"🗑️  Ledger cache invalidated for accounts {debit_name}:{debit_sub} and {credit_name}:{credit_sub}",
             extra={"notification": False},
         )
         return await get_cache_generation()  # Return current generation after invalidation
     except Exception as e:
-        logger.warning(f"Failed to invalidate ledger cache for accounts: {e}")
+        logger.exception(
+            f"Failed to invalidate ledger cache for accounts: {e}, falling back to full invalidation",
+            extra={"notification": True},
+        )
         return await invalidate_all_ledger_cache()  # Fallback to full invalidation on error
 
 
@@ -153,14 +182,18 @@ async def invalidate_ledger_cache(
 # ---------------------------------------------------------------------------
 
 
-@async_time_decorator
 async def get_cached_balance(
     account: LedgerAccount,
-    as_of_date: datetime,
+    as_of_date: datetime | None,
     age: timedelta | None,
 ) -> LedgerAccountDetails | None:
-    """Return a cached ``LedgerAccountDetails`` or ``None`` on miss / error."""
-    from v4vapp_backend_v2.accounting.accounting_classes import LedgerAccountDetails
+    """Return a cached ``LedgerAccountDetails`` or ``None`` on miss / error.
+
+    ``as_of_date`` may be ``None`` to indicate a live query.  The caller
+    should have recorded that fact (see ``one_account_balance``) in order to
+    keep the cache key consistent.
+    """
+    from v4vapp_backend_v2.accounting.account_balances import LedgerAccountDetails
 
     try:
         gen = await get_cache_generation()
@@ -168,17 +201,16 @@ async def get_cached_balance(
         data: str | None = await InternalConfig.redis_async.get(key)
         if data is not None:
             result = LedgerAccountDetails.model_validate_json(data)
-            logger.info(f"Ledger cache HIT: {key}")
+            logger.info(f"{Fore.GREEN}HIT: {key}{Fore.RESET}")
             return result
     except Exception as e:
-        logger.debug(f"Ledger cache miss/error: {e}")
+        logger.debug(f"{Fore.RED}miss/error: {e}{Fore.RESET}")
     return None
 
 
-@async_time_decorator
 async def set_cached_balance(
     account: LedgerAccount,
-    as_of_date: datetime,
+    as_of_date: datetime | None,
     age: timedelta | None,
     result: LedgerAccountDetails,
     ttl: int = DEFAULT_TTL_SECONDS,
@@ -186,12 +218,15 @@ async def set_cached_balance(
     """Store a ``LedgerAccountDetails`` in the cache.
 
     Uses Pydantic JSON serialisation (preserves ``Decimal`` precision).
+    ``as_of_date`` may be ``None`` for live queries; callers are expected to
+    signal the original intent so that the key remains stable across minute
+    rolls.
     """
     try:
         gen = await get_cache_generation()
         key = _make_cache_key(gen, account, as_of_date, age)
         data = result.model_dump_json()
         await InternalConfig.redis_async.setex(key, ttl, data)
-        logger.info(f"Ledger cache SET: {key} (ttl={ttl}s)")
+        logger.info(f"{Fore.WHITE}SET: {key} (ttl={ttl}s){Fore.RESET}")
     except Exception as e:
-        logger.warning(f"Failed to set ledger cache: {e}")
+        logger.warning(f"{Fore.RED}Failed to set ledger cache: {e}{Fore.RESET}")

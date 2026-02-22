@@ -44,6 +44,8 @@ class TestTemplateCompilation:
             assert "{% block content %}" in content
             assert "<!DOCTYPE html>" in content
             assert "<title>" in content
+            # ensure our new sidebar colour variable is referenced
+            assert "sidebar_color" in content
 
     def test_users_template_compilation(self, template_env):
         """Test users template compiles without errors"""
@@ -135,6 +137,13 @@ class TestTemplateRendering:
             query_params = QueryParams()
 
         env.globals["request"] = MockRequest()
+
+        # Provide an empty sanity_results object so base.html rendering
+        # doesn't blow up when the test exercises it directly.
+        from types import SimpleNamespace
+
+        env.globals["sanity_results"] = SimpleNamespace(failed=[])
+
         return env
 
     def test_users_template_empty_data(self, template_env):
@@ -149,6 +158,19 @@ class TestTemplateRendering:
             content = f.read()
             assert "No VSC Liability Users Found" in content
             assert "👥" in content
+
+    def test_sidebar_color_rendering(self, template_env):
+        """Base template should render with provided sidebar_color"""
+        # provide a color so rendering succeeds
+        template_env.globals["sidebar_color"] = "#abcdef"
+        # sanity_results was already added by the fixture but we can override
+        template_env.globals["sanity_results"] = type("S", (), {"failed": []})()
+        template = template_env.get_template("base.html")
+        rendered = template.render()
+        # the override style should include the colour we passed
+        assert "#abcdef" in rendered
+        # should render without stray braces
+        assert "{{" not in rendered and "}}" not in rendered
 
     def test_users_template_with_errors(self, template_env):
         """Test users template handles error states"""

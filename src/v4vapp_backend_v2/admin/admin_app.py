@@ -84,6 +84,18 @@ class AdminApp:
         # Setup templates and static files
         self.templates = Jinja2Templates(directory=str(self.templates_dir))
 
+        # determine sidebar colour based on configured server account
+        # default to the existing light blue used in admin.css
+        sidebar_color = "#2563eb"
+        try:
+            if self.config.server_id == "devser.v4vapp":
+                sidebar_color = "#800000"
+        except Exception:
+            # if server_id is not set, keep default
+            pass
+        # expose as a global so all templates can access it
+        self.templates.env.globals["sidebar_color"] = sidebar_color
+
         # Setup navigation
         self.nav_manager = NavigationManager()
 

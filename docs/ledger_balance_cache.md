@@ -50,6 +50,11 @@ Keys are built from a SHA-256 hash of the query parameters:
 
 Truncating `as_of_date` to the minute means near-simultaneous "give me the current balance" requests share a cache entry.
 
+For queries where the caller passed `as_of_date=None` (the common "live" path),
+we now treat the date part as the literal string **live** rather than a
+timestamp.  This makes the key stable across minute boundaries and eliminates
+extra `SET` activity when nothing in the ledger has changed.
+
 ### TTL policy
 
 | Query type | TTL | Rationale |

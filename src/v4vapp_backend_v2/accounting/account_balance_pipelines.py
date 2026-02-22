@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping, Sequence
+from typing import Any, List, Mapping, Sequence
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 
@@ -83,7 +83,7 @@ def all_account_balances_pipeline(
     account: LedgerAccount | None = None,
     account_name: str | None = None,
     sub: str | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime | None = None,
     age: timedelta | None = None,
     filter: Mapping[str, Any] | None = None,
     cust_ids: Sequence[str] | None = None,
@@ -99,7 +99,7 @@ def all_account_balances_pipeline(
     Args:
         account (LedgerAccount, optional): An instance of LedgerAccount to filter the transactions. If provided, the pipeline will match transactions for this specific account.
         account_name (str, optional): The name of the account to filter transactions. Used if `account` is not provided.
-        sub (str, optional): The sub identifier to filter transactions
+        sub (str, optional): The sub identifier to filter transactions.
         as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
         age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
 
@@ -141,7 +141,7 @@ def all_account_balances_pipeline(
         credit_match_query = {}
 
     # When cust_ids is provided, restrict the facet matches to only those subs.
-    # This is the key optimisation: it ensures the expensive per-account
+    # This is the key optimization: it ensures the expensive per-account
     # aggregation inside the facet only processes the requested accounts.
     if cust_ids is not None:
         debit_match_query["debit.sub"] = {"$in": list(cust_ids)}
@@ -151,15 +151,16 @@ def all_account_balances_pipeline(
     facet_credit_match = {"$match": credit_match_query}
 
     if age:
-        start_date = as_of_date - age
-        date_range_query = {"$gte": start_date, "$lte": as_of_date}
+        if not as_of_date:
+            as_of_date = datetime.now(tz=timezone.utc)
+        date_range_query = {"$gte": as_of_date - age, "$lte": as_of_date}
     else:
-        date_range_query = {"$lte": as_of_date}
+        date_range_query = {"$exists": True} if as_of_date is None else {"$lte": as_of_date}
 
     # Build pipeline incrementally so we can inject an early $or match that
     # checks both `debit.*` and `credit.*` when an account filter is known.
     # This short-circuits documents before the expensive `$facet` stage.
-    pipeline: Sequence[Mapping[str, Any]] = []
+    pipeline: List[Mapping[str, Any]] = []
     pipeline.append(
         {"$match": {"cust_id": {"$in": cust_ids}}} if cust_ids is not None else {"$match": {}}
     )
@@ -258,7 +259,11 @@ def all_account_balances_pipeline(
                 "$project": {
                     "unit_groups": {
                         "$map": {
-                            "input": {"$setUnion": [{"$map": {"input": "$items", "as": "it", "in": "$$it.unit"}}]},
+                            "input": {
+                                "$setUnion": [
+                                    {"$map": {"input": "$items", "as": "it", "in": "$$it.unit"}}
+                                ]
+                            },
                             "as": "unit",
                             "in": {
                                 "k": "$$unit",

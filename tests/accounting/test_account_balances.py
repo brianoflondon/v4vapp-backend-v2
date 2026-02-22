@@ -97,17 +97,100 @@ async def test_all_account_balances_pipeline():
     Test the account details pipeline.
     """
     account = LiabilityAccount(name="Keepsats Hold", sub="keepsats")
+    # call without specifying date (should default to "now", handled inside)
     pipeline = all_account_balances_pipeline(account=account)
     assert isinstance(pipeline, list)
     assert len(pipeline) > 0
 
+    # same call with explicit None should behave identically
+    pipeline_none = all_account_balances_pipeline(account=account, as_of_date=None)
+    assert isinstance(pipeline_none, list)
+    assert len(pipeline_none) == len(pipeline)
+
     # There should be an early top-level $match that short-circuits documents
     # by checking both `debit.*` and `credit.*` fields with an `$or` so the
     # `$facet` stage processes far fewer documents.
-    or_stage = next((s for s in pipeline if "$match" in s and isinstance(s["$match"], dict) and "$or" in s["$match"]), None)
+    or_stage = next(
+        (
+            s
+            for s in pipeline
+            if "$match" in s and isinstance(s["$match"], dict) and "$or" in s["$match"]
+        ),
+        None,
+    )
     assert or_stage is not None, "expected top-level $match with $or for account filtering"
-    assert {"debit.name": account.name, "debit.sub": account.sub, "debit.account_type": account.account_type} in or_stage["$match"]["$or"]
-    assert {"credit.name": account.name, "credit.sub": account.sub, "credit.account_type": account.account_type} in or_stage["$match"]["$or"]
+    assert {
+        "debit.name": account.name,
+        "debit.sub": account.sub,
+        "debit.account_type": account.account_type,
+    } in or_stage["$match"]["$or"]
+    assert {
+        "credit.name": account.name,
+        "credit.sub": account.sub,
+        "credit.account_type": account.account_type,
+    } in or_stage["$match"]["$or"]
+
+    # verify that the date match stage exists
+    date_stage = next(
+        (
+            s
+            for s in pipeline
+            if "$match" in s and isinstance(s["$match"], dict) and "timestamp" in s["$match"]
+        ),
+        None,
+    )
+    assert date_stage is not None
+
+    # default call (no as_of_date, no age) uses an existence check
+    ts_query = date_stage["$match"]["timestamp"]
+    assert ts_query == {"$exists": True}
+
+    # explicit as_of_date without age should produce a $lte-only filter
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    pipeline_date = all_account_balances_pipeline(account=account, as_of_date=now, age=None)
+    date_stage2 = next(
+        (
+            s
+            for s in pipeline_date
+            if "$match" in s and isinstance(s["$match"], dict) and "timestamp" in s["$match"]
+        ),
+        None,
+    )
+    assert date_stage2 is not None
+    assert date_stage2["$match"]["timestamp"] == {"$lte": now}
+
+    # providing only age should return a range with both $gte and $lte
+    one_week = timedelta(days=7)
+    pipeline_age = all_account_balances_pipeline(account=account, as_of_date=None, age=one_week)
+    date_stage3 = next(
+        (
+            s
+            for s in pipeline_age
+            if "$match" in s and isinstance(s["$match"], dict) and "timestamp" in s["$match"]
+        ),
+        None,
+    )
+    assert date_stage3 is not None
+    tsq3 = date_stage3["$match"]["timestamp"]
+    assert "$gte" in tsq3 and "$lte" in tsq3
+
+    # age plus explicit as_of_date should use the provided end date
+    asof = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    age = timedelta(days=30)
+    pipeline_age2 = all_account_balances_pipeline(account=account, as_of_date=asof, age=age)
+    date_stage4 = next(
+        (
+            s
+            for s in pipeline_age2
+            if "$match" in s and isinstance(s["$match"], dict) and "timestamp" in s["$match"]
+        ),
+        None,
+    )
+    assert date_stage4 is not None
+    assert date_stage4["$match"]["timestamp"]["$gte"] == asof - age
+    assert date_stage4["$match"]["timestamp"]["$lte"] == asof
 
 
 async def test_all_account_balances():
