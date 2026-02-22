@@ -79,7 +79,7 @@ def _make_cache_key(
 
     raw = f"{account_part}|{date_part}|{age_part}"
     key_hash = hashlib.sha256(raw.encode()).hexdigest()[:16]
-    return f"ledger:bal:v{generation}:{account.name}:{account.sub}:{key_hash}"
+    return f"ledger:bal:v{generation}:{account.sub}:{account.name}:{key_hash}"
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,10 @@ async def invalidate_all_ledger_cache() -> int:
         )
         return new_gen
     except Exception as e:
-        logger.warning(f"Failed to invalidate ledger cache: {e}")
+        logger.exception(
+            f"This shouldn't happen. Failed to invalidate ledger cache: {e}",
+            extra={"notification": True},
+        )
         return 0
 
 
@@ -158,7 +161,10 @@ async def invalidate_ledger_cache(
         )
         return await get_cache_generation()  # Return current generation after invalidation
     except Exception as e:
-        logger.warning(f"Failed to invalidate ledger cache for accounts: {e}")
+        logger.exception(
+            f"Failed to invalidate ledger cache for accounts: {e}, falling back to full invalidation",
+            extra={"notification": True},
+        )
         return await invalidate_all_ledger_cache()  # Fallback to full invalidation on error
 
 

@@ -570,6 +570,24 @@ class LedgerEntry(BaseModel):
         """
         self.db_checks()
         try:
+            # Invalidate any cache entries that involve the two accounts
+            # affected by this entry.  We used to bump the global generation
+            # here (wiping the entire cache), but selective invalidation keeps
+            # unrelated balance lookups warm.
+            # Do this before saving, for extra safety. This call should be very quick.
+            await invalidate_ledger_cache(
+                debit_name=self.debit.name,
+                debit_sub=self.debit.sub,
+                credit_name=self.credit.name,
+                credit_sub=self.credit.sub,
+            )
+        except Exception as e:
+            logger.error(
+                f"Error invalidating ledger cache: {e}",
+                extra={"notification": True, **self.log_extra},
+            )
+
+        try:
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
             document: Any = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
             document = convert_decimals_for_mongodb(document)
@@ -591,17 +609,6 @@ class LedgerEntry(BaseModel):
             logger.debug(
                 f"\n{self}",
                 extra={"notification": False, "db_ans": ans, **self.log_extra},
-            )
-
-            # Invalidate any cache entries that involve the two accounts
-            # affected by this entry.  We used to bump the global generation
-            # here (wiping the entire cache), but selective invalidation keeps
-            # unrelated balance lookups warm.
-            await invalidate_ledger_cache(
-                debit_name=self.debit.name,
-                debit_sub=self.debit.sub,
-                credit_name=self.credit.name,
-                credit_sub=self.credit.sub,
             )
 
             return ans
