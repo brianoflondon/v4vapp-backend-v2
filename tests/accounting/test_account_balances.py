@@ -146,7 +146,8 @@ async def test_all_account_balances_pipeline():
     assert ts_query == {"$exists": True}
 
     # explicit as_of_date without age should produce a $lte-only filter
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
+
     now = datetime.now(timezone.utc)
     pipeline_date = all_account_balances_pipeline(account=account, as_of_date=now, age=None)
     date_stage2 = next(
