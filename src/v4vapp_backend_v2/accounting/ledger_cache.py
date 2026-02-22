@@ -18,6 +18,7 @@ Operations fall into two categories:
 All operations are fault-tolerant: if Redis is unavailable the functions
 return ``None`` / silently skip, and the caller falls back to the database.
 """
+
 from __future__ import annotations
 
 import hashlib
