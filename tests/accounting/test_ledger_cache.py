@@ -228,8 +228,8 @@ async def test_selective_invalidation_respects_account_filters():
     # scan pattern.
     gen_before = await get_cache_generation()
     gen_after = await invalidate_ledger_cache(
-        debit_name=acc1.sub,  # intentionally swapped
-        debit_sub=acc1.name,
+        debit_name=acc1.name,
+        debit_sub=acc1.sub,
         credit_name="nope",
         credit_sub="none",
     )
