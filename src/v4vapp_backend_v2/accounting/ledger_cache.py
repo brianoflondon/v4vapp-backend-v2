@@ -25,6 +25,8 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from colorama import Fore
+
 from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -192,10 +194,10 @@ async def get_cached_balance(
         data: str | None = await InternalConfig.redis_async.get(key)
         if data is not None:
             result = LedgerAccountDetails.model_validate_json(data)
-            logger.info(f"Ledger cache HIT: {key}")
+            logger.info(f"{Fore.GREEN}HIT: {key}{Fore.RESET}")
             return result
     except Exception as e:
-        logger.debug(f"Ledger cache miss/error: {e}")
+        logger.debug(f"{Fore.RED}miss/error: {e}{Fore.RESET}")
     return None
 
 
@@ -218,6 +220,6 @@ async def set_cached_balance(
         key = _make_cache_key(gen, account, as_of_date, age)
         data = result.model_dump_json()
         await InternalConfig.redis_async.setex(key, ttl, data)
-        logger.info(f"Ledger cache SET: {key} (ttl={ttl}s)")
+        logger.info(f"{Fore.WHITE}SET: {key} (ttl={ttl}s){Fore.RESET}")
     except Exception as e:
-        logger.warning(f"Failed to set ledger cache: {e}")
+        logger.warning(f"{Fore.RED}Failed to set ledger cache: {e}{Fore.RESET}")
