@@ -593,7 +593,10 @@ class LedgerEntry(BaseModel):
                 extra={"notification": False, "db_ans": ans, **self.log_extra},
             )
 
-            # Invalidate all cached ledger balances so subsequent reads reflect this entry
+            # Invalidate any cache entries that involve the two accounts
+            # affected by this entry.  We used to bump the global generation
+            # here (wiping the entire cache), but selective invalidation keeps
+            # unrelated balance lookups warm.
             await invalidate_ledger_cache(
                 debit_name=self.debit.name,
                 debit_sub=self.debit.sub,

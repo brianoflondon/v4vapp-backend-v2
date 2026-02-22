@@ -1,5 +1,6 @@
 """
-Tests for the ledger balance cache (generation-based invalidation).
+Tests for the ledger balance cache, exercising both generation-based and
+selective account invalidation paths.
 
 These tests use the same test DB fixture as test_account_balances, then exercise
 the cache module's get / set / invalidate flow.
@@ -19,6 +20,7 @@ from v4vapp_backend_v2.accounting.ledger_cache import (
     get_cache_generation,
     get_cached_balance,
     invalidate_all_ledger_cache,
+    invalidate_ledger_cache,
     set_cached_balance,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
@@ -93,7 +95,11 @@ async def test_generation_starts_at_zero():
 
 
 async def test_invalidate_increments_generation():
-    """Each call to invalidate_ledger_cache should increment the generation."""
+    """Calling ``invalidate_all_ledger_cache`` bumps the generation counter.
+
+    This is the legacy bulk-invalidation path; selective invalidation does not
+    touch the generation number and is tested separately.
+    """
     await InternalConfig.redis_async.delete(GENERATION_KEY)
     gen1 = await invalidate_all_ledger_cache()
     assert gen1 == 1
@@ -135,7 +141,7 @@ async def test_set_and_get_cached_balance():
 
 
 async def test_invalidation_orphans_cached_entries():
-    """After invalidation, previously cached entries should not be found."""
+    """After full invalidation, previously cached entries should not be found."""
     account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
     from datetime import datetime, timezone
 
@@ -147,7 +153,7 @@ async def test_invalidation_orphans_cached_entries():
     # Confirm it's cached
     assert await get_cached_balance(account, as_of, None) is not None
 
-    # Invalidate
+    # Invalidate everything
     await invalidate_all_ledger_cache()
 
     # Now the old cache entry should be missed (wrong generation)
@@ -179,3 +185,74 @@ async def test_use_cache_false_bypasses_cache():
 
     result = await one_account_balance(account=account, use_cache=False)
     assert isinstance(result, LedgerAccountDetails)
+
+
+async def test_selective_invalidation_respects_account_filters():
+    """Only cache entries matching the given account name/sub should be removed.
+
+    We cache two separate accounts, then invalidate using only the first account's
+    identifiers and verify that the other key survives.
+    """
+    from datetime import datetime, timezone
+
+    acc1 = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
+    # use another permitted liability name so the account is distinct
+    acc2 = LiabilityAccount(name="Keepsats Hold", sub="hello")
+    as_of = datetime.now(tz=timezone.utc)
+
+    # warm the cache for both accounts
+    bal1 = await one_account_balance(account=acc1, use_cache=False)
+    bal2 = await one_account_balance(account=acc2, use_cache=False)
+    await set_cached_balance(acc1, as_of, None, bal1, ttl=30)
+    await set_cached_balance(acc2, as_of, None, bal2, ttl=30)
+
+    assert await get_cached_balance(acc1, as_of, None) is not None
+    assert await get_cached_balance(acc2, as_of, None) is not None
+
+    # invalidate only acc1 (debit) – credit pair is a dummy that shouldn't match
+    gen_before = await get_cache_generation()
+    gen_after = await invalidate_ledger_cache(
+        debit_name=acc1.name,
+        debit_sub=acc1.sub,
+        credit_name="nope",
+        credit_sub="none",
+    )
+    # selective invalidation should not bump the generation counter
+    assert gen_after == gen_before
+
+    assert await get_cached_balance(acc1, as_of, None) is None
+    # second account should still be cached
+    assert await get_cached_balance(acc2, as_of, None) is not None
+
+
+async def test_selective_invalidation_falls_back_to_full_on_error(
+    module_monkeypatch,
+):
+    """If the Redis scan/delete loop raises an exception, revert to full invalidation."""
+    from datetime import datetime, timezone
+
+    acc = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
+    as_of = datetime.now(tz=timezone.utc)
+
+    bal = await one_account_balance(account=acc, use_cache=False)
+    await set_cached_balance(acc, as_of, None, bal, ttl=30)
+    assert await get_cached_balance(acc, as_of, None) is not None
+
+    # ensure generation is zero
+    await InternalConfig.redis_async.delete(GENERATION_KEY)
+    gen_before = await get_cache_generation()
+
+    # make scan fail
+    async def boom(*args, **kwargs):
+        raise RuntimeError("scan failed")
+
+    module_monkeypatch.setattr(InternalConfig.redis_async, "scan", boom)
+    gen_after = await invalidate_ledger_cache(
+        debit_name=acc.name,
+        debit_sub=acc.sub,
+        credit_name=acc.name,
+        credit_sub=acc.sub,
+    )
+    # fallback should have bumped the generation
+    assert gen_after == gen_before + 1
+    assert await get_cached_balance(acc, as_of, None) is None
