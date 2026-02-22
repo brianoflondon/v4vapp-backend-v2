@@ -1069,6 +1069,7 @@ async def keepsats_balance(
     account_balance = await one_account_balance(
         account=account,
         as_of_date=as_of_date,
+        age=None,
     )
 
     net_msats = account_balance.msats

@@ -44,6 +44,8 @@ class TestTemplateCompilation:
             assert "{% block content %}" in content
             assert "<!DOCTYPE html>" in content
             assert "<title>" in content
+            # ensure our new sidebar colour variable is referenced
+            assert "sidebar_color" in content
 
     def test_users_template_compilation(self, template_env):
         """Test users template compiles without errors"""
@@ -149,6 +151,21 @@ class TestTemplateRendering:
             content = f.read()
             assert "No VSC Liability Users Found" in content
             assert "👥" in content
+
+    def test_sidebar_color_rendering(self, template_env):
+        """Base template should render with provided sidebar_color"""
+        # provide a color so rendering succeeds
+        template_env.globals["sidebar_color"] = "#abcdef"
+        template_env.globals["url_for"] = lambda name, **kwargs: f"/admin/{name}"
+        template_env.globals["request"] = type(
+            "MockRequest",
+            (),
+            {"query_params": type("QueryParams", (), {"get": lambda self, k, d=None: d})()}
+        )()
+        template = template_env.get_template("base.html")
+        rendered = template.render()
+        # the override style should include the colour we passed
+        assert "#abcdef" in rendered
 
     def test_users_template_with_errors(self, template_env):
         """Test users template handles error states"""

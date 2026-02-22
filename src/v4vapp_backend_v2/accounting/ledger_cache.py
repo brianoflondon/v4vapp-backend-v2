@@ -160,8 +160,6 @@ async def get_cached_balance(
     age: timedelta | None,
 ) -> LedgerAccountDetails | None:
     """Return a cached ``LedgerAccountDetails`` or ``None`` on miss / error."""
-    from v4vapp_backend_v2.accounting.accounting_classes import LedgerAccountDetails
-
     try:
         gen = await get_cache_generation()
         key = _make_cache_key(gen, account, as_of_date, age)

@@ -16,6 +16,14 @@
     <!-- Custom CSS -->
     <link href="{{ url_for('static', path='css/admin.css') }}" rel="stylesheet">
 
+    <!-- dynamic sidebar colour override based on server account -->
+    <style>
+        /* the global `sidebar_color` is injected by AdminApp */
+        .sidebar {
+            background: {{ sidebar_color }} !important;
+        }
+    </style>
+
     {% block extra_css %}{% endblock %}
 </head>
 
