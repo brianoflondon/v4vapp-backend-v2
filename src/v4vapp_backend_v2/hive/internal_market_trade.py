@@ -239,7 +239,19 @@ def check_order_book(
         ValueError: If the amount is negative or if there is not enough volume in the order book.
 
     Note:
-        The function assumes that the order book always uses HIVE as the base asset.
+        The underlying Nectar `Market.orderbook` returns a shared book that is
+        *always* denominated with HIVE as the base asset.  In other words, even
+        when we ask for ``Market(base="HBD", quote="HIVE")`` the returned
+        ``bids``/``asks`` arrays still contain ``base`` amounts expressed in
+        HIVE and ``quote`` in HBD.  This quirk is why the logic below has to
+        flip sides when we are actually trading HBD.
+
+        To keep prices meaningful to callers, the returned ``Price`` object is
+        always expressed with ``amount.symbol`` as the base asset, and the
+        opposite token as the quote asset.  During a negative-HBD trade we
+        therefore select the bid side of the HIVE book (i.e. the best price we
+        will receive when selling HIVE) and still return the numeric price in
+        HIVE/HBD so that ``market_trade`` can continue to invert it as before.
     """
 
     global ORDER_BOOK_CACHE
@@ -278,11 +290,15 @@ def check_order_book(
     else:
         # buying base asset
         if base_asset == "HIVE":
+            # buying HIVE: hit asks (people selling HIVE for HBD)
             orders_bids = order_book["asks"]
             orders_bids.sort(key=lambda x: x["price"], reverse=False)
-        else:  # buying HBD (sell HIVE) — take asks to hit liquidity immediately
-            orders_bids = order_book["asks"]
-            orders_bids.sort(key=lambda x: x["price"], reverse=False)
+        else:
+            # buying HBD (which in the on-chain book means selling HIVE)
+            # the order book is always HIVE base; we need to hit bids because
+            # bids represent offers to buy HIVE, i.e. sell us HBD.
+            orders_bids = order_book["bids"]
+            orders_bids.sort(key=lambda x: x["price"], reverse=True)
 
     cumulative_volume = 0.0
     total_received = 0.0
@@ -347,7 +363,7 @@ if __name__ == "__main__":
     #     logger.info(f"{icon} {e}")
     InternalConfig(config_filename="devhive.config.yaml")
     try:
-        trade = Amount("0.2 HBD")
+        trade = Amount("-0.2 HBD")
         trx = market_trade(HiveAccountConfig(name="v4vapp-test"), trade)
         logger.info(f"{ICON} trx: {trx}", extra={"notification": False})
     except Exception as e:

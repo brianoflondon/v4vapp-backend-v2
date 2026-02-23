@@ -28,14 +28,20 @@ def test_check_order_book_sell_and_buy():
     buy_quote = check_order_book(Amount("-10 HIVE"), use_cache=False)
     assert float(buy_quote.price["price"]) == 1.2
 
-    # buying HBD (negative amount) should also use ask price
+    # buying HBD (negative amount) should use the bid side (we're selling
+    # HIVE) and therefore the lower price from our fake book
     buy_hbd_quote = check_order_book(Amount("-5 HBD"), use_cache=False)
-    assert float(buy_hbd_quote.price["price"]) == 1.2
+    assert float(buy_hbd_quote.price["price"]) == 1.0
+
+    # selling HBD (positive amount) should hit asks (buying HIVE with HBD)
+    sell_hbd_quote = check_order_book(Amount("5 HBD"), use_cache=False)
+    assert float(sell_hbd_quote.price["price"]) == 1.2
 
     # verify minimum amounts make sense
     assert sell_quote.minimum_amount.symbol == "HBD"
     assert buy_quote.minimum_amount.symbol == "HBD"
     assert buy_hbd_quote.minimum_amount.symbol == "HIVE"
+    assert sell_hbd_quote.minimum_amount.symbol == "HIVE"
 
 
 def test_check_order_book_no_cache():
