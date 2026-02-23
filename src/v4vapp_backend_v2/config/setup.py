@@ -370,6 +370,12 @@ class HiveRoles(StrEnum):
     witness = "witness"
 
 
+class HiveTradeDirection(StrEnum):
+    buy = "buy"
+    sell = "sell"
+    both = "both"
+
+
 class HiveAccountConfig(BaseConfig):
     """
     HiveAccountConfig is a configuration class for Hive account settings.
@@ -388,6 +394,8 @@ class HiveAccountConfig(BaseConfig):
     memo_key: str = ""
     hbd_balance: str = ""  # HBD balance of the account
     hive_balance: str = ""  # HIVE balance of the account
+    hbd_trade: HiveTradeDirection = HiveTradeDirection.both
+    threshold_delta: str = ""  # Threshold value to trigger buy/sell action based on HBD balance
 
     @property
     def keys(self) -> List[str]:

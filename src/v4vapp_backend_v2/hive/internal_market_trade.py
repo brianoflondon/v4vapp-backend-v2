@@ -68,8 +68,12 @@ def account_trade(
     balance["HIVE"] = account.available_balances[0]
     balance["HBD"] = account.available_balances[1]
     delta = balance[set_amount_to.symbol] - set_amount_to
+    if hive_acc.threshold_delta:
+        threshold_delta_amount = Amount(hive_acc.threshold_delta)
+    else:
+        threshold_delta_amount = Amount("1.000 HBD")  # default to 0 if not set
     # delta.amount may be negative if we need to buy the asset instead of selling it
-    if abs(delta.amount) > Amount("0.500 " + set_amount_to.symbol):
+    if abs(delta.amount) > threshold_delta_amount.amount:
         logger.info(
             f"{ICON} "
             f"Account {hive_acc.name} has balance: {balance[set_amount_to.symbol]} "
