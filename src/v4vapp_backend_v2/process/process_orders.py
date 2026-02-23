@@ -229,7 +229,7 @@ async def process_create_fill_order_op(
             )
             if original_entry:
                 logger.info(
-                    f"Reversing original LimitOrderCreate entry {original_entry.id} for order {limit_fill_order.open_orderid}",
+                    f"Reversing original LimitOrderCreate entry {original_entry.log_str} for order {limit_fill_order.open_orderid}",
                     extra={**limit_fill_order.log_extra, **original_entry.log_extra},
                 )
                 await original_entry.save(upsert=True, reverse=True)
