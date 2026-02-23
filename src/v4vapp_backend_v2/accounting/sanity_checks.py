@@ -203,7 +203,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
         # Get customer deposits balance
         server_id = InternalConfig().server_id
         customer_deposits_account = AssetAccount(name="Customer Deposits Hive", sub=server_id)
-        escrow_account = AssetAccount(name="Escrow Hive", sub=server_id)
+        escrow_account = AssetAccount(name="Traded Deposits Hive", sub=server_id)
 
         tasks: dict[str, asyncio.Task] = {}
         async with asyncio.TaskGroup() as tg:

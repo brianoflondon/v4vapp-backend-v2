@@ -43,9 +43,11 @@ async def process_create_fill_order_op(
     ledger_entries = []
     tracked_customers = [InternalConfig().server_id]  # Replace with dynamic query if needed
 
+    # Limit order creation - send value to escrow, this needs to be reversed when order fills or cancels.
+    # TODO: Reverse or cancel escrow entry when order fills or cancels.
     if (
         isinstance(limit_fill_order, LimitOrderCreate)
-        and limit_fill_order.owner not in tracked_customers
+        and limit_fill_order.owner in tracked_customers
     ):
         logger.info(f"Limit order create: {limit_fill_order.orderid}")
         if not limit_fill_order.conv or limit_fill_order.conv.is_unset():
@@ -65,7 +67,9 @@ async def process_create_fill_order_op(
             link=limit_fill_order.link,
         )
         ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=limit_fill_order.owner)
-        ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=limit_fill_order.owner)
+        ledger_entry.credit = AssetAccount(
+            name="Customer Deposits Hive", sub=limit_fill_order.owner
+        )
         ledger_entry.description = limit_fill_order.ledger_str
         ledger_entry.ledger_type = LedgerType.LIMIT_ORDER_CREATE
         ledger_entry.debit_unit = ledger_entry.credit_unit = limit_fill_order.amount_to_sell.unit
@@ -112,13 +116,13 @@ async def process_create_fill_order_op(
                 cust_id=limit_fill_order.cust_id,
                 description=f"Fill order buyer: {limit_fill_order.current_owner} pays {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit}",
                 debit=AssetAccount(
-                    name="Escrow Hive", sub=limit_fill_order.current_owner
+                    name="Traded Deposits Hive", sub=limit_fill_order.current_owner
                 ),  # Buyer debits their deposits for HIVE paid
                 debit_unit=limit_fill_order.open_pays.unit,  # HIVE
                 debit_amount=limit_fill_order.open_pays.amount_decimal,
                 debit_conv=limit_fill_order.debit_conv,
                 credit=AssetAccount(
-                    name="Escrow Hive", sub=limit_fill_order.current_owner
+                    name="Traded Deposits Hive", sub=limit_fill_order.current_owner
                 ),  # Buyer credits their deposits for HBD received
                 credit_unit=limit_fill_order.current_pays.unit,  # HBD
                 credit_amount=limit_fill_order.current_pays.amount_decimal,
@@ -137,13 +141,13 @@ async def process_create_fill_order_op(
                 cust_id=limit_fill_order.cust_id,
                 description=f"Fill order seller: {limit_fill_order.open_owner} receives {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit}",
                 debit=AssetAccount(
-                    name="Escrow Hive", sub=limit_fill_order.open_owner
+                    name="Traded Deposits Hive", sub=limit_fill_order.open_owner
                 ),  # Seller debits escrow for HBD delivered
                 debit_unit=limit_fill_order.current_pays.unit,  # HBD
                 debit_amount=limit_fill_order.current_pays.amount_decimal,
                 debit_conv=limit_fill_order.credit_conv,  # Use credit_conv for seller's debit (HBD)
                 credit=AssetAccount(
-                    name="Escrow Hive", sub=limit_fill_order.open_owner
+                    name="Traded Deposits Hive", sub=limit_fill_order.open_owner
                 ),  # Seller credits deposits for HIVE received
                 credit_unit=limit_fill_order.open_pays.unit,  # HIVE
                 credit_amount=limit_fill_order.open_pays.amount_decimal,
@@ -163,13 +167,13 @@ async def process_create_fill_order_op(
                 cust_id=limit_fill_order.cust_id,
                 description=f"Net fill order: {limit_fill_order.current_owner} trades {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} for {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} (external seller)",
                 debit=AssetAccount(
-                    name="Escrow Hive", sub=limit_fill_order.current_owner
+                    name="Traded Deposits Hive", sub=limit_fill_order.current_owner
                 ),  # Buyer debits deposits for HIVE paid
                 debit_unit=limit_fill_order.open_pays.unit,
                 debit_amount=limit_fill_order.open_pays.amount_decimal,
                 debit_conv=limit_fill_order.debit_conv,
                 credit=AssetAccount(
-                    name="Escrow Hive", sub=limit_fill_order.current_owner
+                    name="Traded Deposits Hive", sub=limit_fill_order.current_owner
                 ),  # Buyer credits deposits for HBD received (net effect)
                 credit_unit=limit_fill_order.current_pays.unit,
                 credit_amount=limit_fill_order.current_pays.amount_decimal,
@@ -192,13 +196,13 @@ async def process_create_fill_order_op(
                 cust_id=limit_fill_order.cust_id,
                 description=f"Net fill order: {limit_fill_order.open_owner} trades {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} (external buyer)",
                 debit=AssetAccount(
-                    name="Escrow Hive", sub=limit_fill_order.open_owner
+                    name="Traded Deposits Hive", sub=limit_fill_order.open_owner
                 ),  # Seller debits deposits for what they receive (current_pays)
                 debit_unit=limit_fill_order.current_pays.unit,
                 debit_amount=limit_fill_order.current_pays.amount_decimal,
                 debit_conv=limit_fill_order.credit_conv,
                 credit=AssetAccount(
-                    name="Escrow Hive", sub=limit_fill_order.open_owner
+                    name="Traded Deposits Hive", sub=limit_fill_order.open_owner
                 ),  # Seller credits deposits for what they deliver (open_pays)
                 credit_unit=limit_fill_order.open_pays.unit,
                 credit_amount=limit_fill_order.open_pays.amount_decimal,

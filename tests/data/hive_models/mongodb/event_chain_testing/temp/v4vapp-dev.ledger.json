@@ -1257,7 +1257,7 @@
       "in_limits": false
     },
     "debit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -1375,7 +1375,7 @@
       "sub": "devser.v4vapp"
     },
     "credit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -1502,7 +1502,7 @@
       "sub": "devser.v4vapp"
     },
     "credit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -1629,7 +1629,7 @@
       "sub": "devser.v4vapp"
     },
     "credit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -1756,7 +1756,7 @@
       "sub": "devser.v4vapp"
     },
     "credit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -1883,7 +1883,7 @@
       "sub": "devser.v4vapp"
     },
     "credit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -2005,7 +2005,7 @@
       "in_limits": true
     },
     "debit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -2123,7 +2123,7 @@
       "sub": "devser.v4vapp"
     },
     "credit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -2248,7 +2248,7 @@
       "sub": "devser.v4vapp"
     },
     "credit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -2471,7 +2471,7 @@
       "in_limits": true
     },
     "debit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
@@ -2591,7 +2591,7 @@
       "sub": "devser.v4vapp"
     },
     "credit": {
-      "name": "Escrow Hive",
+      "name": "Traded Deposits Hive",
       "account_type": "Asset",
       "sub": "devser.v4vapp"
     },
