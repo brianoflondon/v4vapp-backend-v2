@@ -152,11 +152,12 @@ class FillOrder(OpBase):
             - If the remaining amount is zero or less, the order is removed from the list
               of open orders and marked as completed.
         """
-        open_order = LimitOrderCreate.open_order_ids.get(self.current_orderid, None)
+        # attempt to look up the open order by either id
+        open_order = LimitOrderCreate.get_open_order(self.current_orderid)
         if not open_order:
-            open_order = LimitOrderCreate.open_order_ids.get(self.open_orderid, None)
+            open_order = LimitOrderCreate.get_open_order(self.open_orderid)
         if open_order is not None:
-            if self.open_owner == open_order.owner:  # This is when we fill someone else's order
+            if self.open_owner == open_order.owner:  # filling someone else's order
                 amount_remaining = Amount(str(open_order.amount_remaining))
                 amount_remaining -= Amount(self.current_pays.model_dump())
             else:
@@ -167,7 +168,7 @@ class FillOrder(OpBase):
                 self.completed_order = False
                 return f"Remaining {open_order.amount_remaining} {open_order.orderid}"
             else:
-                LimitOrderCreate.open_order_ids.pop(open_order.orderid)
+                LimitOrderCreate.remove_open_order(open_order.orderid)
                 self.completed_order = True
                 return f"✅ Order {open_order.orderid} has been filled (xs {amount_remaining})"
         return f"id {self.open_orderid}"

@@ -13,6 +13,8 @@ from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 def test_model_validate_limit_order_create():
     TrackedBaseModel.last_quote = last_quote()
     LimitOrderCreate.watch_users = ["droida", "dtake"]
+    # ensure clean Redis state before iterating
+    LimitOrderCreate.clear_open_orders()
     for hive_event in load_hive_events(OpTypes.LIMIT_ORDER_CREATE):
         if hive_event["type"] == "limit_order_create":
             limit_order = LimitOrderCreate.model_validate(hive_event)
@@ -24,6 +26,7 @@ def test_model_validate_limit_order_create():
             assert (limit_order.owner in limit_order.watch_users) == limit_order.is_watched
 
     assert limit_order
+    # Redis-backed storage should contain the same count
     assert len(limit_order.open_order_ids) == 14
     limit_order.expire_orders()
     assert len(limit_order.open_order_ids) == 0
