@@ -203,7 +203,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                         extra={"notification": False, **ledger_log_extra},
                     )
                 logger.info(
-                    f"{SUCCESS_ICON} {process_time:>7,.2f} s {tracked_op.log_str} {tracked_op.short_id}",
+                    f"{SUCCESS_ICON} {process_time:>7,.2f} s {tracked_op.log_str}",
                     extra={
                         "notification": True,
                         "ledger_items": ledger_entries_log_extra,
