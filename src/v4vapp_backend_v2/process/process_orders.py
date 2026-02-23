@@ -219,11 +219,19 @@ async def process_create_fill_order_op(
 
         # Now we need to mark the original limit order create entry as reversed since it's effectively closed by this fill
         # This assumes we have a way to find that original entry, which might require a query
+        logger.info(
+            f"Checking for completed {limit_fill_order.completed_order} LimitOrderCreate {limit_fill_order.log_str} to reverse",
+            extra={**limit_fill_order.log_extra},
+        )
         if limit_fill_order.completed_order:
             original_entry = await LedgerEntry().load_one_by_op_type(
                 short_id=limit_fill_order.short_id_p, op_type="limit_order_create"
             )
             if original_entry:
+                logger.info(
+                    f"Reversing original LimitOrderCreate entry {original_entry.id} for order {limit_fill_order.open_orderid}",
+                    extra={**limit_fill_order.log_extra, **original_entry.log_extra},
+                )
                 await original_entry.save(upsert=True, reverse=True)
     # Save all entries
     for entry in ledger_entries:
