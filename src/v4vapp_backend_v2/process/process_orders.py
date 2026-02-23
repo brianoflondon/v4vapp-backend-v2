@@ -210,6 +210,12 @@ async def process_create_fill_order_op(
                 link=limit_fill_order.link,
             )
             ledger_entries.append(net_entry)
+        else:
+            # Neither tracked: Skip or log (not relevant to your entity)
+            logger.info(
+                f"Fill order between untracked parties: {limit_fill_order.current_owner} and {limit_fill_order.open_owner}. Skipping."
+            )
+            return []
 
         # Now we need to mark the original limit order create entry as reversed since it's effectively closed by this fill
         # This assumes we have a way to find that original entry, which might require a query
@@ -219,14 +225,6 @@ async def process_create_fill_order_op(
             )
             if original_entry:
                 await original_entry.save(upsert=True, reverse=True)
-
-        else:
-            # Neither tracked: Skip or log (not relevant to your entity)
-            logger.info(
-                f"Fill order between untracked parties: {limit_fill_order.current_owner} and {limit_fill_order.open_owner}. Skipping."
-            )
-            return []
-
     # Save all entries
     for entry in ledger_entries:
         await entry.save()
