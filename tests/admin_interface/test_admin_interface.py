@@ -103,6 +103,9 @@ class TestAdminEndpoints:
         assert "V4VApp Admin" in content  # Updated to match actual content
         assert "nav" in content  # Navigation should be present
 
+        # new flush ledger cache button should appear in sidebar
+        assert "Flush Ledger Cache" in content
+
     def test_users_page(self, admin_client):
         """Test users page loads and displays data"""
         response = admin_client.get("/admin/users")
@@ -330,6 +333,32 @@ class TestAdminContent:
         badge_classes = ["badge", "bg-success", "bg-danger", "bg-secondary", "bg-warning"]
         badges_found = any(cls in content for cls in badge_classes)
         assert badges_found, "No status badges found"
+
+
+class TestAdminLedgerCache:
+    """Tests for the new ledger cache flush endpoint and UI"""
+
+    def test_flush_endpoint(self, admin_client, mocker):
+        """POSTing to the flush endpoint should call invalidate_all_ledger_cache."""
+        mocker.patch(
+            "v4vapp_backend_v2.admin.admin_app.invalidate_all_ledger_cache",
+            return_value=42,
+        )
+        response = admin_client.post("/admin/ledger-cache/flush")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["generation"] == 42
+
+    def test_flush_endpoint_failure(self, admin_client, mocker):
+        """Ensure failures result in 500 response."""
+        mocker.patch(
+            "v4vapp_backend_v2.admin.admin_app.invalidate_all_ledger_cache",
+            side_effect=Exception("boom"),
+        )
+        response = admin_client.post("/admin/ledger-cache/flush")
+        assert response.status_code == 500
+        assert "Cache flush failed" in response.text
 
 
 class TestAdminErrorHandling:

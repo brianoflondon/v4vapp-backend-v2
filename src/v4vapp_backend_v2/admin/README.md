@@ -104,6 +104,10 @@ The admin interface allows you to manage all V4VApp configuration settings:
 - `POST /admin/v4vconfig/validate` - Validate configuration
 - `GET /admin/v4vconfig/refresh` - Refresh from Hive
 
+### Ledger Cache
+
+- `POST /admin/ledger-cache/flush` - Increment cache generation (flush all ledger balance entries). Typically triggered by the sidebar button but available for scripting.
+
 ### Example API Usage
 
 ```bash

@@ -20,7 +20,13 @@
     <style>
         /* the global `sidebar_color` is injected by AdminApp */
         .sidebar {
-            background: {{ sidebar_color }} !important;
+            background: {
+                    {
+                    sidebar_color
+                }
+            }
+
+            !important;
         }
     </style>
 
@@ -75,6 +81,13 @@
                                 title="Toggle dark/light mode">
                                 <span class="me-2" id="theme-icon">🌙</span>
                                 <span id="theme-text">Dark Mode</span>
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link w-100 text-start" onclick="flushLedgerCache()"
+                                title="Invalidate ledger balance cache">
+                                <span class="me-2">🗑️</span>
+                                Flush Ledger Cache
                             </button>
                         </li>
                     </ul>
@@ -331,6 +344,34 @@
                 bsAlert.close();
             });
         }, 5000);
+
+        // Simple helper to display a temporary alert message
+        function showAlert(message, type = 'success') {
+            var alertHtml = '<div class="alert alert-' + type + ' alert-dismissible fade show" role="alert">'
+                + message
+                + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>'
+                + '</div>';
+            var container = document.querySelector('.main-content');
+            if (container) {
+                container.insertAdjacentHTML('afterbegin', alertHtml);
+            }
+        }
+
+        // Flush ledger cache via admin endpoint
+        function flushLedgerCache() {
+            fetch('/admin/ledger-cache/flush', { method: 'POST' })
+                .then(function (resp) { return resp.json(); })
+                .then(function (data) {
+                    if (data.success) {
+                        showAlert('Ledger cache flushed (generation ' + data.generation + ')');
+                    } else {
+                        showAlert('Cache flush failed', 'danger');
+                    }
+                })
+                .catch(function (err) {
+                    showAlert('Cache flush error: ' + err, 'danger');
+                });
+        }
 
         // Form validation helper
         function validateForm(formId) {
