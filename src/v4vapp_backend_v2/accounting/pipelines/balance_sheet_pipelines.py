@@ -21,7 +21,13 @@ def balance_sheet_check_pipeline(
         date_range_query = {"$lte": as_of_date}
 
     check_balance_pipeline: Sequence[Mapping[str, Any]] = [
-        {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
+        {"$match": {"conv_signed": {"$exists": True}}},
+        {"$match": {"reversed": {"$exists": False}}},
+        {
+            "$match": {
+                "timestamp": date_range_query,
+            }
+        },
         {
             "$group": {
                 "_id": None,

@@ -8,7 +8,12 @@ from nectar.market import Market
 from nectar.price import Price
 from nectarapi.exceptions import UnhandledRPCError
 
-from v4vapp_backend_v2.config.setup import HiveAccountConfig, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import (
+    HiveAccountConfig,
+    HiveTradeDirection,
+    InternalConfig,
+    logger,
+)
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 
 ORDER_BOOK_CACHE: Dict[str, Any] = {}
@@ -74,6 +79,22 @@ def account_trade(
         threshold_delta_amount = Amount("1.000 HBD")  # default to 0 if not set
     # delta.amount may be negative if we need to buy the asset instead of selling it
     if abs(delta.amount) > threshold_delta_amount.amount:
+        if hive_acc.hbd_trade_direction == HiveTradeDirection.none:
+            logger.info(
+                f"{ICON} Account {hive_acc.name} balance is outside threshold but hbd_trade_direction is set to 'none', so no trade will be executed"
+            )
+            return {}
+        if hive_acc.hbd_trade_direction != HiveTradeDirection.both:
+            if delta.amount > 0 and hive_acc.hbd_trade_direction != HiveTradeDirection.sell:
+                logger.info(
+                    f"{ICON} Account {hive_acc.name} balance is above threshold but hbd_trade_direction is set to '{hive_acc.hbd_trade_direction}', so no sell trade will be executed"
+                )
+                return {}
+            elif delta.amount < 0 and hive_acc.hbd_trade_direction != HiveTradeDirection.buy:
+                logger.info(
+                    f"{ICON} Account {hive_acc.name} balance is below threshold but hbd_trade_direction is set to '{hive_acc.hbd_trade_direction}', so no buy trade will be executed"
+                )
+                return {}
         logger.info(
             f"{ICON} "
             f"Account {hive_acc.name} has balance: {balance[set_amount_to.symbol]} "
@@ -229,7 +250,7 @@ def check_order_book(
     abs_amount = Amount(abs(amount.amount), amount.symbol)
 
     if abs_amount.amount <= 0:
-        raise ValueError("Amount must be non‑zero")
+        raise ValueError("Amount must be non-zero")
 
     if not hive:
         hive = get_hive_client()

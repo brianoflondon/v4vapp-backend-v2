@@ -107,6 +107,7 @@ class LedgerEntry(BaseModel):
         credit (LedgerAccountAny | None): Account to be credited.
         op (TrackedAny | None): Associated operation.
         op_type (str): Type of the operation, defaults to 'ledger_entry'.
+        reversed (datetime | None): Timestamp of the reversal if the entry has been reversed.
         extra_data (List[Any]): Additional data related to the ledger entry.
         model_config (ConfigDict): Model configuration.
 
@@ -182,6 +183,9 @@ class LedgerEntry(BaseModel):
     op_type: str = Field(
         default="ledger_entry",
         description="Type of the operation, defaults to 'ledger_entry'",
+    )
+    reversed: datetime | None = Field(
+        None, description="Timestamp of the reversal if the entry has been reversed"
     )
     link: str = Field("", description="Link to the Hive block explorer transaction if appropriate")
     extra_data: List[Any] = Field(
@@ -471,7 +475,30 @@ class LedgerEntry(BaseModel):
             logger.error(f"Error validating ledger entry: {e}")
             return None
 
-    # ...existing code...
+    @classmethod
+    async def load_one_by_op_type(cls, short_id: str, op_type: str) -> "LedgerEntry | None":
+        """
+        Load a single LedgerEntry by short_id only if it has the specified op_type,
+        or return None if not found.
+
+        Args:
+            short_id (str): The short_id of the LedgerEntry to load.
+            op_type (str): The operation type to filter by.
+
+        Returns:
+            LedgerEntry | None: The loaded LedgerEntry if found and valid, otherwise None.
+
+        Note: short_id is not unique across all ledger_entries but it. is for limit_order_create entries,
+        so this method is specifically for loading those entries.
+        """
+        doc = await cls.collection().find_one(
+            filter={"short_id": short_id, "op_type": op_type}
+        )
+        try:
+            return cls.model_validate(doc) if doc else None
+        except ValidationError as e:
+            logger.error(f"Error validating ledger entry: {e}")
+            return None
 
     def db_checks(self) -> None:
         """
@@ -575,11 +602,16 @@ class LedgerEntry(BaseModel):
             )
 
     async def save(
-        self, ignore_duplicates: bool = False, upsert: bool = False
+        self, ignore_duplicates: bool = False, upsert: bool = False, reverse: bool = False
     ) -> InsertOneResult | UpdateResult | None:
         """
         Saves the LedgerEntry to the database. This should only be called after the LedgerEntry is completed.
         and once. If it is called again, it will raise a duplicate exception.
+
+        Args:
+            ignore_duplicates (bool): If True, duplicate entries will be ignored and not raise an exception.
+            upsert (bool): If True, the entry will be updated if it already exists based on group_id, otherwise it will be inserted. Use with caution as it can overwrite existing entries.
+            reverse (bool): If True, the ledger entry will be marked as reversed by setting the 'reversed' timestamp to the current time.
 
         Raises:
             LedgerEntryCreationException: If the ledger entry is not completed or if an error occurs during saving.
@@ -596,6 +628,8 @@ class LedgerEntry(BaseModel):
         await (
             self._invalidate_cache()
         )  # Invalidate cache before saving to ensure any reads during save are consistent
+        if reverse:
+            self.set_reversed()
         try:
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
             document: Any = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
@@ -637,6 +671,21 @@ class LedgerEntry(BaseModel):
                 extra={"notification": True, **self.log_extra},
             )
             raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e
+
+    def set_reversed(self) -> None:
+        """
+        Sets the reversed timestamp to the current time, indicating that this ledger entry has been reversed.
+        This method should be called when reversing a ledger entry to mark it as reversed in the database.
+
+        Side effects:
+            - Updates the 'reversed' field of the LedgerEntry to the current timestamp.
+            - Logs the reversal action.
+        """
+        self.reversed = datetime.now(tz=timezone.utc)
+        logger.info(
+            f"Ledger Entry marked as reversed: {self.group_id}",
+            extra={"notification": False, **self.log_extra},
+        )
 
     def draw_t_diagram(self) -> str:
         """

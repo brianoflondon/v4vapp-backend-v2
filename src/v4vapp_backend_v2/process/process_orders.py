@@ -210,6 +210,16 @@ async def process_create_fill_order_op(
                 link=limit_fill_order.link,
             )
             ledger_entries.append(net_entry)
+
+        # Now we need to mark the original limit order create entry as reversed since it's effectively closed by this fill
+        # This assumes we have a way to find that original entry, which might require a query
+        if limit_fill_order.completed_order:
+            original_entry = await LedgerEntry().load_one_by_op_type(
+                short_id=limit_fill_order.short_id_p, op_type="limit_order_create"
+            )
+            if original_entry:
+                await original_entry.save(upsert=True, reverse=True)
+
         else:
             # Neither tracked: Skip or log (not relevant to your entity)
             logger.info(
