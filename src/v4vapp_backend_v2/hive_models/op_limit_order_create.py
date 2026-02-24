@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List
 
+from nectar.market import Market
 from pydantic import ConfigDict, Field
 from redis import Redis
 
@@ -103,6 +104,32 @@ class LimitOrderCreate(OpBase):
             return cls._model_from_data(json.loads(raw))
         else:
             return cls._in_memory.get(orderid)
+
+    @classmethod
+    def check_hive_open_orders(cls) -> List[int | None]:
+        """Reconcile cached orders with Hive’s current open orders.
+
+        Cached orders are stored in Redis (or in-memory during tests).  We
+        periodically call the Hive API to retrieve the list of orders that
+        are actually live for the configured server account.  Any orderid
+        present locally but absent remotely has been filled or cancelled,
+        so we can drop it with :meth:`remove_open_order`.
+        """
+        all_open_orders = cls.get_all_open_orders()
+        if not all_open_orders:
+            return []
+
+        m = Market("HIVE:HBD")
+        open_orders = m.accountopenorders(account=InternalConfig().server_id)
+        if not open_orders:
+            # nothing returned (error or empty list) – nothing to delete
+            return []
+
+        hive_live_order_ids = {o["orderid"] for o in open_orders}
+        for orderid in list(all_open_orders.keys()):
+            if orderid not in hive_live_order_ids:
+                cls.remove_open_order(orderid)
+        return list(hive_live_order_ids)
 
     @classmethod
     def get_all_open_orders(cls) -> Dict[int, "LimitOrderCreate"]:
