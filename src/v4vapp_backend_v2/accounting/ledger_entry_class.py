@@ -491,9 +491,7 @@ class LedgerEntry(BaseModel):
         Note: short_id is not unique across all ledger_entries but it. is for limit_order_create entries,
         so this method is specifically for loading those entries.
         """
-        doc = await cls.collection().find_one(
-            filter={"short_id": short_id, "op_type": op_type}
-        )
+        doc = await cls.collection().find_one(filter={"short_id": short_id, "op_type": op_type})
         try:
             return cls.model_validate(doc) if doc else None
         except ValidationError as e:
