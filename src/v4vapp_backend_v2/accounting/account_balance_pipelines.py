@@ -87,6 +87,7 @@ def all_account_balances_pipeline(
     age: timedelta | None = None,
     filter: Mapping[str, Any] | None = None,
     cust_ids: Sequence[str] | None = None,
+    hide_reversed: bool = True,
 ) -> Sequence[Mapping[str, Any]]:
     """
     Generates a MongoDB aggregation pipeline to retrieve the balances of all accounts in the ledger.
@@ -102,6 +103,9 @@ def all_account_balances_pipeline(
         sub (str, optional): The sub identifier to filter transactions.
         as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
         age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
+        filter (Mapping[str, Any], optional): Additional MongoDB filter to apply to the transactions.
+        cust_ids (Sequence[str], optional): A list of customer IDs to restrict the transactions to. If provided, only transactions with `cust_id` in this list will be included.
+        hide_reversed (bool, optional): If True, excludes transactions that have been reversed (i.e., those with a `reversed` field). Defaults to True.
 
     Returns:
         Sequence[Mapping[str, Any]]: A MongoDB aggregation pipeline that:
@@ -161,6 +165,9 @@ def all_account_balances_pipeline(
     # checks both `debit.*` and `credit.*` when an account filter is known.
     # This short-circuits documents before the expensive `$facet` stage.
     pipeline: List[Mapping[str, Any]] = []
+    if hide_reversed:
+        pipeline.append({"$match": {"reversed": {"$exists": False}}})
+    pipeline.append({"$match": {"conv_signed": {"$exists": True}}})
     pipeline.append(
         {"$match": {"cust_id": {"$in": cust_ids}}} if cust_ids is not None else {"$match": {}}
     )
@@ -176,7 +183,7 @@ def all_account_balances_pipeline(
 
     pipeline.extend(
         [
-            {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
+            {"$match": {"timestamp": date_range_query}},
             {"$match": filter},
             {
                 "$facet": {

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from timeit import default_timer as timer
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +16,9 @@ from fastapi.templating import Jinja2Templates
 from single_source import get_version
 
 from v4vapp_backend_v2 import __version__ as project_version
+
+# cache helper used by admin flush button
+from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin.data_helpers import admin_data_helper
 from v4vapp_backend_v2.admin.navigation import NavigationManager
@@ -264,6 +267,26 @@ class AdminApp:
                 "load_time": timer() - start,
             }
             return JSONResponse(content=payload, status_code=response_status)
+
+        @self.app.post("/admin/ledger-cache/flush")
+        async def flush_ledger_cache() -> JSONResponse:
+            """Endpoint used by the admin UI to increment cache generation.
+
+            Returns JSON ``{"success": True, "generation": <int>}`` on success or
+            raises an HTTPException on failure.  This allows the sidebar button to
+            trigger a cache reset without exposing low-level details.
+            """
+            try:
+                new_gen = await invalidate_all_ledger_cache()
+                return JSONResponse({"success": True, "generation": new_gen})
+            except Exception as e:
+                logger.exception(
+                    "Error flushing ledger cache via admin endpoint: %s",
+                    e,
+                    extra={"notification": True},
+                )
+                # propagate an error to the client
+                raise HTTPException(status_code=500, detail=f"Cache flush failed: {e}")
 
 
 def create_admin_app(config_filename: str = "devhive.config.yaml") -> FastAPI:

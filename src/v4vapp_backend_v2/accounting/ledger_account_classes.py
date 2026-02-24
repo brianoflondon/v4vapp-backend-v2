@@ -122,6 +122,7 @@ class AssetAccount(LedgerAccount):
 
     name: Literal[
         "Customer Deposits Hive",
+        "Traded Deposits Hive",
         "Customer Deposits Lightning",
         "Escrow Hive",
         "Treasury Hive",

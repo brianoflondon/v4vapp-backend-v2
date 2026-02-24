@@ -61,12 +61,19 @@ class LNDClient:
         self.setup()
 
     async def __aenter__(self):
+        # If we're running under tests or we already cached node info, just
+        # return without making a remote call.  (During startup the monitor may
+        # create many clients rapidly.)
         if os.getenv("TESTING") == "True" or getattr(self, "get_info", None) is not None:
             return self
         try:
             self.get_info = await self.node_get_info
-        except LNDConnectionError as e:
-            logger.warning(f"{ICON} Error getting node info {e}", exc_info=True)
+        except Exception as e:  # catch any failure, not just LNDConnectionError
+            # We don't want a transient RPC failure to bubble out of every
+            # `async with LNDClient(...)` invocation; callers typically continue
+            # using the client and any subsequent RPC will trigger its own
+            # error handling.  Log a simple warning without a stack trace.
+            logger.warning(f"{ICON} Could not fetch node info during enter: {e}")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -164,14 +171,18 @@ class LNDClient:
             return self.get_info
 
         except AioRpcError as e:
+            # Log only a concise message; stack traces for transient RPC errors
+            # tend to overwhelm logs when LND is under load or unreachable.
             if e.code() == StatusCode.DEADLINE_EXCEEDED:
-                logger.warning(f"{ICON} Node info deadline exceeded (LND busy/unreachable)", exc_info=True)
+                logger.warning(f"{ICON} Node info deadline exceeded (LND busy/unreachable): {e}")
             else:
-                logger.error(f"{ICON} Error getting node info {e}", exc_info=True)
+                logger.error(f"{ICON} Error getting node info {e}")
+            # propagate a wrapped error so callers that explicitly request info
+            # (e.g. tests) can still react to the failure.
             raise LNDConnectionError(f"Error getting node info {e}")
 
         except Exception as e:
-            logger.error(f"{ICON} Error getting node info {e}", exc_info=True)
+            logger.error(f"{ICON} Error getting node info {e}")
             raise LNDConnectionError(f"Error getting node info {e}")
 
     async def disconnect(self):

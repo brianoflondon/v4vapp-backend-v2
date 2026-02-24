@@ -193,6 +193,21 @@ async def test_node_get_info_fail(set_base_config_path: None):
 
 
 @pytest.mark.asyncio
+async def test_context_manager_swallows_get_info_errors(set_base_config_path: None, monkeypatch):
+    # Simulate failure of the underlying node_get_info call; should not
+    # propagate out of the async context manager.
+    async def raise_error():
+        raise LNDConnectionError("nope")
+
+    monkeypatch.setattr(LNDClient, "node_get_info", property(lambda self: raise_error()))
+    # Using `async with` should not raise, even though the property raises
+    async with LNDClient(connection_name="example") as client:
+        # client returned and get_info remains None
+        assert client is not None
+        assert getattr(client, "get_info", None) is None
+
+
+@pytest.mark.asyncio
 async def test_get_icon(set_base_config_path: None):
     lnd_client = LNDClient(connection_name="example")
     print(lnd_client.icon)

@@ -25,7 +25,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.error_code_manager import ErrorCodeManager
 
 load_dotenv()
-MIN_CONFIG_VERSION = "0.4.0"
+MIN_CONFIG_VERSION = "0.4.1"
 logger = logging.getLogger("backend")  # __name__ is a common choice
 ICON = "⚙️"
 
@@ -370,6 +370,13 @@ class HiveRoles(StrEnum):
     witness = "witness"
 
 
+class HiveTradeDirection(StrEnum):
+    buy = "buy"
+    sell = "sell"
+    both = "both"
+    none = "none"
+
+
 class HiveAccountConfig(BaseConfig):
     """
     HiveAccountConfig is a configuration class for Hive account settings.
@@ -388,6 +395,8 @@ class HiveAccountConfig(BaseConfig):
     memo_key: str = ""
     hbd_balance: str = ""  # HBD balance of the account
     hive_balance: str = ""  # HIVE balance of the account
+    hbd_trade_direction: HiveTradeDirection = HiveTradeDirection.both
+    threshold_delta: str = ""  # Threshold value to trigger buy/sell action based on HBD balance
 
     @property
     def keys(self) -> List[str]:

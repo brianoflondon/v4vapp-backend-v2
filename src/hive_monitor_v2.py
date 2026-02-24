@@ -216,7 +216,7 @@ async def balance_server_hbd_level(transfer: Transfer | None = None) -> None:
     """
     CONFIG = InternalConfig().config
     logger.info(f"{ICON} Waiting for 60 seconds to re-balance HBD level")
-    await asyncio.sleep(60)  # Sleeps to make sure we only balance HBD after time for a return
+    await asyncio.sleep(5)  # Sleeps to make sure we only balance HBD after time for a return
     use_account = None
     try:
         if not transfer:
@@ -788,7 +788,7 @@ async def main_async_start(
     logger.info(f"{ICON} Main Loop running in thread: {threading.get_ident()}")
 
     try:
-        asyncio.create_task(balance_server_hbd_level(), name="initial_balance_hbd_level")
+        # asyncio.create_task(balance_server_hbd_level(), name="initial_balance_hbd_level")
         # Create tasks so we can cancel them on shutdown_event
         await witness_check_startup()
         tasks = [

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -66,6 +67,8 @@ async def test_ledger_entries_data_includes_op_type(monkeypatch):
             self.user_memo = "m"
             self.journal = "j"
             self.op_type = "MY_OP"
+            # include reversed timestamp to test API and formatting
+            self.reversed = datetime.now(tz=timezone.utc)
 
         def print_journal_entry(self):
             return self.journal
@@ -85,6 +88,10 @@ async def test_ledger_entries_data_includes_op_type(monkeypatch):
     body = resp.body.decode()
     # FastAPI JSON has no extra whitespace; check without spaces
     assert '"op_type":"MY_OP"' in body
+    # reversed field should be present and not null
+    data = json.loads(body)
+    assert "reversed" in data["entries"][0]
+    assert data["entries"][0]["reversed"] is not None
 
 
 @pytest.mark.asyncio

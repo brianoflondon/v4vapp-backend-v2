@@ -239,6 +239,10 @@ class OpBase(TrackedBaseModel):
         short_op_in_trx = f"_{self.op_in_trx}"
         return f"{short_block_num}_{short_trx_id}{short_op_in_trx}"
 
+    @property
+    def short_id_p(self) -> str:
+        return self.short_id
+
     @classmethod
     def name(cls) -> str:
         """

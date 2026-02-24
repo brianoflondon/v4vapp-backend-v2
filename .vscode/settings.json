@@ -30,6 +30,7 @@
         "invoicesrpc",
         "invoicesstub",
         "jsonmetadata",
+        "killfill",
         "KSATS",
         "librar",
         "lightningmemo",

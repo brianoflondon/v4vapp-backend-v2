@@ -8,11 +8,16 @@ from nectar.market import Market
 from nectar.price import Price
 from nectarapi.exceptions import UnhandledRPCError
 
-from v4vapp_backend_v2.config.setup import HiveAccountConfig, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import (
+    HiveAccountConfig,
+    HiveTradeDirection,
+    InternalConfig,
+    logger,
+)
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 
 ORDER_BOOK_CACHE: Dict[str, Any] = {}
-icon = "📈"
+ICON = "📈"
 
 
 @dataclass
@@ -44,33 +49,65 @@ def account_trade(
     if hive_acc is None:
         raise ValueError(f"Account {hive_acc.name} not found in config")
     hive_configs = InternalConfig().config.hive
+    if not hive_configs or not hive_configs.hive_accs:
+        message = "No Hive accounts found in config"
+        logger.error(f"{ICON} {message}")
+        raise ValueError(message)
 
     if isinstance(hive_acc, str):
-        hive_acc = hive_configs.hive_accs.get(hive_acc)
+        retrieved_acc = hive_configs.hive_accs.get(hive_acc)
+        if retrieved_acc is None:
+            raise ValueError(f"Account {hive_acc} not found in config")
+        hive_acc = retrieved_acc
     elif isinstance(hive_acc, HiveAccountConfig):
         if hive_acc.name and not hive_acc.keys:
             hive_acc = hive_configs.hive_accs.get(hive_acc.name, HiveAccountConfig())
 
     if not hive_acc or not hive_acc.active_key:
-        logger.error(f"{icon} Account {hive_acc.name} not found in config")
+        logger.error(f"{ICON} Account {hive_acc.name} not found in config")
         raise ValueError(f"Account {hive_acc.name} Active Keys not found in config")
 
     hive = get_hive_client(keys=hive_acc.keys, nobroadcast=nobroadcast)
     account = Account(hive_acc.name, blockchain_instance=hive)
-    balance = {}
+    balance: Dict[str, Amount] = {}
     balance["HIVE"] = account.available_balances[0]
     balance["HBD"] = account.available_balances[1]
     delta = balance[set_amount_to.symbol] - set_amount_to
-    if delta.amount > 0:
+    if hive_acc.threshold_delta:
+        threshold_delta_amount = Amount(hive_acc.threshold_delta)
+    else:
+        threshold_delta_amount = Amount("1.000 HBD")  # default to 0 if not set
+    # delta.amount may be negative if we need to buy the asset instead of selling it
+    if abs(delta.amount) > threshold_delta_amount.amount:
+        if hive_acc.hbd_trade_direction == HiveTradeDirection.none:
+            logger.info(
+                f"{ICON} Account {hive_acc.name} balance is outside threshold but hbd_trade_direction is set to 'none', so no trade will be executed"
+            )
+            return {}
+        if hive_acc.hbd_trade_direction != HiveTradeDirection.both:
+            if delta.amount > 0 and hive_acc.hbd_trade_direction != HiveTradeDirection.sell:
+                logger.info(
+                    f"{ICON} Account {hive_acc.name} balance is above threshold but hbd_trade_direction is set to '{hive_acc.hbd_trade_direction}', so no sell trade will be executed"
+                )
+                return {}
+            elif delta.amount < 0 and hive_acc.hbd_trade_direction != HiveTradeDirection.buy:
+                logger.info(
+                    f"{ICON} Account {hive_acc.name} balance is below threshold but hbd_trade_direction is set to '{hive_acc.hbd_trade_direction}', so no buy trade will be executed"
+                )
+                return {}
         logger.info(
-            f"{icon} "
+            f"{ICON} "
             f"Account {hive_acc.name} has balance: {balance[set_amount_to.symbol]} "
             f"and will trade {delta} to reach {set_amount_to}"
         )
         trx = market_trade(hive_acc, delta)
         return trx
     else:
-        logger.info(f"{icon} Account {hive_acc.name} balance is {delta} below : {set_amount_to}")
+        if delta.amount == 0:
+            delta_text = "the same as"
+        else:
+            delta_text = f"{delta} below" if delta.amount < 0 else f"{delta} above"
+        logger.info(f"{ICON} Account {hive_acc.name} balance is {delta_text} {set_amount_to}")
     return {}
 
 
@@ -80,9 +117,11 @@ def market_trade(
     use_cache: bool = False,
     killfill: bool = False,
     nobroadcast: bool = False,
-) -> dict:
+) -> Any:
     """
-    Executes a market trade on the Hive blockchain, either selling HIVE for HBD or HBD for HIVE.
+    Executes a market trade on the Hive blockchain, either selling or buying the specified asset.
+    A *positive* amount value means sell the asset; a *negative* amount means buy the
+    asset in order to raise the account's balance to the target.
 
     Args:
         hive_acc (HiveAccountConfig): The Hive account configuration containing account details and keys.
@@ -103,36 +142,65 @@ def market_trade(
         - Logs transaction details and notifications for successful trades.
         - Generates links to the Hive block explorer for the transaction.
     """
+    quote = None
     try:
         hive_configs = InternalConfig().config.hive
         if hive_acc.name in hive_configs.hive_accs:
             hive_acc = hive_configs.hive_accs[hive_acc.name]
 
         hive = get_hive_client(keys=hive_acc.keys, nobroadcast=nobroadcast)
-        quote = check_order_book(amount, hive, use_cache=use_cache)
+        try:
+            quote = check_order_book(amount, hive, use_cache=use_cache)
+        except ValueError as e:
+            logger.warning(
+                f"{ICON} Market Trade error: {e}",
+                extra={"notification": True, "quote": None, "error": e},
+            )
+            raise e
         if not quote:
             raise ValueError("No quote available for the trade")
         price_float = float(quote.price["price"])
 
-        if amount.symbol == "HIVE":
-            market = Market("HIVE:HBD", blockchain_instance=hive)
-            rate = 1 / price_float
-            trx = market.sell(
-                price=price_float,
-                amount=str(amount),
-                account=hive_acc.name,
-                killfill=killfill,
-            )
+        # determine direction based on sign of amount
+        is_buy = amount.amount < 0
+        abs_amount = Amount(abs(amount.amount), amount.symbol)
 
+        if is_buy:
+            # buying base asset
+            if amount.symbol == "HIVE":
+                market = Market("HIVE:HBD", blockchain_instance=hive)
+                trx = market.buy(
+                    price=price_float,
+                    amount=str(abs_amount),
+                    account=hive_acc.name,
+                    killfill=killfill,
+                )
+            else:
+                market = Market("HBD:HIVE", blockchain_instance=hive)
+                trx = market.buy(
+                    price=1 / price_float,
+                    amount=str(abs_amount),
+                    account=hive_acc.name,
+                    killfill=killfill,
+                )
         else:
-            market = Market("HBD:HIVE", blockchain_instance=hive)
-            rate = price_float
-            trx = market.sell(
-                price=1 / price_float,
-                amount=amount,
-                account=hive_acc.name,
-                killfill=killfill,
-            )
+            # selling base asset (existing behavior)
+            if amount.symbol == "HIVE":
+                market = Market("HIVE:HBD", blockchain_instance=hive)
+                trx = market.sell(
+                    price=price_float,
+                    amount=str(abs_amount),
+                    account=hive_acc.name,
+                    killfill=killfill,
+                )
+            else:
+                market = Market("HBD:HIVE", blockchain_instance=hive)
+                trx = market.sell(
+                    price=1 / price_float,
+                    amount=str(abs_amount),
+                    account=hive_acc.name,
+                    killfill=killfill,
+                )
         return trx
     except UnhandledRPCError as e:
         logger.warning(
@@ -142,7 +210,7 @@ def market_trade(
         raise e
     except Exception as e:
         logger.warning(
-            f"{icon} Market Trade error: {e}",
+            f"{ICON} Market Trade error: {e}",
             exc_info=True,
             extra={"notification": False, "quote": quote, "error": e},
         )
@@ -171,18 +239,35 @@ def check_order_book(
         ValueError: If the amount is negative or if there is not enough volume in the order book.
 
     Note:
-        The function assumes that the order book always uses HIVE as the base asset.
+        The underlying Nectar `Market.orderbook` returns a shared book that is
+        *always* denominated with HIVE as the base asset.  In other words, even
+        when we ask for ``Market(base="HBD", quote="HIVE")`` the returned
+        ``bids``/``asks`` arrays still contain ``base`` amounts expressed in
+        HIVE and ``quote`` in HBD.  This quirk is why the logic below has to
+        flip sides when we are actually trading HBD.
+
+        To keep prices meaningful to callers, the returned ``Price`` object is
+        always expressed with ``amount.symbol`` as the base asset, and the
+        opposite token as the quote asset.  During a negative-HBD trade we
+        therefore select the bid side of the HIVE book (i.e. the best price we
+        will receive when selling HIVE) and still return the numeric price in
+        HIVE/HBD so that ``market_trade`` can continue to invert it as before.
     """
 
     global ORDER_BOOK_CACHE
 
-    if amount.amount < 0:
-        raise ValueError("Amount must be positive")
+    # allow negative amounts to represent a buy order
+    sign = 1 if amount.amount >= 0 else -1
+    # construct an Amount with absolute value; let the constructor handle spacing
+    abs_amount = Amount(abs(amount.amount), amount.symbol)
+
+    if abs_amount.amount <= 0:
+        raise ValueError("Amount must be non-zero")
 
     if not hive:
         hive = get_hive_client()
 
-    base_asset = amount.symbol  # The Asset I'm selling
+    base_asset = amount.symbol  # the asset we want to trade
     quote_asset = "HBD" if base_asset == "HIVE" else "HIVE"
 
     if use_cache and ORDER_BOOK_CACHE:
@@ -193,55 +278,80 @@ def check_order_book(
         order_book = market.orderbook(limit=order_book_limit)
         ORDER_BOOK_CACHE = order_book
 
-    # Selling HIVE, so we want the highest bid
-    if base_asset == "HIVE":
-        orders_bids = order_book["bids"]
-        orders_bids.sort(key=lambda x: x["price"], reverse=True)
-    else:  # Selling HBD so we want the lowest ask
-        orders_bids = order_book["asks"]
-        orders_bids.sort(key=lambda x: x["price"], reverse=False)
+    # choose side depending on buy/sell and asset
+    if sign > 0:
+        # selling base asset (existing behaviour)
+        if base_asset == "HIVE":
+            orders_bids = order_book["bids"]
+            orders_bids.sort(key=lambda x: x["price"], reverse=True)
+        else:  # selling HBD
+            orders_bids = order_book["asks"]
+            orders_bids.sort(key=lambda x: x["price"], reverse=False)
+    else:
+        # buying base asset
+        if base_asset == "HIVE":
+            # buying HIVE: hit asks (people selling HIVE for HBD)
+            orders_bids = order_book["asks"]
+            orders_bids.sort(key=lambda x: x["price"], reverse=False)
+        else:
+            # buying HBD (which in the on-chain book means selling HIVE)
+            # the order book is always HIVE base; we need to hit bids because
+            # bids represent offers to buy HIVE, i.e. sell us HBD.
+            orders_bids = order_book["bids"]
+            orders_bids.sort(key=lambda x: x["price"], reverse=True)
 
     cumulative_volume = 0.0
     total_received = 0.0
     final_price: None | Price = None
 
-    # This naieve calculation doesn't take into account the slightly lower
-    # price of the next order in the order book, it quotes the price of the
-    # last order that was needed to reach the desired amount
+    # iterate until we've covered the desired amount of base asset
     for order in orders_bids:
         order_price = float(order["price"])
         quote = order["quote"]
         base = order["base"]
 
-        if base_asset == "HIVE":
-            volume = float(quote)
-            price = Price(order_price, base_asset, quote_asset)
-            total_received += volume
-        else:  # Selling HBD
-            volume = float(base)
-            price = Price(order_price, quote_asset, base_asset)
-            total_received += volume
+        if sign > 0:
+            # selling path, same as before
+            if base_asset == "HIVE":
+                volume = float(quote)
+                price = Price(str(order_price), base_asset, quote_asset)  # type: ignore[arg-type]
+                total_received += volume
+            else:  # Selling HBD
+                volume = float(base)
+                price = Price(str(order_price), quote_asset, base_asset)  # type: ignore[arg-type]
+                total_received += volume
+        else:
+            # buying path, volume is amount of base asset we'll acquire
+            if base_asset == "HIVE":
+                volume = float(base)
+                price = Price(str(order_price), base_asset, quote_asset)  # type: ignore[arg-type]
+                total_received += volume
+            else:  # buying HBD
+                volume = float(quote)
+                price = Price(str(order_price), quote_asset, base_asset)  # type: ignore[arg-type]
+                total_received += volume
 
         cumulative_volume += volume
-        if cumulative_volume >= amount.amount:
+        if cumulative_volume >= abs_amount.amount:
             final_price = price
             break
 
     if final_price is None:
         raise ValueError("Not enough volume in the order book")
 
-    logger.debug(f"{icon} Best price for {amount} is {final_price}")
+    logger.debug(f"{ICON} Best price for {amount} is {final_price}")
 
+    # minimum amount expressed in quote asset (cost when buying, proceeds when selling)
     if base_asset == "HIVE":
-        min_amt = amount.amount * float(final_price["price"])
+        min_amt = abs_amount.amount * float(final_price["price"])
     else:
-        min_amt = amount.amount / float(final_price["price"])
+        min_amt = abs_amount.amount / float(final_price["price"])
 
     minimum_amount = Amount(min_amt, quote_asset)
 
-    logger.debug(f"{icon} Minimum amount: {minimum_amount}")
+    logger.debug(f"{ICON} Minimum amount: {minimum_amount}")
 
-    hive_quote = HiveQuote(amount, final_price, minimum_amount)
+    hive_quote = HiveQuote(abs_amount, final_price, minimum_amount)
     return hive_quote
 
 
@@ -253,11 +363,11 @@ if __name__ == "__main__":
     #     logger.info(f"{icon} {e}")
     InternalConfig(config_filename="devhive.config.yaml")
     try:
-        trade = Amount("0.2 HBD")
+        trade = Amount("-0.2 HBD")
         trx = market_trade(HiveAccountConfig(name="v4vapp-test"), trade)
-        logger.info(f"{icon} trx: {trx}", extra={"notification": False})
+        logger.info(f"{ICON} trx: {trx}", extra={"notification": False})
     except Exception as e:
-        logger.info(f"{icon} {e}")
+        logger.info(f"{ICON} {e}")
 
     # try:
     #     trade = Amount("1 HIVE")

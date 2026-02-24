@@ -234,6 +234,7 @@ async def ledger_entries_data(
                 # Provide the textual journal for reference (not used for primary rendering)
                 "user_memo": getattr(e, "user_memo", ""),
                 "journal": e.print_journal_entry() if hasattr(e, "print_journal_entry") else None,
+                "reversed": e.reversed.isoformat() if getattr(e, "reversed", None) else None,
                 "op_type": getattr(e, "op_type", ""),
             }
         )
