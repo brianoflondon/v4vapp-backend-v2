@@ -2,6 +2,7 @@
 archive_data/*
 d_vol/
 balance_sheet.rtf
+tmp/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
