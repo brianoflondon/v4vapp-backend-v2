@@ -25,7 +25,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.error_code_manager import ErrorCodeManager
 
 load_dotenv()
-MIN_CONFIG_VERSION = "0.4.0"
+MIN_CONFIG_VERSION = "0.4.1"
 logger = logging.getLogger("backend")  # __name__ is a common choice
 ICON = "⚙️"
 
