@@ -215,8 +215,8 @@ async def balance_server_hbd_level(transfer: Transfer | None = None) -> None:
         None: The function does not return any value.
     """
     CONFIG = InternalConfig().config
-    logger.info(f"{ICON} Waiting for 60 seconds to re-balance HBD level")
-    await asyncio.sleep(5)  # Sleeps to make sure we only balance HBD after time for a return
+    logger.info(f"{ICON} Waiting for 30 seconds to re-balance HBD level")
+    await asyncio.sleep(30)  # Sleeps to make sure we only balance HBD after time for a return
     use_account = None
     try:
         if not transfer:

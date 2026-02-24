@@ -107,7 +107,9 @@ def account_trade(
             delta_text = "the same as"
         else:
             delta_text = f"{delta} below" if delta.amount < 0 else f"{delta} above"
-        logger.info(f"{ICON} Account {hive_acc.name} balance is {delta_text} {set_amount_to}")
+        logger.info(
+            f"{ICON} Account {hive_acc.name} balance is {delta_text} {set_amount_to} (threshold: {threshold_delta_amount}), no trade needed"
+        )
     return {}
 
 
