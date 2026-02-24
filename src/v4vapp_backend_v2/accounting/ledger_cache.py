@@ -201,10 +201,10 @@ async def get_cached_balance(
         data: str | None = await InternalConfig.redis_async.get(key)
         if data is not None:
             result = LedgerAccountDetails.model_validate_json(data)
-            logger.info(f"{Fore.GREEN}HIT: {key}{Fore.RESET}")
+            logger.debug(f"{Fore.GREEN}HIT: {key}{Fore.RESET}")
             return result
     except Exception as e:
-        logger.debug(f"{Fore.RED}miss/error: {e}{Fore.RESET}")
+        logger.info(f"{Fore.RED}miss/error: {e}{Fore.RESET}")
     return None
 
 
