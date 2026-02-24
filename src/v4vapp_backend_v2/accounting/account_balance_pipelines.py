@@ -168,9 +168,20 @@ def all_account_balances_pipeline(
     if hide_reversed:
         pipeline.append({"$match": {"reversed": {"$exists": False}}})
     pipeline.append({"$match": {"conv_signed": {"$exists": True}}})
-    pipeline.append(
-        {"$match": {"cust_id": {"$in": cust_ids}}} if cust_ids is not None else {"$match": {}}
-    )
+    # filter by cust_id when specified.  Since some entries use a
+    # colon-suffixed form (e.g. "v4vapp.dev:podping") we match both exact
+    # values and any string beginning with the id plus a colon.
+    if cust_ids is not None:
+        or_clauses: list[Mapping[str, Any]] = []
+        for cid in cust_ids:
+            or_clauses.append({"cust_id": cid})
+            # regex anchored to avoid accidental partial matches (e.g.
+            # "v4vapp.de" should not match "v4vapp.dev:...")
+            regex = f"^{cid}(:|$)"
+            or_clauses.append({"cust_id": {"$regex": regex}})
+        pipeline.append({"$match": {"$or": or_clauses}})
+    else:
+        pipeline.append({"$match": {}})
 
     # minor optimization if we know the account, this is called very often for the server account and the keepsats account.
     if debit_match_query or credit_match_query:

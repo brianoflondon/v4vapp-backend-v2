@@ -50,6 +50,91 @@ UNIT_TOLERANCE = {
 }
 
 
+# I am not sure what the purpose of this code is, removed from code path.
+
+def _merge_groups(groups: List[LedgerAccountDetails]) -> LedgerAccountDetails:
+    """Merge multiple LedgerAccountDetails objects belonging to the same
+    account (typically differing only by the ``contra`` flag) into a single
+    consolidated object.
+
+    This logic is essentially the same as the merge code in ``one_account_balance``
+    but exposed here so it can be reused by ``all_account_balances`` and
+    other callers.  The resulting ``LedgerAccountDetails`` will have all of the
+    balance lines concatenated, sorted chronologically, and running totals
+    recalculated so that the ``msats``/``sats`` values reflect the true net
+    balance.
+    """
+    # trivial case -- nothing to do
+    if len(groups) == 1:
+        return groups[0]
+
+    merged_balances: dict = {}
+    for group in groups:
+        for unit, lines in group.balances.items():
+            merged_balances.setdefault(unit, [])
+            # copy to avoid mutating the originals
+            merged_balances[unit].extend([line.model_copy() for line in lines])
+
+    # sort and recompute running totals for each currency
+    from datetime import datetime as _dt
+
+    for unit, rows in merged_balances.items():
+        rows.sort(key=lambda x: x.timestamp or _dt.min.replace(tzinfo=_dt.now().tzinfo))
+        running_amount = Decimal(0)
+        running_conv = ConvertedSummary()
+        for row in rows:
+            running_amount += row.amount_signed
+            row.amount_running_total = running_amount
+            running_conv = running_conv + ConvertedSummary.from_crypto_conv(row.conv_signed)
+            row.conv_running_total = running_conv
+
+    base = groups[0]
+    ledger_details = LedgerAccountDetails(
+        name=base.name,
+        account_type=base.account_type,
+        sub=base.sub,
+        contra=base.contra,
+        balances=merged_balances,
+    )
+
+    # recompute last_transaction_date (it will be assigned later by caller but
+    # having something sensible here avoids a brief window where it is None)
+    max_ts = None
+    for unit_lines in ledger_details.balances.values():
+        if unit_lines:
+            last = unit_lines[-1].timestamp
+            if last and (max_ts is None or last > max_ts):
+                max_ts = last
+    ledger_details.last_transaction_date = max_ts
+
+    return ledger_details
+
+
+def _merge_duplicate_accounts(account_balances: AccountBalances) -> AccountBalances:
+    """Combine root entries returned by ``all_account_balances`` that belong
+    to the same account (same ``account_type``, ``name`` and ``sub``).
+
+    The underlying aggregation pipeline splits results into separate documents
+    whenever the ``contra`` flag differs.  Consumers of the API usually expect
+    one row per account, so we collapse those here.  The merge is performed in-
+    memory and does *not* touch the database again.
+    """
+    seen: dict[tuple, List[LedgerAccountDetails]] = {}
+    for acct in account_balances.root:
+        key = (acct.account_type, acct.name, acct.sub)
+        seen.setdefault(key, []).append(acct)
+
+    merged_root: List[LedgerAccountDetails] = []
+    for groups in seen.values():
+        if len(groups) == 1:
+            merged_root.append(groups[0])
+        else:
+            merged_root.append(_merge_groups(groups))
+
+    account_balances.root = merged_root
+    return account_balances
+
+
 # @async_time_stats_decorator()
 async def all_account_balances(
     account: LedgerAccount | None = None,
@@ -98,6 +183,8 @@ async def all_account_balances(
     _t4 = timer()
 
     account_balances = AccountBalances.model_validate(clean_results)
+    # # -- merge any duplicate root entries caused by contra flags --
+    # account_balances = _merge_duplicate_accounts(account_balances)
     _t5 = timer()
     all_held_result = await all_held_msats()
     _t6 = timer()
