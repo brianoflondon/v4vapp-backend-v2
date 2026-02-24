@@ -3,7 +3,8 @@ from typing import Any, Mapping, Sequence
 
 
 def balance_sheet_check_pipeline(
-    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    age: timedelta | None = None,
 ) -> Sequence[Mapping[str, Any]]:
     """
     Check if the balance sheet is balanced.
@@ -21,8 +22,8 @@ def balance_sheet_check_pipeline(
         date_range_query = {"$lte": as_of_date}
 
     check_balance_pipeline: Sequence[Mapping[str, Any]] = [
-        {"$match": {"conv_signed": {"$exists": True}}},
         {"$match": {"reversed": {"$exists": False}}},
+        {"$match": {"conv_signed": {"$exists": True}}},
         {
             "$match": {
                 "timestamp": date_range_query,
@@ -135,6 +136,7 @@ def balance_sheet_pipeline(
         date_range_query = {"$lte": as_of_date}
 
     pipeline: Sequence[Mapping[str, Any]] = [
+        {"$match": {"reversed": {"$exists": False}}},
         {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
         {
             "$match": {
@@ -340,6 +342,7 @@ def profit_loss_pipeline(
         date_range_query = {"$lte": as_of_date}
 
     pipeline: Sequence[Mapping[str, Any]] = [
+        {"$match": {"reversed": {"$exists": False}}},
         {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
         {
             "$facet": {

@@ -130,3 +130,22 @@ async def test_ledger_entry_constructor_conv_account():
     assert float(ledger_entry.credit_amount_signed) == float(-conversion_credit_debit_conv.hive)
 
     print(ledger_entry.conv_signed)
+
+@pytest.mark.asyncio
+async def test_print_journal_entry_reversed():
+    """Journal output should include the word REVERSED when entry is reversed."""
+    entry = LedgerEntry(
+        cust_id="u",
+        group_id="g",
+        short_id="s",
+        debit=AssetAccount(name="Unset"),
+        credit=AssetAccount(name="Unset"),
+        debit_unit=Currency.HIVE,
+        credit_unit=Currency.HIVE,
+        debit_amount=1,
+        credit_amount=1,
+    )
+    entry.reversed = datetime.now(tz=timezone.utc)
+    journal = entry.print_journal_entry()
+    assert "REVERSED" in journal
+

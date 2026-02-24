@@ -909,10 +909,22 @@ class LedgerEntry(BaseModel):
 
         formatted_date = f"{self.timestamp:%b %d, %Y %H:%M:%S}"
         customer_left = f"CUSTOMER_ID : {self.cust_id:<20}"
+        # construct base line with right-aligned date (ignoring reversed word)
         if len(customer_left) + len(formatted_date) + 1 > line_width:
-            customer_line = f"{customer_left} {formatted_date}"
+            base_line = f"{customer_left} {formatted_date}"
         else:
-            customer_line = f"{customer_left}{formatted_date:>{line_width - len(customer_left)}}"
+            base_line = f"{customer_left}{formatted_date:>{line_width - len(customer_left)}}"
+        # if reversed, insert the word into the space before the date without moving
+        # the date's rightmost column
+        if self.reversed:
+            word = "REVERSED"
+            idx = base_line.rfind(formatted_date)
+            if idx == -1:
+                customer_line = f"{base_line} {word}"
+            else:
+                customer_line = base_line[:idx] + word + " " + base_line[idx:]
+        else:
+            customer_line = base_line
 
         entry += (
             f"{customer_line}\n\n"

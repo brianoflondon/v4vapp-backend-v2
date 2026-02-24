@@ -23,6 +23,12 @@ def test_ledger_entries_template_compiles_and_renders():
         def __init__(self):
             self.query_params = {}
 
+    # create a fake entry with reversed timestamp to exercise badge logic
+    from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+
+    entry = LedgerEntry(group_id="g1", short_id="s1")
+    entry.reversed = datetime.datetime.utcnow()
+
     ctx = {
         "accounts_by_type": {},
         "account_string": "",
@@ -36,6 +42,7 @@ def test_ledger_entries_template_compiles_and_renders():
         "pending_transactions": [],
         "title": "Test",
         "breadcrumbs": [],
+        "entries": [entry],
     }
 
     rendered = template.render(**ctx)
@@ -48,3 +55,5 @@ def test_ledger_entries_template_compiles_and_renders():
     assert 'name="to_date_str"' in rendered
     assert 'name="ledger_type"' in rendered
     assert 'name="general_search"' in rendered
+    # reversed badge should be visible
+    assert "REVERSED" in rendered

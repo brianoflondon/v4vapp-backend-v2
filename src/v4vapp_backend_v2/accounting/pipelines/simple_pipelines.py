@@ -10,7 +10,7 @@ from v4vapp_backend_v2.hive.v4v_config import V4VConfig, V4VConfigRateLimits
 def filter_by_account_as_of_date_query(
     account: LedgerAccount | None = None,
     cust_id: str | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime | None = None,
     ledger_types: list[LedgerType] | None = None,
     group_id: str | None = None,
     short_id: str | None = None,
@@ -43,10 +43,11 @@ def filter_by_account_as_of_date_query(
         Dict[str, Any]: A dictionary representing the MongoDB query.
     """
     if age:
-        start_date = as_of_date - age
-        date_range_query = {"$gte": start_date, "$lte": as_of_date}
+        if not as_of_date:
+            as_of_date = datetime.now(tz=timezone.utc)
+        date_range_query = {"$gte": as_of_date - age, "$lte": as_of_date}
     else:
-        date_range_query = {"$lte": as_of_date}
+        date_range_query = {"$exists": True} if as_of_date is None else {"$lte": as_of_date}
 
     query: Dict[str, Any] = {"timestamp": date_range_query}
 
