@@ -1,5 +1,7 @@
 from typing import List, Union
 
+from nectar.market import Market
+
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -223,7 +225,14 @@ async def process_create_fill_order_op(
             f"Checking for completed {limit_fill_order.completed_order} LimitOrderCreate {limit_fill_order.log_str} to reverse",
             extra={**limit_fill_order.log_extra},
         )
-        if limit_fill_order.completed_order:
+        m = Market("HIVE:HBD")
+        open_orders = m.accountopenorders(account=InternalConfig().server_id)
+        if open_orders is not None:
+            order_ids = [o["orderid"] for o in open_orders]
+        else:
+            order_ids = []
+
+        if limit_fill_order.completed_order or limit_fill_order.open_orderid not in order_ids:
             original_entry = await LedgerEntry().load_one_by_op_type(
                 short_id=limit_fill_order.short_id_p, op_type="limit_order_create"
             )
@@ -233,6 +242,7 @@ async def process_create_fill_order_op(
                     extra={**limit_fill_order.log_extra, **original_entry.log_extra},
                 )
                 await original_entry.save(upsert=True, reverse=True)
+                LimitOrderCreate.remove_open_order(limit_fill_order.open_orderid)
     # Save all entries
     for entry in ledger_entries:
         await entry.save()
