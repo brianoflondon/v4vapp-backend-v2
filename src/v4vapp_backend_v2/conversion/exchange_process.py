@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -30,6 +31,10 @@ async def rebalance_queue_task(
     try:
         # Always use HIVE for exchange - Binance doesn't trade HBD
         # Get exchange adapter based on config (uses default_exchange)
+        logger.info(
+            f"Queuing rebalance task with delay: {direction.value} {currency} with quantity {hive_qty} for tracked operation {tracked_op.short_id}",
+        )
+        await asyncio.sleep(10)
         exchange_adapter = get_exchange_adapter()
         rebalance_result = await add_pending_rebalance(
             exchange_adapter=exchange_adapter,
