@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
+from unittest.mock import AsyncMock
 
 import pytest
-from unittest.mock import AsyncMock
 
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
@@ -48,6 +48,20 @@ async def test_forward_event_logs_once(caplog, monkeypatch):
         AsyncMock(return_value=None),
     )
 
+    # lock_str grabs a redis connection; on CI the event loop may differ from
+    # redis' connection loop, leading to "Future attached to a different loop"
+    # errors.  We don't care about locking in this unit test, so stub it out.
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _dummy_locked(self, timeout=None, blocking_timeout=None, request_details=None):
+        yield
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.lock_str_class.LockStr.locked",
+        _dummy_locked,
+    )
+
     class DummySanity:
         log_extra = {}
 
@@ -69,9 +83,7 @@ async def test_forward_event_logs_once(caplog, monkeypatch):
     # look for the specific success summary message that is emitted when an
     # event is processed.  Previously the same string was logged twice; after
     # the fix we should see a single instance.
-    matches = [
-        r
-        for r in caplog.records
-        if "FORWARD HTLC" in r.getMessage()
-    ]
-    assert len(matches) == 1, f"expected exactly one forward summary log, got {len(matches)}: {matches}"
+    matches = [r for r in caplog.records if "FORWARD HTLC" in r.getMessage()]
+    assert len(matches) == 1, (
+        f"expected exactly one forward summary log, got {len(matches)}: {matches}"
+    )
