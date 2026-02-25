@@ -98,11 +98,19 @@ async def process_create_fill_order_op(
             regex=f"{limit_fill_order.orderid}", ledger_type=LedgerType.LIMIT_ORDER_CREATE.value
         )
         if original_entry:
-            logger.info(
-                f"Reversing original LimitOrderCreate entry {original_entry.log_str} for cancelled order {limit_fill_order.orderid}",
-                extra={**limit_fill_order.log_extra, **original_entry.log_extra},
-            )
-            await original_entry.save(upsert=True, reverse=True)
+            # Check if the full amount is being cancelled (i.e., no partial fills) by comparing the amount_back to the original amount_to_sell
+            if limit_fill_order.amount_back.amount_decimal == original_entry.debit_amount:
+                logger.info(
+                    f"Reversing original LimitOrderCreate entry {original_entry.log_str} for cancelled order {limit_fill_order.orderid}",
+                    extra={**limit_fill_order.log_extra, **original_entry.log_extra},
+                )
+                await original_entry.save(upsert=True, reverse=True)
+            else:
+                logger.warning(
+                    f"Partial cancellation detected for order {limit_fill_order.orderid}. Amount back: {limit_fill_order.amount_back.amount_decimal}, Original amount: {original_entry.debit_amount}. Manual review may be needed.",
+                    extra={**limit_fill_order.log_extra, **original_entry.log_extra},
+                )
+                # TODO: #297 Handle partial cancellation scenario if needed (e.g., create a new entry for the cancelled portion)
 
     elif isinstance(limit_fill_order, FillOrder):
         logger.info(
