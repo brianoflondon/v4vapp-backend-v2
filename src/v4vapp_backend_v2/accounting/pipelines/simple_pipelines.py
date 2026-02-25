@@ -196,6 +196,8 @@ IGNORED_UPDATE_FIELDS = [
     "change_memo",
     "change_amount",
     "process_time",
+    "included_on_ledger",
+    "ledger_entry_id",
     "locked",
     "extensions",
     "fee_conv",
