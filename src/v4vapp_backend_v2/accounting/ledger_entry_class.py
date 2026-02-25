@@ -2,7 +2,7 @@ import textwrap
 from datetime import datetime, timezone
 from decimal import Decimal
 from math import isclose
-from typing import Any, Dict, List, Self
+from typing import Any, Dict, List, Mapping, Self, Sequence
 
 from pydantic import (
     BaseModel,
@@ -494,6 +494,39 @@ class LedgerEntry(BaseModel):
         doc = await cls.collection().find_one(filter={"short_id": short_id, "op_type": op_type})
         try:
             return cls.model_validate(doc) if doc else None
+        except ValidationError as e:
+            logger.error(f"Error validating ledger entry: {e}")
+            return None
+
+    @classmethod
+    async def load_one_by_description_regex(cls, regex: str, ledger_type: str) -> "LedgerEntry | None":
+        """
+        Load a single LedgerEntry by matching a regex against the description field, or return None if not found.
+        Written mostly to find `limit_order_create` entries which have the order ID in the description
+        but not in a dedicated field, but can be used for other types as well.
+
+        Args:
+            regex (str): The regular expression pattern to match against the description field.
+            op_type (str): The operation type to filter by important to avoid searching all entries.
+        Returns:
+            LedgerEntry | None: The loaded LedgerEntry if a match is found and valid, otherwise None.
+
+        Note: This method is useful for finding entries with specific patterns in their descriptions, such as those containing certain identifiers or keywords.
+        """
+        aggregation_pipeline: Sequence[Mapping[str, Any]] = [
+            {"$match": {"ledger_type": ledger_type}},
+            {
+                "$addFields": {
+                    "description_match": {"$regexMatch": {"input": "$description", "regex": regex}}
+                }
+            },
+            {"$match": {"description_match": True}},
+            {"$limit": 1},
+        ]
+        cursor = await cls.collection().aggregate(aggregation_pipeline)
+        doc = await cursor.to_list(length=1)
+        try:
+            return cls.model_validate(doc[0]) if doc else None
         except ValidationError as e:
             logger.error(f"Error validating ledger entry: {e}")
             return None

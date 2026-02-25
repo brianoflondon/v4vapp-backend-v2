@@ -74,6 +74,7 @@ class VirtualOpTypes(StrEnum):
     PRODUCER_REWARD = auto()
     FILL_ORDER = auto()
     FILL_RECURRENT_TRANSFER = auto()
+    LIMIT_ORDER_CANCELLED = auto()
 
     # @classmethod
     # def all_values(cls):

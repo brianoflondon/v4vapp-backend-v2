@@ -41,6 +41,7 @@ from v4vapp_backend_v2.hive_models.op_all import OpAny, is_op_all_transfer
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
+from v4vapp_backend_v2.hive_models.op_limit_order_cancelled import LimitOrderCancelled
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -584,6 +585,14 @@ async def all_ops_loop(
                     )
                     log_it = True
                     db_store = True
+
+                # new virtual op for cancelled orders – treat like a watched limit order event
+                elif isinstance(op, LimitOrderCancelled):
+                    # only log/store when seller is watched (similar to others)
+                    if op.seller in watch_users:
+                        log_it = True
+                        notification = True
+                        db_store = True
 
                 elif isinstance(op, ProducerReward):
                     if op.producer in watch_witnesses:
