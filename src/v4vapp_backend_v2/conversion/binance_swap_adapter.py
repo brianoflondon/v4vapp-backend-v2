@@ -193,6 +193,12 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
     # Maximum decimal places accepted by the Binance Convert API
     MAX_CONVERT_DECIMALS: ClassVar[int] = 8
 
+    # Floor values for base assets that we prefer to enforce even if the
+    # Convert API reports a smaller minimum.  This protects rebalance logic
+    # from doing tiny trades when the published minimum is effectively zero.
+    # Set to Decimal("0") or remove key to disable for an asset.
+    MIN_BASE_ASSET_OVERRIDE: ClassVar[dict[str, Decimal]] = {"HIVE": Decimal("50")}
+
     def _get_client(self) -> Client:
         """
         Get a Binance Spot client for Convert API calls.
@@ -244,8 +250,13 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             # Find the matching pair
             for pair in pairs:
                 if pair.get("fromAsset") == base_asset and pair.get("toAsset") == quote_asset:
+                    min_qty = Decimal(str(pair.get("fromAssetMinAmount", "0")))
+                    # apply any configured override for the base asset
+                    override = self.MIN_BASE_ASSET_OVERRIDE.get(base_asset, Decimal("0"))
+                    if override and min_qty < override:
+                        min_qty = override
                     return ExchangeMinimums(
-                        min_qty=Decimal(str(pair.get("fromAssetMinAmount", "0"))),
+                        min_qty=min_qty,
                         min_notional=Decimal(str(pair.get("toAssetMinAmount", "0"))),
                         step_size=Decimal("0"),  # Convert API doesn't have step_size
                     )
@@ -256,8 +267,13 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             )
             for pair in pairs_reverse:
                 if pair.get("fromAsset") == quote_asset and pair.get("toAsset") == base_asset:
+                    min_qty = Decimal(str(pair.get("toAssetMinAmount", "0")))
+                    # override is based on the base asset (still base_asset variable)
+                    override = self.MIN_BASE_ASSET_OVERRIDE.get(base_asset, Decimal("0"))
+                    if override and min_qty < override:
+                        min_qty = override
                     return ExchangeMinimums(
-                        min_qty=Decimal(str(pair.get("toAssetMinAmount", "0"))),
+                        min_qty=min_qty,
                         min_notional=Decimal(str(pair.get("fromAssetMinAmount", "0"))),
                         step_size=Decimal("0"),
                     )
