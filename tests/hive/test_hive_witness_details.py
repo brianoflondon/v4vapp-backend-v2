@@ -143,8 +143,9 @@ async def test_get_hive_witness_details(mocker):
 
     fixed_response = fix_witness_at_root(sample_response)
     # Ensure the Redis set method was called with the correct parameters
+    # key format changed from underscore to colon
     mock_redis_instance.setex.assert_called_with(
-        name="witness_brianoflondon", value=json.dumps(fixed_response), time=1800
+        name="witness:brianoflondon", value=json.dumps(fixed_response), time=1800
     )
 
 
@@ -180,8 +181,9 @@ async def test_get_hive_witness_details_mock_empty(mocker):
     # mock_httpx_get.assert_called_with("https://api.syncad.com/hafbe-api/witnesses", timeout=20)
 
     # Ensure the Redis set method was called with the correct parameters
+    # key format changed from underscore to colon
     mock_redis_instance.get.assert_called_with(
-        "witness_",
+        "witness:",
     )
 
 
