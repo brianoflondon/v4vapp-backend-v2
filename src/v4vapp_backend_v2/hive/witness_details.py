@@ -53,7 +53,7 @@ async def get_hive_witness_details(
     Returns:
         WitnessDetails | None: A WitnessDetails object containing the witness details, or None if the request fails.
     """
-    cache_key = f"witness_{hive_accname}"
+    cache_key = f"witness:{hive_accname}"
     if not ignore_cache:
         logger.debug(f"{ICON} Checking Redis cache for witness details with key: {cache_key}")
         try:

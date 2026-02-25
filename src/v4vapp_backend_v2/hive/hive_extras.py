@@ -51,7 +51,7 @@ BLOCK_STREAM_ONLY = ["https://rpc.podping.org/"]
 
 EXCLUDE_NODES = [
     # "https://rpc.mahdiyari.info",
-    "https://api.hive.blog",
+    # "https://api.hive.blog",
     # "https://api.deathwing.me",
     # "https://hive-api.arcange.eu",
     # "https://api.openhive.network",
@@ -66,6 +66,8 @@ EXCLUDE_NODES = [
 MAX_HIVE_BATCH_SIZE = 25
 
 HIVE_BLOCK_TIME = 3  # seconds
+
+REDIS_KEY_GOOD_NODES = "good_nodes:"
 
 
 class CustomJsonSendError(Exception):
@@ -197,7 +199,7 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
         # shuffle good nodes
         good_nodes: List[str] = []
         try:
-            good_nodes_json = InternalConfig.redis_decoded.get("good_nodes")
+            good_nodes_json = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
             if good_nodes_json and isinstance(good_nodes_json, str):
                 ttl = InternalConfig.redis_decoded.ttl("good_nodes")
                 if isinstance(ttl, int) and ttl < 3000:
@@ -287,13 +289,13 @@ def get_good_nodes() -> List[str]:
         good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
         logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
         try:
-            InternalConfig.redis_decoded.setex("good_nodes", 3600, json.dumps(good_nodes))
+            InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes))
         except Exception as e:
             logger.warning(
                 f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
             )
     except Exception as e:
-        good_nodes_json = InternalConfig.redis_decoded.get("good_nodes")
+        good_nodes_json = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
         if good_nodes_json and isinstance(good_nodes_json, str):
             good_nodes = json.loads(good_nodes_json)
         if good_nodes:
@@ -313,8 +315,11 @@ def get_good_nodes() -> List[str]:
                 },
             )
             good_nodes = DEFAULT_GOOD_NODES
-            InternalConfig.redis_decoded.setex("good_nodes", 3600, json.dumps(good_nodes))
+            InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes))
 
+    if len(good_nodes) < 3:
+        good_nodes = DEFAULT_GOOD_NODES
+        InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 60, json.dumps(good_nodes))
     return good_nodes
 
 
