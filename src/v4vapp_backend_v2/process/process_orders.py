@@ -49,6 +49,11 @@ async def process_create_fill_order_op(
         isinstance(limit_fill_order, LimitOrderCreate)
         and limit_fill_order.owner in tracked_customers
     ):
+        description = (
+            f"Orderid: {limit_fill_order.orderid} selling {limit_fill_order.amount_to_sell.amount_decimal}"
+            f"{limit_fill_order.amount_to_sell.unit} for at least "
+            f"{limit_fill_order.min_to_receive.amount_decimal} {limit_fill_order.min_to_receive.unit}"
+        )
         logger.info(f"Limit order create: {limit_fill_order.orderid}")
         if not limit_fill_order.conv or limit_fill_order.conv.is_unset():
             quote = await TrackedBaseModel.nearest_quote(timestamp=limit_fill_order.timestamp)
@@ -70,7 +75,7 @@ async def process_create_fill_order_op(
         ledger_entry.credit = AssetAccount(
             name="Customer Deposits Hive", sub=limit_fill_order.owner
         )
-        ledger_entry.description = limit_fill_order.ledger_str
+        ledger_entry.description = description
         ledger_entry.ledger_type = LedgerType.LIMIT_ORDER_CREATE
         ledger_entry.debit_unit = ledger_entry.credit_unit = limit_fill_order.amount_to_sell.unit
         ledger_entry.debit_amount = ledger_entry.credit_amount = (
@@ -114,7 +119,7 @@ async def process_create_fill_order_op(
                 op_type=limit_fill_order.op_type,
                 ledger_type=ledger_type,
                 cust_id=limit_fill_order.cust_id,
-                description=f"Fill order buyer: {limit_fill_order.current_owner} pays {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit}",
+                description=f"pays {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} Orderid: {limit_fill_order.open_orderid}",
                 debit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.current_owner
                 ),  # Buyer debits their deposits for HIVE paid
@@ -139,7 +144,7 @@ async def process_create_fill_order_op(
                 op_type=limit_fill_order.op_type,
                 ledger_type=ledger_type,
                 cust_id=limit_fill_order.cust_id,
-                description=f"Fill order seller: {limit_fill_order.open_owner} receives {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit}",
+                description=f"receives {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} Orderid: {limit_fill_order.open_orderid}",
                 debit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.open_owner
                 ),  # Seller debits escrow for HBD delivered
@@ -165,7 +170,7 @@ async def process_create_fill_order_op(
                 op_type=limit_fill_order.op_type,
                 ledger_type=ledger_type,
                 cust_id=limit_fill_order.cust_id,
-                description=f"Net fill order: {limit_fill_order.current_owner} trades {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} for {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} (external seller)",
+                description=f"trades {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} for {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} (external seller) Orderid: {limit_fill_order.open_orderid}",
                 debit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.current_owner
                 ),  # Buyer debits deposits for HIVE paid
@@ -194,7 +199,7 @@ async def process_create_fill_order_op(
                 op_type=limit_fill_order.op_type,
                 ledger_type=ledger_type,
                 cust_id=limit_fill_order.cust_id,
-                description=f"Net fill order: {limit_fill_order.open_owner} trades {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} (external buyer)",
+                description=f"trades {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} (external buyer) Orderid: {limit_fill_order.open_orderid}",
                 debit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.open_owner
                 ),  # Seller debits deposits for what they receive (current_pays)
@@ -213,7 +218,7 @@ async def process_create_fill_order_op(
         else:
             # Neither tracked: Skip or log (not relevant to your entity)
             logger.info(
-                f"Fill order between untracked parties: {limit_fill_order.current_owner} and {limit_fill_order.open_owner}. Skipping."
+                f"Fill order between untracked parties: {limit_fill_order.current_owner} and {limit_fill_order.open_owner}. Skipping. Orderid: {limit_fill_order.open_orderid}"
             )
             return []
 
