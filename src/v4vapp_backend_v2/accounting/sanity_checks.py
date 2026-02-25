@@ -355,11 +355,42 @@ async def run_all_sanity_checks() -> SanityCheckResults:
         # Will hold (check_name, Task) pairs created inside the TaskGroup
         task_list: List[Tuple[str, asyncio.Task]] = []
 
-        async with asyncio.timeout(30.0):  # 5 seconds timeout for all checks
-            async with asyncio.TaskGroup() as tg:
-                for check_name, coro in coros:
-                    task = tg.create_task(coro)
-                    task_list.append((check_name, task))
+        # wrapper that logs the start/finish of each check and applies a per-check timeout
+        async def _run_check(
+            name: str, coro: Coroutine[Any, Any, SanityCheckResult]
+        ) -> SanityCheckResult:
+            logger.debug(f"starting sanity check {name}")
+            try:
+                # each individual check gets its own shorter timeout so we can tell which hung
+                async with asyncio.timeout(25.0):
+                    return await coro
+            except Exception as exc:  # including TimeoutError or CancelledError
+                logger.warning(
+                    f"sanity check '{name}' raised {exc!r}",
+                    extra={"notification": False},
+                )
+                raise
+            finally:
+                logger.debug(f"completed sanity check {name}")
+
+        try:
+            async with asyncio.timeout(30.0):  # 30 seconds timeout for all checks
+                async with asyncio.TaskGroup() as tg:
+                    for check_name, coro in coros:
+                        task = tg.create_task(_run_check(check_name, coro))
+                        task_list.append((check_name, task))
+        except Exception as e:
+            # if we hit the outer timeout, log the state of each task so we can
+            # tell which one(s) were still pending/cancelled.
+            if isinstance(e, TimeoutError):
+                for name, t in task_list:
+                    status = ("done" if t.done() else "pending",)
+                    logger.warning(
+                        f"sanity check '{name}' status on overall timeout: {status}",
+                        extra={"notification": False},
+                    )
+            # re-raise to be caught by outer handler below
+            raise
 
         passed: List[Tuple[str, SanityCheckResult]] = []
         failed: List[Tuple[str, SanityCheckResult]] = []
