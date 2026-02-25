@@ -137,11 +137,12 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 elif isinstance(tracked_op, Payment):
                     ledger_entries = await process_lightning_payment(payment=tracked_op)
                 elif isinstance(tracked_op, TrackedForwardEvent):
-                    # No ledger entry necessary for HTLC events
+                    # No ledger entry necessary for HTLC events.  `process_forward`
+                    # handles logging for each event when it is added to the
+                    # ledger, and the generic summary log below also prints a
+                    # success line with timing.  The previous explicit log
+                    # here resulted in duplicate messages.
                     ledger_entries = await process_forward(tracked_forward_event=tracked_op)
-                    logger.info(
-                        tracked_op.log_str, extra={"notification": False, **tracked_op.log_extra}
-                    )
                 else:
                     raise ValueError("Invalid tracked object")
 
