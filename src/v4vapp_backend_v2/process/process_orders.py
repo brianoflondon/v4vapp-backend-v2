@@ -11,7 +11,8 @@ from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 
 async def process_create_fill_order_op(
-    limit_fill_order: Union[LimitOrderCreate, FillOrder, LimitOrderCancelled], nobroadcast: bool = False
+    limit_fill_order: Union[LimitOrderCreate, FillOrder, LimitOrderCancelled],
+    nobroadcast: bool = False,
 ) -> List[LedgerEntry]:
     """
     Process limit order creation and fill order operations, creating appropriate ledger entries.
@@ -93,8 +94,8 @@ async def process_create_fill_order_op(
         order_ids = (
             LimitOrderCreate.check_hive_open_orders()
         )  # This will also clean up any missing orders from cache
-        original_entry = await LedgerEntry().load_one_by_op_type(
-            short_id=limit_fill_order.short_id_p, op_type="limit_order_create"
+        original_entry = await LedgerEntry().load_one_by_description_regex(
+            regex=f"{limit_fill_order.orderid}", ledger_type=LedgerType.LIMIT_ORDER_CREATE.value
         )
         if original_entry:
             logger.info(

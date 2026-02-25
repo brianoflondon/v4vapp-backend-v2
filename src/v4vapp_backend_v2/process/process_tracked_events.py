@@ -23,6 +23,7 @@ from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
+from v4vapp_backend_v2.hive_models.op_limit_order_cancelled import LimitOrderCancelled
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -126,7 +127,10 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
             async with LockStr(f"pte_{cust_id}").locked(
                 timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
             ):
-                if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder, CustomJson)):
+                if isinstance(
+                    tracked_op,
+                    (TransferBase, LimitOrderCreate, LimitOrderCancelled, FillOrder, CustomJson),
+                ):
                     ledger_entries = await process_hive_op(op=tracked_op)
                 elif isinstance(tracked_op, Invoice):
                     ledger_entries = await process_lightning_invoice(invoice=tracked_op)

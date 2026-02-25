@@ -24,6 +24,7 @@ from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.hive_extras import HiveAccountNameOnExchangesList, HiveNotHiveAccount
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
+from v4vapp_backend_v2.hive_models.op_limit_order_cancelled import LimitOrderCancelled
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.process.process_custom_json import process_custom_json_func
@@ -86,7 +87,11 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
 
             ledger_entry = await process_transfer_op(hive_transfer=op, nobroadcast=nobroadcast)
             return [ledger_entry] if ledger_entry else []
-        elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
+        elif (
+            isinstance(op, LimitOrderCreate)
+            or isinstance(op, FillOrder)
+            or isinstance(op, LimitOrderCancelled)
+        ):
             ledger_entries = await process_create_fill_order_op(
                 limit_fill_order=op, nobroadcast=nobroadcast
             )

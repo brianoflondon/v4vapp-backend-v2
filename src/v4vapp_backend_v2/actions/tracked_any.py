@@ -11,6 +11,7 @@ from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
+from v4vapp_backend_v2.hive_models.op_limit_order_cancelled import LimitOrderCancelled
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -51,6 +52,7 @@ def get_tracked_any_type(value: Any) -> str:
             "limit_order_create",
             "recurrent_transfer",
             "fill_recurrent_transfer",
+            "limit_order_cancelled",
             "custom_json",
             "account_update2",
             "producer_missed",
@@ -116,6 +118,7 @@ TrackedAny = Annotated[
     | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
     | Annotated[FillOrder, Tag("fill_order")]
     | Annotated[LimitOrderCreate, Tag("limit_order_create")]
+    | Annotated[LimitOrderCancelled, Tag("limit_order_cancelled")]
     | Annotated[CustomJson, Tag("custom_json")]
     | Annotated[AccountUpdate2, Tag("account_update2")]
     | Annotated[TransferBase, Tag("transfer_base")]
