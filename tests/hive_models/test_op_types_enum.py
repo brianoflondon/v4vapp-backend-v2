@@ -25,6 +25,11 @@ def test_other_ops():
     assert "producer_reward" in WitnessOpTypes
 
 
+def test_virtual_ops_contains_cancelled():
+    # new virtual operation added in 2026
+    assert "limit_order_cancelled" in VirtualOpTypes
+
+
 def test_list_all_real_ops():
     for item in RealOpsLoopTypes:
         print(item)

@@ -6,17 +6,19 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
+from v4vapp_backend_v2.hive_models.op_limit_order_cancelled import LimitOrderCancelled
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 
 async def process_create_fill_order_op(
-    limit_fill_order: Union[LimitOrderCreate, FillOrder], nobroadcast: bool = False
+    limit_fill_order: Union[LimitOrderCreate, FillOrder, LimitOrderCancelled], nobroadcast: bool = False
 ) -> List[LedgerEntry]:
     """
     Process limit order creation and fill order operations, creating appropriate ledger entries.
-    This function handles two types of operations:
+    This function handles three types of operations:
     1. LimitOrderCreate: Records the creation of a limit order with conversion data
     2. FillOrder: Records the execution of a fill order, handling various tracking scenarios
+    3. LimitOrderCancelled: Records the cancellation of a limit order, handling appropriate ledger adjustments
     For LimitOrderCreate operations:
     - Only processes orders from customers other than the server itself
     - Fetches and stores conversion data if not already set
@@ -84,6 +86,23 @@ async def process_create_fill_order_op(
         ledger_entry.debit_conv = ledger_entry.credit_conv = limit_fill_order.conv
         ledger_entry.cust_id = limit_fill_order.cust_id
         ledger_entries.append(ledger_entry)
+    elif isinstance(limit_fill_order, LimitOrderCancelled):
+        logger.info(f"Limit order cancelled: {limit_fill_order.orderid}")
+        # For cancellations, we need to reverse the original escrow entry created by the LimitOrderCreate
+        # This assumes we have a way to find that original entry, which might require a query
+        order_ids = (
+            LimitOrderCreate.check_hive_open_orders()
+        )  # This will also clean up any missing orders from cache
+        original_entry = await LedgerEntry().load_one_by_op_type(
+            short_id=limit_fill_order.short_id_p, op_type="limit_order_create"
+        )
+        if original_entry:
+            logger.info(
+                f"Reversing original LimitOrderCreate entry {original_entry.log_str} for cancelled order {limit_fill_order.orderid}",
+                extra={**limit_fill_order.log_extra, **original_entry.log_extra},
+            )
+            await original_entry.save(upsert=True, reverse=True)
+
     elif isinstance(limit_fill_order, FillOrder):
         logger.info(
             f"Fill order operation: {limit_fill_order.open_orderid} {limit_fill_order.current_owner}"

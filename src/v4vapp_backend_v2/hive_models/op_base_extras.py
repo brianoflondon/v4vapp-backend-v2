@@ -14,6 +14,7 @@ OP_TRACKED = [
     "producer_reward",
     "fill_order",
     "limit_order_create",
+    "limit_order_cancelled",
     "update_proposal_votes",
     "account_update2",
     "fill_recurrent_transfer",
