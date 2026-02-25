@@ -206,16 +206,39 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
         escrow_account = AssetAccount(name="Traded Deposits Hive", sub=server_id)
 
         tasks: dict[str, asyncio.Task] = {}
-        async with asyncio.TaskGroup() as tg:
-            tasks["deposits_details"] = tg.create_task(
-                one_account_balance(account=customer_deposits_account, in_progress=in_progress)
+
+        async def _fetch_balances() -> dict:
+            """Run the blocking hive call in a thread with its own timeout and logs."""
+            try:
+                # give the hive client its own generous timeout but still bounded
+                async with asyncio.timeout(20.0):
+                    return await asyncio.to_thread(account_hive_balances, hive_accname=server_id)
+            except Exception as exc:
+                # this will include CancelledError/TimeoutError when the outer
+                # group is torn down due to our per-check timeout or a shutdown
+                logger.warning(
+                    f"hive balance fetch failed: {exc!r}",
+                    extra={"notification": False},
+                )
+                raise
+
+        try:
+            async with asyncio.TaskGroup() as tg:
+                tasks["deposits_details"] = tg.create_task(
+                    one_account_balance(account=customer_deposits_account, in_progress=in_progress)
+                )
+                tasks["escrow_details"] = tg.create_task(
+                    one_account_balance(account=escrow_account, in_progress=in_progress)
+                )
+                tasks["balances"] = tg.create_task(_fetch_balances())
+        except asyncio.CancelledError:
+            # make sure we log cancellation separately before letting outer wrapper
+            # convert it to TimeoutError
+            logger.warning(
+                "server_account_hive_balances was cancelled during inner taskgroup",
+                extra={"notification": False},
             )
-            tasks["escrow_details"] = tg.create_task(
-                one_account_balance(account=escrow_account, in_progress=in_progress)
-            )
-            tasks["balances"] = tg.create_task(
-                asyncio.to_thread(account_hive_balances, hive_accname=server_id)
-            )
+            raise
 
         deposits_details = tasks["deposits_details"].result()
         escrow_details = tasks["escrow_details"].result()
