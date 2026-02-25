@@ -42,7 +42,6 @@ DEFAULT_GOOD_NODES = [
     "https://api.openhive.network",
     "https://techcoderx.com",
     "https://api.c0ff33a.uk",
-    "https://hive-api.3speak.tv",
     "https://hiveapi.actifit.io",
     "https://api.syncad.com",
 ]
@@ -317,7 +316,11 @@ def get_good_nodes() -> List[str]:
             good_nodes = DEFAULT_GOOD_NODES
             InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes))
 
-    if len(good_nodes) < 3:
+    if len(good_nodes) < 2:
+        logger.warning(
+            f"Too few good nodes found ({len(good_nodes)}), using default nodes.",
+            extra={"good_nodes": good_nodes},
+        )
         good_nodes = DEFAULT_GOOD_NODES
         InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 60, json.dumps(good_nodes))
     return good_nodes
@@ -541,12 +544,23 @@ def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     Returns:
         Dict[str, float]: A dictionary containing the HIVE and HBD balances.
     """
-    hive = get_hive_client()
-    if not hive_accname:
-        hive_accname = InternalConfig().server_id
-    hive_account = Account(hive_accname, blockchain_instance=hive)
+    hive = None
+    balances = None
     try:
+        hive = get_hive_client()
+        if not hive_accname:
+            hive_accname = InternalConfig().server_id
+        hive_account = Account(hive_accname, blockchain_instance=hive)
         balances: List[Amount] | None = hive_account.balances.get("available", None)
+    except Exception as e:
+        url = (
+            hive.rpc.url
+            if hive and hasattr(hive, "rpc") and hasattr(hive.rpc, "url")
+            else "unknown"
+        )
+        logger.error(f"Error In Hive {hive.rpc.url}: {e}", extra={"hive_accname": hive_accname})
+        pass
+    try:
         if not balances or len(balances) < 2:
             return {"HIVE": Amount("0.000 HIVE"), "HBD": Amount("0.000 HBD")}
         return {
