@@ -79,7 +79,15 @@
     "workbench.colorCustomizations": {
         "activityBar.background": "#4F134B",
         "titleBar.activeBackground": "#6F1B69",
-        "titleBar.activeForeground": "#FDF8FD"
+        "titleBar.activeForeground": "#FDF8FD",
+        "titleBar.inactiveBackground": "#4F134B",
+        "titleBar.inactiveForeground": "#FDF8FD",
+        "statusBar.background": "#4F134B",
+        "statusBar.foreground": "#FDF8FD",
+        "statusBar.debuggingBackground": "#4F134B",
+        "statusBar.debuggingForeground": "#FDF8FD",
+        "statusBar.noFolderBackground": "#4F134B",
+        "statusBar.noFolderForeground": "#FDF8FD"
     },
     "jupyter.notebookFileRoot": "${workspaceFolder}/src/jupyter",
     "[html]": {
