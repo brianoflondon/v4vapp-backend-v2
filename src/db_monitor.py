@@ -416,19 +416,55 @@ async def subscribe_stream(
         raise e
 
     except OperationFailure as e:
+        # Mongo will raise OperationFailure for a variety of reasons; one that we
+        # commonly see during development is a "ChangeStreamFatalError" with a
+        # message like "cannot resume stream; the resume token was not found".
+        # In that case the change stream can no longer continue using the old
+        # token (often because the pipeline changed) and we just want to drop the
+        # token and start over from ``start_at_operation_time``.  The existing
+        # code attempted to handle this by looking for the string "resume" and
+        # spawning a new task, but we sometimes ended up stuck in a loop or the
+        # recursive task would itself pick up a stale token.  The symptoms were
+        # exactly what the user reported: restart, see the error, and the stream
+        # never recover.
+
         error_code = f"db_monitor_{collection_name}"
         error_count += 1
         logger.warning(
             f"{ICON} {collection_name} Operation failure in stream subscription: {e}",
             extra={"error_code": error_code, "notification": False},
         )
-        if "resume" in str(e):
-            resume.delete_token()
+
+        # Inspect the error to decide whether it is a non-resumable problem.
+        # We treat any message containing "resume" or a specific change-stream
+        # fatal code as a cue to drop the stored resume token and re-open the
+        # stream fresh.  (Eventually other error conditions could be added.)
+        msg = str(e).lower()
+        non_resumable = "resume" in msg or getattr(e, "code", None) == 280
+        if non_resumable:
+            # The resume token stored in Redis (or the driver's internal
+            # cursor state) cannot be used anymore.  Clear the Redis entry and
+            # restart the watcher from scratch, ignoring the old token.
+            logger.info(
+                f"{ICON} {collection_name} non-resumable stream error, dropping stored token and restarting without resume",
+                extra={"notification": False},
+            )
+            try:
+                resume.delete_token()
+            except Exception:
+                # ignore deletion failures; we just want to make sure the key is
+                # gone the next time we attempt to read it.
+                pass
+
             if not shutdown_event.is_set():
+                # Spawn a new watcher but explicitly disable resuming; the
+                # new invocation will start from 60s ago (or whatever the
+                # normal behaviour is when ``resume_token`` is None).
                 asyncio.create_task(
                     subscribe_stream(
                         collection_name=collection_name,
                         pipeline=pipeline,
+                        use_resume=False,
                         error_count=error_count,
                         error_code=error_code,
                     )
