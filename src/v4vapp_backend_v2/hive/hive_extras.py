@@ -284,7 +284,7 @@ def get_good_nodes() -> List[str]:
             "Fetched good nodes Last good nodes",
             extra={"beacon_response": nodes, "error_code_clear": "beacon_nodes_fail"},
         )
-        good_nodes = [node["endpoint"] for node in nodes if node["score"] == 100]
+        good_nodes = [node["endpoint"] for node in nodes if node["score"] >= 80]
         good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
         logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
         try:
@@ -322,7 +322,7 @@ def get_good_nodes() -> List[str]:
             extra={"good_nodes": good_nodes},
         )
         good_nodes = DEFAULT_GOOD_NODES
-        InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 60, json.dumps(good_nodes))
+        InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 1800, json.dumps(good_nodes))
     return good_nodes
 
 
