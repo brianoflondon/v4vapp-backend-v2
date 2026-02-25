@@ -61,6 +61,12 @@ async def test_forward_event_logs_once(caplog, monkeypatch):
         "v4vapp_backend_v2.process.lock_str_class.LockStr.locked",
         _dummy_locked,
     )
+    # process_tracked_events imported LockStr at module import time, so
+    # patch that reference as well.
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_tracked_events.LockStr.locked",
+        _dummy_locked,
+    )
 
     class DummySanity:
         log_extra = {}
