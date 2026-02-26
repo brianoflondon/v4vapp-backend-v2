@@ -69,10 +69,16 @@ async def reset_lightning_opening_balance():
         )
         reason = f"Balance adjustment required for {node}"
         adjustment_msats = balances.channel.local_msat - account_ledger_balance.msats
+        adjustment_msats = adjustment_msats.quantize(
+            Decimal("1")
+        )  # round to nearest 1 msat to avoid tiny adjustments
         short_id = "adjustment"
     else:
         reason = f"Initial opening balance for {node}"
         adjustment_msats = balances.channel.local_msat
+        adjustment_msats = adjustment_msats.quantize(
+            Decimal("1")
+        )  # round to nearest 1 msat to avoid tiny adjustments
         short_id = "open"
 
     logger.info(f"Current Channel balance: {balances.channel.local_sats:,.0f} sats")
