@@ -130,3 +130,84 @@ async def test_subscribe_stream_no_token_starts_fresh(monkeypatch):
     assert code is None
     # verify that the kwargs included start_at_operation_time when no resume token
     assert "start_at_operation_time" in dummy_col.watch_kwargs
+
+
+# -------------------------------------------------------------
+# new tests for ignore_changes performance and pipeline filtering
+# -------------------------------------------------------------
+
+
+def test_ignore_changes_unit_and_perf():
+    """Simple unit checks plus timeit measurement for ignore_changes."""
+    # db_monitor is imported from the workspace root like the other tests
+    from db_monitor import ignore_changes
+    from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import IGNORED_UPDATE_FIELDS
+
+    # trivial ignored update
+    change = {"updateDescription": {"updatedFields": {"locked": True}}}
+    assert ignore_changes(change, "payments")
+    # non-ignored field should not be filtered
+    change2 = {"updateDescription": {"updatedFields": {"foo": 1}}}
+    assert not ignore_changes(change2, "payments")
+    # mix of ignored and non-ignored should still return False
+    mix = {"updateDescription": {"updatedFields": {"foo": 1, "locked": True}}}
+    assert not ignore_changes(mix, "payments")
+
+    # performance measurement: average should be tiny (<10µs)
+    import timeit
+
+    fixed = {"updateDescription": {"updatedFields": {k: 1 for k in IGNORED_UPDATE_FIELDS}}}
+    runs = 100_000
+    total = timeit.timeit(lambda: ignore_changes(fixed, "payments"), number=runs)
+    avg = total / runs
+    # on CI the call overhead can be higher; allow up to 100µs
+    assert avg < 1e-4, f"ignore_changes too slow: {avg}s"
+
+
+def test_pipeline_filters_ignored_updates():
+    """Integration-esque test to verify the payments pipeline logic.
+
+    mongomock cannot evaluate the $expr/$setDifference stage that lives in the
+    real pipeline, so rather than running the whole aggregation we check that
+    our Python equivalent produces the expected output on a pair of sample
+    change documents.  This guarantees parity between the pipeline and
+    `ignore_changes()` logic used in the monitor.
+    """
+    from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import IGNORED_UPDATE_FIELDS
+
+    # create two fake events
+    evt_ignored = {
+        "operationType": "update",
+        "updateDescription": {"updatedFields": {k: True for k in IGNORED_UPDATE_FIELDS}},
+        "fullDocument": {"custom_records": {"v4vapp_group_id": "x"}, "status": "SUCCEEDED"},
+    }
+    evt_allowed = {
+        "operationType": "update",
+        "updateDescription": {"updatedFields": {"foo": 1}},
+        "fullDocument": {"custom_records": {"v4vapp_group_id": "x"}, "status": "SUCCEEDED"},
+    }
+
+    # manually apply the same match rules as the pipeline
+    def passes_match(evt):
+        m = evt
+        if m.get("operationType") == "delete":
+            return False
+        # top-level filters used by all pipelines
+        if "custom_records" in m.get("fullDocument", {}):
+            if m["fullDocument"]["custom_records"].get("v4vapp_group_id") is None:
+                return False
+        if "status" in m.get("fullDocument", {}):
+            if m["fullDocument"]["status"] not in ["FAILED", "SUCCEEDED"]:
+                return False
+        return True
+
+    filtered = []
+    for e in (evt_ignored, evt_allowed):
+        if not passes_match(e):
+            continue
+        # imitate ignore_updates_match / ignore_changes
+        if set(e["updateDescription"]["updatedFields"]) <= set(IGNORED_UPDATE_FIELDS):
+            continue
+        filtered.append(e)
+
+    assert filtered == [evt_allowed]

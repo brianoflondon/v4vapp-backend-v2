@@ -385,7 +385,7 @@ async def run_all_sanity_checks() -> SanityCheckResults:
             logger.debug(f"starting sanity check {name}")
             try:
                 # each individual check gets its own shorter timeout so we can tell which hung
-                async with asyncio.timeout(25.0):
+                async with asyncio.timeout(40.0):
                     return await coro
             except Exception as exc:  # including TimeoutError or CancelledError
                 logger.warning(
@@ -397,7 +397,7 @@ async def run_all_sanity_checks() -> SanityCheckResults:
                 logger.debug(f"completed sanity check {name}")
 
         try:
-            async with asyncio.timeout(30.0):  # 30 seconds timeout for all checks
+            async with asyncio.timeout(45.0):  # 45 seconds timeout for all checks
                 async with asyncio.TaskGroup() as tg:
                     for check_name, coro in coros:
                         task = tg.create_task(_run_check(check_name, coro))

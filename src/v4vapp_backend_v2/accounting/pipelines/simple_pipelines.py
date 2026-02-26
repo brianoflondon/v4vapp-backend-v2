@@ -226,39 +226,6 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
             Each pipeline also ignores certain update operations that only affect specified fields ("replies", "change_conv", "process_time").
     """
 
-    ignore_updates_match: Mapping[str, Any] = {
-        "$match": {
-            "$or": [
-                {"operationType": {"$ne": "update"}},
-                {
-                    "operationType": "update",
-                    "$expr": {
-                        # Keep ONLY updates that changed at least one field outside the ignore list
-                        "$gt": [
-                            {
-                                "$size": {
-                                    "$setDifference": [
-                                        {
-                                            "$map": {
-                                                "input": {
-                                                    "$objectToArray": "$updateDescription.updatedFields"
-                                                },
-                                                "as": "field",
-                                                "in": "$$field.k",
-                                            }
-                                        },
-                                        IGNORED_UPDATE_FIELDS,
-                                    ]
-                                }
-                            },
-                            0,
-                        ]
-                    },
-                },
-            ]
-        }
-    }
-
     payments_pipeline: Sequence[Mapping[str, Any]] = [
         {
             "$match": {
@@ -274,8 +241,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
                     },
                 ],
             }
-        },
-        ignore_updates_match,
+        }
     ]
     invoices_pipeline: Sequence[Mapping[str, Any]] = [
         {
@@ -283,8 +249,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
                 "operationType": {"$ne": "delete"},
                 "fullDocument.state": "SETTLED",
             }
-        },
-        ignore_updates_match,
+        }
     ]
     hive_ops_pipeline: Sequence[Mapping[str, Any]] = [
         {
@@ -292,8 +257,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
                 "operationType": {"$ne": "delete"},
                 "fullDocument.type": {"$nin": ["block_marker"]},
             }
-        },
-        ignore_updates_match,
+        }
     ]
     htlc_events_pipeline: Sequence[Mapping[str, Any]] = [
         {
@@ -301,8 +265,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
                 "operationType": {"$ne": "delete"},
                 "fullDocument.group_id": {"$ne": None},
             }
-        },
-        ignore_updates_match,
+        }
     ]
 
     return {
