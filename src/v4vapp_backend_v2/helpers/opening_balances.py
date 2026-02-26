@@ -205,11 +205,15 @@ async def reset_exchange_opening_balance(
         else:
             existing_balance = account_ledger_balance.hive
 
-        if existing_balance == balance_value:
+        # check if match within 0.1% to avoid creating adjustment entries for tiny differences due to conversion or timing
+        if (
+            existing_balance != Decimal(0)
+            and abs(existing_balance - balance_value) / balance_value < 0.001
+        ):
             logger.info(
                 f"Ledger balance for {check_account.name} (Sub: {check_account.sub}) "
-                f"{asset_label} is already correct at {balance_value:,.0f} {currency.value}. "
-                "No action needed."
+                f"{asset_label} is close enough to the exchange balance ({existing_balance:,.0f} vs {balance_value:,.0f} {currency.value}), "
+                "no adjustment needed."
             )
             continue
 
@@ -222,6 +226,14 @@ async def reset_exchange_opening_balance(
             )
             reason = f"Balance adjustment for {exchange_sub} ({asset_label})"
             adjustment_value = balance_value - existing_balance
+            if currency == Currency.MSATS:
+                # round to nearest 1000 msats using Decimal quantize to avoid floating point issues, then convert back to Decimal
+                adjustment_value = (adjustment_value / Decimal(1000)).quantize(
+                    Decimal("1")
+                ) * Decimal(1000)
+            elif currency == Currency.HIVE:
+                # round to 3 decimal places for Hive
+                adjustment_value = adjustment_value.quantize(Decimal("0.001"))
             short_id = "adjustment"
         else:
             reason = f"Initial opening balance for {exchange_sub} ({asset_label})"
