@@ -63,7 +63,7 @@ async def health_check() -> Dict[str, Any]:
             )
             # Exit the code to allow docker to restart the container
             shutdown_event.set()
-            sys.exit(1)
+            raise RuntimeError(f"{task} DB Monitor task is not running")
     logger.debug(
         f"{ICON} DB Monitor Health check passed",
         extra={"notification": False, "error_code_clear": "db_monitor_task_failure"},
