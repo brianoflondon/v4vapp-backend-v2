@@ -4,7 +4,6 @@ import signal
 import sys
 from contextlib import suppress
 from datetime import datetime, timezone
-from pprint import pprint
 from typing import Annotated, Any, Dict, Mapping, Sequence
 
 import bson
@@ -22,7 +21,10 @@ from status.status_api import StatusAPI
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
-from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
+from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
+    IGNORED_UPDATE_FIELDS,
+    db_monitor_pipelines,
+)
 from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import (
@@ -186,7 +188,7 @@ class ResumeToken(BaseModel):
             return None
 
 
-def ignore_changes(change: Mapping[str, Any]) -> bool:
+def ignore_changes(change: Mapping[str, Any], collection_name: str) -> bool:
     """
     Determines if the "locked" field is present in the updated or removed fields
     of a database change event.
@@ -200,43 +202,23 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
         bool: True if the "locked" field is found in either the "updatedFields" or
         "removedFields" of the change event, otherwise False.
     """
-    debugging = False
-    if not debugging:
-        return False
 
     update_description = change.get("updateDescription", {})
     updated_fields = update_description.get("updatedFields", {})
-    removed_fields = update_description.get("removedFields", [])
-    # logger.debug(
-    #     f"Change detected Operation type: {change.get('operationType', '')} {change.get('ns', {})}"
-    # )
+    # removed_fields = update_description.get("removedFields", [])
 
-    if update_description or updated_fields or removed_fields:
-        print("update_descriptions")
-        pprint(update_description)
-        print("updated_fields")
-        pprint(updated_fields)
-        print("removed_fields")
-        pprint(removed_fields)
+    if not updated_fields:
+        return False
 
-    # Filter out custom_json sent purely for notifications
-    # if "json" in updated_fields:
-    #     if "notification" in updated_fields["json"]:
-    #         if updated_fields["json"]["notification"] is True:
-    #             return True
-
-    # # Check if "locked" is in either updatedFields or removedFields
-    # if "locked" in updated_fields or "locked" in removed_fields:
-    #     return True
-    # if "process_time" in updated_fields or "process_time" in removed_fields:
-    #     # If process_time is present ignore the change
-    #     return True
-    # if (
-    #     "change_conv" in updated_fields
-    #     or "fee_conv" in updated_fields
-    #     or "replies" in updated_fields
-    # ):
-    #     return True
+    # Uses the <= operator defined on set – it’s the subset test (issubset).
+    # it returns True when every element of the left‑hand set appears in the
+    # right‑hand set.
+    if set(updated_fields) <= set(IGNORED_UPDATE_FIELDS):
+        logger.info(
+            f"{ICON} Ignoring change with only ignored fields updated: {set(updated_fields)} in {collection_name}",
+        )
+        return True
+    logger.info(f"{ICON} Processing changes to: {set(updated_fields)} in {collection_name}")
     return False
 
 
@@ -383,7 +365,7 @@ async def subscribe_stream(
                         f"{ICON}✳️ Change detected in {collection_name} {group_id}",
                         extra={"notification": False, "change": change},
                     )
-                    if ignore_changes(change):
+                    if ignore_changes(change, collection_name=collection_name):
                         pass
                     else:
                         # Process the change if it is not a lock/unlock
