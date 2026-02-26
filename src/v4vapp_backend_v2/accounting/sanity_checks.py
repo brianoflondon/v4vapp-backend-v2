@@ -203,7 +203,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
         # Get customer deposits balance
         server_id = InternalConfig().server_id
         customer_deposits_account = AssetAccount(name="Customer Deposits Hive", sub=server_id)
-        escrow_account = AssetAccount(name="Traded Deposits Hive", sub=server_id)
+        traded_deposits_account = AssetAccount(name="Traded Deposits Hive", sub=server_id)
 
         tasks: dict[str, asyncio.Task] = {}
 
@@ -227,8 +227,8 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 tasks["deposits_details"] = tg.create_task(
                     one_account_balance(account=customer_deposits_account, in_progress=in_progress)
                 )
-                tasks["escrow_details"] = tg.create_task(
-                    one_account_balance(account=escrow_account, in_progress=in_progress)
+                tasks["traded_deposits_details"] = tg.create_task(
+                    one_account_balance(account=traded_deposits_account, in_progress=in_progress)
                 )
                 tasks["balances"] = tg.create_task(_fetch_balances())
         except asyncio.CancelledError:
@@ -241,17 +241,17 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
             raise
 
         deposits_details = tasks["deposits_details"].result()
-        escrow_details = tasks["escrow_details"].result()
+        traded_deposits_details = tasks["traded_deposits_details"].result()
         balances = tasks["balances"].result()
 
         # Get balances with tolerance
         hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
         hbd_deposits = deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
-        hive_escrow = escrow_details.balances_net.get(Currency.HIVE, Decimal(0.0))
-        hbd_escrow = escrow_details.balances_net.get(Currency.HBD, Decimal(0.0))
+        hive_traded = traded_deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
+        hbd_traded = traded_deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
 
-        hive_deposits += hive_escrow
-        hbd_deposits += hbd_escrow
+        hive_deposits += hive_traded
+        hbd_deposits += hbd_traded
 
         hive_actual = Amount(balances.get("HIVE", 0.0))
         hbd_actual = Amount(balances.get("HBD", 0.0))
@@ -270,8 +270,8 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 details=(
                     f"Server Hive balances match: \nHIVE deposits {hive_deposits:,.3f}, "
                     f"HBD deposits {hbd_deposits:,.3f}.\n"
-                    f"Escrow Hive {hive_escrow:,.3f} HIVE\nEscrow HBD {hbd_escrow:,.3f}\n"
-                    f"Includes Customer Deposits Hive and Escrow Hive accounts. Tolerance is {tolerance} (1 thousandth of a token)."
+                    f"Traded Deposits Hive {hive_traded:,.3f} HIVE\nTraded Deposits HBD {hbd_traded:,.3f}\n"
+                    f"Includes Customer Deposits Hive and Traded Deposits Hive accounts. Tolerance is {tolerance} (1 thousandth of a token)."
                 ),
             )
         else:
@@ -282,7 +282,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                     f"Server Hive Mismatch: {hive_delta:,.3f} HIVE, {hbd_delta:,.3f} HBD; \n"
                     f"balances mismatch: \nHIVE deposits {hive_deposits:,.3f} vs actual {hive_actual.amount_decimal:,.3f}, \n"
                     f"HBD deposits {hbd_deposits:,.3f} vs actual {hbd_actual.amount_decimal:,.3f}.\n"
-                    f"Includes Customer Deposits Hive and Escrow Hive accounts. Tolerance is {tolerance} (1 thousandth of a token)."
+                    f"Includes Customer Deposits Hive and Traded Deposits Hive accounts. Tolerance is {tolerance} (1 thousandth of a token)."
                 ),
             )
 
