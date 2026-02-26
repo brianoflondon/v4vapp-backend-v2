@@ -443,33 +443,24 @@ async def subscribe_stream(
         non_resumable = "resume" in msg or getattr(e, "code", None) == 280
         if non_resumable:
             # The resume token stored in Redis (or the driver's internal
-            # cursor state) cannot be used anymore.  Clear the Redis entry and
-            # restart the watcher from scratch, ignoring the old token.
-            logger.info(
-                f"{ICON} {collection_name} non-resumable stream error, dropping stored token and restarting without resume",
-                extra={"notification": False},
+            # cursor state) cannot be used anymore.  This is a fatal condition
+            # for db_monitor because the pipeline has changed and we cannot
+            # guarantee we won't mis-handle events.  The safest option is to
+            # terminate the entire process so Docker can restart the container
+            # (with a fresh resume token).
+            logger.error(
+                f"{ICON} {collection_name} non-resumable stream error; failing process",
+                extra={"notification": True},
             )
             try:
                 resume.delete_token()
             except Exception:
-                # ignore deletion failures; we just want to make sure the key is
-                # gone the next time we attempt to read it.
                 pass
-
-            if not shutdown_event.is_set():
-                # Spawn a new watcher but explicitly disable resuming; the
-                # new invocation will start from 60s ago (or whatever the
-                # normal behaviour is when ``resume_token`` is None).
-                asyncio.create_task(
-                    subscribe_stream(
-                        collection_name=collection_name,
-                        pipeline=pipeline,
-                        use_resume=False,
-                        error_count=error_count,
-                        error_code=error_code,
-                    )
-                )
-            return error_code
+            # signal shutdown in case anything else is watching
+            shutdown_event.set()
+            # raise something that bubbles up through main_async_start and
+            # ultimately causes `asyncio.run` to exit with non-zero.
+            raise RuntimeError(f"non-resumable change stream for {collection_name}: {e}")
 
     except (
         ServerSelectionTimeoutError,

@@ -84,13 +84,14 @@ async def test_subscribe_stream_discards_bad_resume(monkeypatch):
     # intercept asyncio.create_task so we can inspect its arguments
     monkeypatch.setattr(asyncio, "create_task", fake_create_task)
 
-    # run the function, it should catch the OperationFailure and return an error code
-    code = await db_monitor.subscribe_stream(collection_name="foo", pipeline=None, use_resume=True)
-    assert code == "db_monitor_foo"
+    # run the function; expect it to raise because non-resumable errors are
+    # treated as fatal now
+    with pytest.raises(RuntimeError) as exc:
+        await db_monitor.subscribe_stream(collection_name="foo", pipeline=None, use_resume=True)
+    assert "non-resumable" in str(exc.value)
     assert cleared["deleted"], "resume token must be deleted"
-    # new task should have been scheduled without resume (flag assures we went through branch)
-    assert test_results.get("task_called"), "retry task should be scheduled"
-    # we don't need to actually run the retry task here
+    # no new task should be created
+    assert not test_results.get("task_called", False)
 
 
 @pytest.mark.asyncio
