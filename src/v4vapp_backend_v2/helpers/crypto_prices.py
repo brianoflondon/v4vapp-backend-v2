@@ -600,7 +600,9 @@ class AllQuotes(BaseModel):
             TESTING_CACHE_TIMES if InternalConfig().config.development.enabled else CACHE_TIMES
         )
         redis_client.setex(
-            "all_quote_class_quote", time=cache_times["Global"], value=cache_data_pickle
+            "cryptoprices:cryptoprices:all_quote_class_quote",
+            time=cache_times["Global"],
+            value=cache_data_pickle,
         )
         if store_db:
             await self.db_store_quote()
