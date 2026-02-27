@@ -412,12 +412,12 @@ class Invoice(TrackedBaseModel):
         if self.memo:
             match = re.match(LND_INVOICE_TAG, self.memo.lower())
             if match:
-                extracted_value = match.group(1)
+                extracted_value = match.group(1).lower()
 
         elif self.htlcs and self.htlcs[0] and self.htlcs[0].custom_records:
             if value := self.htlcs[0].custom_records.get("818818", None):
                 try:
-                    extracted_value = b64_decode(value)
+                    extracted_value = b64_decode(value).lower()
                 except Exception as e:
                     logger.warning(f"Error decoding {value}: {e}", extra={"notification": False})
 
