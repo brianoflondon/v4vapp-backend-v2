@@ -39,6 +39,31 @@ Use this when you simply want to move sats from one v4v user to another.
 }
 ```
 
+#### 1a. Converting keepsats to Hive/HBD via transfer to the server
+
+If you transfer keepsats to the server account itself (e.g. `v4vapp`), the backend will interpret the operation as a conversion request. The sats will be exchanged for Hive or HBD based on the memo contents. A `#HBD` tag forces HBD, otherwise the default is Hive.
+
+The custom JSON payload is identical to a normal transfer but uses the `v4vapp_dev_transfer` ID when working against a development instance. It must be signed with the **active key** of the sending account.
+
+Example:
+
+```json
+{
+  "id": "v4vapp_transfer",
+  "json": {
+    "from_account": "brianoflondon",
+    "to_account": "v4vapp",
+    "sats": 1234,
+    "memo": "Converting sats to #HIVE"
+  }
+}
+```
+
+* `from_account` – must match the active authority of the transaction.
+* `to_account` – the server account receiving the sats for conversion.
+* `sats` or `msats` – amount to convert.
+* `memo` – include `#HIVE` or `#HBD` to specify the destination asset (default is Hive).
+
 * `from_account` – must match the active authority of the transaction.
 * `to_account` – the Hive account that will receive the sats. This account must already be registered with the v4v system (i.e. has a keepsats balance).
 * `sats` or `msats` – the amount to transfer from sender to receiver. `msats` are milisatoshis, 1/1000ths of a sat. If you specify `msats` then `sats` value will be ignored. All internal accounting is actually in `msats`.
