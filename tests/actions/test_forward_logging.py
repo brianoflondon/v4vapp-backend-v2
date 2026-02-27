@@ -72,10 +72,6 @@ async def test_forward_event_logs_once(caplog, monkeypatch):
         log_extra = {}
 
     monkeypatch.setattr(
-        "v4vapp_backend_v2.process.process_tracked_events.run_all_sanity_checks",
-        AsyncMock(return_value=DummySanity()),
-    )
-    monkeypatch.setattr(
         "v4vapp_backend_v2.models.tracked_forward_models.TrackedForwardEvent.save",
         AsyncMock(),
     )
