@@ -1016,7 +1016,7 @@ async def send_transfer(
     while retries < 3:
         try:
             trx = account.transfer(
-                to=to_account,
+                to=to_account.lower(),
                 amount=amount.amount,
                 asset=amount.asset,
                 account=from_account,
