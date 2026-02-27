@@ -29,6 +29,7 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 async def flip_entries() -> None:
     # ensure the singleton config is initialized so ``InternalConfig.db`` is set
     ic = InternalConfig(config_filename="devhive.config.yaml")
+    # ic = InternalConfig(config_filename="production.fromhome.config.yaml")
     db_conn = DBConn()
     await db_conn.setup_database()
 
