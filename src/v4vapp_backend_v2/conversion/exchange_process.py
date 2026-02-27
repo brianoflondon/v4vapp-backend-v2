@@ -99,6 +99,17 @@ async def exchange_accounting(
     # Create CryptoConversion using the trade_quote
     # SELL: We sold HIVE (executed_qty) and received BTC (quote_qty)
     # BUY: We spent BTC (quote_qty) and received HIVE (executed_qty)
+    #
+    # The accounting entries should reflect what happens to the asset account:
+    #   * the currency that goes up is debited (asset increase)
+    #   * the currency that goes down is credited (asset decrease)
+    # Previously the debit/credit sides were reversed which made sales appear as
+    # hives being debited and msats credited.  That meant the asset account
+    # balance moved in the wrong direction (credits reduce the balance).
+    #
+    # For a BUY order we spend msats and acquire hive, so hive is debited and
+    # msats is credited.  For a SELL order we sell hive and receive msats, so
+    # msats is debited and hive is credited.
     if order_result.side.upper() == "BUY":
         # BUY HIVE: Start from msats spent, derive HIVE received
         msats_value = order_result.quote_qty * Decimal("100_000_000_000")
@@ -106,20 +117,20 @@ async def exchange_accounting(
             conv_from=Currency.MSATS, value=msats_value, quote=trade_quote
         )
         conv = crypto_conversion.conversion
-        debit_unit = Currency.MSATS
-        credit_unit = Currency.HIVE
-        debit_amount = conv.msats
-        credit_amount = conv.hive
+        debit_unit = Currency.HIVE
+        credit_unit = Currency.MSATS
+        debit_amount = conv.hive
+        credit_amount = conv.msats
     else:  # SELL
         # SELL HIVE: Start from HIVE sold, derive msats received
         crypto_conversion = CryptoConversion(
             conv_from=Currency.HIVE, value=order_result.executed_qty, quote=trade_quote
         )
         conv = crypto_conversion.conversion
-        debit_unit = Currency.HIVE
-        credit_unit = Currency.MSATS
-        debit_amount = conv.hive
-        credit_amount = conv.msats
+        debit_unit = Currency.MSATS
+        credit_unit = Currency.HIVE
+        debit_amount = conv.msats
+        credit_amount = conv.hive
 
     # Create fee conversion from fee_msats using trade_quote for consistent rates
     fee_conv = CryptoConversion(

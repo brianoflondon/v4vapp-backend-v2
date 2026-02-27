@@ -11,7 +11,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryException,
 )
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
-from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -71,7 +70,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
         existing_entry = await LedgerEntry.load(group_id=tracked_op.group_id_p)
         if existing_entry:
             logger.warning(
-                f"Ledger entry for {tracked_op.short_id} already exists.",
+                f"Ledger entry for {tracked_op.short_id} already exists. {existing_entry.group_id}",
                 extra={"notification": False},
             )
             return [existing_entry]
@@ -193,7 +192,6 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
 
         finally:
             if finalize:
-                sanity_results = await run_all_sanity_checks()
                 process_time = timer() - start
                 tracked_op.process_time = process_time
                 await tracked_op.save()
@@ -212,7 +210,6 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                     extra={
                         "notification": True,
                         "ledger_items": ledger_entries_log_extra,
-                        **sanity_results.log_extra,
                     },
                 )
                 logger.debug(f"{ICON} {'+++' * 10} {cust_id} {'+++' * 10}")

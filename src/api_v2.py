@@ -294,13 +294,20 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
         message = "Insufficient funds"
 
     if message:
+        # Convert Decimal results to plain ints so the exception detail can be
+        # serialized by FastAPI/JSONResponse.  Without this the default JSON
+        # encoder will raise "Object of type Decimal is not JSON
+        # serializable" during error handling (see issue in logs).
+        balance = int(net_msats // Decimal(1000))
+        requested = transfer.sats
+        deficit = requested - balance
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
                 "message": message,
-                "balance": net_msats // Decimal(1000),
-                "requested": transfer.sats,
-                "deficit": transfer.sats - (net_msats // Decimal(1000)),
+                "balance": balance,
+                "requested": requested,
+                "deficit": deficit,
             },
         )
 
@@ -356,14 +363,17 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
         cust_id=convert.hive_accname, line_items=False
     )
     # Add one sat
-    if net_msats + 1_000 < convert.sats * 1_000:
+    if net_msats + Decimal(1_000) < Decimal(convert.sats) * Decimal(1_000):
+        balance = int(net_msats // Decimal(1000))
+        requested = convert.sats
+        deficit = requested - balance
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
                 "message": "Insufficient funds",
-                "balance": net_msats // Decimal(1000),
-                "requested": convert.sats,
-                "deficit": convert.sats - (net_msats // Decimal(1000)),
+                "balance": balance,
+                "requested": requested,
+                "deficit": deficit,
             },
         )
     if convert.memo:

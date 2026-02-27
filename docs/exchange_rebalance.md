@@ -152,7 +152,7 @@ Dispatches to `market_sell()` or `market_buy()` on the exchange adapter based on
 
 Creates two ledger entries after a successful trade:
 
-1. **EXCHANGE_CONVERSION** — records the asset swap (debit/credit both to "Exchange Holdings" but in different currencies: HIVE vs MSATS)
+1. **EXCHANGE_CONVERSION** — records the asset swap (debit/credit both to "Exchange Holdings" but in different currencies: HIVE vs MSATS).  The debit side is the currency being acquired, the credit side is the currency being sold; a bug in earlier versions had these reversed which made sales decrease the wrong balance.
 2. **EXCHANGE_FEES** — records the trading fee (debit to "Exchange Fees Paid" expense, credit from "Exchange Holdings")
 
 Uses the `trade_quote` from the order result for consistent pricing. Falls back to fetching a fresh market quote if the trade quote is unavailable.
