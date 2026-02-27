@@ -330,7 +330,7 @@ async def send_lightning_to_pay_req(
 
     # Add amount_msat if it's a zero-value invoice
     if zero_value_pay_req:
-        request_params["amt_msat"] = amount_msat
+        request_params["amt_msat"] = int(amount_msat)
 
     payment_dict = {}
     payment_id = f"{lnd_client.icon} {pay_req.pay_req_str[:14]}"
@@ -340,6 +340,10 @@ async def send_lightning_to_pay_req(
     try:
         # simulate_error_for_testing()
         # Create the SendPaymentRequest object
+        logger.info(
+            f"{payment_id} Sending payment...",
+            extra={"notification": False, "request_params": request_params},
+        )
         request = routerrpc.SendPaymentRequest(**request_params)
         async for payment_resp in lnd_client.router_stub.SendPaymentV2(request):
             payment_dict = MessageToDict(payment_resp, preserving_proto_field_name=True)
