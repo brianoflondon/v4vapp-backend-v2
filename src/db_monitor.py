@@ -20,7 +20,7 @@ from pymongo.errors import (
 from status.status_api import StatusAPI
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
-from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     IGNORED_UPDATE_FIELDS,
     db_monitor_pipelines,
@@ -40,6 +40,7 @@ from v4vapp_backend_v2.helpers.opening_balances import (
     reset_lightning_opening_balance,
 )
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
+from v4vapp_backend_v2.process.process_overwatch import overwatch_ledger_entry, overwatch_op
 from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
@@ -214,11 +215,11 @@ def ignore_changes(change: Mapping[str, Any], collection_name: str) -> bool:
     # it returns True when every element of the left‑hand set appears in the
     # right‑hand set.
     if set(updated_fields) <= set(IGNORED_UPDATE_FIELDS):
-        logger.info(
+        logger.debug(
             f"{ICON} Ignoring change with only ignored fields updated: {set(updated_fields)} in {collection_name}",
         )
         return True
-    logger.info(f"{ICON} Processing changes to: {set(updated_fields)} in {collection_name}")
+    logger.debug(f"{ICON} Processing changes to: {set(updated_fields)} in {collection_name}")
     return False
 
 
@@ -252,7 +253,20 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         timeout=None, blocking_timeout=None, request_details="db_monitor"
     ):
         try:
-            op = tracked_any_filter(full_document)
+            if collection == "ledger":
+                try:
+                    ledger_entry = LedgerEntry.model_validate(full_document)
+                    await overwatch_ledger_entry(ledger_entry=ledger_entry)
+                    return
+                except Exception as e:
+                    logger.warning(
+                        f"{ICON} Error validating ledger entry: {e}", extra={"error": e}
+                    )
+                    return
+            else:
+                op = tracked_any_filter(full_document)
+                await overwatch_op(op=op)
+
         except ValueError as e:
             logger.warning(
                 f"{ICON} {lock_str} Error in tracked_any: {e}", extra={"notification": False}
@@ -287,7 +301,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                 logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
                 await asyncio.sleep(5)
             finally:
-                logger.debug(f"{ICON} Lock release: {lock_str}")
+                logger.info(f"{ICON} Lock release: {lock_str}")
 
 
 async def subscribe_stream(

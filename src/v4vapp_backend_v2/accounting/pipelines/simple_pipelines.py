@@ -223,6 +223,8 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
                 - "payments": Pipeline to monitor payment documents, excluding deletes and filtering by group ID and status.
                 - "invoices": Pipeline to monitor invoice documents, excluding deletes and filtering for settled state.
                 - "hive_ops": Pipeline to monitor hive operation documents, excluding deletes and block marker types.
+                - "htlc_events": Pipeline to monitor HTLC event documents, excluding deletes and filtering by group ID.
+                - "ledger": Pipeline to monitor all ledger documents, excluding deletes.
             Each pipeline also ignores certain update operations that only affect specified fields ("replies", "change_conv", "process_time").
     """
 
@@ -267,10 +269,19 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
             }
         }
     ]
-
+    ledger_pipeline: Sequence[Mapping[str, Any]] = [
+        {
+            "$match": {
+                "operationType": {"$ne": "delete"},
+                "fullDocument.group_id": {"$ne": None},
+            }
+        }
+    ]
+    
     return {
         "payments": payments_pipeline,
         "invoices": invoices_pipeline,
         "hive_ops": hive_ops_pipeline,
         "htlc_events": htlc_events_pipeline,
+        "ledger": ledger_pipeline,
     }
