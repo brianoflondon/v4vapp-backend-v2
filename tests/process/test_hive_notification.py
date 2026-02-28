@@ -30,7 +30,7 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
 
 def make_transfer_op() -> Transfer:
     # build with construct and supply the few attributes we will read later
-    tx = Transfer.construct(
+    tx = Transfer.model_construct(
         group_id="GID",
         short_id="SID",
         op_type="transfer",
