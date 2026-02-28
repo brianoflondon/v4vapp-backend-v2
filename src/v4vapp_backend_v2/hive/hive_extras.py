@@ -277,6 +277,7 @@ def get_good_nodes() -> List[str]:
     good_nodes: List[str] = []
 
     while not good_nodes and beacon_urls:
+        url = "unset"
         try:
             url = beacon_urls.pop(0)
             params = {"source": "v4vapp_backend"}
