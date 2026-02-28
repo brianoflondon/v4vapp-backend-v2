@@ -23,7 +23,13 @@
     <style>
         /* the global `sidebar_color` is injected by AdminApp */
         .sidebar {
-            background: {{ sidebar_color }} !important;
+            background: {
+                    {
+                    sidebar_color
+                }
+            }
+
+            !important;
         }
     </style>
 

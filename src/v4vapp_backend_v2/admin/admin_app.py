@@ -100,13 +100,13 @@ class AdminApp:
             pass
         # expose as globals so all templates can access them
         self.templates.env.globals["sidebar_color"] = sidebar_color
-        self.templates.env.globals[
-            "favicon_path"
-        ] = f"/admin/static/favicon/{favicon_folder}/favicon.ico"
+        self.templates.env.globals["favicon_path"] = (
+            f"/admin/static/favicon/{favicon_folder}/favicon.ico"
+        )
         # also expose manifest path in case templates use it
-        self.templates.env.globals[
-            "favicon_manifest"
-        ] = f"/admin/static/favicon/{favicon_folder}/site.webmanifest"
+        self.templates.env.globals["favicon_manifest"] = (
+            f"/admin/static/favicon/{favicon_folder}/site.webmanifest"
+        )
 
         # Setup navigation
         self.nav_manager = NavigationManager()
