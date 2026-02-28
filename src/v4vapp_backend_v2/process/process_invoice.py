@@ -150,14 +150,22 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
             )
             # This will send Hive or a custom_json at the end.
             # Check for fixed quote in the conversion to Hive/HBD
-            await conversion_keepsats_to_hive(
-                server_id=server_id,
-                cust_id=invoice.cust_id,
-                tracked_op=invoice,
-                to_currency=invoice.recv_currency,
-                nobroadcast=nobroadcast,
-            )
-            return
+            # Failure in the conversion (i.e. for a small amount) will prevent follow on processes
+            try:
+                await conversion_keepsats_to_hive(
+                    server_id=server_id,
+                    cust_id=invoice.cust_id,
+                    tracked_op=invoice,
+                    to_currency=invoice.recv_currency,
+                    nobroadcast=nobroadcast,
+                )
+                return
+            except Exception as e:
+                logger.warning(
+                    f"Error during conversion of Lightning to Hive for invoice {invoice.short_id}: {e}",
+                    extra={"notification": False, **invoice.log_extra},
+                )
+                raise
         elif invoice.recv_currency in {Currency.SATS, Currency.MSATS}:
             logger.info(
                 f"Lightning to Keepsats deposit transfer for customer ID: {invoice.cust_id}",
