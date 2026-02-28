@@ -67,7 +67,8 @@ class V4VConfigData(BaseModel):
     # notification instead of a Hive transfer.  This was historically a hard‑coded
     # value (50/500 sats) so exposing it here makes it adjustable via Hive config.
     force_custom_json_payment_sats: Decimal = Field(
-        Decimal(500), description="Below this amount (sats) force custom_json reply instead of Hive transfer."
+        Decimal(500),
+        description="Below this amount (sats) force custom_json reply instead of Hive transfer.",
     )
     max_acceptable_lnd_fee_msats: Decimal = Field(
         Decimal(500_000), description="Maximum acceptable Lightning Network fee in millisatoshis."

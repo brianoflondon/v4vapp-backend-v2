@@ -1,14 +1,12 @@
-import pytest
 from decimal import Decimal
 from pathlib import Path
-from datetime import datetime
 
+import pytest
+
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
-from v4vapp_backend_v2.hive.v4v_config import V4VConfig
-from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.hive_models.op_transfer import Transfer
-from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 
 @pytest.fixture(autouse=True)
@@ -27,8 +25,8 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     )  # Resetting InternalConfig instance
 
 
-
 # helper to produce a minimal Transfer object for tracked_op
+
 
 def make_transfer_op() -> Transfer:
     # build with construct and supply the few attributes we will read later
@@ -68,9 +66,11 @@ async def test_reply_with_hive_force_custom_json(monkeypatch):
         True,
         raising=False,
     )
+
     # stub Hive client so we don't need real credentials
     async def fake_hive_client(nobroadcast=False):
         return (object(), "server")
+
     monkeypatch.setattr(
         "v4vapp_backend_v2.process.hive_notification.get_verified_hive_client",
         fake_hive_client,
@@ -96,13 +96,17 @@ async def test_reply_with_hive_force_custom_json(monkeypatch):
         property(lambda self: "dummy_short"),
         raising=False,
     )
+
     # prevent any save call from touching a database
     async def fake_save(self, *args, **kwargs):
         return {}
+
     monkeypatch.setattr(Transfer, "save", fake_save, raising=False)
+
     # stub balance lookup to avoid mongo access
     async def fake_check(cust_id, amount):
         return amount
+
     monkeypatch.setattr(
         "v4vapp_backend_v2.process.hive_notification.check_for_outstanding_hive_balance",
         fake_check,
@@ -134,8 +138,8 @@ async def test_reply_with_hive_force_custom_json(monkeypatch):
 async def test_process_invoice_sets_force_flag(monkeypatch):
     """process_lightning_receipt_stage_2 should mark low‑value invoices."""
 
-    from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt_stage_2
     from v4vapp_backend_v2.models.invoice_models import Invoice
+    from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt_stage_2
 
     def make_invoice(sats: Decimal):
         # memo includes #sats so that recv_currency property returns SATS rather
