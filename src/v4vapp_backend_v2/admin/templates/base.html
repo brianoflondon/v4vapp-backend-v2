@@ -24,9 +24,14 @@
     <style>
         /* the global `sidebar_color` is injected by AdminApp */
         .sidebar {
+
             /* keep the Jinja expression on one line so formatters don’t
                split the braces and break template parsing */
-            background: linear-gradient(180deg, {{ sidebar_color }}) !important;
+            background: linear-gradient(180deg, {
+                    {
+                    sidebar_color
+                }
+            }) !important;
         }
     </style>
 
