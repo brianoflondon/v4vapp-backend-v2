@@ -7,6 +7,7 @@ from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 from v4vapp_backend_v2.hive.hive_extras import (
     CustomJsonSendError,
@@ -185,8 +186,11 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         if not error_message:
             return_amount = get_hive_amount_from_trx_reply(trx)
             await TransferBase.update_quote()
+            return_amount_symbol = Currency(
+                return_amount.symbol if return_amount.symbol in {"HIVE", "HBD"} else "HIVE"
+            )
             details.tracked_op.change_conv = CryptoConversion(
-                conv_from=return_amount.symbol,
+                conv_from=return_amount_symbol,
                 amount=return_amount,
                 quote=TransferBase.last_quote,
             ).conversion
@@ -217,6 +221,10 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
                 hive_client=hive_client,
             )
             return_amount_msat = 0  # Custom JSON does not have a return amount in msats
+            logger.info(
+                f"Notification (forced: {details.force_custom_json}) {notification.log_str}",
+                extra={"notification": False, **notification.log_extra},
+            )
         except CustomJsonSendError as e:
             error_message = f"Failed to send Hive custom_json: {e}"
             logger.error(

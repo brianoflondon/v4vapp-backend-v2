@@ -176,11 +176,10 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
             details = HiveReturnDetails(
                 tracked_op=invoice,
                 original_memo=invoice.memo,
-                reason_str=received_lightning_message(invoice.memo, sats),
+                reason_str=received_lightning_message(invoice.memo, Decimal(invoice.value)),
                 action=ReturnAction.CHANGE,
                 pay_to_cust_id=invoice.cust_id,
                 nobroadcast=nobroadcast,
-                msats=Decimal(invoice.value_msat or 0),
                 force_custom_json=force_flag,
             )
             await reply_with_hive(details=details, nobroadcast=nobroadcast)
