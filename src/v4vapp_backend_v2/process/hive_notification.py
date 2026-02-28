@@ -89,6 +89,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     logger.debug(
         f"Replying with Hive details: {details.original_memo}", extra={"notification": False}
     )
+    # decide whether we are allowed to send a Hive transfer at all
     if not LockStr(details.pay_to_cust_id).is_hive:
         logger.warning(
             f"Tracked operation customer ID {details.pay_to_cust_id} is not a valid Hive account.",
@@ -97,6 +98,16 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         send_hive = False
     else:
         send_hive = True
+
+    # callers may explicitly request that we always use a custom_json instead of
+    # a direct Hive transfer (useful for very small amounts where the transfer
+    # fee would eat the value or when we simply want a notification).
+    if details.force_custom_json:
+        logger.debug(
+            "force_custom_json flag set, will send custom_json instead of Hive transfer",
+            extra={"notification": False, **details.tracked_op.log_extra},
+        )
+        send_hive = False
 
     # raise HiveNotHiveAccount(
     #     f"Tracked operation customer ID {details.pay_to_cust_id} is not a valid Hive account."
@@ -145,6 +156,10 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     reply_type = ReplyType.UNKNOWN
     error_message = ""
 
+    # Only send a Hive transfer if we're allowed (send_hive True), the tracked
+    # operation isn't already a custom_json, and we're not requesting a custom
+    # json reply via the force flag.  conversions always go out as transfers even
+    # though they may originate as custom_json.
     if send_hive and (
         details.tracked_op.op_type != "custom_json" or details.action == ReturnAction.CONVERSION
     ):
