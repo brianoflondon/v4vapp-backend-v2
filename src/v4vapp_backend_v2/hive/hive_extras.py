@@ -200,7 +200,7 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
         try:
             good_nodes_json = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
             if good_nodes_json and isinstance(good_nodes_json, str):
-                ttl = InternalConfig.redis_decoded.ttl("good_nodes")
+                ttl = InternalConfig.redis_decoded.ttl(REDIS_KEY_GOOD_NODES)
                 if isinstance(ttl, int) and ttl < 3000:
                     good_nodes = get_good_nodes()
                 else:
@@ -268,53 +268,64 @@ def get_good_nodes() -> List[str]:
     Returns:
         List[str]: A list of endpoints for nodes with a score of 100.
     """
+    beacon_urls = [
+        "https://devapi.v4v.app/v2/beacon/nodes/",
+        "https://api.v4v.app/v2/beacon/nodes/",
+        "https://beacon.peakd.com/api/nodes",
+    ]
+
     good_nodes: List[str] = []
-    try:
-        params = {
-            "source": "v4vapp_backend",
-        }
-        response = httpx.get(
-            "https://beacon.v4v.app/",
-            params=params,
-            timeout=5,
-            follow_redirects=True,
-        )
-        nodes = response.json()
-        logger.debug(
-            "Fetched good nodes Last good nodes",
-            extra={"beacon_response": nodes, "error_code_clear": "beacon_nodes_fail"},
-        )
-        good_nodes = [node["endpoint"] for node in nodes if node["score"] >= 80]
-        good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
-        logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
+
+    while not good_nodes and beacon_urls:
         try:
-            InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes))
+            url = beacon_urls.pop(0)
+            params = {"source": "v4vapp_backend"}
+            response = httpx.get(url, params=params, timeout=5, follow_redirects=True)
+            response.raise_for_status()
+            nodes = response.json()
+            logger.debug(
+                "Fetched good nodes Last good nodes",
+                extra={"beacon_response": nodes, "error_code_clear": "beacon_nodes_fail"},
+            )
+            good_nodes = [node["endpoint"] for node in nodes if node["score"] >= 80]
+            good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
+            logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
+            try:
+                InternalConfig.redis_decoded.setex(
+                    REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes)
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
+                )
+            return good_nodes
         except Exception as e:
             logger.warning(
-                f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
+                f"Failed to fetch good nodes from {url}: {e}",
+                extra={"notification": False},
             )
-    except Exception as e:
-        good_nodes_json = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
-        if good_nodes_json and isinstance(good_nodes_json, str):
-            good_nodes = json.loads(good_nodes_json)
-        if good_nodes:
-            logger.warning(
-                f"Failed to fetch good nodes: {e} using last good nodes.",
-                extra={
-                    "notification": False,
-                    "error_code": "beacon_nodes_fail",
-                },
-            )
-        else:
-            logger.warning(
-                f"Failed to fetch good nodes: {e} using default nodes.",
-                extra={
-                    "notification": False,
-                    "error_code": "beacon_nodes_fail",
-                },
-            )
-            good_nodes = DEFAULT_GOOD_NODES
-            InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes))
+
+    good_nodes_json = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
+    if good_nodes_json and isinstance(good_nodes_json, str):
+        good_nodes = json.loads(good_nodes_json)
+    if good_nodes:
+        logger.warning(
+            f"Failed to fetch good nodes: {e} using last good nodes.",
+            extra={
+                "notification": False,
+                "error_code": "beacon_nodes_fail",
+            },
+        )
+    else:
+        logger.warning(
+            f"Failed to fetch good nodes: {e} using default nodes.",
+            extra={
+                "notification": False,
+                "error_code": "beacon_nodes_fail",
+            },
+        )
+        good_nodes = DEFAULT_GOOD_NODES
+        InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes))
 
     if len(good_nodes) < 2:
         logger.warning(
