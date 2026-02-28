@@ -7,6 +7,7 @@ from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 from v4vapp_backend_v2.hive.hive_extras import (
     CustomJsonSendError,
@@ -89,6 +90,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     logger.debug(
         f"Replying with Hive details: {details.original_memo}", extra={"notification": False}
     )
+    # decide whether we are allowed to send a Hive transfer at all
     if not LockStr(details.pay_to_cust_id).is_hive:
         logger.warning(
             f"Tracked operation customer ID {details.pay_to_cust_id} is not a valid Hive account.",
@@ -97,6 +99,16 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         send_hive = False
     else:
         send_hive = True
+
+    # callers may explicitly request that we always use a custom_json instead of
+    # a direct Hive transfer (useful for very small amounts where the transfer
+    # fee would eat the value or when we simply want a notification).
+    if details.force_custom_json:
+        logger.debug(
+            "force_custom_json flag set, will send custom_json instead of Hive transfer",
+            extra={"notification": False, **details.tracked_op.log_extra},
+        )
+        send_hive = False
 
     # raise HiveNotHiveAccount(
     #     f"Tracked operation customer ID {details.pay_to_cust_id} is not a valid Hive account."
@@ -145,6 +157,10 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     reply_type = ReplyType.UNKNOWN
     error_message = ""
 
+    # Only send a Hive transfer if we're allowed (send_hive True), the tracked
+    # operation isn't already a custom_json, and we're not requesting a custom
+    # json reply via the force flag.  conversions always go out as transfers even
+    # though they may originate as custom_json.
     if send_hive and (
         details.tracked_op.op_type != "custom_json" or details.action == ReturnAction.CONVERSION
     ):
@@ -170,8 +186,14 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         if not error_message:
             return_amount = get_hive_amount_from_trx_reply(trx)
             await TransferBase.update_quote()
+            # pick a valid currency name (lowercase) based on the returned symbol
+            sym = (return_amount.symbol or "").upper()
+            if sym not in {"HIVE", "HBD"}:
+                sym = "HIVE"
+            # Currency enum uses lowercase values
+            return_amount_symbol = Currency(sym.lower())
             details.tracked_op.change_conv = CryptoConversion(
-                conv_from=return_amount.symbol,
+                conv_from=return_amount_symbol,
                 amount=return_amount,
                 quote=TransferBase.last_quote,
             ).conversion
@@ -202,6 +224,10 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
                 hive_client=hive_client,
             )
             return_amount_msat = 0  # Custom JSON does not have a return amount in msats
+            logger.info(
+                f"Notification (forced: {details.force_custom_json}) {notification.log_str}",
+                extra={"notification": False, **notification.log_extra},
+            )
         except CustomJsonSendError as e:
             error_message = f"Failed to send Hive custom_json: {e}"
             logger.error(

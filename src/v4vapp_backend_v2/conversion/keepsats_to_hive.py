@@ -141,12 +141,12 @@ async def conversion_keepsats_to_hive(
             )
     except HiveToKeepsatsConversionError as e:
         logger.error(
-            f"Conversion error for {tracked_op.group_id}: {e}",
+            f"Conversion error for {tracked_op.short_id} {tracked_op.group_id}: {e}",
             extra={"error": str(e), "group_id": tracked_op.group_id},
         )
         raise
     to_currency = conv_result.to_currency
-    logger.debug(f"{tracked_op.group_id} {conv_result.log_str}")
+    logger.debug(f"{tracked_op.short_id} {tracked_op.group_id} {conv_result.log_str}")
     logger.debug(f"Conversion result: \n{conv_result}")
 
     ledger_entries: List[LedgerEntry] = []

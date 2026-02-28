@@ -125,6 +125,14 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="mb-3">
+                                    <label class="form-label">Force custom_json threshold (Sats)</label>
+                                    <input type="number" class="form-control" name="force_custom_json_payment_sats"
+                                        value="{{ config.force_custom_json_payment_sats }}" required>
+                                    <div class="form-text">Amounts below this use custom_json instead of Hive transfer</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
                                     <label class="form-label">Maximum Invoice (Sats)</label>
                                     <input type="number" class="form-control" name="maximum_invoice_payment_sats"
                                         value="{{ config.maximum_invoice_payment_sats }}" required>

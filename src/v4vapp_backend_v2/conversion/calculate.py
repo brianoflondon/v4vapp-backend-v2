@@ -461,8 +461,9 @@ async def calc_keepsats_to_hive(
     # Net (msats) after conversion fee
     net_to_receive = to_convert - fee
     if net_to_receive < 0:
+        net_to_receive_sats = net_to_receive / Decimal(1000)
         raise HiveToKeepsatsConversionError(
-            f"Net msats to receive {net_to_receive} is negative, cannot convert."
+            f"Net msats to receive {net_to_receive_sats:,.0f} sats is negative, cannot convert very small amounts."
         )
 
     net_to_receive_conv = CryptoConversion(

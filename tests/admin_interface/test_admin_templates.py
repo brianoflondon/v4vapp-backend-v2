@@ -172,6 +172,15 @@ class TestTemplateRendering:
         # should render without stray braces
         assert "{{" not in rendered and "}}" not in rendered
 
+    def test_favicon_path_rendering(self, template_env):
+        """Base template should include the favicon_path global."""
+        template_env.globals["favicon_path"] = "/admin/static/favicon/foo.ico"
+        template_env.globals["favicon_manifest"] = "/admin/static/favicon/foo.webmanifest"
+        template = template_env.get_template("base.html")
+        rendered = template.render()
+        assert "/admin/static/favicon/foo.ico" in rendered
+        assert "/admin/static/favicon/foo.webmanifest" in rendered
+
     def test_users_template_with_errors(self, template_env):
         """Test users template handles error states"""
         # Skip full rendering due to complex FastAPI dependencies

@@ -10,6 +10,7 @@ from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to
 from v4vapp_backend_v2.helpers.bad_actors_list import check_bad_hive_accounts
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import received_lightning_message
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
@@ -149,14 +150,22 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
             )
             # This will send Hive or a custom_json at the end.
             # Check for fixed quote in the conversion to Hive/HBD
-            await conversion_keepsats_to_hive(
-                server_id=server_id,
-                cust_id=invoice.cust_id,
-                tracked_op=invoice,
-                to_currency=invoice.recv_currency,
-                nobroadcast=nobroadcast,
-            )
-            return
+            # Failure in the conversion (i.e. for a small amount) will prevent follow on processes
+            try:
+                await conversion_keepsats_to_hive(
+                    server_id=server_id,
+                    cust_id=invoice.cust_id,
+                    tracked_op=invoice,
+                    to_currency=invoice.recv_currency,
+                    nobroadcast=nobroadcast,
+                )
+                return
+            except Exception as e:
+                logger.warning(
+                    f"Error during conversion of Lightning to Hive for invoice {invoice.short_id}: {e}",
+                    extra={"notification": False, **invoice.log_extra},
+                )
+                raise
         elif invoice.recv_currency in {Currency.SATS, Currency.MSATS}:
             logger.info(
                 f"Lightning to Keepsats deposit transfer for customer ID: {invoice.cust_id}",
@@ -168,6 +177,10 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
                     extra={"notification": False, **invoice.log_extra},
                 )
                 return
+            sats = Decimal(invoice.value or 0)
+            threshold = V4VConfig().data.force_custom_json_payment_sats
+            force_flag = sats < threshold
+
             details = HiveReturnDetails(
                 tracked_op=invoice,
                 original_memo=invoice.memo,
@@ -175,6 +188,7 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
                 action=ReturnAction.CHANGE,
                 pay_to_cust_id=invoice.cust_id,
                 nobroadcast=nobroadcast,
+                force_custom_json=force_flag,
             )
             await reply_with_hive(details=details, nobroadcast=nobroadcast)
             return

@@ -1,5 +1,6 @@
 import asyncio
 import os
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -36,10 +37,16 @@ async def test_get_settings_from_hive():
     hive_config = V4VConfig(server_accname="hivehydra", hive=hive)
     assert hive_config is not None
     assert hive_config.data.conv_fee_sats is not None
+    # the new force_custom_json_payment_sats field should exist and default to 500
+    assert hasattr(hive_config.data, "force_custom_json_payment_sats")
+    assert hive_config.data.force_custom_json_payment_sats == Decimal(500)
 
     hive_config = V4VConfig(server_accname="testnet", hive=hive)
     assert hive_config is not None
     assert hive_config.data.conv_fee_sats is not None
+    # repeat check for second instance
+    assert hasattr(hive_config.data, "force_custom_json_payment_sats")
+    assert hive_config.data.force_custom_json_payment_sats == Decimal(500)
 
 
 @pytest.mark.skipif(

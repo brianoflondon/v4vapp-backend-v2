@@ -62,6 +62,14 @@ class V4VConfigData(BaseModel):
     maximum_invoice_payment_sats: Decimal = Field(
         Decimal(100_000), description="Maximum invoice payment in satoshis."
     )
+    # Used by `reply_with_hive` when a lightning payment is being returned.  If the
+    # received sats amount is below this threshold we prefer to send a custom_json
+    # notification instead of a Hive transfer.  This was historically a hard‑coded
+    # value (50/500 sats) so exposing it here makes it adjustable via Hive config.
+    force_custom_json_payment_sats: Decimal = Field(
+        Decimal(500),
+        description="Below this amount (sats) force custom_json reply instead of Hive transfer.",
+    )
     max_acceptable_lnd_fee_msats: Decimal = Field(
         Decimal(500_000), description="Maximum acceptable Lightning Network fee in millisatoshis."
     )

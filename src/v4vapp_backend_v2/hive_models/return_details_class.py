@@ -51,6 +51,11 @@ class HiveReturnDetails(BaseModel):
     pay_to_cust_id: CustIDType
     nobroadcast: bool = False
     clean: bool = False
+    # When true `reply_with_hive` will skip sending a normal Hive transfer and
+    # emit a custom_json notification regardless of the customer being a Hive
+    # account.  Callers should set this based on their own logic (e.g. low
+    # satoshis receipts).
+    force_custom_json: bool = False
 
     @property
     def log_extra(self) -> dict:

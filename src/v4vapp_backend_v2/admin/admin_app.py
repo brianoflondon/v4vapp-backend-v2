@@ -90,14 +90,23 @@ class AdminApp:
         # determine sidebar colour based on configured server account
         # default to the existing light blue used in admin.css
         sidebar_color = "#2563eb"
+        favicon_folder = "favicon_prod"
         try:
             if self.config.server_id == "devser.v4vapp":
                 sidebar_color = "#800000"
+                favicon_folder = "favicon_dev"
         except Exception:
-            # if server_id is not set, keep default
+            # if server_id is not set, keep defaults
             pass
-        # expose as a global so all templates can access it
+        # expose as globals so all templates can access them
         self.templates.env.globals["sidebar_color"] = sidebar_color
+        self.templates.env.globals[
+            "favicon_path"
+        ] = f"/admin/static/favicon/{favicon_folder}/favicon.ico"
+        # also expose manifest path in case templates use it
+        self.templates.env.globals[
+            "favicon_manifest"
+        ] = f"/admin/static/favicon/{favicon_folder}/site.webmanifest"
 
         # Setup navigation
         self.nav_manager = NavigationManager()
