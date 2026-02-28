@@ -43,9 +43,9 @@ TESTING_CACHE_TIMES = {
 }
 
 CACHE_TIMES = {
-    "CoinGecko": 180,
+    "CoinGecko": 360,
     "Binance": 120,
-    "CoinMarketCap": 1800,
+    "CoinMarketCap": 720,
     "HiveInternalMarket": 10,
     "Global": 60,
 }
