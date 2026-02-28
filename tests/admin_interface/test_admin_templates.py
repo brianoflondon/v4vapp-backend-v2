@@ -45,7 +45,13 @@ class TestTemplateCompilation:
             assert "<!DOCTYPE html>" in content
             assert "<title>" in content
             # ensure our new sidebar colour variable is referenced
-            assert "sidebar_color" in content
+            # the template should contain the sidebar_color variable inside
+            # a Jinja expression; white-space or newlines may be inserted by
+            # formatters, so match loosely rather than looking for the exact
+            # literal string.
+            import re            # the linter may insert arbitrary whitespace or line breaks in
+            # the tag, so allow spacing between every token            assert re.search(r"\{\{\s*sidebar_color\s*\}\}", content)
+
 
     def test_users_template_compilation(self, template_env):
         """Test users template compiles without errors"""
@@ -163,13 +169,22 @@ class TestTemplateRendering:
         """Base template should render with provided sidebar_color"""
         # provide a color so rendering succeeds
         template_env.globals["sidebar_color"] = "#abcdef"
+        # tests for favicon addition - avoid undefined variables
+        template_env.globals["favicon_path"] = "/admin/static/favicon/test.ico"
+        template_env.globals["favicon_manifest"] = "/admin/static/favicon/test.webmanifest"
         # sanity_results was already added by the fixture but we can override
         template_env.globals["sanity_results"] = type("S", (), {"failed": []})()
         template = template_env.get_template("base.html")
         rendered = template.render()
-        # the override style should include the colour we passed
-        assert "#abcdef" in rendered
-        # should render without stray braces
+        # the override style should include the colour we passed; don't
+        # rely on exact spacing since the linter may break the CSS across
+        # lines.  normalising whitespace before testing helps cope with
+        # formatting changes.
+        import re
+        compact = re.sub(r"\s+", "", rendered)
+        # colour must be injected into the gradient
+        assert "linear-gradient(180deg,#abcdef" in compact
+        # ensure the final HTML doesn't contain unrendered Jinja tokens
         assert "{{" not in rendered and "}}" not in rendered
 
     def test_favicon_path_rendering(self, template_env):
