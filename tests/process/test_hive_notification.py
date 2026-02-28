@@ -111,7 +111,18 @@ async def test_reply_with_hive_force_custom_json(monkeypatch):
         "v4vapp_backend_v2.process.hive_notification.check_for_outstanding_hive_balance",
         fake_check,
     )
+    # stub getting hive amount so conversion logic sees a known symbol
+    from v4vapp_backend_v2.hive.hive_extras import Amount
 
+    def fake_get_amt(trx):
+        return Amount("1 HIVE")
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.hive_notification.get_hive_amount_from_trx_reply",
+        fake_get_amt,
+    )
+
+    # prepare details object for both calls
     details = HiveReturnDetails(
         tracked_op=make_transfer_op(),
         original_memo="memo",

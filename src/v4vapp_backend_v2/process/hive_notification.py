@@ -186,9 +186,12 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         if not error_message:
             return_amount = get_hive_amount_from_trx_reply(trx)
             await TransferBase.update_quote()
-            return_amount_symbol = Currency(
-                return_amount.symbol if return_amount.symbol in {"HIVE", "HBD"} else "HIVE"
-            )
+            # pick a valid currency name (lowercase) based on the returned symbol
+            sym = (return_amount.symbol or "").upper()
+            if sym not in {"HIVE", "HBD"}:
+                sym = "HIVE"
+            # Currency enum uses lowercase values
+            return_amount_symbol = Currency(sym.lower())
             details.tracked_op.change_conv = CryptoConversion(
                 conv_from=return_amount_symbol,
                 amount=return_amount,
