@@ -40,7 +40,11 @@ from v4vapp_backend_v2.helpers.opening_balances import (
     reset_lightning_opening_balance,
 )
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
-from v4vapp_backend_v2.process.process_overwatch import overwatch_ledger_entry, overwatch_op
+from v4vapp_backend_v2.process.process_overwatch import (
+    OverwatchLog,
+    overwatch_ledger_entry,
+    overwatch_op,
+)
 from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
@@ -493,6 +497,24 @@ async def subscribe_stream(
         logger.info(
             f"{ICON} Closed connection to {collection_name} stream. Error:{error_code} {error_count}"
         )
+
+
+async def subscribe_overwatch():
+    """
+    Subscribes to the overwatch stream and processes changes.
+    """
+    while not shutdown_event.is_set():
+        try:
+            await OverwatchLog.scan_entries()
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.info(f"Keyboard interrupt or Cancelled: {e}")
+            return
+        except Exception as e:
+            logger.error(
+                f"{ICON} Error scanning overwatch entries: {e}",
+                extra={"error_code": "overwatch_scan_error"},
+            )
+        await asyncio.sleep(60)
 
 
 def handle_shutdown_signal():
