@@ -2,25 +2,34 @@
 Overwatch System: End-to-end transaction flow tracking.
 
 This module provides a framework for defining expected transaction flows,
-recording events as they occur, and verifying flow completeness. It supports:
+recording events as they occur, and verifying flow completeness.
+
+Core models:
 
 - FlowStage: An expected event (ledger entry or operation) in a flow.
 - FlowDefinition: A blueprint for a complete transaction flow.
 - FlowEvent: A recorded event that has occurred.
 - FlowInstance: A tracked flow instance that collects events and checks completeness.
-- OverwatchLog: Central registry managing flow instances and incoming events.
+- Overwatch: Singleton that ingests events, manages active flows, and runs a
+  periodic reporting loop.
 
-Flow definitions describe what ledger entries and operations are expected for a
-particular transaction type (e.g., Hive-to-Keepsats conversion). Events are fed
-into the system and matched to flow instances. Completeness can be checked at any
-time against the flow definition.
+Usage from db_monitor::
+
+    from v4vapp_backend_v2.process.process_overwatch import Overwatch
+
+    overwatch = Overwatch()                   # singleton
+    await overwatch.ingest_ledger_entry(le)   # feed entries
+    await overwatch.ingest_op(op)             # feed ops
+
+    # Start the periodic reporter as an asyncio task:
+    asyncio.create_task(overwatch.report_loop(interval=30, shutdown_event=evt))
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from timeit import default_timer as timer
 from typing import Any, ClassVar, List, Literal
 
 from pydantic import BaseModel, Field
@@ -286,100 +295,252 @@ class FlowInstance(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Overwatch log: backward-compatible entry point for db_monitor integration
+# Overwatch singleton: clean entry point for db_monitor integration
 # ---------------------------------------------------------------------------
 
-
-class OverwatchLogEntry:
-    """Simple wrapper for an incoming event (ledger entry or op)."""
-
-    __slots__ = (
-        "ledger_entry",
-        "op",
-        "overwatch_id",
-        "start_time",
-        "end_time",
-        "duration",
-        "status",
-    )
-
-    def __init__(
-        self, ledger_entry: LedgerEntry | None = None, op: TrackedAny | None = None
-    ) -> None:
-        self.ledger_entry = ledger_entry
-        self.op = op
-        self.overwatch_id = ""
-        self.start_time = timer()
-        self.end_time: float | None = None
-        self.duration: float | None = None
-        self.status = "processing"
+# Default timeout — if a flow hasn't received new events for this long it
+# is marked as STALLED during the periodic report.
+DEFAULT_STALL_TIMEOUT = timedelta(minutes=5)
 
 
-class OverwatchLog:
-    """Central registry for overwatch events and flow instances.
+class Overwatch:
+    """Singleton that ingests events, manages active flows, and reports progress.
 
-    Receives ledger entries and operations from db_monitor, stores them
-    as OverwatchLogEntries, and manages active FlowInstances.
+    Instantiate anywhere — you always get the same instance::
+
+        overwatch = Overwatch()
+        await overwatch.ingest_ledger_entry(ledger_entry)
+        await overwatch.ingest_op(op)
+
+    Start the periodic reporter as a long-running asyncio task::
+
+        asyncio.create_task(
+            overwatch.report_loop(interval=30, shutdown_event=shutdown_event)
+        )
     """
 
-    entries: ClassVar[List[OverwatchLogEntry]] = []
+    _instance: ClassVar[Overwatch | None] = None
+
+    # ---- state (shared across all references) ----
     flow_instances: ClassVar[List[FlowInstance]] = []
+    _flow_definitions: ClassVar[dict[str, FlowDefinition]] = {}
+    stall_timeout: ClassVar[timedelta] = DEFAULT_STALL_TIMEOUT
 
-    def add_entry(self, entry: OverwatchLogEntry) -> None:
-        self.entries.append(entry)
+    def __new__(cls) -> Overwatch:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
-    @classmethod
-    def add_flow_instance(cls, instance: FlowInstance) -> None:
-        """Register a new flow instance for tracking."""
-        cls.flow_instances.append(instance)
-
-    @classmethod
-    def get_active_flows(cls) -> List[FlowInstance]:
-        """Return flow instances that are not yet completed."""
-        return [f for f in cls.flow_instances if not f.is_complete]
+    # ---- flow definition registry ----
 
     @classmethod
-    def get_completed_flows(cls) -> List[FlowInstance]:
-        """Return flow instances that are completed."""
-        return [f for f in cls.flow_instances if f.is_complete]
+    def register_flow(cls, definition: FlowDefinition) -> None:
+        """Register a FlowDefinition so triggers can auto-create instances."""
+        cls._flow_definitions[definition.name] = definition
 
     @classmethod
-    async def scan_entries(cls) -> None:
-        """Scan entries and run sanity checks (placeholder for future logic)."""
-        for entry in cls.entries:
-            logger.info(f"Scanning entry: {entry}")
+    def registered_flows(cls) -> dict[str, FlowDefinition]:
+        """Return the currently registered flow definitions."""
+        return dict(cls._flow_definitions)
+
+    # ---- event ingestion ----
+
+    async def ingest_ledger_entry(
+        self,
+        ledger_entry: LedgerEntry,
+        group: str = "primary",
+    ) -> str | None:
+        """Feed a ledger entry into overwatch.
+
+        The entry is wrapped in a FlowEvent, matched against every active
+        (non-completed) flow, and the matched stage name is returned (or
+        ``None`` if no flow consumed it).
+        """
+        event = FlowEvent.from_ledger_entry(ledger_entry, group=group)
+        logger.info(
+            f"{ICON} {ledger_entry.short_id} {ledger_entry.ledger_type_str}",
+            extra={"notification": False},
+        )
+        return self._dispatch(event)
+
+    async def ingest_op(
+        self,
+        op: TrackedAny,
+        group: str = "primary",
+    ) -> str | None:
+        """Feed a TrackedAny operation into overwatch.
+
+        If the op matches a registered trigger_op_type **and** no active flow
+        already owns this ``group_id``, a new FlowInstance is automatically
+        created.  Returns the matched stage name, or ``None``.
+        """
+        event = FlowEvent.from_op(op, group=group)
+        logger.info(
+            f"{ICON} {op.short_id} {op.op_type}",
+            extra={"notification": False},
+        )
+
+        # Auto-create a flow instance when a trigger op arrives
+        matched = self._dispatch(event)
+        if matched is None:
+            matched = self._try_create_flow(event, op)
+        return matched
+
+    # ---- internal dispatch ----
+
+    def _dispatch(self, event: FlowEvent) -> str | None:
+        """Try to match *event* against every active flow instance."""
+        for flow in self.active_flows:
+            result = flow.add_event(event)
+            if result is not None:
+                if flow.is_complete:
+                    logger.info(
+                        f"{ICON} ✅ Flow '{flow.flow_definition.name}' completed "
+                        f"({flow.trigger_short_id}) in {flow.duration:.1f}s",
+                        extra={"notification": False},
+                    )
+                return result
+        return None
+
+    def _try_create_flow(self, event: FlowEvent, op: TrackedAny) -> str | None:
+        """If *event* matches a registered trigger, spin up a new FlowInstance."""
+        for defn in self._flow_definitions.values():
+            if event.op_type == defn.trigger_op_type and event.group == "primary":
+                instance = FlowInstance(
+                    flow_definition=defn,
+                    trigger_group_id=event.group_id,
+                    trigger_short_id=event.short_id,
+                    cust_id=getattr(op, "from_account", ""),
+                )
+                self.flow_instances.append(instance)
+                result = instance.add_event(event)
+                logger.info(
+                    f"{ICON} 🆕 New flow '{defn.name}' started "
+                    f"({event.short_id}) cust={instance.cust_id}",
+                    extra={"notification": False},
+                )
+                return result
+        return None
+
+    # ---- queries ----
+
+    @property
+    def active_flows(self) -> List[FlowInstance]:
+        """Return flow instances that are not yet completed or failed."""
+        return [
+            f
+            for f in self.flow_instances
+            if f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
+        ]
+
+    @property
+    def completed_flows(self) -> List[FlowInstance]:
+        """Return completed flow instances."""
+        return [f for f in self.flow_instances if f.status == FlowStatus.COMPLETED]
+
+    @property
+    def stalled_flows(self) -> List[FlowInstance]:
+        """Return stalled flow instances."""
+        return [f for f in self.flow_instances if f.status == FlowStatus.STALLED]
+
+    # ---- stall detection ----
+
+    def check_stalls(self, now: datetime | None = None) -> List[FlowInstance]:
+        """Mark active flows that haven't received events recently as STALLED.
+
+        Returns the list of flows whose status was changed.
+        """
+        now = now or datetime.now(tz=timezone.utc)
+        newly_stalled: List[FlowInstance] = []
+        for flow in self.active_flows:
+            last_event_time = flow.events[-1].timestamp if flow.events else flow.started_at
+            if now - last_event_time > self.stall_timeout:
+                flow.status = FlowStatus.STALLED
+                newly_stalled.append(flow)
+                logger.warning(
+                    f"{ICON} ⚠️ Flow '{flow.flow_definition.name}' "
+                    f"({flow.trigger_short_id}) stalled — "
+                    f"{flow.progress}, last event {last_event_time:%H:%M:%S}",
+                    extra={"notification": False},
+                )
+        return newly_stalled
+
+    # ---- periodic reporter ----
+
+    async def report_loop(
+        self,
+        interval: float = 30,
+        shutdown_event: asyncio.Event | None = None,
+    ) -> None:
+        """Long-running coroutine that periodically logs flow status.
+
+        Args:
+            interval: Seconds between reports.
+            shutdown_event: When set, the loop exits gracefully.
+        """
+        logger.info(
+            f"{ICON} Overwatch report loop started (interval={interval}s)",
+            extra={"notification": False},
+        )
+        while True:
+            if shutdown_event and shutdown_event.is_set():
+                break
+            try:
+                self.check_stalls()
+                self._log_report()
+            except Exception as e:
+                logger.error(
+                    f"{ICON} Error in overwatch report loop: {e}",
+                    extra={"error_code": "overwatch_report_error"},
+                )
+            # Sleep in small increments so we can break promptly on shutdown
+            for _ in range(int(interval)):
+                if shutdown_event and shutdown_event.is_set():
+                    break
+                await asyncio.sleep(1)
+
+        logger.info(
+            f"{ICON} Overwatch report loop stopped",
+            extra={"notification": False},
+        )
+
+    def _log_report(self) -> None:
+        """Emit a single log line summarising current state."""
+        active = self.active_flows
+        stalled = self.stalled_flows
+        completed = self.completed_flows
+
+        if not active and not stalled:
+            return  # nothing interesting to report
+
+        parts: list[str] = [f"{ICON} Overwatch:"]
+        if active:
+            parts.append(f"{len(active)} active")
+        if stalled:
+            parts.append(f"{len(stalled)} stalled")
+        parts.append(f"{len(completed)} completed")
+        logger.info(" | ".join(parts), extra={"notification": False})
+
+        for flow in active:
+            logger.info(
+                f"{ICON}   ↳ {flow.flow_definition.name} "
+                f"({flow.trigger_short_id}) {flow.progress}",
+                extra={"notification": False},
+            )
+        for flow in stalled:
+            logger.warning(
+                f"{ICON}   ↳ STALLED {flow.flow_definition.name} "
+                f"({flow.trigger_short_id}) {flow.progress} "
+                f"missing: {[s.name for s in flow.missing_stages]}",
+                extra={"notification": False},
+            )
+
+    # ---- housekeeping ----
 
     @classmethod
     def reset(cls) -> None:
-        """Clear all entries and flow instances (useful for tests)."""
-        cls.entries.clear()
+        """Clear all state — useful for tests."""
         cls.flow_instances.clear()
-
-
-overwatch_log = OverwatchLog()
-
-
-async def overwatch_ledger_entry(ledger_entry: LedgerEntry) -> None:
-    """Process a ledger entry by running sanity checks and logging the results.
-
-    Args:
-        ledger_entry: The LedgerEntry object to be processed.
-    """
-    overwatch_log.add_entry(OverwatchLogEntry(ledger_entry=ledger_entry))
-    logger.info(
-        f"{ICON} {ledger_entry.short_id} {ledger_entry.ledger_type_str}",
-        extra={"notification": False},
-    )
-
-
-async def overwatch_op(op: TrackedAny) -> None:
-    """Process a TrackedAny object by running sanity checks and logging the results.
-
-    Args:
-        op: The TrackedAny object to be processed.
-    """
-    overwatch_log.add_entry(OverwatchLogEntry(op=op))
-    logger.info(
-        f"{ICON} {op.short_id} {op.op_type}",
-        extra={"notification": False},
-    )
+        cls._flow_definitions.clear()
+        cls.stall_timeout = DEFAULT_STALL_TIMEOUT
+        cls._instance = None

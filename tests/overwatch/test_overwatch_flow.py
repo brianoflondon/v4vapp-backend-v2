@@ -5,6 +5,7 @@ Uses real flow data extracted from db_monitor logs for a Hive-to-Keepsats conver
 """
 
 import json
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ from v4vapp_backend_v2.process.process_overwatch import (
     FlowInstance,
     FlowStage,
     FlowStatus,
-    OverwatchLog,
+    Overwatch,
 )
 
 # ---------------------------------------------------------------------------
@@ -607,37 +608,69 @@ class TestFlowInstanceMatching:
 
 
 # ---------------------------------------------------------------------------
-# Tests: OverwatchLog
+# Tests: Overwatch singleton
 # ---------------------------------------------------------------------------
 
 
-class TestOverwatchLog:
-    """Tests for the OverwatchLog registry."""
+class TestOverwatch:
+    """Tests for the Overwatch singleton registry."""
 
     def test_add_and_retrieve_flow_instance(self, flow_instance: FlowInstance):
-        OverwatchLog.reset()
-        OverwatchLog.add_flow_instance(flow_instance)
-        assert len(OverwatchLog.get_active_flows()) == 1
-        assert len(OverwatchLog.get_completed_flows()) == 0
+        Overwatch.reset()
+        ow = Overwatch()
+        ow.flow_instances.append(flow_instance)
+        assert len(ow.active_flows) == 1
+        assert len(ow.completed_flows) == 0
 
     def test_completed_flow_moves_to_completed(
         self,
         flow_instance: FlowInstance,
         all_flow_events: list[FlowEvent],
     ):
-        OverwatchLog.reset()
+        Overwatch.reset()
         for event in all_flow_events:
             flow_instance.add_event(event)
-        OverwatchLog.add_flow_instance(flow_instance)
-        assert len(OverwatchLog.get_active_flows()) == 0
-        assert len(OverwatchLog.get_completed_flows()) == 1
+        ow = Overwatch()
+        ow.flow_instances.append(flow_instance)
+        assert len(ow.active_flows) == 0
+        assert len(ow.completed_flows) == 1
 
     def test_reset_clears_everything(self, flow_instance: FlowInstance):
-        OverwatchLog.reset()
-        OverwatchLog.add_flow_instance(flow_instance)
-        OverwatchLog.reset()
-        assert len(OverwatchLog.flow_instances) == 0
-        assert len(OverwatchLog.entries) == 0
+        Overwatch.reset()
+        ow = Overwatch()
+        ow.flow_instances.append(flow_instance)
+        Overwatch.reset()
+        ow2 = Overwatch()
+        assert len(ow2.flow_instances) == 0
+
+    def test_singleton_returns_same_instance(self):
+        Overwatch.reset()
+        a = Overwatch()
+        b = Overwatch()
+        assert a is b
+
+    def test_register_and_retrieve_flow_definition(self):
+        Overwatch.reset()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        flows = Overwatch.registered_flows()
+        assert "hive_to_keepsats" in flows
+        assert flows["hive_to_keepsats"] is HIVE_TO_KEEPSATS_FLOW
+
+    def test_check_stalls_marks_old_flows(
+        self,
+        flow_instance: FlowInstance,
+        primary_ledger_entries: dict[str, LedgerEntry],
+    ):
+        Overwatch.reset()
+        ow = Overwatch()
+        # Add one event so the flow is IN_PROGRESS
+        flow_instance.add_event(FlowEvent.from_ledger_entry(primary_ledger_entries["cust_h_in"]))
+        ow.flow_instances.append(flow_instance)
+        # Simulate time passing
+        far_future = flow_instance.started_at + Overwatch.stall_timeout + timedelta(seconds=1)
+        stalled = ow.check_stalls(now=far_future)
+        assert len(stalled) == 1
+        assert flow_instance.status == FlowStatus.STALLED
 
 
 # ---------------------------------------------------------------------------

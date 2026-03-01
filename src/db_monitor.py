@@ -40,11 +40,7 @@ from v4vapp_backend_v2.helpers.opening_balances import (
     reset_lightning_opening_balance,
 )
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
-from v4vapp_backend_v2.process.process_overwatch import (
-    OverwatchLog,
-    overwatch_ledger_entry,
-    overwatch_op,
-)
+from v4vapp_backend_v2.process.process_overwatch import Overwatch
 from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
@@ -260,7 +256,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             if collection == "ledger":
                 try:
                     ledger_entry = LedgerEntry.model_validate(full_document)
-                    await overwatch_ledger_entry(ledger_entry=ledger_entry)
+                    await Overwatch().ingest_ledger_entry(ledger_entry=ledger_entry)
                     return
                 except Exception as e:
                     logger.warning(
@@ -269,7 +265,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                     return
             else:
                 op = tracked_any_filter(full_document)
-                await overwatch_op(op=op)
+                await Overwatch().ingest_op(op=op)
 
         except ValueError as e:
             logger.warning(
@@ -501,20 +497,15 @@ async def subscribe_stream(
 
 async def subscribe_overwatch():
     """
-    Subscribes to the overwatch stream and processes changes.
+    Start the Overwatch periodic report loop.
+
+    Runs until *shutdown_event* is set, logging flow status every 30 seconds
+    and detecting stalled flows.
     """
-    while not shutdown_event.is_set():
-        try:
-            await OverwatchLog.scan_entries()
-        except (asyncio.CancelledError, KeyboardInterrupt) as e:
-            logger.info(f"Keyboard interrupt or Cancelled: {e}")
-            return
-        except Exception as e:
-            logger.error(
-                f"{ICON} Error scanning overwatch entries: {e}",
-                extra={"error_code": "overwatch_scan_error"},
-            )
-        await asyncio.sleep(60)
+    await Overwatch().report_loop(
+        interval=30,
+        shutdown_event=shutdown_event,
+    )
 
 
 def handle_shutdown_signal():
@@ -585,6 +576,7 @@ async def main_async_start(use_resume: bool = True):
                 name=name,
             )
             tasks.append(task)
+        tasks.append(asyncio.create_task(subscribe_overwatch(), name="overwatch_report_loop"))  
 
         await shutdown_event.wait()
         for t in tasks:
