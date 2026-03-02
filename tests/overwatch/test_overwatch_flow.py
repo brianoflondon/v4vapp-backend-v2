@@ -80,7 +80,12 @@ def all_flow_events(
     keepsats_notification_ledger_entries: dict[str, LedgerEntry],
     change_ledger_entries: dict[str, LedgerEntry],
 ) -> list[FlowEvent]:
-    """Build a list of all FlowEvents for the complete Hive-to-Keepsats flow."""
+    """Build a list of all FlowEvents for the complete Hive-to-Keepsats flow.
+
+    All events use the default ``group="primary"`` to simulate what
+    ``db_monitor`` actually sends — the Overwatch system must be able to
+    match stages without the caller specifying the correct group.
+    """
     events: list[FlowEvent] = []
 
     # 1. Trigger transfer op
@@ -112,7 +117,7 @@ def all_flow_events(
             group_id=fee_op["group_id"],
             short_id=fee_op["short_id"],
             op_type=fee_op["type"],
-            group="fee_notification",
+            group="primary",
             ledger_entry=None,
             op=None,
             ledger_type=None,
@@ -121,7 +126,7 @@ def all_flow_events(
 
     # 4. Fee ledger entries
     for le in fee_ledger_entries.values():
-        events.append(FlowEvent.from_ledger_entry(le, group="fee_notification"))
+        events.append(FlowEvent.from_ledger_entry(le, group="primary"))
 
     # 5. Keepsats notification custom_json op
     ks_op = flow_data["keepsats_notification_op"]
@@ -132,7 +137,7 @@ def all_flow_events(
             group_id=ks_op["group_id"],
             short_id=ks_op["short_id"],
             op_type=ks_op["type"],
-            group="keepsats_notification",
+            group="primary",
             ledger_entry=None,
             op=None,
             ledger_type=None,
@@ -141,7 +146,7 @@ def all_flow_events(
 
     # 6. Keepsats notification ledger entries
     for le in keepsats_notification_ledger_entries.values():
-        events.append(FlowEvent.from_ledger_entry(le, group="keepsats_notification"))
+        events.append(FlowEvent.from_ledger_entry(le, group="primary"))
 
     # 7. Change transfer op
     change_op = flow_data["change_transfer"]
@@ -152,7 +157,7 @@ def all_flow_events(
             group_id=change_op["group_id"],
             short_id=change_op["short_id"],
             op_type=change_op["type"],
-            group="change_return",
+            group="primary",
             ledger_entry=None,
             op=None,
             ledger_type=None,
@@ -161,7 +166,7 @@ def all_flow_events(
 
     # 8. Change ledger entries
     for le in change_ledger_entries.values():
-        events.append(FlowEvent.from_ledger_entry(le, group="change_return"))
+        events.append(FlowEvent.from_ledger_entry(le, group="primary"))
 
     return events
 
@@ -514,7 +519,11 @@ class TestFlowInstanceIncomplete:
         keepsats_notification_ledger_entries: dict[str, LedgerEntry],
         change_ledger_entries: dict[str, LedgerEntry],
     ):
-        # Add everything except fee-related events
+        # Add everything except fee-related events.
+        # With group-agnostic op matching the keepsats custom_json op will
+        # match the first unmatched custom_json stage (fee_custom_json_op)
+        # because stages are tried in definition order.  That means
+        # keepsats_notification_op ends up unmatched instead.
         trigger = flow_data["trigger_transfer"]
         flow_instance.add_event(
             FlowEvent(
@@ -531,7 +540,7 @@ class TestFlowInstanceIncomplete:
         for le in primary_ledger_entries.values():
             flow_instance.add_event(FlowEvent.from_ledger_entry(le))
 
-        # Add keepsats notification
+        # Add keepsats notification (no explicit group — simulates db_monitor)
         ks_op = flow_data["keepsats_notification_op"]
         flow_instance.add_event(
             FlowEvent(
@@ -540,7 +549,6 @@ class TestFlowInstanceIncomplete:
                 group_id=ks_op["group_id"],
                 short_id=ks_op["short_id"],
                 op_type=ks_op["type"],
-                group="keepsats_notification",
                 ledger_entry=None,
                 op=None,
                 ledger_type=None,
@@ -549,7 +557,7 @@ class TestFlowInstanceIncomplete:
         for le in keepsats_notification_ledger_entries.values():
             flow_instance.add_event(FlowEvent.from_ledger_entry(le))
 
-        # Add change return
+        # Add change return (no explicit group — simulates db_monitor)
         change_op = flow_data["change_transfer"]
         flow_instance.add_event(
             FlowEvent(
@@ -558,7 +566,6 @@ class TestFlowInstanceIncomplete:
                 group_id=change_op["group_id"],
                 short_id=change_op["short_id"],
                 op_type=change_op["type"],
-                group="change_return",
                 ledger_entry=None,
                 op=None,
                 ledger_type=None,
@@ -569,10 +576,13 @@ class TestFlowInstanceIncomplete:
 
         assert not flow_instance.is_complete
         missing_names = [s.name for s in flow_instance.missing_stages]
+        # Fee ledger stages are always missing (unique ledger_types)
         assert "custom_json_fee" in missing_names
         assert "fee_income" in missing_names
-        # fee_custom_json_op is also missing
-        assert "fee_custom_json_op" in missing_names
+        # With group-agnostic matching the keepsats custom_json consumed
+        # fee_custom_json_op, so keepsats_notification_op is the missing op stage
+        assert "keepsats_notification_op" in missing_names
+        assert len(missing_names) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -695,6 +705,72 @@ class TestOverwatch:
         stalled = await ow.check_stalls(now=far_future)
         assert len(stalled) == 1
         assert flow_instance.status == FlowStatus.STALLED
+
+    def test_dedup_prevents_rematched_trigger(
+        self,
+        flow_instance: FlowInstance,
+        flow_data: dict,
+    ):
+        """A re-arrived trigger (MongoDB update event) must NOT match
+        change_transfer_op — dedup should skip it."""
+        trigger = flow_data["trigger_transfer"]
+        trigger_event = FlowEvent(
+            event_type="op",
+            timestamp=trigger["timestamp"],
+            group_id=trigger["group_id"],
+            short_id=trigger["short_id"],
+            op_type=trigger["type"],
+            ledger_entry=None,
+            op=None,
+            ledger_type=None,
+        )
+        # First insertion matches trigger_transfer
+        result1 = flow_instance.add_event(trigger_event)
+        assert result1 == "trigger_transfer"
+
+        # Simulate the same trigger arriving again (e.g. with replies added)
+        assert Overwatch._is_duplicate(flow_instance, trigger_event)
+
+    async def test_dispatch_with_default_groups_completes_flow(
+        self,
+        flow_data: dict,
+        all_flow_events: list[FlowEvent],
+    ):
+        """Simulate dbmonitor dispatching all events with group='primary'.
+
+        The flow should still complete even though op stages have specific
+        groups in the definition — matching is group-agnostic.
+        """
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch._loaded_from_redis = True  # skip Redis
+
+        trigger = flow_data["trigger_transfer"]
+        # Simulate: ingest trigger op → creates flow
+        trigger_event = all_flow_events[0]
+        matched = await ow._try_create_flow(
+            trigger_event,
+            type(
+                "FakeOp",
+                (),
+                {
+                    "group_id": trigger["group_id"],
+                    "short_id": trigger["short_id"],
+                    "op_type": trigger["type"],
+                    "from_account": trigger.get("from", ""),
+                },
+            )(),
+        )
+        assert matched == "trigger_transfer"
+        assert len(ow.active_flows) == 1
+
+        # Dispatch remaining events
+        for event in all_flow_events[1:]:
+            await ow._dispatch(event)
+
+        assert len(ow.completed_flows) == 1
+        assert ow.completed_flows[0].is_complete
 
 
 # ---------------------------------------------------------------------------

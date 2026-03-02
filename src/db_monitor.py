@@ -40,6 +40,7 @@ from v4vapp_backend_v2.helpers.opening_balances import (
     reset_lightning_opening_balance,
 )
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
+from v4vapp_backend_v2.process.overwatch_flows import FLOW_DEFINITIONS
 from v4vapp_backend_v2.process.process_overwatch import Overwatch
 from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
@@ -499,9 +500,15 @@ async def subscribe_overwatch():
     """
     Start the Overwatch periodic report loop.
 
-    Runs until *shutdown_event* is set, logging flow status every 30 seconds
-    and detecting stalled flows.
+    Registers all known flow definitions and then runs until *shutdown_event*
+    is set, logging flow status every 30 seconds and detecting stalled flows.
     """
+    for defn in FLOW_DEFINITIONS.values():
+        Overwatch.register_flow(defn)
+    logger.info(
+        f"{ICON} Overwatch registered {len(FLOW_DEFINITIONS)} flow definition(s)",
+        extra={"notification": False},
+    )
     await Overwatch().report_loop(
         interval=30,
         shutdown_event=shutdown_event,
@@ -576,7 +583,7 @@ async def main_async_start(use_resume: bool = True):
                 name=name,
             )
             tasks.append(task)
-        tasks.append(asyncio.create_task(subscribe_overwatch(), name="overwatch_report_loop"))  
+        tasks.append(asyncio.create_task(subscribe_overwatch(), name="overwatch_report_loop"))
 
         await shutdown_event.wait()
         for t in tasks:

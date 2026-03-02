@@ -95,21 +95,19 @@ class FlowStage(BaseModel):
     def matches(self, event: FlowEvent) -> bool:
         """Check if an event fulfils this stage.
 
-        Ledger events are matched solely by ledger_type (which is unique
-        across stages). Op events are matched by op_type **and** group so
-        that two stages with the same op_type (e.g. trigger_transfer vs
-        change_transfer_op, both "transfer") are disambiguated.
+        Ledger events are matched solely by ``ledger_type`` (which is unique
+        across stages).  Op events are matched by ``op_type`` alone — group
+        disambiguation is not performed here because ``db_monitor`` dispatches
+        all events with the default group ``"primary"``.  Deduplication in
+        :pymethod:`Overwatch._dispatch` prevents re-arrived trigger updates
+        from matching the wrong stage.
         """
         if self.event_type != event.event_type:
             return False
         if self.event_type == "ledger":
             return self.ledger_type is not None and self.ledger_type == event.ledger_type
-        # op event: must also match group to disambiguate
-        return (
-            self.op_type is not None
-            and self.op_type == event.op_type
-            and self.group == event.group
-        )
+        # op event: match by op_type only (group-agnostic)
+        return self.op_type is not None and self.op_type == event.op_type
 
 
 class FlowDefinition(BaseModel):
@@ -249,13 +247,21 @@ class FlowInstance(BaseModel):
 
     @property
     def matched_stage_names(self) -> set[str]:
-        """Return names of stages that have been matched by events."""
+        """Return names of stages that have been matched by events.
+
+        Events are replayed **in order** and each event consumes at most
+        one unmatched stage — the first one in definition order that
+        accepts it.  This mirrors the behaviour of :pymethod:`add_event`
+        and prevents a single ``transfer`` event from matching both
+        ``trigger_transfer`` and ``change_transfer_op`` when matching is
+        group-agnostic.
+        """
         matched: set[str] = set()
-        for stage in self.flow_definition.stages:
-            for event in self.events:
-                if stage.matches(event):
+        for event in self.events:
+            for stage in self.flow_definition.stages:
+                if stage.name not in matched and stage.matches(event):
                     matched.add(stage.name)
-                    break
+                    break  # this event is consumed — move to the next
         return matched
 
     @property
@@ -526,9 +532,44 @@ class Overwatch:
 
     # ---- internal dispatch ----
 
+    @staticmethod
+    def _is_duplicate(flow: FlowInstance, event: FlowEvent) -> bool:
+        """Check if an equivalent event was already added to *flow*.
+
+        Prevents re-processing when MongoDB sends an *update* change-stream
+        event for a document we already ingested on *insert* (e.g. the trigger
+        op being updated with reply IDs).
+
+        - **Op events** are deduped by ``(event_type, group_id)`` — each op
+          has a unique ``group_id``.
+        - **Ledger events** are deduped by ``(event_type, group_id,
+          ledger_type)`` because several ledger entries can share the same
+          ``group_id``.
+        """
+        for existing in flow.events:
+            if existing.event_type != event.event_type:
+                continue
+            if existing.group_id != event.group_id:
+                continue
+            if event.event_type == "op":
+                return True  # same group_id + event_type → duplicate op
+            # ledger: also require matching ledger_type
+            if existing.ledger_type == event.ledger_type:
+                return True
+        return False
+
     async def _dispatch(self, event: FlowEvent) -> str | None:
-        """Try to match *event* against every active flow instance."""
+        """Try to match *event* against every active flow instance.
+
+        Before attempting a match the event is checked for duplication —
+        if a flow already contains an event with the same identity the
+        flow is skipped.  This prevents, for example, an updated trigger
+        op (now carrying reply IDs) from incorrectly matching the
+        ``change_transfer_op`` stage.
+        """
         for flow in self.active_flows:
+            if self._is_duplicate(flow, event):
+                continue
             result = flow.add_event(event)
             if result is not None:
                 if flow.is_complete:
