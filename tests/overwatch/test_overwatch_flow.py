@@ -93,6 +93,9 @@ def all_flow_events(
             short_id=trigger["short_id"],
             op_type=trigger["type"],
             group="primary",
+            ledger_entry=None,
+            op=None,
+            ledger_type=None,
         )
     )
 
@@ -110,6 +113,9 @@ def all_flow_events(
             short_id=fee_op["short_id"],
             op_type=fee_op["type"],
             group="fee_notification",
+            ledger_entry=None,
+            op=None,
+            ledger_type=None,
         )
     )
 
@@ -127,6 +133,9 @@ def all_flow_events(
             short_id=ks_op["short_id"],
             op_type=ks_op["type"],
             group="keepsats_notification",
+            ledger_entry=None,
+            op=None,
+            ledger_type=None,
         )
     )
 
@@ -144,6 +153,9 @@ def all_flow_events(
             short_id=change_op["short_id"],
             op_type=change_op["type"],
             group="change_return",
+            ledger_entry=None,
+            op=None,
+            ledger_type=None,
         )
     )
 
@@ -464,6 +476,9 @@ class TestFlowInstanceIncomplete:
                 group_id=trigger["group_id"],
                 short_id=trigger["short_id"],
                 op_type=trigger["type"],
+                ledger_entry=None,
+                op=None,
+                ledger_type=None,
             )
         )
         flow_instance.add_event(FlowEvent.from_ledger_entry(primary_ledger_entries["cust_h_in"]))
@@ -508,6 +523,9 @@ class TestFlowInstanceIncomplete:
                 group_id=trigger["group_id"],
                 short_id=trigger["short_id"],
                 op_type=trigger["type"],
+                ledger_entry=None,
+                op=None,
+                ledger_type=None,
             )
         )
         for le in primary_ledger_entries.values():
@@ -523,6 +541,9 @@ class TestFlowInstanceIncomplete:
                 short_id=ks_op["short_id"],
                 op_type=ks_op["type"],
                 group="keepsats_notification",
+                ledger_entry=None,
+                op=None,
+                ledger_type=None,
             )
         )
         for le in keepsats_notification_ledger_entries.values():
@@ -538,6 +559,9 @@ class TestFlowInstanceIncomplete:
                 short_id=change_op["short_id"],
                 op_type=change_op["type"],
                 group="change_return",
+                ledger_entry=None,
+                op=None,
+                ledger_type=None,
             )
         )
         for le in change_ledger_entries.values():
@@ -656,7 +680,7 @@ class TestOverwatch:
         assert "hive_to_keepsats" in flows
         assert flows["hive_to_keepsats"] is HIVE_TO_KEEPSATS_FLOW
 
-    def test_check_stalls_marks_old_flows(
+    async def test_check_stalls_marks_old_flows(
         self,
         flow_instance: FlowInstance,
         primary_ledger_entries: dict[str, LedgerEntry],
@@ -668,7 +692,7 @@ class TestOverwatch:
         ow.flow_instances.append(flow_instance)
         # Simulate time passing
         far_future = flow_instance.started_at + Overwatch.stall_timeout + timedelta(seconds=1)
-        stalled = ow.check_stalls(now=far_future)
+        stalled = await ow.check_stalls(now=far_future)
         assert len(stalled) == 1
         assert flow_instance.status == FlowStatus.STALLED
 

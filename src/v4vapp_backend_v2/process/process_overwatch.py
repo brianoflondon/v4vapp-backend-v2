@@ -11,7 +11,7 @@ Core models:
 - FlowEvent: A recorded event that has occurred.
 - FlowInstance: A tracked flow instance that collects events and checks completeness.
 - Overwatch: Singleton that ingests events, manages active flows, and runs a
-  periodic reporting loop.
+  periodic reporting loop.  State is persisted in Redis so it survives restarts.
 
 Usage from db_monitor::
 
@@ -37,9 +37,14 @@ from pydantic import BaseModel, Field
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 ICON = "📒"
+
+# Redis key prefixes / TTLs
+_REDIS_ACTIVE_KEY = "overwatch:flows:active"
+_REDIS_COMPLETED_PREFIX = "overwatch:flows:completed:"
+_COMPLETED_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 
 
 # ---------------------------------------------------------------------------
@@ -306,14 +311,25 @@ DEFAULT_STALL_TIMEOUT = timedelta(minutes=5)
 class Overwatch:
     """Singleton that ingests events, manages active flows, and reports progress.
 
-    Instantiate anywhere — you always get the same instance::
+    **State is persisted to Redis** so that in-progress and completed flows
+    survive process restarts:
+
+    - Active (pending / in_progress / stalled) flows are stored in a Redis
+      hash at ``overwatch:flows:active`` keyed by ``trigger_group_id``.
+    - Completed flows are moved to individual keys
+      ``overwatch:flows:completed:<trigger_group_id>`` with a 24-hour TTL so
+      they stay queryable for at least a day.
+
+    If Redis is unreachable the system continues to operate purely in-memory
+    and will attempt to persist again on the next mutation.
+
+    Usage::
 
         overwatch = Overwatch()
         await overwatch.ingest_ledger_entry(ledger_entry)
         await overwatch.ingest_op(op)
 
-    Start the periodic reporter as a long-running asyncio task::
-
+        # Start the periodic reporter as a long-running task:
         asyncio.create_task(
             overwatch.report_loop(interval=30, shutdown_event=shutdown_event)
         )
@@ -321,10 +337,11 @@ class Overwatch:
 
     _instance: ClassVar[Overwatch | None] = None
 
-    # ---- state (shared across all references) ----
+    # ---- state (in-memory cache, synced to Redis) ----
     flow_instances: ClassVar[List[FlowInstance]] = []
     _flow_definitions: ClassVar[dict[str, FlowDefinition]] = {}
     stall_timeout: ClassVar[timedelta] = DEFAULT_STALL_TIMEOUT
+    _loaded_from_redis: ClassVar[bool] = False
 
     def __new__(cls) -> Overwatch:
         if cls._instance is None:
@@ -343,6 +360,125 @@ class Overwatch:
         """Return the currently registered flow definitions."""
         return dict(cls._flow_definitions)
 
+    # ------------------------------------------------------------------
+    # Redis persistence helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _redis():
+        """Return the async Redis client, or ``None`` if unavailable."""
+        try:
+            return InternalConfig.redis_async
+        except Exception:
+            return None
+
+    async def _persist_flow(self, flow: FlowInstance) -> None:
+        """Write a single flow to Redis (active hash or completed key)."""
+        r = self._redis()
+        if r is None:
+            return
+        try:
+            data = flow.model_dump_json()
+            if flow.status == FlowStatus.COMPLETED:
+                key = f"{_REDIS_COMPLETED_PREFIX}{flow.trigger_group_id}"
+                await r.setex(key, _COMPLETED_TTL_SECONDS, data)
+                # Remove from the active hash
+                await r.hdel(_REDIS_ACTIVE_KEY, flow.trigger_group_id)
+            else:
+                await r.hset(_REDIS_ACTIVE_KEY, flow.trigger_group_id, data)
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Redis persist failed: {e}",
+                extra={"notification": False},
+            )
+
+    async def _remove_active_flow(self, flow: FlowInstance) -> None:
+        """Remove a flow from the active Redis hash."""
+        r = self._redis()
+        if r is None:
+            return
+        try:
+            await r.hdel(_REDIS_ACTIVE_KEY, flow.trigger_group_id)
+        except Exception:
+            pass
+
+    async def load_from_redis(self) -> int:
+        """Hydrate in-memory state from Redis.
+
+        Called once on startup (or manually).  Returns the number of flows
+        loaded.  Already-loaded flows whose ``trigger_group_id`` is present in
+        memory are skipped so hot-reloading is safe.
+        """
+        r = self._redis()
+        if r is None:
+            return 0
+        loaded = 0
+        existing_ids = {f.trigger_group_id for f in self.flow_instances}
+        try:
+            # Active flows
+            active_data: dict[str, str] = await r.hgetall(_REDIS_ACTIVE_KEY)
+            for gid, raw in active_data.items():
+                if gid in existing_ids:
+                    continue
+                try:
+                    flow = FlowInstance.model_validate_json(raw)
+                    self.flow_instances.append(flow)
+                    existing_ids.add(gid)
+                    loaded += 1
+                except Exception as e:
+                    logger.warning(
+                        f"{ICON} Skipping corrupt active flow {gid}: {e}",
+                        extra={"notification": False},
+                    )
+            # Completed flows (scan for keys)
+            cursor: int = 0
+            while True:
+                cursor, keys = await r.scan(
+                    cursor,
+                    match=f"{_REDIS_COMPLETED_PREFIX}*",
+                    count=100,
+                )
+                for key in keys:
+                    gid = (
+                        key.removeprefix(_REDIS_COMPLETED_PREFIX)
+                        if isinstance(key, str)
+                        else key.decode().removeprefix(_REDIS_COMPLETED_PREFIX)
+                    )
+                    if gid in existing_ids:
+                        continue
+                    raw_val: str | None = await r.get(key)
+                    if raw_val is None:
+                        continue
+                    try:
+                        flow = FlowInstance.model_validate_json(raw_val)
+                        self.flow_instances.append(flow)
+                        existing_ids.add(gid)
+                        loaded += 1
+                    except Exception as e:
+                        logger.warning(
+                            f"{ICON} Skipping corrupt completed flow {gid}: {e}",
+                            extra={"notification": False},
+                        )
+                if cursor == 0:
+                    break
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Failed to load flows from Redis: {e}",
+                extra={"notification": False},
+            )
+        if loaded:
+            logger.info(
+                f"{ICON} Loaded {loaded} flow(s) from Redis",
+                extra={"notification": False},
+            )
+        Overwatch._loaded_from_redis = True
+        return loaded
+
+    async def _ensure_loaded(self) -> None:
+        """Load from Redis once if not already done."""
+        if not self._loaded_from_redis:
+            await self.load_from_redis()
+
     # ---- event ingestion ----
 
     async def ingest_ledger_entry(
@@ -356,12 +492,13 @@ class Overwatch:
         (non-completed) flow, and the matched stage name is returned (or
         ``None`` if no flow consumed it).
         """
+        await self._ensure_loaded()
         event = FlowEvent.from_ledger_entry(ledger_entry, group=group)
         logger.info(
             f"{ICON} {ledger_entry.short_id} {ledger_entry.ledger_type_str}",
             extra={"notification": False},
         )
-        return self._dispatch(event)
+        return await self._dispatch(event)
 
     async def ingest_op(
         self,
@@ -374,6 +511,7 @@ class Overwatch:
         already owns this ``group_id``, a new FlowInstance is automatically
         created.  Returns the matched stage name, or ``None``.
         """
+        await self._ensure_loaded()
         event = FlowEvent.from_op(op, group=group)
         logger.info(
             f"{ICON} {op.short_id} {op.op_type}",
@@ -381,14 +519,14 @@ class Overwatch:
         )
 
         # Auto-create a flow instance when a trigger op arrives
-        matched = self._dispatch(event)
+        matched = await self._dispatch(event)
         if matched is None:
-            matched = self._try_create_flow(event, op)
+            matched = await self._try_create_flow(event, op)
         return matched
 
     # ---- internal dispatch ----
 
-    def _dispatch(self, event: FlowEvent) -> str | None:
+    async def _dispatch(self, event: FlowEvent) -> str | None:
         """Try to match *event* against every active flow instance."""
         for flow in self.active_flows:
             result = flow.add_event(event)
@@ -399,10 +537,11 @@ class Overwatch:
                         f"({flow.trigger_short_id}) in {flow.duration:.1f}s",
                         extra={"notification": False},
                     )
+                await self._persist_flow(flow)
                 return result
         return None
 
-    def _try_create_flow(self, event: FlowEvent, op: TrackedAny) -> str | None:
+    async def _try_create_flow(self, event: FlowEvent, op: TrackedAny) -> str | None:
         """If *event* matches a registered trigger, spin up a new FlowInstance."""
         for defn in self._flow_definitions.values():
             if event.op_type == defn.trigger_op_type and event.group == "primary":
@@ -411,6 +550,8 @@ class Overwatch:
                     trigger_group_id=event.group_id,
                     trigger_short_id=event.short_id,
                     cust_id=getattr(op, "from_account", ""),
+                    status=FlowStatus.PENDING,
+                    completed_at=None,
                 )
                 self.flow_instances.append(instance)
                 result = instance.add_event(event)
@@ -419,6 +560,7 @@ class Overwatch:
                     f"({event.short_id}) cust={instance.cust_id}",
                     extra={"notification": False},
                 )
+                await self._persist_flow(instance)
                 return result
         return None
 
@@ -445,7 +587,7 @@ class Overwatch:
 
     # ---- stall detection ----
 
-    def check_stalls(self, now: datetime | None = None) -> List[FlowInstance]:
+    async def check_stalls(self, now: datetime | None = None) -> List[FlowInstance]:
         """Mark active flows that haven't received events recently as STALLED.
 
         Returns the list of flows whose status was changed.
@@ -463,6 +605,7 @@ class Overwatch:
                     f"{flow.progress}, last event {last_event_time:%H:%M:%S}",
                     extra={"notification": False},
                 )
+                await self._persist_flow(flow)
         return newly_stalled
 
     # ---- periodic reporter ----
@@ -474,10 +617,14 @@ class Overwatch:
     ) -> None:
         """Long-running coroutine that periodically logs flow status.
 
+        On the first iteration it hydrates state from Redis so that flows
+        started before a restart are picked up again.
+
         Args:
             interval: Seconds between reports.
             shutdown_event: When set, the loop exits gracefully.
         """
+        await self._ensure_loaded()
         logger.info(
             f"{ICON} Overwatch report loop started (interval={interval}s)",
             extra={"notification": False},
@@ -486,7 +633,7 @@ class Overwatch:
             if shutdown_event and shutdown_event.is_set():
                 break
             try:
-                self.check_stalls()
+                await self.check_stalls()
                 self._log_report()
             except Exception as e:
                 logger.error(
@@ -539,8 +686,33 @@ class Overwatch:
 
     @classmethod
     def reset(cls) -> None:
-        """Clear all state — useful for tests."""
+        """Clear all in-memory state — useful for tests."""
         cls.flow_instances.clear()
         cls._flow_definitions.clear()
         cls.stall_timeout = DEFAULT_STALL_TIMEOUT
+        cls._loaded_from_redis = False
         cls._instance = None
+
+    async def reset_redis(self) -> None:
+        """Clear all overwatch data from Redis."""
+        r = self._redis()
+        if r is None:
+            return
+        try:
+            await r.delete(_REDIS_ACTIVE_KEY)
+            cursor: int = 0
+            while True:
+                cursor, keys = await r.scan(
+                    cursor,
+                    match=f"{_REDIS_COMPLETED_PREFIX}*",
+                    count=100,
+                )
+                if keys:
+                    await r.delete(*keys)
+                if cursor == 0:
+                    break
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Failed to clear Redis overwatch data: {e}",
+                extra={"notification": False},
+            )
