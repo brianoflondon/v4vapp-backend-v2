@@ -251,6 +251,37 @@ class FlowInstance(BaseModel):
         default_factory=list, description="Recorded events in this flow"
     )
 
+    def __init__(
+        self,
+        flow_definition: FlowDefinition,
+        trigger_group_id: str = "",
+        trigger_short_id: str = "",
+        cust_id: str = "",
+        status: FlowStatus = FlowStatus.PENDING,
+        started_at: datetime | None = None,
+        completed_at: datetime | None = None,
+        events: List[FlowEvent] | None = None,
+        **data: Any,
+    ) -> None:
+        """Explicit initializer for FlowInstance.
+
+        Pydantic generates a dynamic __init__ that confuses type checkers when
+        we instantiate the model with positional/keyword arguments.  Providing
+        this signature with defaults makes static analysis happy while still
+        delegating to the BaseModel machinery.
+        """
+        super().__init__(
+            flow_definition=flow_definition,
+            trigger_group_id=trigger_group_id,
+            trigger_short_id=trigger_short_id,
+            cust_id=cust_id,
+            status=status,
+            started_at=started_at or datetime.now(tz=timezone.utc),
+            completed_at=completed_at,
+            events=events or [],
+            **data,
+        )
+
     def add_event(self, event: FlowEvent) -> str | None:
         """Add an event and return the matched stage name, or None if unmatched."""
         # Snapshot which stages are already fulfilled BEFORE adding the event
@@ -511,8 +542,18 @@ class Overwatch:
                 extra={"notification": False},
             )
         if loaded:
+            # compute status breakdown for reporting
+            act = len(
+                [
+                    f
+                    for f in self.flow_instances
+                    if f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
+                ]
+            )
+            stl = len([f for f in self.flow_instances if f.status == FlowStatus.STALLED])
+            comp = len([f for f in self.flow_instances if f.status == FlowStatus.COMPLETED])
             logger.info(
-                f"{ICON} Loaded {loaded} flow(s) from Redis",
+                f"{ICON} Loaded {loaded} flow(s) from Redis ({act} active, {stl} stalled, {comp} completed)",
                 extra={"notification": False},
             )
         Overwatch._loaded_from_redis = True

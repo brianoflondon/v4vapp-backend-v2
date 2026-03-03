@@ -783,6 +783,7 @@
                     <div class="mt-2">
                       <button class="btn btn-sm btn-outline-secondary me-2" type="button" data-bs-toggle="collapse" data-bs-target="#raw-${startingIdx + idx}">Raw JSON</button>
                       <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#journal-${startingIdx + idx}">Journal Text</button>
+                      ${!entry.reversed ? `<button class="btn btn-sm btn-outline-danger ms-2" type="button" onclick="reverseEntry('${entry.group_id}')">Reverse</button>` : ''}
                       ${entry.link ? `<a class="btn btn-sm btn-outline-primary ms-2" href="${escapeHtml(entry.link)}" target="_blank">🔗 Link</a>` : ""}
                     </div>
 
@@ -807,6 +808,29 @@
         window.__ledger_entries_offset =
             (window.__ledger_entries_offset || 0) + limit
         fetchEntries()
+    }
+
+    // Reverse an existing ledger entry via API
+    async function reverseEntry(group_id) {
+        if (!confirm("Are you sure you want to reverse this ledger entry?")) return;
+        try {
+            const res = await fetch("/admin/ledger-entries/reverse", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ group_id }),
+            })
+            if (!res.ok) {
+                const txt = await res.text()
+                throw new Error(res.status + " " + txt)
+            }
+            // refresh results
+            window.__ledger_entries_offset = 0
+            const entriesContainer = document.getElementById('entries-container')
+            if (entriesContainer) entriesContainer.innerHTML = ''
+            fetchEntries()
+        } catch (e) {
+            alert("Error reversing entry: " + e.message)
+        }
     }
 </script>
 {% endblock %}

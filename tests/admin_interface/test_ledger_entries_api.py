@@ -6,7 +6,10 @@ import pytest
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 
 pytestmark = pytest.mark.integration
-from v4vapp_backend_v2.admin.routers.ledger_entries import ledger_entries_data
+from v4vapp_backend_v2.admin.routers.ledger_entries import (
+    ledger_entries_data,
+    ledger_entry_reverse,
+)
 
 
 class DummyCursor:
@@ -107,3 +110,53 @@ async def test_from_date_parsing_accepts_local_and_offset(monkeypatch):
     # explicit offset included
     resp = await ledger_entries_data(from_date_str="2025-12-18T10:00-05:00")
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_reverse_endpoint(monkeypatch):
+    """Verify that reversing behaves correctly including error cases."""
+
+    class DummyEntry:
+        def __init__(self, reversed_val=None):
+            self.group_id = "g1"
+            self.reversed = reversed_val
+            # simple account stubs for cache invalidation
+            Account = type("Acct", (), {"name": "a", "sub": ""})
+            self.debit = Account()
+            self.credit = Account()
+            self.saved = []
+
+        async def save(self, ignore_duplicates=False, upsert=False, reverse=False):
+            self.saved.append((ignore_duplicates, upsert, reverse))
+            if reverse:
+                from datetime import datetime, timezone
+
+                self.reversed = datetime.now(tz=timezone.utc)
+            return None
+
+    # helper to create async loader
+    async def _async_none(gid):
+        return None
+
+    async def _async_entry(gid, e):
+        return e
+
+    # case: entry not found
+    monkeypatch.setattr(LedgerEntry, "load", _async_none)
+    resp = await ledger_entry_reverse(group_id="missing")
+    assert resp.status_code == 404
+
+    # case: already reversed
+    already = DummyEntry(reversed_val=1)
+    monkeypatch.setattr(LedgerEntry, "load", lambda gid, _e=already: _async_entry(gid, _e))
+    resp = await ledger_entry_reverse(group_id="g1")
+    assert resp.status_code == 400
+
+    # case: success path
+    entry = DummyEntry(reversed_val=None)
+    monkeypatch.setattr(LedgerEntry, "load", lambda gid, _e=entry: _async_entry(gid, _e))
+    resp = await ledger_entry_reverse(group_id="g1")
+    assert resp.status_code == 200
+    data = resp.body.decode()
+    assert "ok" in data
+    assert entry.saved == [(False, True, True)]
