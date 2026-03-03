@@ -734,6 +734,7 @@ class TestOverwatch:
         )
         # add one event per stage so the instance satisfies the old definition
         from datetime import datetime, timezone
+
         for stage in old_def.stages:
             if stage.event_type == "op":
                 evt = FlowEvent(
