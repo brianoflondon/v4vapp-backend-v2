@@ -523,7 +523,7 @@ def handle_shutdown_signal():
     shutdown_event.set()
 
 
-async def main_async_start(use_resume: bool = True):
+async def main_async_start(use_resume: bool = True, use_overwatch: bool = False):
     """
     Main function to run Database Monitor app.
     Args:
@@ -583,7 +583,8 @@ async def main_async_start(use_resume: bool = True):
                 name=name,
             )
             tasks.append(task)
-        tasks.append(asyncio.create_task(subscribe_overwatch(), name="overwatch_report_loop"))
+        if use_overwatch:
+            tasks.append(asyncio.create_task(subscribe_overwatch(), name="overwatch_report_loop"))
 
         await shutdown_event.wait()
         for t in tasks:
@@ -644,6 +645,14 @@ def main(
             is_flag=True,  # Mark as a flag option
         ),
     ] = True,
+    use_overwatch: Annotated[
+        bool,
+        typer.Option(
+            "--overwatch/--no-overwatch",  # Define both positive and negative flags
+            help="Whether to start the overwatch report loop",
+            is_flag=True,  # Mark as a flag option
+        ),
+    ] = False,
 ):
     """
     DB Monitor App.
@@ -653,6 +662,7 @@ def main(
     Args:
         config_filename (str): The name of the config file (in a folder called ./config).
         resume (bool): Whether to resume the stream from the last known token.
+        use_overwatch (bool): Whether to start the overwatch report loop.
 
     Returns:
         None
@@ -667,7 +677,7 @@ def main(
         extra={"notification": False},
     )
 
-    asyncio.run(main_async_start(use_resume=use_resume))
+    asyncio.run(main_async_start(use_resume=use_resume, use_overwatch=use_overwatch))
 
 
 if __name__ == "__main__":

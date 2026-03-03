@@ -78,7 +78,8 @@
             "program": "src/db_monitor.py",
             "args": [
                 "--config",
-                "devhive.config.yaml"
+                "devhive.config.yaml",
+                "--overwatch"
             ],
             "console": "integratedTerminal",
             "justMyCode": false,
