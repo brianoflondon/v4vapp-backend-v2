@@ -336,14 +336,11 @@ async def send_transfer_custom_json(
         Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
     """
     try:
-        hive_config = InternalConfig().config.hive
         hive_client = await get_verified_hive_client_for_accounts(
-            [transfer.from_account, transfer.to_account], nobroadcast=nobroadcast
+            [transfer.from_account, transfer.to_account, InternalConfig().server_id], nobroadcast=nobroadcast
         )
-        if hive_config.hive_accs.get(transfer.from_account):
-            send_from = transfer.from_account
-        else:
-            send_from = InternalConfig().server_id
+        # ALWAYS SEND FROM THE SERVER ACCOUNT, because other accounts won't have the correct keys.
+        send_from = InternalConfig().server_id
         # TODO: #169 add pending for custom_json
         json_data = transfer.model_dump(exclude_none=True, exclude_unset=True)
         json_data_converted = convert_decimals_for_mongodb(json_data)
