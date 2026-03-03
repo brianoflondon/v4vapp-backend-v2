@@ -398,6 +398,7 @@ async def get_verified_hive_client_for_accounts(
     hive_config = InternalConfig().config.hive
     hive_accounts = []
     keys = []
+    accounts = list(set(accounts + [InternalConfig().server_id]))  # Ensure server account is included and remove duplicates
     for account in accounts:
         if hive_config.hive_accs.get(account):
             hive_account = hive_config.hive_accs[account]

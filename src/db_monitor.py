@@ -78,6 +78,32 @@ async def health_check() -> Dict[str, Any]:
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
 
+# Flag indicating whether overwatch is active.  When the CLI
+# starts with ``--no-overwatch`` we still spin up the change streams
+# but we don't want to feed any of the events into the Overwatch
+# machinery.  This global is modified by ``main_async_start`` and
+# consulted by ``process_op`` below.
+_overwatch_enabled: bool = False
+
+
+def set_overwatch_enabled(enabled: bool) -> None:
+    """Mark overwatch as enabled/disabled for this process.
+
+    ``main_async_start`` calls this once during startup so that
+    ``process_op`` can bail out quickly when we are running in a
+    lightweight mode (e.g. during some tests) where we only want to
+    exercise the streaming logic without actually ingesting the
+    operations.
+    """
+    global _overwatch_enabled
+    _overwatch_enabled = enabled
+    logger.debug(f"{ICON} overwatch_enabled set to {enabled}")
+
+
+def overwatch_enabled() -> bool:
+    """Return the current value of the overwatch flag."""
+    return _overwatch_enabled
+
 
 class ResumeToken(BaseModel):
     """
@@ -257,7 +283,8 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             if collection == "ledger":
                 try:
                     ledger_entry = LedgerEntry.model_validate(full_document)
-                    await Overwatch().ingest_ledger_entry(ledger_entry=ledger_entry)
+                    if overwatch_enabled():
+                        await Overwatch().ingest_ledger_entry(ledger_entry=ledger_entry)
                     return
                 except Exception as e:
                     logger.warning(
@@ -266,7 +293,8 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                     return
             else:
                 op = tracked_any_filter(full_document)
-                await Overwatch().ingest_op(op=op)
+                if overwatch_enabled():
+                    await Overwatch().ingest_op(op=op)
 
         except ValueError as e:
             logger.warning(
@@ -532,6 +560,9 @@ async def main_async_start(use_resume: bool = True, use_overwatch: bool = False)
     Returns:
         None
     """
+    # flip the global so helpers know whether they should ingest anything
+    set_overwatch_enabled(use_overwatch)
+
     # Ensure notification handler uses the running loop (non-blocking path)
     InternalConfig.notification_loop = asyncio.get_running_loop()
 
@@ -583,7 +614,7 @@ async def main_async_start(use_resume: bool = True, use_overwatch: bool = False)
                 name=name,
             )
             tasks.append(task)
-        if use_overwatch:
+        if overwatch_enabled():
             tasks.append(asyncio.create_task(subscribe_overwatch(), name="overwatch_report_loop"))
 
         await shutdown_event.wait()
