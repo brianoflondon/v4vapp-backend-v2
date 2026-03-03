@@ -710,6 +710,43 @@ class TestOverwatch:
         """A flow persisted under an older definition should complete when
         the registered definition later makes some stages optional.
         """
+
+    async def test_redis_load_log_contains_breakdown(self, caplog):
+        """Verify the info log shows active/stalled/completed counts."""
+        Overwatch.reset()
+        ow = Overwatch()
+        await ow.reset_redis()
+        # insert a couple of dummy flows
+        f1 = FlowInstance(
+            flow_definition=FlowDefinition(name="f", trigger_op_type="x", stages=[]),
+            trigger_group_id="g1",
+            trigger_short_id="s1",
+            cust_id="c",
+            status=FlowStatus.PENDING,
+        )
+        f2 = FlowInstance(
+            flow_definition=FlowDefinition(name="f", trigger_op_type="x", stages=[]),
+            trigger_group_id="g2",
+            trigger_short_id="s2",
+            cust_id="c",
+            status=FlowStatus.COMPLETED,
+        )
+        ow.flow_instances.extend([f1, f2])
+        await ow._persist_flow(f1)
+        await ow._persist_flow(f2)
+
+        Overwatch.reset()
+        ow2 = Overwatch()
+        caplog.set_level("INFO")
+        loaded = await ow2.load_from_redis()
+        # there may already be extra flows left over in Redis, just ensure
+        # our two made it in
+        assert loaded >= 2
+        # check last log message
+        messages = [r.message for r in caplog.records if "Loaded" in r.message]
+        assert messages, "no load message logged"
+        msg = messages[-1]
+        assert "active" in msg and "stalled" in msg and "completed" in msg
         from v4vapp_backend_v2.process.overwatch_flows import KEEPSATS_TO_HBD_FLOW
 
         # start with an "old" copy where every stage is required
