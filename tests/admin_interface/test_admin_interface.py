@@ -485,6 +485,65 @@ class TestAdminErrorHandling:
         # Should return 404 for invalid admin endpoints
         assert response.status_code == 404
 
+
+class TestLedgerEntriesReverseEndpoint:
+    """Sanity tests exercising the `POST /admin/ledger-entries/reverse` API."""
+
+    def test_bad_json_shape(self, admin_client):
+        # sending a bare string should trigger validation error (422)
+        response = admin_client.post("/admin/ledger-entries/reverse", json="not a dict")
+        assert response.status_code == 422
+
+    def test_missing_entry(self, admin_client, mocker):
+        mocker.patch(
+            "v4vapp_backend_v2.accounting.ledger_entry_class.LedgerEntry.load",
+            return_value=None,
+        )
+        response = admin_client.post("/admin/ledger-entries/reverse", json={"group_id": "x"})
+        assert response.status_code == 404
+        assert "not found" in response.text.lower()
+
+    def test_already_reversed(self, admin_client, mocker):
+        entry = type("E", (), {"reversed": 123})()
+        mocker.patch(
+            "v4vapp_backend_v2.accounting.ledger_entry_class.LedgerEntry.load",
+            return_value=entry,
+        )
+        response = admin_client.post("/admin/ledger-entries/reverse", json={"group_id": "x"})
+        assert response.status_code == 400
+        assert "already reversed" in response.text.lower()
+
+    def test_success(self, admin_client, mocker):
+        entry = type(
+            "E",
+            (),
+            {
+                "reversed": None,
+                "debit": type("A", (), {"name": "a", "sub": ""})(),
+                "credit": type("A", (), {"name": "b", "sub": ""})(),
+            },
+        )()
+        saved_args = []
+
+        async def fake_save(ignore_duplicates=False, upsert=False, reverse=False):
+            saved_args.append((ignore_duplicates, upsert, reverse))
+            entry.reversed = 1
+
+        entry.save = fake_save
+        mocker.patch(
+            "v4vapp_backend_v2.accounting.ledger_entry_class.LedgerEntry.load",
+            return_value=entry,
+        )
+        # patch cache invalidator to avoid side effects
+        mocker.patch(
+            "v4vapp_backend_v2.accounting.ledger_cache.invalidate_ledger_cache",
+            return_value=None,
+        )
+        response = admin_client.post("/admin/ledger-entries/reverse", json={"group_id": "x"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        assert saved_args == [(False, True, True)]
+
     def test_users_page_empty_state(self, admin_client):
         """Test users page handles empty data gracefully"""
         # This would require mocking the database to return empty results

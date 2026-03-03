@@ -57,3 +57,20 @@ def test_ledger_entries_template_compiles_and_renders():
     assert 'name="general_search"' in rendered
     # reversed badge should be visible
     assert "REVERSED" in rendered
+
+    # when entry isn't reversed we should still render a reverse button
+    entry2 = LedgerEntry(group_id="g2", short_id="s2")
+    ctx["entries"] = [entry2]
+    rendered2 = template.render(**ctx)
+    assert "Reverse" in rendered2
+    # and when an entry is reversed the button should not appear (only badge)
+    entry3 = LedgerEntry(group_id="g3", short_id="s3")
+    entry3.reversed = datetime.datetime.utcnow()
+    ctx["entries"] = [entry3]
+    rendered3 = template.render(**ctx)
+    # expect no reverse button element rendered for an already-reversed entry
+    # use regex to ignore the JS function definition which also contains reverseEntry
+    #     assert not re.search(r'<button[^>]+onclick="reverseEntry', rendered3)
+    # inspect only HTML before script tag to avoid matching JS template
+    first_part = rendered3.split("<script>")[0]
+    assert '<button class="btn btn-sm btn-outline-danger"' not in first_part

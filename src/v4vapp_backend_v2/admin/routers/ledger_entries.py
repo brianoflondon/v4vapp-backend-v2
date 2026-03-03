@@ -7,7 +7,7 @@ Provides a simple page and data endpoint to browse ledger entries.
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
@@ -240,6 +240,39 @@ async def ledger_entries_data(
         )
 
     return JSONResponse({"count": total, "entries": entries})
+
+
+@router.post("/reverse")
+async def ledger_entry_reverse(group_id: str = Body(..., embed=True)):
+    """Reverse a ledger entry by setting its reversed timestamp and invalidating cache.
+
+    The body must be a JSON object like {"group_id": "<id>"}. ``embed=True``
+    tells FastAPI to pull the string out of the object rather than expecting a
+    bare string payload.
+
+    This endpoint is used by the admin UI when the user confirms a reversal. The
+    *group_id* of the entry to reverse must be supplied in the JSON body.
+    """
+    entry = await LedgerEntry.load(group_id)
+    if not entry:
+        return JSONResponse({"error": "entry not found"}, status_code=404)
+    if getattr(entry, "reversed", None):
+        return JSONResponse({"error": "entry already reversed"}, status_code=400)
+    # perform the save using upsert so we update the existing document
+    try:
+        await entry.save(upsert=True, reverse=True)
+        # save already invalidates the cache once, but run an extra invalidation to be safe
+        from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
+
+        await invalidate_ledger_cache(
+            debit_name=entry.debit.name,
+            debit_sub=entry.debit.sub,
+            credit_name=entry.credit.name,
+            credit_sub=entry.credit.sub,
+        )
+        return JSONResponse({"status": "ok"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @router.get("/", response_class=HTMLResponse)
