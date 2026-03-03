@@ -82,6 +82,7 @@ async def stream_ops_async(
         - Logging is used to provide information about the streaming process and errors.
 
     """
+    use_threading = True
     good_nodes = get_good_nodes()
     hive = get_hive_client() if hive is None else hive
     hive.set_default_nodes(good_nodes)
@@ -128,7 +129,7 @@ async def stream_ops_async(
                     stop=stop_block,
                     only_virtual_ops=only_virtual_ops,
                     opNames=opNames,
-                    threading=False,
+                    threading=use_threading,
                 )
             )
             logger.info(
@@ -175,7 +176,7 @@ async def stream_ops_async(
                             only_virtual_ops=True,
                             # Very subtle problem with op_in_trx counter if we filter for opNames here.
                             # opNames=opNames,      # we must filter them after updating op_in_trx counter
-                            threading=False,
+                            threading=use_threading,
                         )
                     ):
                         last_block = hive_event.get("block_num", start_block)
