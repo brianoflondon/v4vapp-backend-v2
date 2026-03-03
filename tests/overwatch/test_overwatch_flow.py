@@ -706,6 +706,67 @@ class TestOverwatch:
         assert len(stalled) == 1
         assert flow_instance.status == FlowStatus.STALLED
 
+    async def test_load_upgrades_stalled_flow_to_completed(self):
+        """A flow persisted under an older definition should complete when
+        the registered definition later makes some stages optional.
+        """
+        from v4vapp_backend_v2.process.overwatch_flows import KEEPSATS_TO_HBD_FLOW
+
+        # start with an "old" copy where every stage is required
+        old_def = FlowDefinition(**KEEPSATS_TO_HBD_FLOW.model_dump())
+        for s in old_def.stages:
+            s.required = True
+
+        Overwatch.reset()
+        ow = Overwatch()
+        # ensure Redis is empty before we persist our test instance
+        await ow.reset_redis()
+        Overwatch.register_flow(old_def)
+
+        # create a stalled instance that was already 'complete' under the
+        # old definition by giving it a dummy event for each stage.
+        flow = FlowInstance(
+            flow_definition=old_def,
+            trigger_group_id="old123",
+            trigger_short_id="short456",
+            cust_id="cust",
+            status=FlowStatus.STALLED,
+        )
+        # add one event per stage so the instance satisfies the old definition
+        from datetime import datetime, timezone
+        for stage in old_def.stages:
+            if stage.event_type == "op":
+                evt = FlowEvent(
+                    event_type="op",
+                    timestamp=datetime.now(timezone.utc),
+                    group_id="old123",
+                    short_id="short456",
+                    op_type=stage.op_type or "",
+                )
+            else:
+                evt = FlowEvent(
+                    event_type="ledger",
+                    timestamp=datetime.now(timezone.utc),
+                    group_id="old123",
+                    short_id="short456",
+                    ledger_type=stage.ledger_type,
+                )
+            flow.events.append(evt)
+        ow.flow_instances.append(flow)
+        await ow._persist_flow(flow)
+
+        # reset and register the updated definition
+        Overwatch.reset()
+        ow2 = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+
+        loaded = await ow2.load_from_redis()
+        # we expect at least one flow to be loaded and that one should
+        # have been upgraded to COMPLETED; there may be other leftover
+        # entries from earlier test runs.
+        assert loaded >= 1
+        assert any(f.status == FlowStatus.COMPLETED for f in ow2.flow_instances)
+
     def test_dedup_prevents_rematched_trigger(
         self,
         flow_instance: FlowInstance,

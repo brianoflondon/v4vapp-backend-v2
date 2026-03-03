@@ -233,7 +233,19 @@ class TestKeepsatsToHbdDefinition:
         assert KEEPSATS_TO_HBD_FLOW.stage_names == expected
 
     def test_required_stages_count(self):
-        assert len(KEEPSATS_TO_HBD_FLOW.required_stages) == 17
+        # five stages were marked optional in the definition
+        assert len(KEEPSATS_TO_HBD_FLOW.required_stages) == 12
+
+    def test_optional_stages_listed(self):
+        optional = [s.name for s in KEEPSATS_TO_HBD_FLOW.stages if not s.required]
+        expected = [
+            "notification_custom_json_op",
+            "limit_order_create_op",
+            "limit_order_create",
+            "fill_order_op",
+            "fill_order_net",
+        ]
+        assert optional == expected
 
     def test_stage_count(self):
         assert len(KEEPSATS_TO_HBD_FLOW.stages) == 17
@@ -362,7 +374,8 @@ class TestKeepsatsToHbdComplete:
     ):
         for event in ks_all_flow_events:
             ks_flow_instance.add_event(event)
-        assert ks_flow_instance.progress == "17/17 required stages complete"
+        # only 12 stages are required after marking some optional
+        assert ks_flow_instance.progress == "12/12 required stages complete"
 
     def test_event_count(
         self,
@@ -413,7 +426,8 @@ class TestKeepsatsToHbdIncomplete:
     ):
         assert not ks_flow_instance.is_complete
         assert ks_flow_instance.status == FlowStatus.PENDING
-        assert len(ks_flow_instance.missing_stages) == 17
+        # only 12 stages are required now
+        assert len(ks_flow_instance.missing_stages) == 12
 
     def test_partial_primary_events_not_complete(
         self,
@@ -441,24 +455,25 @@ class TestKeepsatsToHbdIncomplete:
 
         assert not ks_flow_instance.is_complete
         assert ks_flow_instance.status == FlowStatus.IN_PROGRESS
-        # 17 total - 3 added = 14 missing
-        assert len(ks_flow_instance.missing_stages) == 14
-        assert ks_flow_instance.progress == "3/17 required stages complete"
+        # 12 required stages total, 3 added leaving 9 missing
+        assert len(ks_flow_instance.missing_stages) == 9
+        assert ks_flow_instance.progress == "3/12 required stages complete"
 
     def test_missing_fill_order_events_not_complete(
         self,
         ks_flow_instance: FlowInstance,
         ks_all_flow_events: list[FlowEvent],
     ):
-        # Add all events EXCEPT the fill order ones (last 2)
+        # Add all events EXCEPT the fill order ones (last 2).  Those
+        # stages are optional, so the flow should still report complete.
         for event in ks_all_flow_events[:-2]:
             ks_flow_instance.add_event(event)
 
-        assert not ks_flow_instance.is_complete
+        assert ks_flow_instance.is_complete
+        # optional stages do not appear in missing_stages
         missing_names = [s.name for s in ks_flow_instance.missing_stages]
-        assert "fill_order_op" in missing_names
-        assert "fill_order_net" in missing_names
-        assert len(missing_names) == 2
+        assert "fill_order_op" not in missing_names
+        assert "fill_order_net" not in missing_names
 
     def test_missing_hbd_transfer_not_complete(
         self,

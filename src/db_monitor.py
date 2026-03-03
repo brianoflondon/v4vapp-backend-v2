@@ -302,7 +302,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                 logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
                 await asyncio.sleep(5)
             finally:
-                logger.info(f"{ICON} Lock release: {lock_str}")
+                logger.debug(f"{ICON} Lock release: {lock_str}")
 
 
 async def subscribe_stream(

@@ -244,6 +244,7 @@ KEEPSATS_TO_HBD_FLOW = FlowDefinition(
             event_type="op",
             op_type="custom_json",
             group="notification",
+            required=False,  # Notification may be missing if user has no cust_id or conv is zero
         ),
         # --- HBD transfer stages (reply group) ---
         FlowStage(
@@ -264,12 +265,14 @@ KEEPSATS_TO_HBD_FLOW = FlowDefinition(
             event_type="op",
             op_type="limit_order_create",
             group="exchange_order",
+            required=False,  # Limit order may be missing if exchange conversion fails or is zero
         ),
         FlowStage(
             name="limit_order_create",
             event_type="ledger",
             ledger_type=LedgerType.LIMIT_ORDER_CREATE,
             group="exchange_order",
+            required=False,  # Limit order may be missing if exchange conversion fails or is zero
         ),
         # --- Fill order stages ---
         FlowStage(
@@ -277,12 +280,14 @@ KEEPSATS_TO_HBD_FLOW = FlowDefinition(
             event_type="op",
             op_type="fill_order",
             group="fill_order",
+            required=False,  # Fill order may be missing if limit order is missing or doesn't fill within timeframe
         ),
         FlowStage(
             name="fill_order_net",
             event_type="ledger",
             ledger_type=LedgerType.FILL_ORDER_NET,
             group="fill_order",
+            required=False,  # Fill order may be missing if limit order is missing or doesn't fill within timeframe
         ),
     ],
 )
