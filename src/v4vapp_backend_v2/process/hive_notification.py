@@ -337,7 +337,8 @@ async def send_transfer_custom_json(
     """
     try:
         hive_client = await get_verified_hive_client_for_accounts(
-            [transfer.from_account, transfer.to_account, InternalConfig().server_id], nobroadcast=nobroadcast
+            [transfer.from_account, transfer.to_account],
+            nobroadcast=nobroadcast,
         )
         # ALWAYS SEND FROM THE SERVER ACCOUNT, because other accounts won't have the correct keys.
         send_from = InternalConfig().server_id
@@ -361,7 +362,7 @@ async def send_transfer_custom_json(
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
     except Exception as e:
         logger.exception(
-            f"Error sending custom_json transfer: {e}",
-            extra={"notification": False, **transfer.log_extra},
+            f"Error sending custom_json transfer: {e} {transfer.log_str}",
+            extra={"notification": False, "id": id, **transfer.log_extra},
         )
         return {}
