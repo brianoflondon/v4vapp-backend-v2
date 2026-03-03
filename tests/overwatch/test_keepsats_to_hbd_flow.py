@@ -15,10 +15,8 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.process.overwatch_flows import KEEPSATS_TO_HBD_FLOW
 from v4vapp_backend_v2.process.process_overwatch import (
-    FlowDefinition,
     FlowEvent,
     FlowInstance,
-    FlowStage,
     FlowStatus,
     Overwatch,
 )
@@ -252,15 +250,11 @@ class TestKeepsatsToHbdDefinition:
         assert groups == expected_groups
 
     def test_primary_group_has_10_stages(self):
-        primary_stages = [
-            s for s in KEEPSATS_TO_HBD_FLOW.stages if s.group == "primary"
-        ]
+        primary_stages = [s for s in KEEPSATS_TO_HBD_FLOW.stages if s.group == "primary"]
         assert len(primary_stages) == 10
 
     def test_ledger_types_in_definition(self):
-        ledger_stages = [
-            s for s in KEEPSATS_TO_HBD_FLOW.stages if s.event_type == "ledger"
-        ]
+        ledger_stages = [s for s in KEEPSATS_TO_HBD_FLOW.stages if s.event_type == "ledger"]
         expected_types = {
             LedgerType.CONTRA_KEEPSATS_TO_HIVE,
             LedgerType.CUSTOM_JSON_FEE_REFUND,
@@ -287,17 +281,13 @@ class TestKeepsatsToHbdDefinition:
 class TestKeepsatsToHbdDeserialization:
     """Verify the extracted test data can be deserialized into proper LedgerEntry objects."""
 
-    def test_primary_entries_deserialize(
-        self, ks_primary_ledger_entries: dict[str, LedgerEntry]
-    ):
+    def test_primary_entries_deserialize(self, ks_primary_ledger_entries: dict[str, LedgerEntry]):
         assert len(ks_primary_ledger_entries) == 9
         for key, le in ks_primary_ledger_entries.items():
             assert isinstance(le, LedgerEntry)
             assert le.short_id == "3991_317497_1"
 
-    def test_primary_entry_types(
-        self, ks_primary_ledger_entries: dict[str, LedgerEntry]
-    ):
+    def test_primary_entry_types(self, ks_primary_ledger_entries: dict[str, LedgerEntry]):
         expected_types = {
             "k_contra_h": LedgerType.CONTRA_KEEPSATS_TO_HIVE,
             "c_j_fee_r": LedgerType.CUSTOM_JSON_FEE_REFUND,
@@ -363,9 +353,7 @@ class TestKeepsatsToHbdComplete:
     ):
         for event in ks_all_flow_events:
             ks_flow_instance.add_event(event)
-        assert ks_flow_instance.matched_stage_names == set(
-            KEEPSATS_TO_HBD_FLOW.stage_names
-        )
+        assert ks_flow_instance.matched_stage_names == set(KEEPSATS_TO_HBD_FLOW.stage_names)
 
     def test_progress_shows_all_done(
         self,
@@ -672,16 +660,10 @@ class TestKeepsatsToHbdOverwatch:
         ow = Overwatch()
         # Add one event so the flow is IN_PROGRESS
         ks_flow_instance.add_event(
-            FlowEvent.from_ledger_entry(
-                ks_primary_ledger_entries["k_contra_h"]
-            )
+            FlowEvent.from_ledger_entry(ks_primary_ledger_entries["k_contra_h"])
         )
         ow.flow_instances.append(ks_flow_instance)
-        far_future = (
-            ks_flow_instance.started_at
-            + Overwatch.stall_timeout
-            + timedelta(seconds=1)
-        )
+        far_future = ks_flow_instance.started_at + Overwatch.stall_timeout + timedelta(seconds=1)
         stalled = await ow.check_stalls(now=far_future)
         assert len(stalled) == 1
         assert ks_flow_instance.status == FlowStatus.STALLED
