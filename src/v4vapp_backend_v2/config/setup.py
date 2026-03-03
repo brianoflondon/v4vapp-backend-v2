@@ -396,7 +396,10 @@ class HiveAccountConfig(BaseConfig):
     hbd_balance: str = ""  # HBD balance of the account
     hive_balance: str = ""  # HIVE balance of the account
     hbd_trade_direction: HiveTradeDirection = HiveTradeDirection.both
-    threshold_delta: str = ""  # Threshold value to trigger buy/sell action based on HBD balance
+    # threshold_delta: str = ""  # Threshold value to trigger buy/sell action based on HBD balance
+    # exchange_name: str = ""  # Which exchange to auto-send to
+    # exchange_memo: str = ""  # Memo to use when auto-sending to exchange
+
 
     @property
     def keys(self) -> List[str]:

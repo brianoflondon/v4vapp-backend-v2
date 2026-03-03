@@ -82,7 +82,9 @@ async def stream_ops_async(
         - Logging is used to provide information about the streaming process and errors.
 
     """
-    use_threading = True
+    use_threading = False
+    max_batch_size: int | None = 180
+    
     good_nodes = get_good_nodes()
     hive = get_hive_client() if hive is None else hive
     hive.set_default_nodes(good_nodes)
@@ -129,6 +131,7 @@ async def stream_ops_async(
                     stop=stop_block,
                     only_virtual_ops=only_virtual_ops,
                     opNames=opNames,
+                    max_batch_size=max_batch_size,
                     threading=use_threading,
                 )
             )
@@ -174,6 +177,7 @@ async def stream_ops_async(
                             stop=last_block - 1,
                             raw_ops=False,
                             only_virtual_ops=True,
+                            max_batch_size=max_batch_size,
                             # Very subtle problem with op_in_trx counter if we filter for opNames here.
                             # opNames=opNames,      # we must filter them after updating op_in_trx counter
                             threading=use_threading,
@@ -257,6 +261,7 @@ async def stream_ops_async(
                 )
                 break
             else:
+                max_batch_size = None
                 logger.info(
                     f"{ICON} {start_block:,} Stream restarting from {last_block=:,} {rpc_url}"
                 )
