@@ -377,6 +377,12 @@ class HiveTradeDirection(StrEnum):
     none = "none"
 
 
+class HiveAutoRebalanceConfig(BaseConfig):
+    enabled: bool = False
+    target_hive_acc: str = ""  # Which exchange to send excess Hive
+    memo: str = ""  # Memo to use when sending excess Hive
+
+
 class HiveAccountConfig(BaseConfig):
     """
     HiveAccountConfig is a configuration class for Hive account settings.
@@ -396,10 +402,8 @@ class HiveAccountConfig(BaseConfig):
     hbd_balance: str = ""  # HBD balance of the account
     hive_balance: str = ""  # HIVE balance of the account
     hbd_trade_direction: HiveTradeDirection = HiveTradeDirection.both
-    # threshold_delta: str = ""  # Threshold value to trigger buy/sell action based on HBD balance
-    # exchange_name: str = ""  # Which exchange to auto-send to
-    # exchange_memo: str = ""  # Memo to use when auto-sending to exchange
-
+    threshold_delta: str = ""  # When to trigger buy/sell action based on HBD balance
+    auto_rebalance: HiveAutoRebalanceConfig = HiveAutoRebalanceConfig()
 
     @property
     def keys(self) -> List[str]:
