@@ -230,6 +230,11 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
             # remove the first node from the list
             kwargs["node"] = kwargs["node"][1:]
             errors += 1
+
+        except ValueError as e:
+            logger.warning(f"Bad keys passed to Hive client: {e}", extra={"notification": True})
+            raise HiveMissingKeyError(f"Bad keys passed to Hive client: {e}", extra={"notification": True})
+
         except Exception as e:
             logger.warning(
                 f"Node {kwargs['node'][0]} not working {e} error: {errors}",
@@ -398,7 +403,9 @@ async def get_verified_hive_client_for_accounts(
     hive_config = InternalConfig().config.hive
     hive_accounts = []
     keys = []
-    accounts = list(set(accounts + [InternalConfig().server_id]))  # Ensure server account is included and remove duplicates
+    accounts = list(
+        set(accounts + [InternalConfig().server_id])
+    )  # Ensure server account is included and remove duplicates
     for account in accounts:
         if hive_config.hive_accs.get(account):
             hive_account = hive_config.hive_accs[account]
@@ -977,6 +984,9 @@ async def send_transfer(
             the network. Defaults to False.
         is_private (bool, optional): If True, the memo will be encrypted (prefixed with '#').
             Defaults to False.
+        store_pending (PendingTransaction, optional): An existing PendingTransaction instance to update.
+            If not provided, a new PendingTransaction will be created and saved before sending.
+            Defaults to None.
 
     Returns:
         Dict[str, str]: The transaction result dictionary, including transaction ID and

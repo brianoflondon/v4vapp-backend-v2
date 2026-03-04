@@ -12,6 +12,7 @@ from typing import Annotated, Any, Dict, List, Tuple
 
 import typer
 from colorama import Fore, Style
+from nectar.account import Account
 from nectar.amount import Amount
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
@@ -31,7 +32,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
     seconds_only,
 )
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import get_hive_client, send_transfer
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
@@ -198,28 +199,65 @@ async def db_store_op(
         return None
 
 
-# async def balance_server_hive_level() -> None:
-#     """
-#     This function is a placeholder for balancing the Hive level of the server account.
-#     It currently does not contain any implementation and serves as a template for future
-#     development.
+async def balance_server_hive_level() -> None:
+    """
+    This function is a placeholder for balancing the Hive level of the server account.
+    It currently does not contain any implementation and serves as a template for future
+    development.
 
-#     Returns:
-#         None: The function does not return any value.
-#     """
-#     # Placeholder for future implementation of balancing Hive level
-#     server_account = InternalConfig().config.hive.server_account
-#     if not server_account:
-#         return
+    Returns:
+        None: The function does not return any value.
+    """
+    # Placeholder for future implementation of balancing Hive level
+    server_account = InternalConfig().config.hive.server_account
+    if not server_account:
+        return
 
-#     if not server_account.auto_rebalance.enabled:
-#         return
+    if not server_account.auto_rebalance.enabled:
+        return
 
-#     logger.info(f"{ICON} Waiting for 30 seconds to re-balance HBD level")
-#     await asyncio.sleep(30)  # Sleeps to make sure we only balance HBD after time for a return
+    if not server_account.active_key:
+        logger.warning(
+            f"{ICON} Server account {server_account.name} does not have an active key set. Cannot auto-rebalance Hive level.",
+            extra={"notification": False},
+        )
+        return
 
-#     current_target_hive_balance = Amount(server_account.hive_balance)
-#     current_hive_balance =
+    logger.info(f"{ICON} Waiting for 30 seconds to re-balance HIVE level")
+    await asyncio.sleep(30)  # Sleeps to make sure we only balance HIVE after time for a return
+    try:
+        current_target_hive_balance = Amount(server_account.hive_balance)
+        nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
+        hive = get_hive_client(keys=server_account.keys, nobroadcast=nobroadcast)
+        account = Account(server_account.name, hive_instance=hive)
+        balance: Dict[str, Amount] = {}
+        balance["HIVE"] = account.available_balances[0]
+        balance["HBD"] = account.available_balances[1]
+        delta = balance["HIVE"] - current_target_hive_balance
+        if delta > Amount("20.000 HIVE"):
+            logger.info(
+                f"{ICON} Balancing Hive level for account {server_account.name} by {delta}",
+                extra={"notification": False},
+            )
+            trx = await send_transfer(
+                to_account=server_account.auto_rebalance.target_hive_acc,
+                amount=delta,
+                from_account=server_account.name,
+                memo=server_account.auto_rebalance.memo,
+                hive_client=hive,
+                nobroadcast=nobroadcast,
+            )
+            trx_id = trx.get("trx_id", None)
+            if trx_id:
+                logger.info(
+                    f"{ICON} Hive server rebalance transaction broadcast: {trx_id}",
+                    extra={"trx": trx},
+                )
+    except Exception as e:
+        logger.exception(
+            f"{ICON} Error in {__name__}: {e}",
+            extra={"notification": False, "error": e},
+        )
 
 
 async def balance_server_hbd_level(transfer: Transfer | None = None) -> None:
@@ -585,6 +623,7 @@ async def all_ops_loop(
                                     f"Rebalance triggered by transfer {op.from_account} to {op.to_account} {op.amount}"
                                 )
                                 asyncio.create_task(balance_server_hbd_level(op))
+                                asyncio.create_task(balance_server_hive_level())
                         log_it = True
                         db_store = True
                         notification = True

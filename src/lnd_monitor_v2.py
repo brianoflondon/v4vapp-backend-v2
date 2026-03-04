@@ -1057,14 +1057,20 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                     filter=query,
                 )
                 # The invoice_description "Not set" is used in pub_key_alias.py if there is no description.
-                if (
-                    read_payment
-                    and read_payment.get("route_str", None)
-                    and read_payment.get("invoice_description", None)
-                    and not read_payment.get("route_str") == "Unknown"
-                    and not read_payment.get("invoice_description") == "Not set"
-                ):
+                # look for existing data so we can skip further processing
+                route_str = read_payment.get("route_str", None) if read_payment else None
+                invoice_description = (
+                    read_payment.get("invoice_description", None) if read_payment else None
+                )
+                status = read_payment.get("status", None) if read_payment else None
+                # if we already have a meaningful route or description, nothing to do
+                if (read_payment and route_str and invoice_description):
                     continue
+                if read_payment and route_str and (not invoice_description or invoice_description == "Not set"):
+                    continue
+                logger.info(
+                    f"Updating payment {payment.payment_index} {route_str} {invoice_description} {payment.payment_hash} {status}"
+                )
                 await update_payment_route_with_alias(
                     lnd_client=lnd_client,
                     payment=payment,
