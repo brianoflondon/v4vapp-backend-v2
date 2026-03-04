@@ -425,6 +425,69 @@ def test_quote_response_parses_iso_string_fetch_date():
     assert q.age_p >= 0
 
 
+@pytest.mark.asyncio
+async def test_get_all_quotes_global_timeout(mocker):
+    """If the overall timeout is exceeded the method should still return a
+    quote entry for every configured service with a helpful error message.
+    """
+
+    # make every service slow so the outer timeout is triggered
+    async def slow_quote(self, use_cache=True):
+        await asyncio.sleep(0.1)
+        return QuoteResponse(source="slow")
+
+    mocker.patch.object(CoinGecko, "get_quote", new=slow_quote)
+    mocker.patch.object(Binance, "get_quote", new=slow_quote)
+    mocker.patch.object(CoinMarketCap, "get_quote", new=slow_quote)
+    mocker.patch.object(HiveInternalMarket, "get_quote", new=slow_quote)
+
+    all_quotes = AllQuotes()
+    # use a very small timeout so we hit the boundary quickly
+    await all_quotes.get_all_quotes(timeout=0.01, store_db=False)
+
+    # we expect every service to have a timeout-style error rather than an
+    # empty string (previous bug produced empty messages)
+    for svc, quote in all_quotes.quotes.items():
+        assert quote.error, f"{svc} did not have an error"
+        assert "timeout" in quote.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_per_service_timeout(mocker):
+    """Individual services should time out independently and return a
+    "Service timeout" message without waiting for the global timeout.
+    """
+
+    # only CoinGecko will be slow; the rest can return a normal dummy quote
+    # to exercise the per-service timeout we give a very long sleep while using
+    # a global timeout that is bigger than the per-service limit (15s).  The
+    # constant PER_SERVICE_TIMEOUT in the implementation is min(timeout, 15),
+    # so calling with timeout=20 yields a 15s limit.
+    async def slow_quote(self, use_cache=True):
+        await asyncio.sleep(20.0)
+        return QuoteResponse(source="slow")
+
+    mocker.patch.object(CoinGecko, "get_quote", new=slow_quote)
+
+    # patch the other services with fast no-op responses so taskgroup runs
+    async def fast_quote(self, use_cache=True):
+        return QuoteResponse(source="fast")
+
+    mocker.patch.object(Binance, "get_quote", new=fast_quote)
+    mocker.patch.object(CoinMarketCap, "get_quote", new=fast_quote)
+    mocker.patch.object(HiveInternalMarket, "get_quote", new=fast_quote)
+
+    all_quotes = AllQuotes()
+    # global timeout large enough that the outer block does not fire before
+    # the per-service limit; per-service cutoff is 15 seconds in our code
+    await all_quotes.get_all_quotes(timeout=20, store_db=False)
+
+    assert "service timeout" in all_quotes.quotes["CoinGecko"].error.lower()
+    # the other providers should have succeeded
+    for svc in ("Binance", "CoinMarketCap", "HiveInternalMarket"):
+        assert not all_quotes.quotes[svc].error
+
+
 async def fetch_all_quote_json_files():
     """
     Fetches all quote data and writes them to JSON files.

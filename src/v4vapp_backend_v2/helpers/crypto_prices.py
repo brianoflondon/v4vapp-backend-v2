@@ -548,33 +548,55 @@ class AllQuotes(BaseModel):
         ]
         self.fetch_date = datetime.now(tz=timezone.utc)
         tasks: dict[str, asyncio.Task] = {}
+
+        # per-service timeout smaller than overall; helps avoid a single slow provider
+        PER_SERVICE_TIMEOUT = min(timeout, 15.0)
+
+        async def _fetch_with_limit(service):
+            try:
+                # wrap each service call in its own timeout so we can return a
+                # QuoteResponse error if it takes too long.  This prevents a hung
+                # HiveInternalMarket call (which has no built-in timeout) from
+                # lasting the entire global timeout period.
+                return await asyncio.wait_for(service.get_quote(use_cache), PER_SERVICE_TIMEOUT)
+            except asyncio.TimeoutError:
+                return QuoteResponse(
+                    source=service.__class__.__name__,
+                    fetch_date=datetime.now(tz=timezone.utc),
+                    error=f"Service timeout after {PER_SERVICE_TIMEOUT} seconds",
+                )
+
         try:
             async with asyncio.timeout(timeout):
                 logger.debug(f"{ICON} Fetching quotes with timeout of {timeout} seconds")
                 async with asyncio.TaskGroup() as tg:
-                    tasks = {
-                        service.__class__.__name__: tg.create_task(service.get_quote(use_cache))
-                        for service in all_services
-                    }
-
+                    for service in all_services:
+                        name = service.__class__.__name__
+                        tasks[name] = tg.create_task(_fetch_with_limit(service))
         except asyncio.TimeoutError as e:
-            self.quotes = {
-                service.__class__.__name__: QuoteResponse(error=f"Timeout after {timeout} seconds")
-                for service in all_services
-            }
             logger.error(
                 f"{ICON} Quote fetching exceeded timeout of {timeout} seconds",
                 exc_info=True,
                 extra={"timeout": timeout, "error": e},
             )
+            # don't return early; we'll inspect `tasks` below and mark cancelled
 
+        # assemble quote results; handle cancelled tasks separately
         self.quotes = {}
         for service_name, task in tasks.items():
-            try:
-                self.quotes[service_name] = await task
-            except Exception as e:
-                logger.error(f"Error fetching quote from {service_name}: {e}")
-                self.quotes[service_name] = QuoteResponse(error=str(e))
+            if task.cancelled():
+                # outer timeout hit before this service finished
+                self.quotes[service_name] = QuoteResponse(
+                    error=f"Timeout after {timeout} seconds",
+                    source=service_name,
+                    fetch_date=datetime.now(tz=timezone.utc),
+                )
+            else:
+                try:
+                    self.quotes[service_name] = await task
+                except Exception as e:
+                    logger.error(f"Error fetching quote from {service_name}: {e}")
+                    self.quotes[service_name] = QuoteResponse(error=str(e), source=service_name)
 
         log_func(
             f"{ICON} Quotes fetched successfully in {timer() - start:.4f} seconds",

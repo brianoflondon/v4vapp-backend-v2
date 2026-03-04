@@ -28,7 +28,7 @@ ICON = "🔗"
 # ~3 s, but the filtered stream only yields *matching* operations so gaps
 # of several blocks are normal.  30 s (~10 blocks) avoids false restarts
 # while still detecting genuinely dead nodes promptly.
-STREAM_TIMEOUT = 30
+STREAM_TIMEOUT = 15
 
 
 class SwitchToLiveStream(Exception):
@@ -84,7 +84,7 @@ async def stream_ops_async(
     """
     use_threading = False
     max_batch_size: int | None = 180
-    
+
     good_nodes = get_good_nodes()
     hive = get_hive_client() if hive is None else hive
     hive.set_default_nodes(good_nodes)
