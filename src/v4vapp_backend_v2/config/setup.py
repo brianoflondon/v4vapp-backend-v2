@@ -461,6 +461,7 @@ class HiveConfig(BaseConfig):
             )
         filter_duplicates = set(self.custom_json_ids_tracked)
         self.custom_json_ids_tracked = list(filter_duplicates)
+        # TODO: #306 We can check that the auto_rebalance account (if set) is an exchange account
 
     def witness_key_to_machine_name(self, witness_name: str, signing_key: str) -> str:
         """

@@ -230,6 +230,11 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
             # remove the first node from the list
             kwargs["node"] = kwargs["node"][1:]
             errors += 1
+
+        except ValueError as e:
+            logger.warning(f"Bad keys passed to Hive client: {e}", extra={"notification": True})
+            raise HiveMissingKeyError(f"Bad keys passed to Hive client: {e}", extra={"notification": True})
+
         except Exception as e:
             logger.warning(
                 f"Node {kwargs['node'][0]} not working {e} error: {errors}",
