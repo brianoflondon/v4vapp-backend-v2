@@ -135,7 +135,7 @@ class LimitOrderCreate(OpBase):
     def get_hive_open_orders(cls) -> Union[List[Order], List[Dict[str, Any]], None]:
         """Get the list of open orders for the server account from Hive."""
         m = Market("HIVE:HBD")
-        open_orders = m.accountopenorders(account=InternalConfig().server_id, raw_data=False)
+        open_orders = m.accountopenorders(account=InternalConfig().server_id)
         return open_orders
 
     @classmethod
