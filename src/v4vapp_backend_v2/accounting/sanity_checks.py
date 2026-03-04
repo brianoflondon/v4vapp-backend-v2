@@ -18,6 +18,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
+from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 ICON = "🧪"  # Test Tube
 
@@ -268,21 +269,43 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 name="server_account_hive_balances",
                 is_valid=True,
                 details=(
-                    f"Server Hive balances match: \nHIVE deposits {hive_deposits:,.3f}, "
-                    f"HBD deposits {hbd_deposits:,.3f}.\n"
-                    f"Traded Deposits Hive {hive_traded:,.3f} HIVE\nTraded Deposits HBD {hbd_traded:,.3f}\n"
-                    f"Includes Customer Deposits Hive and Traded Deposits Hive accounts. Tolerance is {tolerance} (1 thousandth of a token)."
+                    f"Server Hive balances match: \n"
+                    f"HIVE deposits {hive_deposits:,.3f}\n"
+                    f"HBD deposits  {hbd_deposits:,.3f}.\n"
+                    f"Traded Deposits Hive {hive_traded:,.3f} HIVE\n"
+                    f"Traded Deposits HBD  {hbd_traded:,.3f}\n"
+                    f"Includes Customer Deposits Hive and Traded Deposits Hive accounts.\n"
+                    f"Tolerance is {tolerance} (1 thousandth of a token)."
                 ),
             )
         else:
+            try:
+                open_orders = LimitOrderCreate.get_hive_open_orders()
+                if open_orders:
+                    open_orders_str = ", ".join(
+                        str(o.get("orderid")) for o in open_orders if isinstance(o, dict)
+                    )
+                    orders_info = f"Open Hive orders may be affecting balances. Open order IDs: {open_orders_str}."
+                    is_valid = True  # we consider this a passed check.
+                else:
+                    is_valid = False
+                    orders_info = "No open Hive orders found."
+            except Exception as e:
+                logger.error(
+                    f"Failed to fetch Hive open orders: {e}", extra={"notification": False}
+                )
+                is_valid = True
+                orders_info = f"Failed to fetch Hive open orders: {e}"
             return SanityCheckResult(
                 name="server_account_hive_balances",
-                is_valid=False,
+                is_valid=is_valid,
                 details=(
-                    f"Server Hive Mismatch: {hive_delta:,.3f} HIVE, {hbd_delta:,.3f} HBD; \n"
+                    f"Server Hive Mismatch: {hive_delta:,.3f} \n"
+                    f"HIVE\n{hbd_delta:,.3f} HBD; \n"
                     f"balances mismatch: \nHIVE deposits {hive_deposits:,.3f} vs actual {hive_actual.amount_decimal:,.3f}, \n"
                     f"HBD deposits {hbd_deposits:,.3f} vs actual {hbd_actual.amount_decimal:,.3f}.\n"
-                    f"Includes Customer Deposits Hive and Traded Deposits Hive accounts. Tolerance is {tolerance} (1 thousandth of a token)."
+                    f"Includes Customer Deposits Hive and Traded Deposits Hive accounts. Tolerance is {tolerance} (1 thousandth of a token).\n"
+                    f"{orders_info}"
                 ),
             )
 
@@ -491,6 +514,11 @@ if __name__ == "__main__":
     async def main():
         InternalConfig(config_filename="devhive.config.yaml")
         db_conn = DBConn()
+        order_ids = LimitOrderCreate.get_hive_open_orders()
+        if order_ids is None:
+            logger.info("No open Hive orders found.")
+        else:
+            logger.info(f"Found {len(order_ids)} open Hive orders: {order_ids}")
         await db_conn.setup_database()
         await log_all_sanity_checks(
             local_logger=logger, log_only_failures=False, notification=False

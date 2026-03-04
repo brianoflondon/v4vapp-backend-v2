@@ -1,8 +1,9 @@
 import json
 from datetime import datetime, timezone
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Union
 
 from nectar.market import Market
+from nectar.price import Order
 from pydantic import ConfigDict, Field
 from redis import Redis
 
@@ -119,17 +120,23 @@ class LimitOrderCreate(OpBase):
         if not all_open_orders:
             return []
 
-        m = Market("HIVE:HBD")
-        open_orders = m.accountopenorders(account=InternalConfig().server_id)
+        open_orders = cls.get_hive_open_orders()
         if not open_orders:
             # nothing returned (error or empty list) – nothing to delete
             return []
 
-        hive_live_order_ids = {o["orderid"] for o in open_orders}
+        hive_live_order_ids = {o.get("orderid") for o in open_orders if isinstance(o, dict)}
         for orderid in list(all_open_orders.keys()):
             if orderid not in hive_live_order_ids:
                 cls.remove_open_order(orderid)
         return list(hive_live_order_ids)
+
+    @classmethod
+    def get_hive_open_orders(cls) -> Union[List[Order], List[Dict[str, Any]], None]:
+        """Get the list of open orders for the server account from Hive."""
+        m = Market("HIVE:HBD")
+        open_orders = m.accountopenorders(account=InternalConfig().server_id, raw_data=False)
+        return open_orders
 
     @classmethod
     def get_all_open_orders(cls) -> Dict[int, "LimitOrderCreate"]:

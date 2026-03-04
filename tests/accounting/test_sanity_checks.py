@@ -229,9 +229,16 @@ async def test_server_account_hive_balances_formatting_handles_amount(module_mon
             "HBD": Amount(f"{hbd_deposits + Decimal('1.0')} HBD"),
         }
 
+    def no_open_orders():
+        return []
+
     module_monkeypatch.setattr(
         "v4vapp_backend_v2.accounting.sanity_checks.account_hive_balances",
         fake_account_hive_balances,
+    )
+    module_monkeypatch.setattr(
+        "v4vapp_backend_v2.accounting.sanity_checks.LimitOrderCreate.get_hive_open_orders",
+        no_open_orders,
     )
 
     result = await server_account_hive_balances(InProgressResults([]))
