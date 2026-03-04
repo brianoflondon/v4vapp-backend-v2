@@ -68,7 +68,7 @@ app = typer.Typer()
 ICON = "🐝"
 
 NOTIFICATION_QUITE_MODE = (
-    True  # Set to True to disable notifications if db_monitor will provide these
+    False  # Set to True to disable notifications if db_monitor will provide these
 )
 
 # os.environ["http_proxy"] = "http://home-imac.tail400e5.ts.net:8888"
@@ -127,8 +127,10 @@ async def health_check() -> Dict[str, Any]:
 
     exceptions = []
     check_for_tasks = ["all_ops_loop", "store_rates"]
+
     if not startup_complete_event.is_set():
         logger.warning(f"{ICON} Startup not complete", extra={"notification": False})
+
     for task in check_for_tasks:
         if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
             exceptions.append(f"{task} task is not running")
@@ -136,20 +138,17 @@ async def health_check() -> Dict[str, Any]:
                 f"{ICON} {task} task is not running",
                 extra={"notification": True, "error_code": "hive_monitor_task_failure"},
             )
-            # Exit the code to allow docker to restart the container
-            sys.exit(1)
 
     STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
+
     if exceptions:
         logger.error(
             f"{ICON} Health check failed: {', '.join(exceptions)}",
-            extra={
-                "notification": True,
-                "error_code": "hive_monitor_task_failure",
-            },
+            extra={"notification": True, "error_code": "hive_monitor_task_failure"},
         )
-        sys.exit(1)
+        # raise rather than exit; StatusAPI will return 500
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
+
     logger.debug(
         f"{ICON} Hive Monitor Health check passed",
         extra={"notification": False, "error_code_clear": "hive_monitor_task_failure"},
