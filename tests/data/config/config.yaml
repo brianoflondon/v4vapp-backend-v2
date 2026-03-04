@@ -1,5 +1,5 @@
 ########### TEST CONFIG NO SECRETS #################
-version: "0.4.1"
+version: "0.4.2"
 
 logging:
   log_config_file: 2-stderr-json-file.json
@@ -221,13 +221,22 @@ api_keys:
 
 hive:
   hive_accs:
-    devser.v4vapp:
-      role: server
     someaccount:
       role: server
-      posting_key: somepostingkey
-      active_key: someactive
-      memo_key: somememo
+      # FAKE KEYS FOR TESTING PURPOSES
+      posting_key: 5K12WhRLsbQhg1VYKoXrCsceTTBBGPRHuzmiNYfvvA5e2UpY6aK
+      active_key: 5JWDvzHSk6EwvczdpPcgdsxDHqjWC1wCbqCT4iB9KmCRHkxLmWe
+      memo_key: 5JeWnurwXNF6tgqkxe6EsW2h9ovu5MBJGn3rBxCDcAvmzJfSXCx
+      hive_balance: "100 HIVE"
+      hbd_balance: "50 HBD"
+      hbd_trade_direction: both
+      threshold_delta: "0.500 HBD"
+      auto_rebalance:
+        enabled: true
+        memo: "100116033 rebalancing testing"
+        target_hive_acc: fiction
+    devser.v4vapp:
+      role: server
     devtre.v4vapp:
       role: treasury
     v4vapp.dhf:
@@ -235,6 +244,7 @@ hive:
     fiction:
       role: exchange
     brianoflondon:
+      active_key: 5K5xuVxQs7jxp75yY6vsvHxdoyV5y2w8A5Lt6XQBG2yqFbWpALx
       role: witness
   proposals_tracked:
     - 342
