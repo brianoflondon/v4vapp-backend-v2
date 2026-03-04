@@ -1066,7 +1066,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 # if we already have a meaningful route or description, nothing to do
                 if (read_payment and route_str and invoice_description):
                     continue
-                if route_str and (not invoice_description or invoice_description == "Not set"):
+                if read_payment and route_str and (not invoice_description or invoice_description == "Not set"):
                     continue
                 logger.info(
                     f"Updating payment {payment.payment_index} {route_str} {invoice_description} {payment.payment_hash} {status}"
