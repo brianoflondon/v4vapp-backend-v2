@@ -219,7 +219,9 @@ class TestTemplateRendering:
         # multi-line details simulate title + body
         details_text = "Title Line\nrest of message"
         template_env.globals["sanity_results"] = type(
-            "S", (), {"failed": [], "results": [("check_one", SimpleNamespace(details=details_text))]}
+            "S",
+            (),
+            {"failed": [], "results": [("check_one", SimpleNamespace(details=details_text))]},
         )()
         template = template_env.get_template("base.html")
         rendered = template.render()

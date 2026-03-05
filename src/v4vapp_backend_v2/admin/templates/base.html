@@ -63,9 +63,9 @@
                             {% for name, result in sanity_results.results %}
                             <div class="mb-1">
                                 {# treat the first line of details as a title; bold it and
-                                   then render the remainder as preformatted text. solely
-                                   splitting once avoids injecting Jinja logic into the
-                                   config model. #}
+                                then render the remainder as preformatted text. solely
+                                splitting once avoids injecting Jinja logic into the
+                                config model. #}
                                 {% set parts = result.details.split('\n', 1) %}
                                 <strong>{{ parts[0] }}</strong>
                                 {% if parts|length > 1 %}
