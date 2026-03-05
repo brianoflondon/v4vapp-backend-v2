@@ -28,11 +28,7 @@
             /* keep the Jinja expression on one line so formatters don’t
            split the braces and break template parsing */
             /* prettier-ignore */
-            background: linear-gradient(180deg, {
-                    {
-                    sidebar_color
-                }
-            }) !important;
+            background: linear-gradient(180deg, {{ sidebar_color }} ) !important;
         }
     </style>
     <!-- prettier-ignore-end -->
