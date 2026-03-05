@@ -52,6 +52,9 @@ class TestTemplateCompilation:
             import re
 
             assert re.search(r"\{\s*\{\s*sidebar_color\s*\}\s*\}", content)
+            # our new sidebar sanity box should be mentioned (text only, styling
+            # is verified by rendering tests)
+            assert "Sanity Checks" in content
 
     def test_users_template_compilation(self, template_env):
         """Test users template compiles without errors"""
@@ -145,10 +148,11 @@ class TestTemplateRendering:
         env.globals["request"] = MockRequest()
 
         # Provide an empty sanity_results object so base.html rendering
-        # doesn't blow up when the test exercises it directly.
+        # doesn't blow up when the test exercises it directly.  We now also
+        # iterate over `results` in the sidebar so include that attribute too.
         from types import SimpleNamespace
 
-        env.globals["sanity_results"] = SimpleNamespace(failed=[])
+        env.globals["sanity_results"] = SimpleNamespace(failed=[], results=[])
 
         return env
 
@@ -173,7 +177,7 @@ class TestTemplateRendering:
         template_env.globals["favicon_path"] = "/admin/static/favicon/test.ico"
         template_env.globals["favicon_manifest"] = "/admin/static/favicon/test.webmanifest"
         # sanity_results was already added by the fixture but we can override
-        template_env.globals["sanity_results"] = type("S", (), {"failed": []})()
+        template_env.globals["sanity_results"] = type("S", (), {"failed": [], "results": []})()
         template = template_env.get_template("base.html")
         rendered = template.render()
         # the override style should include the colour we passed; don't
@@ -205,6 +209,28 @@ class TestTemplateRendering:
         rendered = template.render()
         assert "/admin/static/favicon/foo.ico" in rendered
         assert "/admin/static/favicon/foo.webmanifest" in rendered
+
+    def test_sidebar_sanity_overview(self, template_env):
+        """Ensure sidebar splits details and bolds first line, hiding raw name."""
+        from types import SimpleNamespace
+
+        template_env.globals["favicon_path"] = "/admin/static/favicon/test.ico"
+        template_env.globals["favicon_manifest"] = "/admin/static/favicon/test.webmanifest"
+        # multi-line details simulate title + body
+        details_text = "Title Line\nrest of message"
+        template_env.globals["sanity_results"] = type(
+            "S", (), {"failed": [], "results": [("check_one", SimpleNamespace(details=details_text))]}
+        )()
+        template = template_env.get_template("base.html")
+        rendered = template.render()
+        # first line appears bolded
+        assert "<strong>Title Line</strong>" in rendered
+        # rest of message in pre block
+        assert "rest of message" in rendered
+        assert "<pre" in rendered
+        assert "Sanity Checks" in rendered
+        # the underscored identifier should not appear anywhere
+        assert "check_one" not in rendered
 
     def test_users_template_with_errors(self, template_env):
         """Test users template handles error states"""

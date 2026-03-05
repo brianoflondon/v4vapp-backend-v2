@@ -24,12 +24,17 @@
     <style>
         /* the global `sidebar_color` is injected by AdminApp */
         .sidebar {
-        /* keep the Jinja expression on one line so formatters don’t
+
+            /* keep the Jinja expression on one line so formatters don’t
            split the braces and break template parsing */
-        /* prettier-ignore */
-        background: linear-gradient(180deg, {{ sidebar_color }}) !important;
-    }
-</style>
+            /* prettier-ignore */
+            background: linear-gradient(180deg, {
+                    {
+                    sidebar_color
+                }
+            }) !important;
+        }
+    </style>
     <!-- prettier-ignore-end -->
 
     {% block extra_css %}{% endblock %}
@@ -45,6 +50,32 @@
                         <h4 class="text-white">🏠 V4VApp Admin</h4>
                         <small class="text-white-50">Backend Administration</small>
                     </div>
+
+                    {# quick sanity overview shown under the heading; uses `results` since
+                    that holds both passed and failed checks. we wrap in a fixed
+                    height box so the sidebar doesn't grow unbounded when a lot
+                    of checks are added in the future. #}
+                    {% if sanity_results and sanity_results.results %}
+                    <div class="px-3 mb-4">
+                        <h6 class="text-white">Sanity Checks</h6>
+                        <div class="bg-white text-dark p-2 rounded"
+                            style="font-size:0.75rem; max-height:200px; overflow-y:auto;">
+                            {% for name, result in sanity_results.results %}
+                            <div class="mb-1">
+                                {# treat the first line of details as a title; bold it and
+                                   then render the remainder as preformatted text. solely
+                                   splitting once avoids injecting Jinja logic into the
+                                   config model. #}
+                                {% set parts = result.details.split('\n', 1) %}
+                                <strong>{{ parts[0] }}</strong>
+                                {% if parts|length > 1 %}
+                                <pre class="mb-0" style="white-space:pre-wrap;">{{ parts[1] }}</pre>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
 
                     <ul class="nav flex-column px-3">
                         {% for item in nav_items %}

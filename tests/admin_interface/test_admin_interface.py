@@ -144,6 +144,11 @@ class TestAdminEndpoints:
 
         # new flush ledger cache button should appear in sidebar
         assert "Flush Ledger Cache" in content
+        # sanity check summary should be visible even if empty (header text)
+        assert "Sanity Checks" in content
+        # the sanity checks subsystem may or may not return individual entries
+        # depending on how the test config is set up; we simply verify the
+        # summary header exists above.
 
     def test_users_page(self, admin_client):
         """Test users page loads and displays data"""
