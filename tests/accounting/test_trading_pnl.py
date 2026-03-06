@@ -3,7 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from v4vapp_backend_v2.accounting.trading_pnl import trading_pnl_printout
+from v4vapp_backend_v2.accounting.trading_pnl import (
+    generate_trading_pnl_report,
+    trading_pnl_printout,
+)
 
 SAMPLE = (
     Path(__file__).parent.parent / "data" / "trading_peformance" / "exchange_holdings_sample.json"
@@ -69,22 +72,69 @@ def _compute_from_sample_balance(balance_json: dict):
     }
 
 
-def test_sample_trading_pnl_matches_expected():
+@pytest.mark.asyncio
+async def test_sample_trading_pnl_matches_expected(monkeypatch):
     if not SAMPLE.exists():
         pytest.skip("sample trading data not available")
     data = json.loads(SAMPLE.read_text())
-    r = _compute_from_sample_balance(data)
 
-    # Validate counts and cashflow roughly match values from the example
-    assert r["summary"]["sells"] == 13
-    assert r["summary"]["buys"] == 7
-    assert pytest.approx(r["summary"]["hive_sold"], rel=1e-6) == 6728.44808208
-    assert pytest.approx(r["summary"]["hive_bought"], rel=1e-6) == 4212.967482325001
-    assert pytest.approx(r["summary"]["sats_received"], rel=1e-6) == 687165.0989293022
-    assert pytest.approx(r["summary"]["sats_spent"], rel=1e-6) == 428886.0
+    # compute expected results using the helper (absolute amounts, same logic as
+    # we expect in production)
+    expected = _compute_from_sample_balance(data)
 
-    # Final P&L ~ 3081 sats (small rounding differences allowed)
-    assert pytest.approx(r["performance"]["total_trading_pnl_sats"], rel=1e-2) == 3081.0766
+    # fake one_account_balance to return the sample data structure
+    async def fake_one_account_balance(account, as_of_date=None, age=None):
+        # convert the raw dict entries into objects with attribute access to mimic
+        # AccountBalanceLine.  make nested dicts AttrDict too so conv_signed.hive
+        # works.
+        class AttrDict(dict):
+            def __getattr__(self, item):
+                v = self.get(item)
+                if isinstance(v, dict):
+                    return AttrDict(v)
+                return v
+
+        class Dummy:
+            balances = {"hive": [AttrDict(t) for t in data["balances"]["hive"]]}
+
+        return Dummy()
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.accounting.trading_pnl.one_account_balance",
+        fake_one_account_balance,
+    )
+
+    report = await generate_trading_pnl_report(subs=["binance_convert"])
+    subrep = report["by_sub"]["binance_convert"]
+
+    # verify counts and amounts match the manual calculation
+    assert subrep["summary"]["sells"] == expected["summary"]["sells"]
+    assert subrep["summary"]["buys"] == expected["summary"]["buys"]
+    assert (
+        pytest.approx(subrep["summary"]["hive_sold"], rel=1e-6) == expected["summary"]["hive_sold"]
+    )
+    assert (
+        pytest.approx(subrep["summary"]["hive_bought"], rel=1e-6)
+        == expected["summary"]["hive_bought"]
+    )
+    assert (
+        pytest.approx(subrep["summary"]["sats_received"], rel=1e-6)
+        == expected["summary"]["sats_received"]
+    )
+    assert (
+        pytest.approx(subrep["summary"]["sats_spent"], rel=1e-6)
+        == expected["summary"]["sats_spent"]
+    )
+
+    # and verify PnL calculation roughly agrees as well
+    assert (
+        pytest.approx(subrep["performance"]["total_trading_pnl_sats"], rel=1e-2)
+        == expected["performance"]["total_trading_pnl_sats"]
+    )
+
+    # also ensure summary values are non-negative
+    for k in ("hive_sold", "hive_bought", "sats_received", "sats_spent"):
+        assert subrep["summary"][k] >= 0
 
 
 def test_trading_pnl_printout_contains_total():

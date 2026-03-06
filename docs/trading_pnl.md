@@ -58,10 +58,14 @@ comments).  At a high level:
    `ledger_type == LedgerType.EXCHANGE_CONVERSION.value` (`"exc_conv"`).
    These correspond to individual trades performed by the exchange adapter.
 4. Iterate over the filtered entries and for each line:
-   * read the `description` to detect *SELL* vs *BUY*.
+   * read the `description` to detect *SELL* vs *BUY* (the text is
+     upper‑cased before searching).  If the description is empty the code
+     falls back to the sign of the original amount field – a negative hive
+     amount indicates a sale while a positive value is treated as a buy.
    * parse `conv_signed` to obtain `hive` and `sats` amounts.  Absolute values
-     are used because the same trade appears twice (debit/credit) in the
-     combined balance view.
+     are used for aggregation because the combined balance output contains both
+     debit and credit rows for each trade; this also guards against inconsistent
+     sign conventions seen in production data.
    * track running totals of HIVE sold/bought and SATS received/spent.
    * remember the last non-zero price value (`sats_hive`).
 5. After processing all trades, the per-sub performance metrics are computed:

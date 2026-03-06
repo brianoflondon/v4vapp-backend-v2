@@ -5,6 +5,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from fastapi.concurrency import run_in_threadpool
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
+from v4vapp_backend_v2.accounting.trading_pnl import generate_trading_pnl_report
 from v4vapp_backend_v2.accounting.accounting_classes import LedgerAccountDetails
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, log_all_sanity_checks
@@ -26,6 +28,10 @@ class AdminDataHelper:
     hive_balances: dict[str, dict[str, str | float]]
     lnd_info: dict[str, str | int | None]
     server_balance_check: dict[str, str]
+
+    # newly added summary values for dashboard cards
+    profit_loss_usd: float | None
+    trading_pnl_usd: float | None
 
 
 @async_time_stats_decorator(runs=10)
@@ -276,6 +282,27 @@ async def admin_data_helper() -> AdminDataHelper:
             )
             server_balance_check = {"status": "error", "icon": "⚠️"}
 
+    # compute summary values for the two dashboard boxes; failures should be non-fatal
+    profit_loss_usd = None
+    trading_pnl_usd = None
+    try:
+        pl_report = await generate_profit_and_loss_report()
+        # convert Decimal128 to float if necessary
+        from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
+
+        pl_report = convert_decimal128_to_decimal(pl_report)
+        profit_loss_usd = float(pl_report.get("Net Income", {}).get("Total", {}).get("usd", 0))
+    except Exception as e:
+        logger.warning(f"Failed to compute profit & loss for dashboard: {e}", extra={"notification": False})
+
+    try:
+        tp_report = await generate_trading_pnl_report()
+        tp_report = convert_decimal128_to_decimal(tp_report)
+        # use USD if available else sats (could convert later)
+        trading_pnl_usd = float(tp_report.get("totals", {}).get("total_trading_pnl_usd", 0))
+    except Exception as e:
+        logger.warning(f"Failed to compute trading pnl for dashboard: {e}", extra={"notification": False})
+
     return AdminDataHelper(
         node_balances=nb,
         ledger_details=ledger_details,
@@ -284,6 +311,8 @@ async def admin_data_helper() -> AdminDataHelper:
         hive_balances=hive_balances,
         lnd_info=lnd_info,
         server_balance_check=server_balance_check,
+        profit_loss_usd=profit_loss_usd,
+        trading_pnl_usd=trading_pnl_usd,
     )
 
 

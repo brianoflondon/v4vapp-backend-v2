@@ -65,14 +65,19 @@ async def generate_trading_pnl_report(
             desc = (t.description or "").upper()
             # conv_signed holds signed conversion amounts
             conv = getattr(t, "conv_signed", None)
-            hive_amt = (
+            # original signed amounts; may be negative depending on ledger conventions
+            hive_signed = (
                 float(getattr(conv, "hive", 0)) if conv else float(getattr(t, "amount_signed", 0))
             )
-            sats_amt = 0.0
+            sats_signed = 0.0
             if conv and getattr(conv, "sats", None) is not None:
-                sats_amt = float(conv.sats)
+                sats_signed = float(conv.sats)
             elif conv and getattr(conv, "msats", None) is not None:
-                sats_amt = float(conv.msats) / 1000.0
+                sats_signed = float(conv.msats) / 1000.0
+
+            # use absolute magnitudes for aggregation
+            hive_amt = abs(hive_signed)
+            sats_amt = abs(sats_signed)
 
             # Price (sats per hive) if present
             if conv and getattr(conv, "sats_hive", None) is not None:
@@ -97,15 +102,19 @@ async def generate_trading_pnl_report(
                 total_hive_bought += hive_amt
                 total_sats_spent += sats_amt
             else:
-                # Fallback: infer by sign of hive amount (positive on debit rows in sample data)
-                if hive_amt < 0:
-                    buys += 1
-                    total_hive_bought += abs(hive_amt)
-                    total_sats_spent += sats_amt
-                else:
+                # Fallback: infer by sign of hive entry; negative values usually indicate
+                # a hive debit (sell), positive a hive credit (buy), but conventions
+                # have varied.  We use the original signed amount to decide the
+                # direction, then always accumulate positive magnitudes.
+                if hive_signed < 0:
+                    # negative hive means we moved hive out of the account -> sell
                     sells += 1
-                    total_hive_sold += abs(hive_amt)
+                    total_hive_sold += hive_amt
                     total_sats_received += sats_amt
+                else:
+                    buys += 1
+                    total_hive_bought += hive_amt
+                    total_sats_spent += sats_amt
 
         net_hive_change = total_hive_bought - total_hive_sold
         net_sats_cashflow = total_sats_received - total_sats_spent

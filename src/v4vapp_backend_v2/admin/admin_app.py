@@ -244,6 +244,9 @@ class AdminApp:
                         "local_machine_name": InternalConfig().local_machine_name,
                     },
                     "lnd_info": admin_data.lnd_info,
+                    # summary values for dashboard cards
+                    "profit_loss_usd": admin_data.profit_loss_usd,
+                    "trading_pnl_usd": admin_data.trading_pnl_usd,
                     "load_time": timer() - start,
                 },
             )

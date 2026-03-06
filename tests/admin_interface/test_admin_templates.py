@@ -82,6 +82,11 @@ class TestTemplateCompilation:
             assert "LND Balances" in content
             assert "Delta:" in content
             assert "Load Time:" in content
+            # new summary cards should be present
+            assert "Net Income" in content
+            # title is HTML-escaped in the template; allow either form
+            assert "Trading P" in content
+            assert ("Trading P&L" in content) or ("Trading P&amp;L" in content)
 
     def test_template_inheritance(self, template_env):
         """Test template inheritance works correctly"""
