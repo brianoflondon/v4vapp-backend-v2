@@ -5,11 +5,11 @@ from decimal import ROUND_HALF_UP, Decimal
 from fastapi.concurrency import run_in_threadpool
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
-from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
-from v4vapp_backend_v2.accounting.trading_pnl import generate_trading_pnl_report
 from v4vapp_backend_v2.accounting.accounting_classes import LedgerAccountDetails
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, log_all_sanity_checks
+from v4vapp_backend_v2.accounting.trading_pnl import generate_trading_pnl_report
 from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
@@ -293,7 +293,9 @@ async def admin_data_helper() -> AdminDataHelper:
         pl_report = convert_decimal128_to_decimal(pl_report)
         profit_loss_usd = float(pl_report.get("Net Income", {}).get("Total", {}).get("usd", 0))
     except Exception as e:
-        logger.warning(f"Failed to compute profit & loss for dashboard: {e}", extra={"notification": False})
+        logger.warning(
+            f"Failed to compute profit & loss for dashboard: {e}", extra={"notification": False}
+        )
 
     try:
         tp_report = await generate_trading_pnl_report()
@@ -301,7 +303,9 @@ async def admin_data_helper() -> AdminDataHelper:
         # use USD if available else sats (could convert later)
         trading_pnl_usd = float(tp_report.get("totals", {}).get("total_trading_pnl_usd", 0))
     except Exception as e:
-        logger.warning(f"Failed to compute trading pnl for dashboard: {e}", extra={"notification": False})
+        logger.warning(
+            f"Failed to compute trading pnl for dashboard: {e}", extra={"notification": False}
+        )
 
     return AdminDataHelper(
         node_balances=nb,
