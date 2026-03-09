@@ -499,7 +499,9 @@ class LedgerEntry(BaseModel):
             return None
 
     @classmethod
-    async def load_one_by_description_regex(cls, regex: str, ledger_type: str) -> "LedgerEntry | None":
+    async def load_one_by_description_regex(
+        cls, regex: str, ledger_type: str
+    ) -> "LedgerEntry | None":
         """
         Load a single LedgerEntry by matching a regex against the description field, or return None if not found.
         Written mostly to find `limit_order_create` entries which have the order ID in the description
@@ -714,7 +716,7 @@ class LedgerEntry(BaseModel):
         """
         self.reversed = datetime.now(tz=timezone.utc)
         logger.info(
-            f"Ledger Entry marked as reversed: {self.group_id}",
+            f"Ledger Entry marked as reversed: {self.short_id} {self.debit_amount} {self.debit_unit} {self.debit} {self.credit} {self.group_id}",
             extra={"notification": False, **self.log_extra},
         )
 
