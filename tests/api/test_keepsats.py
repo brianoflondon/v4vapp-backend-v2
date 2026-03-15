@@ -8,7 +8,7 @@ from api_v2 import create_app
 def make_client(monkeypatch, balance_msats: Decimal):
     """Helper to create a TestClient with keepsats_balance patched."""
 
-    async def fake_keepsats_balance(cust_id, line_items=False):
+    async def fake_keepsats_balance(cust_id, line_items=False, notifications=False):
         # return (net_msats, account_balance)
         return balance_msats, None
 

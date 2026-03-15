@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from pprint import pprint
 
@@ -65,6 +66,24 @@ async def load_ledger_events():
     for ledger_entry_raw in json_data:
         ledger_entry = LedgerEntry.model_validate(ledger_entry_raw)
         await ledger_entry.save()
+
+    # Add a notification record for the test customer so we can validate that
+    # keepsats_balance correctly includes notification history when requested.
+    await InternalConfig.db["hive_ops"].insert_one(
+        {
+            "cust_id": "v4vapp.qrc",
+            "trx_id": "testtrxid123",
+            "short_id": "0000_test",
+            "timestamp": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "json": {
+                "notification": True,
+                "memo": "Test notification",
+                "parent_id": "parent123",
+                "hive_accname_to": "v4vapp.qrc",
+                "hive_accname_from": "devser.v4vapp",
+            },
+        }
+    )
 
 
 async def test_list_all_accounts():
@@ -248,6 +267,19 @@ async def test_get_keepsats_balance():
     net_sats, details = await keepsats_balance(cust_id=cust_id)
     pprint(details.model_dump())
     print(f"Net Sats for {cust_id}: {net_sats}")
+
+
+async def test_get_keepsats_balance_includes_notifications():
+    cust_id = "v4vapp.qrc"
+    _, details = await keepsats_balance(cust_id=cust_id, notifications=True)
+    # Verify that the synthetic notification line is included in the combined history
+    notification_lines = [
+        line for line in details.combined_balance if line.ledger_type == "notification"
+    ]
+    assert notification_lines, "Expected notification line to be present in combined balance"
+    assert any(
+        "Test notification" in (line.user_memo or line.description) for line in notification_lines
+    )
 
 
 async def test_account_balance_printout_ksats_positive_and_negative():
