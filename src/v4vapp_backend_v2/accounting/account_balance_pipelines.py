@@ -605,6 +605,38 @@ def all_account_balances_pipeline(
     return pipeline
 
 
+def account_notifications_pipeline(cust_id: str) -> Sequence[Mapping[str, Any]]:
+    """Generates a MongoDB aggregation pipeline to retrieve notification records for a customer.
+
+    These are stored in the `hive_ops` collection as custom JSON operations with
+    `json.notification` set to True.
+
+    Args:
+        cust_id (str): The customer ID for which to retrieve notifications.
+
+    Returns:
+        Sequence[Mapping[str, Any]]: The aggregation pipeline as a list of stages.
+    """
+    pipeline: Sequence[Mapping[str, Any]] = [
+        {"$match": {"cust_id": cust_id}},
+        {"$match": {"json.notification": True}},
+        {"$sort": {"timestamp": 1}},
+        {
+            "$project": {
+                "trx_id": 1,
+                "timestamp": 1,
+                "short_id": 1,
+                "memo": "$json.memo",
+                "parent_id": "$json.parent_id",
+                "hive_accname_to": "$json.hive_accname_to",
+                "hive_accname_from": "$json.hive_accname_from",
+                "_id": 0,
+            }
+        },
+    ]
+    return pipeline
+
+
 def all_held_msats_balance_pipeline(cust_id: str = "") -> Sequence[Mapping[str, Any]]:
     """
     Generates a MongoDB aggregation pipeline to calculate the net held balances for all customers.

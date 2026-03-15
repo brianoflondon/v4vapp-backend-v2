@@ -4,12 +4,14 @@ from timeit import default_timer as timer
 from typing import Any, List, Mapping, Tuple
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
+    account_notifications_pipeline,
     active_account_subs_pipeline,
     all_account_balances_pipeline,
     list_all_accounts_pipeline,
     list_all_ledger_types_pipeline,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
+    AccountBalanceLine,
     AccountBalances,
     ConvertedSummary,
     LedgerAccountDetails,
@@ -32,9 +34,9 @@ from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.decorators import async_time_decorator
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
@@ -51,6 +53,7 @@ UNIT_TOLERANCE = {
 
 
 # I am not sure what the purpose of this code is, removed from code path.
+
 
 def _merge_groups(groups: List[LedgerAccountDetails]) -> LedgerAccountDetails:
     """Merge multiple LedgerAccountDetails objects belonging to the same
@@ -227,6 +230,7 @@ async def one_account_balance(
 ) -> LedgerAccountDetails:
     """
     Retrieve the balance details for a single ledger account as of a specified date.
+
     Args:
         account (LedgerAccount | str): The ledger account object or its string identifier.
         as_of_date (datetime | None, optional): The date for which to retrieve the account balance. Defaults to current UTC time if not provided.
@@ -1119,11 +1123,12 @@ async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal]
     expiry: datetime = oldest_ts + timedelta(hours=first_limit.hours)
     return expiry, sats_freed
 
-
+@async_time_decorator
 async def keepsats_balance(
     cust_id: CustIDType = "",
     as_of_date: datetime | None = None,
     line_items: bool = False,
+    notifications: bool = False,
 ) -> Tuple[Decimal, LedgerAccountDetails]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
@@ -1134,6 +1139,7 @@ async def keepsats_balance(
     Args:
         cust_id (str): The customer ID for which to retrieve the Keepsats balance.
         as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to the current UTC time.
+        notifications (bool): If True, include non-financial notification entries in the returned line items.
 
     Returns:
         Tuple:
@@ -1150,6 +1156,10 @@ async def keepsats_balance(
         as_of_date=as_of_date,
         age=None,
     )
+
+    if notifications:
+        # Add non-financial notifications from hive_ops to the transaction history
+        await notification_lines(cust_id=cust_id, account=account, account_balance=account_balance)
 
     net_msats = account_balance.msats
     if net_msats < Decimal(0) and account_balance.sats == Decimal(0):
@@ -1189,38 +1199,86 @@ async def keepsats_balance_printout(
 
     return net_msats, account_balance
 
+@async_time_decorator
+async def notification_lines(cust_id: str, account: LiabilityAccount, account_balance: LedgerAccountDetails) -> None:
+    """
+    Fetches non-financial notifications for a given customer and adds them as synthetic ledger lines to the account balance history.
+    This allows the frontend to display notifications alongside financial transactions in the account history.
 
-# @async_time_decorator
-# async def in_progress(cust_id: CustIDType) -> Decimal:
-#     """
-#     Calculate the in-progress balance for a given customer ID.
+    Args:
+        cust_id (str): The customer ID for which to fetch notifications.
+        account (LiabilityAccount): The account for which to add notification lines.
+        account_balance (LedgerAccountDetails): The account balance details object to which notification lines will be added.
 
-#     This asynchronous function aggregates ledger entries using a predefined pipeline
-#     to compute the net held balance in millisatoshis, converts it to satoshis,
-#     quantizes to whole satoshis, and returns the result as a Decimal.
+    Side Effects:
+        The combined_balance field will be modified in place.
+    """
 
-#     Args:
-#         cust_id (CustIDType): The customer ID for which to calculate the balance.
+    pipeline = account_notifications_pipeline(cust_id)
+    cursor = await InternalConfig.db["hive_ops"].aggregate(pipeline=pipeline)
+    notifications_list = await cursor.to_list(length=None)
+    notifications_list = convert_decimal128_to_decimal(notifications_list)
 
-#     Returns:
-#         Decimal: The in-progress balance in satoshis, quantized to whole units.
-#                  Returns 0 if no results are found.
-#     """
-#     results = await all_held_msats()
-#     in_progress = _get_in_progress_sats(cust_id, results)
-#     return in_progress["net_held"]
+    notification_lines: list[AccountBalanceLine] = []
+    for notif in notifications_list:
+        timestamp = notif.get("timestamp")
+        # Create a synthetic ledger line for the notification so the frontend can render it
+        trx_id = notif.get("trx_id", "")
+        line = AccountBalanceLine(
+            group_id=notif.get("parent_id", ""),
+            short_id=notif.get("short_id", ""),
+            ledger_type="notification",
+            ledger_type_str="Notification",
+            icon="🔔",
+            timestamp=timestamp,
+            timestamp_unix=(timestamp.timestamp() * 1000) if timestamp else 0,
+            description=notif.get("memo", ""),
+            user_memo=notif.get("memo", ""),
+            cust_id=cust_id,
+            op_type="notification",
+            account_type=account.account_type,
+            name=account.name,
+            sub=account.sub,
+            contra=False,
+            amount=Decimal(0),
+            amount_signed=Decimal(0),
+            unit="",
+            conv=None,
+            conv_signed=CryptoConv(),
+            side="",
+            amount_running_total=Decimal(0),
+            conv_running_total=ConvertedSummary(),
+            trx_id=trx_id,
+            link=f"https://hivehub.dev/tx/{trx_id}" if trx_id else "",
+            checkCode=notif.get("short_id", ""),
+            hiveAccTo=notif.get("hive_accname_to", ""),
+            hiveAccFrom=notif.get("hive_accname_from", ""),
+            paid=False,
+            paidDate=timestamp,
+            amountString="",
+            currencyToSend="",
+            lightning=False,
+            usd=Decimal(0),
+        )
+        notification_lines.append(line)
 
+    # Merge into the combined balance and re-sort
+    account_balance.combined_balance.extend(notification_lines)
+    account_balance.combined_balance.sort(
+        key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc)
+    )
 
-# def _get_in_progress_sats(cust_id, results_list) -> dict[str, Decimal]:
-#     for doc in results_list:
-#         if doc["cust_id"] == cust_id:
-#             return {
-#                 "hold_total": Decimal(doc["hold_total"]),
-#                 "release_total": Decimal(doc["release_total"]),
-#                 "net_held": Decimal(doc["net_held"]),
-#             }
-#     return {
-#         "hold_total": Decimal(0),
-#         "release_total": Decimal(0),
-#         "net_held": Decimal(0),
-#     }
+    # Recompute running totals for the combined history (notifications are zero-value)
+    running_conv = ConvertedSummary()
+    for line in account_balance.combined_balance:
+        if line.timestamp:
+            line.timestamp_unix = line.timestamp.timestamp() * 1000
+        running_conv = running_conv + ConvertedSummary.from_crypto_conv(line.conv_signed)
+        line.conv_running_total = running_conv
+
+    # Update last transaction date to include notifications
+    if account_balance.combined_balance:
+        account_balance.last_transaction_date = max(
+            (line.timestamp for line in account_balance.combined_balance if line.timestamp),
+            default=account_balance.last_transaction_date,
+        )

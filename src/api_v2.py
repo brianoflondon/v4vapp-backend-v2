@@ -242,13 +242,19 @@ async def keepsats(
     age: int = Query(0, description="Age in hours to check for keepsats"),
     transactions: bool = Query(False, description="Whether to include transaction history"),
     admin: bool = Query(False, description="Whether the user is an admin"),
+    notifications: bool = Query(
+        True,
+        description="Whether to include non-financial notifications in the transaction history",
+    ),
 ) -> Dict[str, Any]:
     """
     Retrieves the keepsats balance and related information for a specified Hive account.
+    This is the main information end point which fetches all transactions and balances for a Hive account.
     Args:
         hive_accname (str): Hive account name to check for keepsats.
         age (int): Age in hours to check for keepsats. Defaults to 0.
         transactions (bool): Whether to include transaction history. Defaults to False.
+        admin (bool): Whether the user is an admin. Defaults to False.
     Returns:
         Dict[str, Any]: A dictionary containing the Hive account name, net balances in various currencies,
         in-progress sats, and transaction history.
@@ -257,7 +263,7 @@ async def keepsats(
     """
     line_items = transactions
     net_msats, account_balance = await keepsats_balance(
-        cust_id=hive_accname, line_items=line_items
+        cust_id=hive_accname, line_items=line_items, notifications=notifications
     )
 
     if line_items:

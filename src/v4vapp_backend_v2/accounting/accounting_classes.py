@@ -166,6 +166,17 @@ class AccountBalanceLine(BaseModel):
     sats_hbd: Decimal = Field(
         Decimal(0), description="Sats/HBD conversion rate at time of transaction"
     )
+    # Optional fields used by the frontend for transaction history display
+    trx_id: str = ""
+    checkCode: str = ""
+    hiveAccTo: str = ""
+    hiveAccFrom: str = ""
+    paid: bool = False
+    paidDate: datetime | None = None
+    amountString: str = ""
+    currencyToSend: str = ""
+    lightning: bool = False
+    usd: Decimal = Decimal(0)
 
     def __init__(self, **data):
         super().__init__(**data)
