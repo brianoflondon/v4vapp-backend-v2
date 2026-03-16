@@ -762,8 +762,7 @@ class Overwatch:
         for candidate in candidates:
             # Keep the candidate if it has events the winner can't explain
             has_unique_events = any(
-                not any(stage.matches(ev) for stage in winner_stages)
-                for ev in candidate.events
+                not any(stage.matches(ev) for stage in winner_stages) for ev in candidate.events
             )
             if has_unique_events:
                 logger.info(

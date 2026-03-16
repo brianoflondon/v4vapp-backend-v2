@@ -21,13 +21,7 @@ from v4vapp_backend_v2.process.overwatch_flows import (
     KEEPSATS_TO_EXTERNAL_FLOW,
     KEEPSATS_TO_HBD_FLOW,
 )
-from v4vapp_backend_v2.process.process_overwatch import (
-    FlowEvent,
-    FlowInstance,
-    FlowStatus,
-    Overwatch,
-)
-
+from v4vapp_backend_v2.process.process_overwatch import FlowEvent, FlowStatus, Overwatch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -107,9 +101,7 @@ _PAYMENT_EVENTS = [
     lambda: _ledger_event(
         LedgerType.WITHDRAW_LIGHTNING, group_id="gid_payment", short_id="sid_payment"
     ),
-    lambda: _ledger_event(
-        LedgerType.FEE_EXPENSE, group_id="gid_payment", short_id="sid_payment"
-    ),
+    lambda: _ledger_event(LedgerType.FEE_EXPENSE, group_id="gid_payment", short_id="sid_payment"),
 ]
 
 
@@ -141,8 +133,7 @@ class TestHiveToKeepsatsExternalDefinition:
 
     def test_same_trigger_as_hive_to_keepsats(self):
         assert (
-            HIVE_TO_KEEPSATS_EXTERNAL_FLOW.trigger_op_type
-            == HIVE_TO_KEEPSATS_FLOW.trigger_op_type
+            HIVE_TO_KEEPSATS_EXTERNAL_FLOW.trigger_op_type == HIVE_TO_KEEPSATS_FLOW.trigger_op_type
         )
 
 
@@ -198,9 +189,7 @@ class TestSupersetCandidateResolution:
         # hive_to_keepsats_external should be removed (all its events
         # are also in hive_to_keepsats, so no unique events)
         ext_flows = [
-            f
-            for f in ow.flow_instances
-            if f.flow_definition.name == "hive_to_keepsats_external"
+            f for f in ow.flow_instances if f.flow_definition.name == "hive_to_keepsats_external"
         ]
         assert len(ext_flows) == 0
 
@@ -237,9 +226,7 @@ class TestSupersetCandidateResolution:
         # hive_to_keepsats_external should still be active (has payment events
         # not coverable by hive_to_keepsats) — OR already completed too
         ext_flows = [
-            f
-            for f in ow.flow_instances
-            if f.flow_definition.name == "hive_to_keepsats_external"
+            f for f in ow.flow_instances if f.flow_definition.name == "hive_to_keepsats_external"
         ]
         assert len(ext_flows) == 1
         # It should have completed too (17/17 stages all dispatched)
