@@ -148,6 +148,18 @@ keepsats_to_external completes (6/6)
   `transfer` → `hive_to_keepsats`), only one instance is created. Candidates
   only exist when there's genuine ambiguity.
 
+### Late-arriving optional events
+
+Some optional stages (e.g. the notification `custom_json`) arrive **after**
+all required stages have completed the flow. Since the flow is already
+`COMPLETED`, it would normally be invisible to `_dispatch`.
+
+To handle this, `_dispatch` has a **second pass**: if no active flow matches
+the event, it tries completed flows. If a completed flow has an unfulfilled
+stage that matches, the event is absorbed there (logged as a "late event")
+and `_try_create_flow` is never reached. This prevents spurious candidate
+flows from being created for reply/notification operations.
+
 ---
 
 ## Event dispatch flow

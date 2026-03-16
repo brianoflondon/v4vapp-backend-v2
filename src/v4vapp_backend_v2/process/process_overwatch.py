@@ -651,12 +651,16 @@ class Overwatch:
         accumulate stages in parallel.  When a candidate completes,
         :pymethod:`_resolve_candidates` removes the remaining candidates.
 
+        If no active flow matches, recently completed flows are also
+        checked so that late-arriving optional events (e.g. notifications)
+        are absorbed rather than spawning spurious new candidates.
+
         Before attempting a match the event is checked for duplication —
         if a flow already contains an event with the same identity the
         flow is skipped.
         """
         first_result: str | None = None
-        completed_flows: list[FlowInstance] = []
+        newly_completed: list[FlowInstance] = []
         for flow in self.active_flows:
             if self._is_duplicate(flow, event):
                 continue
@@ -665,15 +669,34 @@ class Overwatch:
                 if first_result is None:
                     first_result = result
                 if flow.is_complete:
-                    completed_flows.append(flow)
+                    newly_completed.append(flow)
                     logger.info(
                         f"{ICON} ✅ Flow '{flow.flow_definition.name}' completed "
                         f"({flow.trigger_short_id}) in {flow.duration:.1f}s",
                         extra={"notification": False},
                     )
                 await self._persist_flow(flow)
-        for completed in completed_flows:
+        for completed in newly_completed:
             await self._resolve_candidates(completed)
+
+        # Second pass: absorb late events into already-completed flows
+        # (e.g. notification custom_json arriving after all required stages).
+        if first_result is None:
+            for flow in self.completed_flows:
+                if self._is_duplicate(flow, event):
+                    continue
+                result = flow.add_event(event)
+                if result is not None:
+                    first_result = result
+                    logger.info(
+                        f"{ICON} 📎 Late event '{result}' absorbed by "
+                        f"completed flow '{flow.flow_definition.name}' "
+                        f"({flow.trigger_short_id})",
+                        extra={"notification": False},
+                    )
+                    await self._persist_flow(flow)
+                    break  # one match is enough
+
         return first_result
 
     async def _try_create_flow(self, event: FlowEvent, op: TrackedAny) -> str | None:

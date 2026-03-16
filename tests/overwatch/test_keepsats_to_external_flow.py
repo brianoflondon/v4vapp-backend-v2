@@ -650,3 +650,52 @@ class TestMultiCandidateDisambiguation:
         # Only the winner should remain
         assert len(ow.flow_instances) == 1
         assert ow.flow_instances[0].flow_definition.name == "keepsats_to_external"
+
+    @pytest.mark.asyncio
+    async def test_late_notification_absorbed_by_completed_flow(
+        self,
+        ke_flow_data: dict,
+        ke_all_flow_events: list[FlowEvent],
+    ):
+        """A notification custom_json arriving after the flow completes should
+        be absorbed by the completed flow — not spawn new candidates."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        # Create candidates from trigger
+        trigger = ke_flow_data["trigger_custom_json"]
+        trigger_event = ke_all_flow_events[0]
+        fake_op = type(
+            "FakeOp",
+            (),
+            {
+                "group_id": trigger["group_id"],
+                "short_id": trigger["short_id"],
+                "op_type": trigger["type"],
+                "from_account": trigger.get("cust_id", ""),
+            },
+        )()
+        await ow._try_create_flow(trigger_event, fake_op)
+
+        # Dispatch all events EXCEPT the notification (last one) — completes the flow
+        for event in ke_all_flow_events[1:-1]:
+            await ow._dispatch(event)
+
+        assert len(ow.completed_flows) == 1
+        assert ow.completed_flows[0].flow_definition.name == "keepsats_to_external"
+        assert len(ow.active_flows) == 0  # HBD candidate was resolved away
+
+        # Now the late notification arrives
+        notification_event = ke_all_flow_events[-1]
+        result = await ow._dispatch(notification_event)
+
+        # Should be absorbed by the completed flow, not return None
+        assert result == "notification_custom_json_op"
+        # No new active flows should have been created
+        assert len(ow.active_flows) == 0
+        # The completed flow absorbed the notification
+        completed = ow.completed_flows[0]
+        assert "notification_custom_json_op" in completed.matched_stage_names
