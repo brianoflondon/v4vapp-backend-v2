@@ -744,24 +744,41 @@ class Overwatch:
     async def _resolve_candidates(self, winner: FlowInstance) -> None:
         """Remove losing candidate flows that share the same trigger.
 
-        Called when *winner* completes.  Any other active flow with the
-        same ``trigger_group_id`` is marked FAILED and removed from both
-        the in-memory list and Redis.
+        Called when *winner* completes.  A candidate is only removed if
+        **every event it has received** could be matched by the winner's
+        definition.  If the candidate has events the winner can't explain
+        (e.g. a ``payment`` op that the winner's flow doesn't include)
+        the candidate is kept alive — it's tracking an extended flow that
+        includes stages beyond the winner's scope.
         """
-        losers = [
+        candidates = [
             f
             for f in self.flow_instances
             if f is not winner
             and f.trigger_group_id == winner.trigger_group_id
             and f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
         ]
-        for loser in losers:
-            loser.status = FlowStatus.FAILED
-            self.flow_instances.remove(loser)
-            await self._remove_active_flow(loser)
+        winner_stages = winner.flow_definition.stages
+        for candidate in candidates:
+            # Keep the candidate if it has events the winner can't explain
+            has_unique_events = any(
+                not any(stage.matches(ev) for stage in winner_stages)
+                for ev in candidate.events
+            )
+            if has_unique_events:
+                logger.info(
+                    f"{ICON} 📌 Keeping candidate '{candidate.flow_definition.name}' "
+                    f"({candidate.trigger_short_id}) — has events "
+                    f"not covered by '{winner.flow_definition.name}'",
+                    extra={"notification": False},
+                )
+                continue
+            candidate.status = FlowStatus.FAILED
+            self.flow_instances.remove(candidate)
+            await self._remove_active_flow(candidate)
             logger.info(
-                f"{ICON} 🗑️ Removed candidate '{loser.flow_definition.name}' "
-                f"({loser.trigger_short_id}) — "
+                f"{ICON} 🗑️ Removed candidate '{candidate.flow_definition.name}' "
+                f"({candidate.trigger_short_id}) — "
                 f"'{winner.flow_definition.name}' completed",
                 extra={"notification": False},
             )

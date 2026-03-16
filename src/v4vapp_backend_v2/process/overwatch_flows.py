@@ -371,11 +371,150 @@ KEEPSATS_TO_EXTERNAL_FLOW = FlowDefinition(
 
 
 # ---------------------------------------------------------------------------
+# Hive-to-Keepsats External Lightning flow
+# ---------------------------------------------------------------------------
+# Flow: User sends HIVE to the server account with a Lightning invoice in the
+# memo.  The system converts the HIVE to keepsats (identical to the normal
+# hive_to_keepsats flow) AND immediately pays the external Lightning invoice.
+# This is a superset of hive_to_keepsats — it includes all primary/fee/
+# notification/change stages plus the external payment stages.
+#
+# Primary events (same short_id as trigger):
+#   1-7. Same as hive_to_keepsats (transfer, cust_h_in, hold_k, h_conv_k,
+#        h_contra_k, cust_conv, release_k)
+#
+# External payment events (different short_id — payment hash):
+#   8.  payment op — LND payment sent
+#   9.  withdraw_l ledger — Debit user, credit External Lightning Payments
+#  10.  fee_exp ledger — Lightning routing fee
+#
+# Reply events (same as hive_to_keepsats):
+#  11-17. Fee notification, keepsats notification, change return
+# ---------------------------------------------------------------------------
+
+HIVE_TO_KEEPSATS_EXTERNAL_FLOW = FlowDefinition(
+    name="hive_to_keepsats_external",
+    description="Hive converted to Keepsats then paid to external Lightning address",
+    trigger_op_type="transfer",
+    stages=[
+        # --- Primary stages (same short_id as trigger) ---
+        FlowStage(
+            name="trigger_transfer",
+            event_type="op",
+            op_type="transfer",
+            group="primary",
+        ),
+        FlowStage(
+            name="customer_hive_in",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOMER_HIVE_IN,
+            group="primary",
+        ),
+        FlowStage(
+            name="hold_keepsats",
+            event_type="ledger",
+            ledger_type=LedgerType.HOLD_KEEPSATS,
+            group="primary",
+        ),
+        FlowStage(
+            name="conv_hive_to_keepsats",
+            event_type="ledger",
+            ledger_type=LedgerType.CONV_HIVE_TO_KEEPSATS,
+            group="primary",
+        ),
+        FlowStage(
+            name="contra_hive_to_keepsats",
+            event_type="ledger",
+            ledger_type=LedgerType.CONTRA_HIVE_TO_KEEPSATS,
+            group="primary",
+        ),
+        FlowStage(
+            name="conv_customer",
+            event_type="ledger",
+            ledger_type=LedgerType.CONV_CUSTOMER,
+            group="primary",
+        ),
+        FlowStage(
+            name="release_keepsats",
+            event_type="ledger",
+            ledger_type=LedgerType.RELEASE_KEEPSATS,
+            group="primary",
+        ),
+        # --- External payment stages (different short_id — payment hash) ---
+        FlowStage(
+            name="payment_op",
+            event_type="op",
+            op_type="payment",
+            group="payment",
+        ),
+        FlowStage(
+            name="withdraw_lightning",
+            event_type="ledger",
+            ledger_type=LedgerType.WITHDRAW_LIGHTNING,
+            group="payment",
+        ),
+        FlowStage(
+            name="fee_expense",
+            event_type="ledger",
+            ledger_type=LedgerType.FEE_EXPENSE,
+            group="payment",
+        ),
+        # --- Fee notification stages (reply group) ---
+        FlowStage(
+            name="fee_custom_json_op",
+            event_type="op",
+            op_type="custom_json",
+            group="fee_notification",
+        ),
+        FlowStage(
+            name="custom_json_fee",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOM_JSON_FEE,
+            group="fee_notification",
+        ),
+        FlowStage(
+            name="fee_income",
+            event_type="ledger",
+            ledger_type=LedgerType.FEE_INCOME,
+            group="fee_notification",
+        ),
+        # --- Keepsats notification stages (reply group) ---
+        FlowStage(
+            name="keepsats_notification_op",
+            event_type="op",
+            op_type="custom_json",
+            group="keepsats_notification",
+        ),
+        FlowStage(
+            name="receive_lightning",
+            event_type="ledger",
+            ledger_type=LedgerType.RECEIVE_LIGHTNING,
+            group="keepsats_notification",
+        ),
+        # --- Change return stages (reply group) ---
+        FlowStage(
+            name="change_transfer_op",
+            event_type="op",
+            op_type="transfer",
+            group="change_return",
+        ),
+        FlowStage(
+            name="customer_hive_out",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOMER_HIVE_OUT,
+            group="change_return",
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Registry of all known flow definitions
 # ---------------------------------------------------------------------------
 
 FLOW_DEFINITIONS = {
     "hive_to_keepsats": HIVE_TO_KEEPSATS_FLOW,
+    "hive_to_keepsats_external": HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     "keepsats_to_hbd": KEEPSATS_TO_HBD_FLOW,
     "keepsats_to_external": KEEPSATS_TO_EXTERNAL_FLOW,
 }

@@ -46,6 +46,7 @@ Currently registered flows:
 | Name | Trigger | Required stages | Description |
 |------|---------|-----------------|-------------|
 | `hive_to_keepsats` | `transfer` | 14 | HIVE deposit converted to sats stored on system |
+| `hive_to_keepsats_external` | `transfer` | 17 | HIVE converted to keepsats then paid to external Lightning invoice |
 | `keepsats_to_hbd` | `custom_json` | 12 (+ 5 optional) | Keepsats converted to HBD via exchange |
 | `keepsats_to_external` | `custom_json` | 6 (+ 1 optional) | Keepsats paid to external Lightning invoice |
 
@@ -128,14 +129,41 @@ When a candidate **completes** (all required stages fulfilled),
 `_resolve_candidates` runs:
 
 1. The winning flow is marked `COMPLETED`.
-2. All other candidates sharing the same `trigger_group_id` are marked
-   `FAILED`, removed from the in-memory list, and deleted from Redis.
+2. Each remaining candidate sharing the same `trigger_group_id` is checked:
+   if **every event** the candidate has received can be matched by a stage
+   in the winner's definition, the candidate is removed (it's a redundant
+   subset).  If the candidate has events the winner **cannot** explain
+   (e.g. a `payment` op absent from the winner's definition), the candidate
+   is **kept alive** — it's tracking an extended/superset flow.
 
 ```
 keepsats_to_external completes (6/6)
   └─► _resolve_candidates:
         ├─► keepsats_to_external: COMPLETED ✅ (kept)
-        └─► keepsats_to_hbd: FAILED 🗑️ (removed)
+        └─► keepsats_to_hbd: all events coverable → FAILED 🗑️ (removed)
+```
+
+### Superset flows
+
+Some flow definitions are strict supersets of another (e.g.
+`hive_to_keepsats_external` includes all 14 stages of `hive_to_keepsats`
+plus 3 external-payment stages).  Both are triggered by `transfer`, so both
+candidates are created.
+
+- **Simple deposit** (no external payment): `hive_to_keepsats` completes
+  first.  The external candidate only has events the winner can also explain
+  → removed.
+- **Back-to-back external payment**: payment events arrive before the flow
+  completes.  The external candidate now has events (payment, withdraw_l,
+  fee_exp) that `hive_to_keepsats` cannot match → kept alive.  Both flows
+  complete independently.
+
+```
+hive_to_keepsats completes (14/14)
+  └─► _resolve_candidates:
+        └─► hive_to_keepsats_external: has payment events → 📌 KEPT
+
+hive_to_keepsats_external completes (17/17)  ← later, independently
 ```
 
 ### Why this approach?
