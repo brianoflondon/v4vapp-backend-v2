@@ -731,6 +731,7 @@ class TestKeepsatsToHbdOverwatch:
                     "short_id": trigger["short_id"],
                     "op_type": trigger["type"],
                     "from_account": trigger.get("cust_id", ""),
+                    "memo": trigger["json"]["memo"],
                 },
             )(),
         )

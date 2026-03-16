@@ -436,6 +436,11 @@ class Overwatch:
         except Exception:
             return None
 
+    @staticmethod
+    def _redis_flow_key(flow: FlowInstance) -> str:
+        """Composite Redis key allowing multiple candidates per trigger."""
+        return f"{flow.trigger_group_id}:{flow.flow_definition.name}"
+
     async def _persist_flow(self, flow: FlowInstance) -> None:
         """Write a single flow to Redis (active hash or completed key)."""
         r = self._redis()
@@ -443,13 +448,14 @@ class Overwatch:
             return
         try:
             data = flow.model_dump_json()
+            rkey = self._redis_flow_key(flow)
             if flow.status == FlowStatus.COMPLETED:
-                key = f"{_REDIS_COMPLETED_PREFIX}{flow.trigger_group_id}"
+                key = f"{_REDIS_COMPLETED_PREFIX}{rkey}"
                 await r.setex(key, _COMPLETED_TTL_SECONDS, data)
                 # Remove from the active hash
-                await r.hdel(_REDIS_ACTIVE_KEY, flow.trigger_group_id)
+                await r.hdel(_REDIS_ACTIVE_KEY, rkey)
             else:
-                await r.hset(_REDIS_ACTIVE_KEY, flow.trigger_group_id, data)
+                await r.hset(_REDIS_ACTIVE_KEY, rkey, data)
         except Exception as e:
             logger.warning(
                 f"{ICON} Redis persist failed: {e}",
@@ -462,7 +468,7 @@ class Overwatch:
         if r is None:
             return
         try:
-            await r.hdel(_REDIS_ACTIVE_KEY, flow.trigger_group_id)
+            await r.hdel(_REDIS_ACTIVE_KEY, self._redis_flow_key(flow))
         except Exception:
             pass
 
@@ -477,12 +483,12 @@ class Overwatch:
         if r is None:
             return 0
         loaded = 0
-        existing_ids = {f.trigger_group_id for f in self.flow_instances}
+        existing_ids = {self._redis_flow_key(f) for f in self.flow_instances}
         try:
             # Active flows
             active_data: dict[str, str] = await r.hgetall(_REDIS_ACTIVE_KEY)
-            for gid, raw in active_data.items():
-                if gid in existing_ids:
+            for rkey, raw in active_data.items():
+                if rkey in existing_ids:
                     continue
                 try:
                     flow = FlowInstance.model_validate_json(raw)
@@ -498,11 +504,11 @@ class Overwatch:
                         # also persist updated status immediately
                         await self._persist_flow(flow)
                     self.flow_instances.append(flow)
-                    existing_ids.add(gid)
+                    existing_ids.add(rkey)
                     loaded += 1
                 except Exception as e:
                     logger.warning(
-                        f"{ICON} Skipping corrupt active flow {gid}: {e}",
+                        f"{ICON} Skipping corrupt active flow {rkey}: {e}",
                         extra={"notification": False},
                     )
             # Completed flows (scan for keys)
@@ -514,12 +520,12 @@ class Overwatch:
                     count=100,
                 )
                 for key in keys:
-                    gid = (
+                    rkey = (
                         key.removeprefix(_REDIS_COMPLETED_PREFIX)
                         if isinstance(key, str)
                         else key.decode().removeprefix(_REDIS_COMPLETED_PREFIX)
                     )
-                    if gid in existing_ids:
+                    if rkey in existing_ids:
                         continue
                     raw_val: str | None = await r.get(key)
                     if raw_val is None:
@@ -527,11 +533,11 @@ class Overwatch:
                     try:
                         flow = FlowInstance.model_validate_json(raw_val)
                         self.flow_instances.append(flow)
-                        existing_ids.add(gid)
+                        existing_ids.add(rkey)
                         loaded += 1
                     except Exception as e:
                         logger.warning(
-                            f"{ICON} Skipping corrupt completed flow {gid}: {e}",
+                            f"{ICON} Skipping corrupt completed flow {rkey}: {e}",
                             extra={"notification": False},
                         )
                 if cursor == 0:
@@ -640,29 +646,47 @@ class Overwatch:
     async def _dispatch(self, event: FlowEvent) -> str | None:
         """Try to match *event* against every active flow instance.
 
+        Events are dispatched to **all** active flows (not just the first
+        match) so that multiple candidate flows for the same trigger can
+        accumulate stages in parallel.  When a candidate completes,
+        :pymethod:`_resolve_candidates` removes the remaining candidates.
+
         Before attempting a match the event is checked for duplication —
         if a flow already contains an event with the same identity the
-        flow is skipped.  This prevents, for example, an updated trigger
-        op (now carrying reply IDs) from incorrectly matching the
-        ``change_transfer_op`` stage.
+        flow is skipped.
         """
+        first_result: str | None = None
+        completed_flows: list[FlowInstance] = []
         for flow in self.active_flows:
             if self._is_duplicate(flow, event):
                 continue
             result = flow.add_event(event)
             if result is not None:
+                if first_result is None:
+                    first_result = result
                 if flow.is_complete:
+                    completed_flows.append(flow)
                     logger.info(
                         f"{ICON} ✅ Flow '{flow.flow_definition.name}' completed "
                         f"({flow.trigger_short_id}) in {flow.duration:.1f}s",
                         extra={"notification": False},
                     )
                 await self._persist_flow(flow)
-                return result
-        return None
+        for completed in completed_flows:
+            await self._resolve_candidates(completed)
+        return first_result
 
     async def _try_create_flow(self, event: FlowEvent, op: TrackedAny) -> str | None:
-        """If *event* matches a registered trigger, spin up a new FlowInstance."""
+        """If *event* matches registered triggers, create candidate FlowInstances.
+
+        When multiple flow definitions share the same ``trigger_op_type`` a
+        candidate instance is created for **each** matching definition.  As
+        subsequent events arrive the correct candidate will naturally
+        accumulate the right stages and complete; the losers are cleaned up
+        by :pymethod:`_resolve_candidates`.
+        """
+        first_result: str | None = None
+        candidates: list[str] = []
         for defn in self._flow_definitions.values():
             if event.op_type == defn.trigger_op_type and event.group == "primary":
                 instance = FlowInstance(
@@ -675,14 +699,49 @@ class Overwatch:
                 )
                 self.flow_instances.append(instance)
                 result = instance.add_event(event)
+                if first_result is None and result is not None:
+                    first_result = result
+                candidates.append(defn.name)
+                await self._persist_flow(instance)
+        if candidates:
+            if len(candidates) == 1:
                 logger.info(
-                    f"{ICON} 🆕 New flow '{defn.name}' started "
-                    f"({event.short_id}) cust={instance.cust_id}",
+                    f"{ICON} 🆕 New flow '{candidates[0]}' started "
+                    f"({event.short_id}) cust={getattr(op, 'from_account', '')}",
                     extra={"notification": False},
                 )
-                await self._persist_flow(instance)
-                return result
-        return None
+            else:
+                logger.info(
+                    f"{ICON} 🆕 {len(candidates)} candidate flows started "
+                    f"({event.short_id}): {', '.join(candidates)}",
+                    extra={"notification": False},
+                )
+        return first_result
+
+    async def _resolve_candidates(self, winner: FlowInstance) -> None:
+        """Remove losing candidate flows that share the same trigger.
+
+        Called when *winner* completes.  Any other active flow with the
+        same ``trigger_group_id`` is marked FAILED and removed from both
+        the in-memory list and Redis.
+        """
+        losers = [
+            f
+            for f in self.flow_instances
+            if f is not winner
+            and f.trigger_group_id == winner.trigger_group_id
+            and f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
+        ]
+        for loser in losers:
+            loser.status = FlowStatus.FAILED
+            self.flow_instances.remove(loser)
+            await self._remove_active_flow(loser)
+            logger.info(
+                f"{ICON} 🗑️ Removed candidate '{loser.flow_definition.name}' "
+                f"({loser.trigger_short_id}) — "
+                f"'{winner.flow_definition.name}' completed",
+                extra={"notification": False},
+            )
 
     # ---- queries ----
 
@@ -798,14 +857,16 @@ class Overwatch:
         for flow in active:
             logger.info(
                 f"{ICON}   ↳ {flow.flow_definition.name} "
-                f"({flow.trigger_short_id}) {flow.progress}",
+                f"({flow.trigger_short_id}) {flow.progress} Started: {flow.started_at}",
                 extra={"notification": False},
             )
         for flow in stalled:
+            stalled_time = flow.events[-1].timestamp if flow.events else flow.started_at
+            since = datetime.now(tz=timezone.utc) - stalled_time
             logger.warning(
                 f"{ICON}   ↳ STALLED {flow.flow_definition.name} "
                 f"({flow.trigger_short_id}) {flow.progress} "
-                f"missing: {[s.name for s in flow.missing_stages]}",
+                f"missing: {[s.name for s in flow.missing_stages]}, last event: {stalled_time}, stalled for: {since}",
                 extra={"notification": False},
             )
 

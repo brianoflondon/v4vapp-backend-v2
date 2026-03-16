@@ -80,6 +80,7 @@
             "args": [
                 "--config",
                 "devhive.config.yaml",
+                "--overwatch"
                 // "--no-overwatch"
             ],
             "console": "integratedTerminal",

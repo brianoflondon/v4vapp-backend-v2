@@ -78,11 +78,6 @@ async def health_check() -> Dict[str, Any]:
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
 
-# Flag indicating whether overwatch is active.  When the CLI
-# starts with ``--no-overwatch`` we still spin up the change streams
-# but we don't want to feed any of the events into the Overwatch
-# machinery.  This global is modified by ``main_async_start`` and
-# consulted by ``process_op`` below.
 _overwatch_enabled: bool = False
 
 
@@ -96,8 +91,9 @@ def set_overwatch_enabled(enabled: bool) -> None:
     operations.
     """
     global _overwatch_enabled
+
     _overwatch_enabled = enabled
-    logger.debug(f"{ICON} overwatch_enabled set to {enabled}")
+    logger.info(f"{ICON} Overwatch enabled: {_overwatch_enabled}", extra={"notification": False})
 
 
 def overwatch_enabled() -> bool:
