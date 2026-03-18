@@ -156,7 +156,7 @@ async def invalidate_ledger_cache(
                 )
                 if keys:
                     tasks.append(InternalConfig.redis_async.delete(*keys))
-                    logger.info(
+                    logger.debug(
                         f"🗑️  Deleted {len(keys)} cache keys matching pattern: {pattern}",
                         extra={"notification": False},
                     )

@@ -229,6 +229,15 @@ class FlowEvent(BaseModel):
             group=group,
         )
 
+    @property
+    def log_str(self) -> str:
+        """Return a human-readable string summarizing this event for logging."""
+        if self.event_type == "ledger" and self.ledger_entry:
+            return self.ledger_entry.log_str
+        if self.event_type == "op" and self.op:
+            return self.op.log_str
+        return "UnknownEvent"
+
 
 class FlowInstance(BaseModel):
     """A tracked instance of a transaction flow.
@@ -603,7 +612,7 @@ class Overwatch:
         """
         await self._ensure_loaded()
         event = FlowEvent.from_ledger_entry(ledger_entry, group=group)
-        logger.info(
+        logger.debug(
             f"{ICON} {ledger_entry.short_id} {ledger_entry.ledger_type_str}",
             extra={"notification": False},
         )
@@ -693,7 +702,7 @@ class Overwatch:
                     newly_completed.append(flow)
                     logger.info(
                         f"{ICON} ✅ {Fore.WHITE}Flow '{flow.flow_definition.name}' completed "
-                        f"({flow.trigger_short_id}) in {flow.duration:.1f}s{Fore.RESET}",
+                        f"({flow.trigger_short_id}) in {flow.duration:.1f}s.{event.log_str} {Fore.RESET}",
                         extra={"notification": True, **flow.log_extra},
                     )
                 await self._persist_flow(flow)
