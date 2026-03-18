@@ -19,7 +19,7 @@ from v4vapp_backend_v2.process.overwatch_flows import (
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
     KEEPSATS_TO_EXTERNAL_FLOW,
-    KEEPSATS_TO_HBD_FLOW,
+    KEEPSATS_TO_HIVE_FLOW,
 )
 from v4vapp_backend_v2.process.process_overwatch import FlowEvent, FlowStatus, Overwatch
 
@@ -163,10 +163,10 @@ class TestSupersetCandidateResolution:
         assert flow_names == {"hive_to_keepsats", "hive_to_keepsats_external"}
 
     @pytest.mark.asyncio
-    async def test_simple_deposit_removes_external_candidate(self):
+    async def test_simple_deposit_keeps_external_candidate(self):
         """For a simple deposit (no payment events), hive_to_keepsats completes
-        and hive_to_keepsats_external is removed because all its events
-        are explainable by the winner's definition."""
+        but hive_to_keepsats_external is kept alive because it is a superset
+        flow — its definition has stages the winner doesn't cover."""
         Overwatch.reset()
         ow = Overwatch()
         Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
@@ -186,12 +186,13 @@ class TestSupersetCandidateResolution:
         assert len(ow.completed_flows) == 1
         assert ow.completed_flows[0].flow_definition.name == "hive_to_keepsats"
 
-        # hive_to_keepsats_external should be removed (all its events
-        # are also in hive_to_keepsats, so no unique events)
+        # hive_to_keepsats_external is a superset — kept alive so it can
+        # continue accumulating payment events if they arrive.
         ext_flows = [
             f for f in ow.flow_instances if f.flow_definition.name == "hive_to_keepsats_external"
         ]
-        assert len(ext_flows) == 0
+        assert len(ext_flows) == 1
+        assert ext_flows[0].status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
 
     @pytest.mark.asyncio
     async def test_back_to_back_keeps_external_after_base_completes(self):
@@ -259,8 +260,8 @@ class TestSupersetCandidateResolution:
         assert completed_names == {"hive_to_keepsats", "hive_to_keepsats_external"}
 
     @pytest.mark.asyncio
-    async def test_external_candidate_not_counted_as_active_when_removed(self):
-        """In a simple deposit, after resolution there should be no active flows."""
+    async def test_superset_candidate_stays_active_after_base_completes(self):
+        """In a simple deposit, the superset external candidate stays active."""
         Overwatch.reset()
         ow = Overwatch()
         Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
@@ -273,7 +274,8 @@ class TestSupersetCandidateResolution:
         for factory in _SHARED_EVENTS[1:]:
             await ow._dispatch(factory())
 
-        assert len(ow.active_flows) == 0
+        assert len(ow.active_flows) == 1
+        assert ow.active_flows[0].flow_definition.name == "hive_to_keepsats_external"
         assert len(ow.completed_flows) == 1
 
 
@@ -293,7 +295,7 @@ class TestMixedTriggerTypes:
         ow = Overwatch()
         Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
         Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
         Overwatch._loaded_from_redis = True
 
@@ -313,4 +315,4 @@ class TestMixedTriggerTypes:
         flow_names = {f.flow_definition.name for f in ow.active_flows}
         assert "hive_to_keepsats" not in flow_names
         assert "hive_to_keepsats_external" not in flow_names
-        assert flow_names == {"keepsats_to_hbd", "keepsats_to_external"}
+        assert flow_names == {"keepsats_to_hive", "keepsats_to_external"}

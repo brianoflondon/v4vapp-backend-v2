@@ -13,7 +13,7 @@ import pytest
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
-from v4vapp_backend_v2.process.overwatch_flows import KEEPSATS_TO_HBD_FLOW
+from v4vapp_backend_v2.process.overwatch_flows import KEEPSATS_TO_HIVE_FLOW
 from v4vapp_backend_v2.process.process_overwatch import (
     FlowEvent,
     FlowInstance,
@@ -25,7 +25,7 @@ from v4vapp_backend_v2.process.process_overwatch import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-KS_FLOW_DATA_PATH = Path("tests/data/overwatch/keepsats_to_hbd_flow.json")
+KS_FLOW_DATA_PATH = Path("tests/data/overwatch/keepsats_to_hive_flow.json")
 
 
 @pytest.fixture
@@ -191,7 +191,7 @@ def ks_flow_instance(ks_flow_data: dict) -> FlowInstance:
     """Create an empty FlowInstance for the Keepsats-to-HBD flow."""
     trigger = ks_flow_data["trigger_custom_json"]
     return FlowInstance(
-        flow_definition=KEEPSATS_TO_HBD_FLOW,
+        flow_definition=KEEPSATS_TO_HIVE_FLOW,
         trigger_group_id=trigger["group_id"],
         trigger_short_id=trigger["short_id"],
         cust_id=trigger["cust_id"],
@@ -204,11 +204,11 @@ def ks_flow_instance(ks_flow_data: dict) -> FlowInstance:
 
 
 class TestKeepsatsToHbdDefinition:
-    """Tests for the KEEPSATS_TO_HBD_FLOW definition."""
+    """Tests for the keepsats_to_hive_FLOW definition."""
 
     def test_definition_exists(self):
-        assert KEEPSATS_TO_HBD_FLOW.name == "keepsats_to_hbd"
-        assert KEEPSATS_TO_HBD_FLOW.trigger_op_type == "custom_json"
+        assert KEEPSATS_TO_HIVE_FLOW.name == "keepsats_to_hive"
+        assert KEEPSATS_TO_HIVE_FLOW.trigger_op_type == "custom_json"
 
     def test_has_expected_stage_names(self):
         expected = [
@@ -230,14 +230,14 @@ class TestKeepsatsToHbdDefinition:
             "fill_order_op",
             "fill_order_net",
         ]
-        assert KEEPSATS_TO_HBD_FLOW.stage_names == expected
+        assert KEEPSATS_TO_HIVE_FLOW.stage_names == expected
 
     def test_required_stages_count(self):
         # five stages were marked optional in the definition
-        assert len(KEEPSATS_TO_HBD_FLOW.required_stages) == 12
+        assert len(KEEPSATS_TO_HIVE_FLOW.required_stages) == 12
 
     def test_optional_stages_listed(self):
-        optional = [s.name for s in KEEPSATS_TO_HBD_FLOW.stages if not s.required]
+        optional = [s.name for s in KEEPSATS_TO_HIVE_FLOW.stages if not s.required]
         expected = [
             "notification_custom_json_op",
             "limit_order_create_op",
@@ -248,10 +248,10 @@ class TestKeepsatsToHbdDefinition:
         assert optional == expected
 
     def test_stage_count(self):
-        assert len(KEEPSATS_TO_HBD_FLOW.stages) == 17
+        assert len(KEEPSATS_TO_HIVE_FLOW.stages) == 17
 
     def test_groups_are_correct(self):
-        groups = {s.group for s in KEEPSATS_TO_HBD_FLOW.stages}
+        groups = {s.group for s in KEEPSATS_TO_HIVE_FLOW.stages}
         expected_groups = {
             "primary",
             "notification",
@@ -262,11 +262,11 @@ class TestKeepsatsToHbdDefinition:
         assert groups == expected_groups
 
     def test_primary_group_has_10_stages(self):
-        primary_stages = [s for s in KEEPSATS_TO_HBD_FLOW.stages if s.group == "primary"]
+        primary_stages = [s for s in KEEPSATS_TO_HIVE_FLOW.stages if s.group == "primary"]
         assert len(primary_stages) == 10
 
     def test_ledger_types_in_definition(self):
-        ledger_stages = [s for s in KEEPSATS_TO_HBD_FLOW.stages if s.event_type == "ledger"]
+        ledger_stages = [s for s in KEEPSATS_TO_HIVE_FLOW.stages if s.event_type == "ledger"]
         expected_types = {
             LedgerType.CONTRA_KEEPSATS_TO_HIVE,
             LedgerType.CUSTOM_JSON_FEE_REFUND,
@@ -365,7 +365,7 @@ class TestKeepsatsToHbdComplete:
     ):
         for event in ks_all_flow_events:
             ks_flow_instance.add_event(event)
-        assert ks_flow_instance.matched_stage_names == set(KEEPSATS_TO_HBD_FLOW.stage_names)
+        assert ks_flow_instance.matched_stage_names == set(KEEPSATS_TO_HIVE_FLOW.stage_names)
 
     def test_progress_shows_all_done(
         self,
@@ -398,7 +398,7 @@ class TestKeepsatsToHbdComplete:
         for event in ks_all_flow_events:
             ks_flow_instance.add_event(event)
         summary = ks_flow_instance.summary()
-        assert summary["flow_type"] == "keepsats_to_hbd"
+        assert summary["flow_type"] == "keepsats_to_hive"
         assert summary["status"] == "completed"
         assert summary["cust_id"] == "v4vapp-test"
         assert summary["trigger_short_id"] == "3991_317497_1"
@@ -646,12 +646,12 @@ class TestKeepsatsToHbdMatching:
 class TestKeepsatsToHbdOverwatch:
     """Integration tests for Overwatch with the Keepsats-to-HBD flow."""
 
-    def test_register_keepsats_to_hbd_flow(self):
+    def test_register_keepsats_to_hive_flow(self):
         Overwatch.reset()
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         flows = Overwatch.registered_flows()
-        assert "keepsats_to_hbd" in flows
-        assert flows["keepsats_to_hbd"] is KEEPSATS_TO_HBD_FLOW
+        assert "keepsats_to_hive" in flows
+        assert flows["keepsats_to_hive"] is KEEPSATS_TO_HIVE_FLOW
 
     def test_completed_flow_moves_to_completed(
         self,
@@ -716,7 +716,7 @@ class TestKeepsatsToHbdOverwatch:
         """
         Overwatch.reset()
         ow = Overwatch()
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         Overwatch._loaded_from_redis = True  # skip Redis
 
         trigger = ks_flow_data["trigger_custom_json"]

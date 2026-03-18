@@ -20,7 +20,7 @@ from v4vapp_backend_v2.process.overwatch_flows import (
     HIVE_TO_KEEPSATS_FLOW,
     KEEPSATS_INTERNAL_TRANSFER_FLOW,
     KEEPSATS_TO_EXTERNAL_FLOW,
-    KEEPSATS_TO_HBD_FLOW,
+    KEEPSATS_TO_HIVE_FLOW,
 )
 from v4vapp_backend_v2.process.process_overwatch import FlowEvent, Overwatch
 
@@ -83,7 +83,7 @@ def _register_all() -> Overwatch:
     ow = Overwatch()
     Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
     Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
-    Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+    Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
     Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
     Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_FLOW)
     Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
@@ -127,14 +127,14 @@ class TestKeepsatsInternalTransferDefinition:
 class TestKeepsatsInternalTransferOverwatch:
     @pytest.mark.asyncio
     async def test_custom_json_creates_three_candidates(self):
-        """A custom_json trigger should create keepsats_to_hbd,
+        """A custom_json trigger should create keepsats_to_hive,
         keepsats_to_external, and keepsats_internal_transfer."""
         ow = _register_all()
         event = _op_event("custom_json")
         await ow._try_create_flow(event, _fake_op())
         names = {f.flow_definition.name for f in ow.active_flows}
         assert names == {
-            "keepsats_to_hbd",
+            "keepsats_to_hive",
             "keepsats_to_external",
             "keepsats_internal_transfer",
         }
@@ -152,36 +152,98 @@ class TestKeepsatsInternalTransferOverwatch:
         assert "keepsats_internal_transfer" in completed_names
 
     @pytest.mark.asyncio
-    async def test_other_candidates_removed_on_completion(self):
-        """When keepsats_internal_transfer completes, the other custom_json
-        candidates should be removed (their events are all explainable)."""
+    async def test_superset_kept_subset_removed_on_completion(self):
+        """When keepsats_internal_transfer completes, keepsats_to_hive (a
+        superset flow) is kept alive while keepsats_to_external (not a
+        superset) is removed."""
         ow = _register_all()
         trigger = _op_event("custom_json")
         await ow._try_create_flow(trigger, _fake_op())
 
         await ow._dispatch(_ledger_event(LedgerType.CUSTOM_JSON_TRANSFER))
 
-        # Only the completed flow should remain
-        assert len(ow.active_flows) == 0
+        # keepsats_to_hive is a superset (contains all of
+        # keepsats_internal_transfer's stage signatures plus more) → kept
+        assert len(ow.active_flows) == 1
+        assert ow.active_flows[0].flow_definition.name == "keepsats_to_hive"
         assert len(ow.completed_flows) == 1
         assert ow.completed_flows[0].flow_definition.name == "keepsats_internal_transfer"
 
     @pytest.mark.asyncio
     async def test_notification_absorbed_after_completion(self):
         """Late notification custom_json is absorbed by the recently-completed
-        internal transfer flow."""
-        ow = _register_all()
+        internal transfer flow (when no superset candidate is active)."""
+        Overwatch.reset()
+        ow = Overwatch()
+        # Only register keepsats_internal_transfer so no superset candidate
+        # intercepts the notification in the first pass.
+        Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
+        Overwatch._loaded_from_redis = True
+
         trigger = _op_event("custom_json")
         await ow._try_create_flow(trigger, _fake_op())
 
         await ow._dispatch(_ledger_event(LedgerType.CUSTOM_JSON_TRANSFER))
         assert len(ow.completed_flows) == 1
 
+        # Simulate recent completion so late-event time window applies
+        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc)
+
         # Notification arrives shortly after — absorbed as late event
         notif = _op_event("custom_json", group_id="gid_notif", short_id="3690_5a7a2f_1")
         result = await ow._dispatch(notif)
         assert result is not None
         assert len(ow.completed_flows[0].events) == 3
+
+    @pytest.mark.asyncio
+    async def test_keepsats_to_hive_completes_after_internal_transfer(self):
+        """A keepsats_to_hive transaction: keepsats_internal_transfer completes
+        early (2 stages) but keepsats_to_hive (superset) stays alive and
+        eventually completes as the remaining ledgers and transfer arrive."""
+        ow = _register_all()
+
+        # Trigger custom_json → creates 3 candidates
+        trigger = _op_event("custom_json")
+        await ow._try_create_flow(trigger, _fake_op())
+        assert len(ow.active_flows) == 3
+
+        # CUSTOM_JSON_TRANSFER → keepsats_internal_transfer completes
+        await ow._dispatch(_ledger_event(LedgerType.CUSTOM_JSON_TRANSFER))
+        assert len(ow.completed_flows) == 1
+        assert ow.completed_flows[0].flow_definition.name == "keepsats_internal_transfer"
+        # keepsats_to_hive superset kept, keepsats_to_external removed
+        assert len(ow.active_flows) == 1
+        assert ow.active_flows[0].flow_definition.name == "keepsats_to_hive"
+
+        # Remaining keepsats_to_hive ledgers arrive
+        for lt in [
+            LedgerType.CONV_KEEPSATS_TO_HIVE,
+            LedgerType.CONTRA_KEEPSATS_TO_HIVE,
+            LedgerType.CUSTOM_JSON_FEE_REFUND,
+            LedgerType.FEE_INCOME,
+            LedgerType.CONV_CUSTOMER,
+            LedgerType.RECLASSIFY_VSC_SATS,
+            LedgerType.RECLASSIFY_VSC_HIVE,
+            LedgerType.EXCHANGE_CONVERSION,
+            LedgerType.EXCHANGE_FEES,
+        ]:
+            await ow._dispatch(_ledger_event(lt, group_id="gid_ledger", short_id="3688_2320ec_1"))
+
+        # Transfer and CUSTOMER_HIVE_OUT (different group_id for the transfer)
+        await ow._dispatch(_op_event("transfer", group_id="gid_transfer", short_id="sid_transfer"))
+        await ow._dispatch(
+            _ledger_event(
+                LedgerType.CUSTOMER_HIVE_OUT,
+                group_id="gid_transfer",
+                short_id="sid_transfer",
+            )
+        )
+
+        # Both flows should be completed now
+        completed_names = {f.flow_definition.name for f in ow.completed_flows}
+        assert "keepsats_internal_transfer" in completed_names
+        assert "keepsats_to_hive" in completed_names
+        assert len(ow.active_flows) == 0
 
 
 # ---------------------------------------------------------------------------

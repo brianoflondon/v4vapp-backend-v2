@@ -7,7 +7,7 @@ small amounts).
 
 A key benefit of this flow: once active (triggered by 'invoice'), the
 subsequent custom_json and transfer events are absorbed by _dispatch
-instead of creating false keepsats_to_hbd / hive_to_keepsats candidates.
+instead of creating false keepsats_to_hive / hive_to_keepsats candidates.
 """
 
 from datetime import datetime, timezone
@@ -20,7 +20,7 @@ from v4vapp_backend_v2.process.overwatch_flows import (
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
     KEEPSATS_TO_EXTERNAL_FLOW,
-    KEEPSATS_TO_HBD_FLOW,
+    KEEPSATS_TO_HIVE_FLOW,
 )
 from v4vapp_backend_v2.process.process_overwatch import FlowEvent, Overwatch
 
@@ -129,7 +129,7 @@ class TestExternalToKeepsatsOverwatch:
         ow = Overwatch()
         Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
         Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
         Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_FLOW)
         Overwatch._loaded_from_redis = True
@@ -174,6 +174,9 @@ class TestExternalToKeepsatsOverwatch:
         assert len(ow.completed_flows) == 1
         assert ow.completed_flows[0].flow_definition.name == "external_to_keepsats"
 
+        # Simulate recent completion so late-event time window applies
+        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc)
+
         # HIVE notification (optional, absorbed as late event)
         await ow._dispatch(_op_event("transfer", group_id="gid_hive", short_id="3145_02a914_1"))
         await ow._dispatch(
@@ -216,7 +219,7 @@ class TestExternalToKeepsatsOverwatch:
     async def test_custom_json_absorbed_not_creating_false_candidates(self):
         """The custom_json from keepsats notification should be absorbed
         by the active external_to_keepsats flow — NOT trigger
-        keepsats_to_hbd / keepsats_to_external candidates."""
+        keepsats_to_hive / keepsats_to_external candidates."""
         ow = self._register_all()
 
         # Start external_to_keepsats via invoice trigger
@@ -260,6 +263,9 @@ class TestExternalToKeepsatsOverwatch:
         # Flow completed. Transfer arrives as late event.
         assert len(ow.completed_flows) == 1
 
+        # Simulate recent completion so late-event time window applies
+        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc)
+
         transfer_event = _op_event("transfer", group_id="gid_hive", short_id="3145_02a914_1")
         result = await ow._dispatch(transfer_event)
         # Transfer absorbed by completed flow (late event)
@@ -293,6 +299,9 @@ class TestExternalToKeepsatsOverwatch:
         # Flow completed. Second custom_json (small-amount notification) arrives.
         assert len(ow.completed_flows) == 1
 
+        # Simulate recent completion so late-event time window applies
+        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc)
+
         small_notif = _op_event("custom_json", group_id="gid_small", short_id="3145_small_1")
         result = await ow._dispatch(small_notif)
         # Absorbed by the optional small_notification_custom_json_op stage
@@ -301,7 +310,7 @@ class TestExternalToKeepsatsOverwatch:
 
     @pytest.mark.asyncio
     async def test_invoice_does_not_create_other_flow_types(self):
-        """Invoice trigger should not create hive_to_keepsats, keepsats_to_hbd,
+        """Invoice trigger should not create hive_to_keepsats, keepsats_to_hive,
         or keepsats_to_external candidates."""
         ow = self._register_all()
         event = _op_event("invoice")

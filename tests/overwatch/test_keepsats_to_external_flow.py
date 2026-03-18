@@ -15,7 +15,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.process.overwatch_flows import (
     KEEPSATS_TO_EXTERNAL_FLOW,
-    KEEPSATS_TO_HBD_FLOW,
+    KEEPSATS_TO_HIVE_FLOW,
 )
 from v4vapp_backend_v2.process.process_overwatch import (
     FlowEvent,
@@ -460,10 +460,10 @@ class TestMultiCandidateDisambiguation:
     @pytest.mark.asyncio
     async def test_try_create_creates_two_candidates(self, ke_flow_data: dict):
         """custom_json trigger should create both keepsats_to_external and
-        keepsats_to_hbd as candidates."""
+        keepsats_to_hive as candidates."""
         Overwatch.reset()
         ow = Overwatch()
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
         Overwatch._loaded_from_redis = True
 
@@ -491,7 +491,7 @@ class TestMultiCandidateDisambiguation:
         assert result == "trigger_custom_json"
         assert len(ow.active_flows) == 2
         flow_names = {f.flow_definition.name for f in ow.active_flows}
-        assert flow_names == {"keepsats_to_hbd", "keepsats_to_external"}
+        assert flow_names == {"keepsats_to_hive", "keepsats_to_external"}
 
     @pytest.mark.asyncio
     async def test_external_events_complete_external_and_remove_hbd(
@@ -500,10 +500,10 @@ class TestMultiCandidateDisambiguation:
         ke_all_flow_events: list[FlowEvent],
     ):
         """Feeding keepsats_to_external events should complete that flow
-        and resolve the keepsats_to_hbd candidate."""
+        and resolve the keepsats_to_hive candidate."""
         Overwatch.reset()
         ow = Overwatch()
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
         Overwatch._loaded_from_redis = True
 
@@ -531,7 +531,7 @@ class TestMultiCandidateDisambiguation:
         assert len(ow.completed_flows) == 1
         assert ow.completed_flows[0].flow_definition.name == "keepsats_to_external"
         # HBD candidate was removed by _resolve_candidates
-        hbd_flows = [f for f in ow.flow_instances if f.flow_definition.name == "keepsats_to_hbd"]
+        hbd_flows = [f for f in ow.flow_instances if f.flow_definition.name == "keepsats_to_hive"]
         assert len(hbd_flows) == 0
 
     @pytest.mark.asyncio
@@ -543,7 +543,7 @@ class TestMultiCandidateDisambiguation:
         """Events should be dispatched to all active candidates, not just the first."""
         Overwatch.reset()
         ow = Overwatch()
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
         Overwatch._loaded_from_redis = True
 
@@ -615,7 +615,7 @@ class TestMultiCandidateDisambiguation:
         """_resolve_candidates should remove losers from flow_instances."""
         Overwatch.reset()
         ow = Overwatch()
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
         Overwatch._loaded_from_redis = True
 
@@ -662,7 +662,7 @@ class TestMultiCandidateDisambiguation:
         be absorbed by the completed flow — not spawn new candidates."""
         Overwatch.reset()
         ow = Overwatch()
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
         Overwatch._loaded_from_redis = True
 

@@ -747,10 +747,10 @@ class TestOverwatch:
         assert messages, "no load message logged"
         msg = messages[-1]
         assert "active" in msg and "stalled" in msg and "completed" in msg
-        from v4vapp_backend_v2.process.overwatch_flows import KEEPSATS_TO_HBD_FLOW
+        from v4vapp_backend_v2.process.overwatch_flows import KEEPSATS_TO_HIVE_FLOW
 
         # start with an "old" copy where every stage is required
-        old_def = FlowDefinition(**KEEPSATS_TO_HBD_FLOW.model_dump())
+        old_def = FlowDefinition(**KEEPSATS_TO_HIVE_FLOW.model_dump())
         for s in old_def.stages:
             s.required = True
 
@@ -796,7 +796,7 @@ class TestOverwatch:
         # reset and register the updated definition
         Overwatch.reset()
         ow2 = Overwatch()
-        Overwatch.register_flow(KEEPSATS_TO_HBD_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
 
         loaded = await ow2.load_from_redis()
         # we expect at least one flow to be loaded and that one should

@@ -172,9 +172,9 @@ HIVE_TO_KEEPSATS_FLOW = FlowDefinition(
 #  17. fill_or_n ledger - Fill order net entry
 # ---------------------------------------------------------------------------
 
-KEEPSATS_TO_HBD_FLOW = FlowDefinition(
-    name="keepsats_to_hbd",
-    description="Conversion from Keepsats (sats) to HBD via exchange",
+KEEPSATS_TO_HIVE_FLOW = FlowDefinition(
+    name="keepsats_to_hive",
+    description="Conversion from Keepsats (sats) to HIVE/HBD via exchange",
     trigger_op_type="custom_json",
     stages=[
         # --- Primary stages (same short_id as trigger) ---
@@ -646,7 +646,7 @@ KEEPSATS_INTERNAL_TRANSFER_FLOW = FlowDefinition(
 FLOW_DEFINITIONS = {
     "hive_to_keepsats": HIVE_TO_KEEPSATS_FLOW,
     "hive_to_keepsats_external": HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
-    "keepsats_to_hbd": KEEPSATS_TO_HBD_FLOW,
+    "keepsats_to_hive": KEEPSATS_TO_HIVE_FLOW,
     "keepsats_to_external": KEEPSATS_TO_EXTERNAL_FLOW,
     "external_to_keepsats": EXTERNAL_TO_KEEPSATS_FLOW,
     "keepsats_internal_transfer": KEEPSATS_INTERNAL_TRANSFER_FLOW,

@@ -297,8 +297,10 @@ class FlowInstance(BaseModel):
         # Try to match against stages not yet fulfilled
         for stage in self.flow_definition.stages:
             if stage.name not in previously_matched and stage.matches(event):
-                # Check completeness after adding
-                if self.is_complete:
+                # Check completeness after adding — only record completed_at
+                # the first time so late-event absorption doesn't push the
+                # timestamp back and fall outside _LATE_EVENT_WINDOW.
+                if self.is_complete and self.completed_at is None:
                     self.status = FlowStatus.COMPLETED
                     self.completed_at = event.timestamp
                 return stage.name
@@ -755,12 +757,18 @@ class Overwatch:
     async def _resolve_candidates(self, winner: FlowInstance) -> None:
         """Remove losing candidate flows that share the same trigger.
 
-        Called when *winner* completes.  A candidate is only removed if
-        **every event it has received** could be matched by the winner's
-        definition.  If the candidate has events the winner can't explain
-        (e.g. a ``payment`` op that the winner's flow doesn't include)
-        the candidate is kept alive — it's tracking an extended flow that
-        includes stages beyond the winner's scope.
+        Called when *winner* completes.  A candidate is kept alive if:
+
+        1. It already has **events** the winner's definition can't explain
+           (e.g. a ``payment`` op not in the winner's stages), **or**
+        2. The winner's stage definitions are a **proper subset** of the
+           candidate's — meaning the candidate is a superset flow that
+           could still be the correct match once more events arrive.
+
+        Without check (2), a simple flow (e.g. ``keepsats_internal_transfer``
+        with 2 required stages) would kill a superset candidate
+        (``keepsats_to_hive`` with 12+ required stages) before the
+        distinguishing events have a chance to arrive.
         """
         candidates = [
             f
@@ -770,16 +778,32 @@ class Overwatch:
             and f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
         ]
         winner_stages = winner.flow_definition.stages
+
+        def _stage_sig(s: FlowStage) -> tuple:
+            """Hashable matching-criteria signature for a stage."""
+            return (s.event_type, s.op_type, s.ledger_type)
+
+        winner_sigs = {_stage_sig(s) for s in winner_stages}
+
         for candidate in candidates:
-            # Keep the candidate if it has events the winner can't explain
+            # (1) Keep the candidate if it has events the winner can't explain
             has_unique_events = any(
                 not any(stage.matches(ev) for stage in winner_stages) for ev in candidate.events
             )
-            if has_unique_events:
+            # (2) Keep if the candidate is a superset flow — every stage the
+            #     winner defines also exists in the candidate's definition,
+            #     but the candidate has additional stages.
+            candidate_sigs = {_stage_sig(s) for s in candidate.flow_definition.stages}
+            winner_is_proper_subset = (
+                winner_sigs.issubset(candidate_sigs) and winner_sigs != candidate_sigs
+            )
+
+            if has_unique_events or winner_is_proper_subset:
+                reason = "has unique events" if has_unique_events else "is a superset flow"
                 logger.info(
                     f"{ICON} 📌 Keeping candidate '{candidate.flow_definition.name}' "
-                    f"({candidate.trigger_short_id}) — has events "
-                    f"not covered by '{winner.flow_definition.name}'",
+                    f"({candidate.trigger_short_id}) — {reason} "
+                    f"vs '{winner.flow_definition.name}'",
                     extra={"notification": False},
                 )
                 continue
