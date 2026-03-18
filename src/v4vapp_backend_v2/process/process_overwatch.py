@@ -30,7 +30,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import Any, ClassVar, List, Literal
+from typing import Any, ClassVar, Dict, List, Literal
 
 from colorama import Fore
 from pydantic import BaseModel, Field
@@ -249,6 +249,10 @@ class FlowInstance(BaseModel):
         description="When the flow was initiated",
     )
     completed_at: datetime | None = Field(None, description="When the flow completed")
+    superset_grace_expires: datetime | None = Field(
+        None,
+        description="If this candidate was kept alive as a superset, when the grace period expires",
+    )
     events: List[FlowEvent] = Field(
         default_factory=list, description="Recorded events in this flow"
     )
@@ -351,6 +355,13 @@ class FlowInstance(BaseModel):
             return (self.completed_at - self.started_at).total_seconds()
         return None
 
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        """
+        Return extra fields for logging this flow instance.
+        """
+        return {"flow": self.summary()}
+
     def summary(self) -> dict[str, Any]:
         """Return a summary dict of this flow instance."""
         return {
@@ -374,6 +385,7 @@ class FlowInstance(BaseModel):
 # Default timeout — if a flow hasn't received new events for this long it
 # is marked as STALLED during the periodic report.
 DEFAULT_STALL_TIMEOUT = timedelta(minutes=5)
+DEFAULT_SUPERSET_GRACE_PERIOD = timedelta(seconds=30)
 
 
 class Overwatch:
@@ -410,6 +422,7 @@ class Overwatch:
     flow_instances: ClassVar[List[FlowInstance]] = []
     _flow_definitions: ClassVar[dict[str, FlowDefinition]] = {}
     stall_timeout: ClassVar[timedelta] = DEFAULT_STALL_TIMEOUT
+    superset_grace_period: ClassVar[timedelta] = DEFAULT_SUPERSET_GRACE_PERIOD
     _loaded_from_redis: ClassVar[bool] = False
 
     def __new__(cls) -> Overwatch:
@@ -673,12 +686,15 @@ class Overwatch:
             if result is not None:
                 if first_result is None:
                     first_result = result
+                # Clear superset grace — the flow is actively progressing
+                if flow.superset_grace_expires is not None:
+                    flow.superset_grace_expires = None
                 if flow.is_complete:
                     newly_completed.append(flow)
                     logger.info(
-                        f"{ICON} ✅ {Fore.GREEN}Flow '{flow.flow_definition.name}' completed "
+                        f"{ICON} ✅ {Fore.WHITE}Flow '{flow.flow_definition.name}' completed "
                         f"({flow.trigger_short_id}) in {flow.duration:.1f}s{Fore.RESET}",
-                        extra={"notification": False},
+                        extra={"notification": True, **flow.log_extra},
                     )
                 await self._persist_flow(flow)
         for completed in newly_completed:
@@ -800,11 +816,17 @@ class Overwatch:
 
             if has_unique_events or winner_is_proper_subset:
                 reason = "has unique events" if has_unique_events else "is a superset flow"
+                # Start the superset grace period so the candidate gets
+                # cancelled automatically if no distinguishing events arrive.
+                if winner_is_proper_subset and candidate.superset_grace_expires is None:
+                    candidate.superset_grace_expires = (
+                        datetime.now(tz=timezone.utc) + self.superset_grace_period
+                    )
                 logger.info(
                     f"{ICON} 📌 Keeping candidate '{candidate.flow_definition.name}' "
                     f"({candidate.trigger_short_id}) — {reason} "
                     f"vs '{winner.flow_definition.name}'",
-                    extra={"notification": False},
+                    extra={"notification": False, **candidate.log_extra},
                 )
                 continue
             candidate.status = FlowStatus.FAILED
@@ -814,7 +836,7 @@ class Overwatch:
                 f"{ICON} 🗑️ Removed candidate '{candidate.flow_definition.name}' "
                 f"({candidate.trigger_short_id}) — "
                 f"'{winner.flow_definition.name}' completed",
-                extra={"notification": False},
+                extra={"notification": False, **candidate.log_extra},
             )
 
     # ---- queries ----
@@ -843,10 +865,28 @@ class Overwatch:
     async def check_stalls(self, now: datetime | None = None) -> List[FlowInstance]:
         """Mark active flows that haven't received events recently as STALLED.
 
+        Also cancels superset candidates whose grace period has expired —
+        i.e. a simpler sibling flow already completed and this candidate
+        hasn't accumulated any distinguishing events in time.
+
         Returns the list of flows whose status was changed.
         """
         now = now or datetime.now(tz=timezone.utc)
         newly_stalled: List[FlowInstance] = []
+
+        # Rule 1: cancel superset candidates past their grace period
+        for flow in list(self.active_flows):
+            if flow.superset_grace_expires is not None and now >= flow.superset_grace_expires:
+                flow.status = FlowStatus.FAILED
+                self.flow_instances.remove(flow)
+                await self._remove_active_flow(flow)
+                logger.info(
+                    f"{ICON} 🗑️ Superset candidate '{flow.flow_definition.name}' "
+                    f"({flow.trigger_short_id}) cancelled — grace period "
+                    f"({self.superset_grace_period.total_seconds():.0f}s) expired",
+                    extra={"notification": False, **flow.log_extra},
+                )
+
         for flow in list(self.active_flows):
             # a definition change may have made the flow complete
             if flow.is_complete and flow.status != FlowStatus.COMPLETED:
@@ -941,7 +981,11 @@ class Overwatch:
                 f"{ICON}   ↳ STALLED {flow.flow_definition.name} "
                 f"({flow.trigger_short_id}) {flow.progress} "
                 f"missing: {[s.name for s in flow.missing_stages]}, last event: {stalled_time}, stalled for: {since}",
-                extra={"notification": False},
+                extra={
+                    "notification": True,
+                    "error_code": "overwatch_flow_stalled",
+                    **flow.__dict__,
+                },
             )
 
     # ---- housekeeping ----
@@ -952,6 +996,7 @@ class Overwatch:
         cls.flow_instances.clear()
         cls._flow_definitions.clear()
         cls.stall_timeout = DEFAULT_STALL_TIMEOUT
+        cls.superset_grace_period = DEFAULT_SUPERSET_GRACE_PERIOD
         cls._loaded_from_redis = False
         cls._instance = None
 

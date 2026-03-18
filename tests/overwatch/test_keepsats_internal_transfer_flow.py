@@ -245,6 +245,28 @@ class TestKeepsatsInternalTransferOverwatch:
         assert "keepsats_to_hive" in completed_names
         assert len(ow.active_flows) == 0
 
+    @pytest.mark.asyncio
+    async def test_superset_cancelled_after_grace_period(self):
+        """keepsats_to_hive superset candidate is auto-cancelled after the
+        grace period if this really was just an internal transfer."""
+        ow = _register_all()
+        trigger = _op_event("custom_json")
+        await ow._try_create_flow(trigger, _fake_op())
+
+        await ow._dispatch(_ledger_event(LedgerType.CUSTOM_JSON_TRANSFER))
+        assert len(ow.active_flows) == 1
+        assert ow.active_flows[0].flow_definition.name == "keepsats_to_hive"
+        assert ow.active_flows[0].superset_grace_expires is not None
+
+        # Jump past the grace period
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=31)
+        await ow.check_stalls(now=future)
+
+        # Superset candidate removed
+        assert len(ow.active_flows) == 0
+        assert len(ow.completed_flows) == 1
+        assert ow.completed_flows[0].flow_definition.name == "keepsats_internal_transfer"
+
 
 # ---------------------------------------------------------------------------
 # Tests: Late-event time window

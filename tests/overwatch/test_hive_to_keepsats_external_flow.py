@@ -10,7 +10,7 @@ fee_exp).  Tests verify that:
   - Both flows can complete independently when payment events arrive
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -277,6 +277,137 @@ class TestSupersetCandidateResolution:
         assert len(ow.active_flows) == 1
         assert ow.active_flows[0].flow_definition.name == "hive_to_keepsats_external"
         assert len(ow.completed_flows) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: Superset grace period (Rule 1)
+# ---------------------------------------------------------------------------
+
+
+class TestSupersetGracePeriod:
+    """Superset candidates are cancelled after the grace period expires
+    if no distinguishing events arrive."""
+
+    @pytest.mark.asyncio
+    async def test_grace_period_set_on_superset_candidate(self):
+        """When hive_to_keepsats completes, the superset candidate gets a
+        superset_grace_expires timestamp."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _SHARED_EVENTS[0]()
+        await ow._try_create_flow(trigger, _fake_op())
+
+        for factory in _SHARED_EVENTS[1:]:
+            await ow._dispatch(factory())
+
+        ext = ow.active_flows[0]
+        assert ext.flow_definition.name == "hive_to_keepsats_external"
+        assert ext.superset_grace_expires is not None
+
+    @pytest.mark.asyncio
+    async def test_superset_cancelled_after_grace_expires(self):
+        """check_stalls cancels the superset candidate once grace period is up."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _SHARED_EVENTS[0]()
+        await ow._try_create_flow(trigger, _fake_op())
+        for factory in _SHARED_EVENTS[1:]:
+            await ow._dispatch(factory())
+
+        ext = ow.active_flows[0]
+        # Jump past the grace period
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=31)
+        await ow.check_stalls(now=future)
+
+        assert len(ow.active_flows) == 0
+        # The candidate was removed, not just stalled
+        ext_remaining = [
+            f for f in ow.flow_instances if f.flow_definition.name == "hive_to_keepsats_external"
+        ]
+        assert len(ext_remaining) == 0
+
+    @pytest.mark.asyncio
+    async def test_superset_survives_before_grace_expires(self):
+        """check_stalls does NOT cancel if grace hasn't expired yet."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _SHARED_EVENTS[0]()
+        await ow._try_create_flow(trigger, _fake_op())
+        for factory in _SHARED_EVENTS[1:]:
+            await ow._dispatch(factory())
+
+        # Only 10s later — well within grace
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=10)
+        await ow.check_stalls(now=future)
+        assert len(ow.active_flows) == 1
+
+    @pytest.mark.asyncio
+    async def test_distinguishing_event_clears_grace(self):
+        """A payment event (only in external flow) clears the grace timer."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _SHARED_EVENTS[0]()
+        await ow._try_create_flow(trigger, _fake_op())
+
+        # Dispatch some shared events first
+        await ow._dispatch(_SHARED_EVENTS[1]())  # cust_h_in
+        await ow._dispatch(_SHARED_EVENTS[2]())  # hold_k
+
+        # Payment events (only external has these)
+        for factory in _PAYMENT_EVENTS:
+            await ow._dispatch(factory())
+
+        # Remaining shared events complete hive_to_keepsats
+        for factory in _SHARED_EVENTS[3:]:
+            await ow._dispatch(factory())
+
+        ext = [
+            f for f in ow.flow_instances if f.flow_definition.name == "hive_to_keepsats_external"
+        ]
+        assert len(ext) == 1
+        # Grace timer should be cleared because payment events arrived
+        assert ext[0].superset_grace_expires is None
+
+    @pytest.mark.asyncio
+    async def test_custom_grace_period(self):
+        """The grace period is configurable via Overwatch.superset_grace_period."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.superset_grace_period = timedelta(seconds=60)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _SHARED_EVENTS[0]()
+        await ow._try_create_flow(trigger, _fake_op())
+        for factory in _SHARED_EVENTS[1:]:
+            await ow._dispatch(factory())
+
+        # 40s later — would be expired with default 30s, but not with 60s
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=40)
+        await ow.check_stalls(now=future)
+        assert len(ow.active_flows) == 1
+
+        # 70s later — now it's expired
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=70)
+        await ow.check_stalls(now=future)
+        assert len(ow.active_flows) == 0
 
 
 # ---------------------------------------------------------------------------
