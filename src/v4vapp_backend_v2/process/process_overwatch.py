@@ -365,6 +365,17 @@ class FlowInstance(BaseModel):
         return None
 
     @property
+    def log_str(self) -> str:
+        """Return a human-readable string summarizing this flow instance for logging."""
+        return (
+            f"FlowInstance(flow='{self.flow_definition.name}', "
+            f"trigger_short_id='{self.trigger_short_id}', "
+            f"cust_id='{self.cust_id}', "
+            f"status='{self.status}', "
+            f"progress='{self.progress}')"
+        )
+
+    @property
     def log_extra(self) -> Dict[str, Any]:
         """
         Return extra fields for logging this flow instance.
