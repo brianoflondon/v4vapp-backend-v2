@@ -6,6 +6,7 @@ Lightning payment (1,234 sats paid to WalletOfSatoshi.com via LND).
 """
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -687,6 +688,9 @@ class TestMultiCandidateDisambiguation:
         assert len(ow.completed_flows) == 1
         assert ow.completed_flows[0].flow_definition.name == "keepsats_to_external"
         assert len(ow.active_flows) == 0  # HBD candidate was resolved away
+
+        # Simulate recent completion so the late-event time window applies
+        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc)
 
         # Now the late notification arrives
         notification_event = ke_all_flow_events[-1]

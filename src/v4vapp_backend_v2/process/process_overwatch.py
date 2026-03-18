@@ -32,6 +32,7 @@ from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Any, ClassVar, List, Literal
 
+from colorama import Fore
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
@@ -45,6 +46,7 @@ ICON = "📒"
 _REDIS_ACTIVE_KEY = "overwatch:flows:active"
 _REDIS_COMPLETED_PREFIX = "overwatch:flows:completed:"
 _COMPLETED_TTL_SECONDS = 24 * 60 * 60  # 24 hours
+_LATE_EVENT_WINDOW = timedelta(seconds=120)  # only absorb late events into recent completions
 
 
 # ---------------------------------------------------------------------------
@@ -379,10 +381,11 @@ class Overwatch:
     survive process restarts:
 
     - Active (pending / in_progress / stalled) flows are stored in a Redis
-      hash at ``overwatch:flows:active`` keyed by ``trigger_group_id``.
+      hash at ``overwatch:flows:active`` keyed by
+      ``<cust_id>:<trigger_group_id>:<flow_name>``.
     - Completed flows are moved to individual keys
-      ``overwatch:flows:completed:<trigger_group_id>`` with a 24-hour TTL so
-      they stay queryable for at least a day.
+      ``overwatch:flows:completed:<cust_id>:<trigger_group_id>:<flow_name>``
+      with a 24-hour TTL so they stay queryable for at least a day.
 
     If Redis is unreachable the system continues to operate purely in-memory
     and will attempt to persist again on the next mutation.
@@ -439,7 +442,7 @@ class Overwatch:
     @staticmethod
     def _redis_flow_key(flow: FlowInstance) -> str:
         """Composite Redis key allowing multiple candidates per trigger."""
-        return f"{flow.trigger_group_id}:{flow.flow_definition.name}"
+        return f"{flow.cust_id}:{flow.trigger_group_id}:{flow.flow_definition.name}"
 
     async def _persist_flow(self, flow: FlowInstance) -> None:
         """Write a single flow to Redis (active hash or completed key)."""
@@ -671,27 +674,35 @@ class Overwatch:
                 if flow.is_complete:
                     newly_completed.append(flow)
                     logger.info(
-                        f"{ICON} ✅ Flow '{flow.flow_definition.name}' completed "
-                        f"({flow.trigger_short_id}) in {flow.duration:.1f}s",
+                        f"{ICON} ✅ {Fore.GREEN}Flow '{flow.flow_definition.name}' completed "
+                        f"({flow.trigger_short_id}) in {flow.duration:.1f}s{Fore.RESET}",
                         extra={"notification": False},
                     )
                 await self._persist_flow(flow)
         for completed in newly_completed:
             await self._resolve_candidates(completed)
 
-        # Second pass: absorb late events into already-completed flows
+        # Second pass: absorb late events into recently-completed flows
         # (e.g. notification custom_json arriving after all required stages).
+        # Only consider flows that completed within _LATE_EVENT_WINDOW to
+        # avoid greedily absorbing unrelated events from new transactions.
         if first_result is None:
+            now = datetime.now(tz=timezone.utc)
             for flow in self.completed_flows:
+                if (
+                    flow.completed_at is not None
+                    and (now - flow.completed_at) > _LATE_EVENT_WINDOW
+                ):
+                    continue
                 if self._is_duplicate(flow, event):
                     continue
                 result = flow.add_event(event)
                 if result is not None:
                     first_result = result
                     logger.info(
-                        f"{ICON} 📎 Late event '{result}' absorbed by "
+                        f"{ICON} 📎 {Fore.YELLOW}Late event '{result}' absorbed by "
                         f"completed flow '{flow.flow_definition.name}' "
-                        f"({flow.trigger_short_id})",
+                        f"({flow.trigger_short_id}){Fore.RESET}",
                         extra={"notification": False},
                     )
                     await self._persist_flow(flow)

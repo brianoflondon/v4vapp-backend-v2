@@ -227,6 +227,6 @@ async def set_cached_balance(
         key = _make_cache_key(gen, account, as_of_date, age)
         data = result.model_dump_json()
         await InternalConfig.redis_async.setex(key, ttl, data)
-        logger.info(f"{Fore.WHITE}SET: {key} (ttl={ttl}s){Fore.RESET}")
+        logger.info(f"SET: {key} (ttl={ttl}s)")
     except Exception as e:
-        logger.warning(f"{Fore.RED}Failed to set ledger cache: {e}{Fore.RESET}")
+        logger.warning(f"Failed to set ledger cache: {e}")
