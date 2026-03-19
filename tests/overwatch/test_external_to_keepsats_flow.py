@@ -16,6 +16,7 @@ import pytest
 
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.process.overwatch_flows import (
+    EXTERNAL_TO_HIVE_FLOW,
     EXTERNAL_TO_KEEPSATS_FLOW,
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
@@ -132,19 +133,21 @@ class TestExternalToKeepsatsOverwatch:
         Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
         Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
         Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(EXTERNAL_TO_HIVE_FLOW)
         Overwatch._loaded_from_redis = True
         return ow
 
     @pytest.mark.asyncio
-    async def test_invoice_creates_single_candidate(self):
-        """An invoice trigger should create exactly one candidate
-        (only external_to_keepsats has trigger_op_type='invoice')."""
+    async def test_invoice_creates_two_candidates(self):
+        """An invoice trigger should create two candidates —
+        external_to_keepsats and its superset external_to_hive."""
         ow = self._register_all()
         event = _op_event("invoice")
         result = await ow._try_create_flow(event, _fake_op())
         assert result == "trigger_invoice"
-        assert len(ow.active_flows) == 1
-        assert ow.active_flows[0].flow_definition.name == "external_to_keepsats"
+        assert len(ow.active_flows) == 2
+        names = {f.flow_definition.name for f in ow.active_flows}
+        assert names == {"external_to_keepsats", "external_to_hive"}
 
     @pytest.mark.asyncio
     async def test_full_flow_with_hive_notification(self):
@@ -174,10 +177,7 @@ class TestExternalToKeepsatsOverwatch:
         assert len(ow.completed_flows) == 1
         assert ow.completed_flows[0].flow_definition.name == "external_to_keepsats"
 
-        # Simulate recent completion so late-event time window applies
-        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc)
-
-        # HIVE notification (optional, absorbed as late event)
+        # HIVE notification — absorbed by active external_to_hive
         await ow._dispatch(_op_event("transfer", group_id="gid_hive", short_id="3145_02a914_1"))
         await ow._dispatch(
             _ledger_event(
@@ -187,9 +187,10 @@ class TestExternalToKeepsatsOverwatch:
             )
         )
 
-        # Still 1 completed flow, with 6 events total
-        assert len(ow.completed_flows) == 1
-        assert len(ow.completed_flows[0].events) == 6
+        # Both flows completed
+        assert len(ow.completed_flows) == 2
+        completed_names = {f.flow_definition.name for f in ow.completed_flows}
+        assert completed_names == {"external_to_keepsats", "external_to_hive"}
 
     @pytest.mark.asyncio
     async def test_full_flow_without_hive_notification(self):
@@ -213,7 +214,9 @@ class TestExternalToKeepsatsOverwatch:
 
         # Complete with 4 required stages, no HIVE notification
         assert len(ow.completed_flows) == 1
-        assert len(ow.active_flows) == 0
+        # external_to_hive still active (waiting for HIVE payout)
+        active_names = {f.flow_definition.name for f in ow.active_flows}
+        assert "external_to_hive" in active_names
 
     @pytest.mark.asyncio
     async def test_custom_json_absorbed_not_creating_false_candidates(self):
@@ -225,19 +228,20 @@ class TestExternalToKeepsatsOverwatch:
         # Start external_to_keepsats via invoice trigger
         trigger = _op_event("invoice")
         await ow._try_create_flow(trigger, _fake_op())
-        assert len(ow.active_flows) == 1
+        assert len(ow.active_flows) == 2
 
         # Deposit ledger
         await ow._dispatch(_ledger_event(LedgerType.DEPOSIT_LIGHTNING))
 
-        # custom_json arrives — should be absorbed by external_to_keepsats
+        # custom_json arrives — should be absorbed by both active flows
         cj_event = _op_event("custom_json", group_id="gid_notif", short_id="3143_0bb89a_1")
         result = await ow._dispatch(cj_event)
         assert result is not None  # absorbed
 
         # No new candidates should have been created
-        assert len(ow.active_flows) == 1
-        assert ow.active_flows[0].flow_definition.name == "external_to_keepsats"
+        assert len(ow.active_flows) == 2
+        active_names = {f.flow_definition.name for f in ow.active_flows}
+        assert active_names == {"external_to_keepsats", "external_to_hive"}
 
     @pytest.mark.asyncio
     async def test_transfer_absorbed_not_creating_false_candidates(self):
@@ -260,15 +264,12 @@ class TestExternalToKeepsatsOverwatch:
             )
         )
 
-        # Flow completed. Transfer arrives as late event.
+        # Flow completed. Transfer arrives — absorbed by active external_to_hive.
         assert len(ow.completed_flows) == 1
-
-        # Simulate recent completion so late-event time window applies
-        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc)
 
         transfer_event = _op_event("transfer", group_id="gid_hive", short_id="3145_02a914_1")
         result = await ow._dispatch(transfer_event)
-        # Transfer absorbed by completed flow (late event)
+        # Transfer absorbed by active external_to_hive
         assert result is not None
 
         # No hive_to_keepsats candidates created
@@ -299,14 +300,10 @@ class TestExternalToKeepsatsOverwatch:
         # Flow completed. Second custom_json (small-amount notification) arrives.
         assert len(ow.completed_flows) == 1
 
-        # Simulate recent completion so late-event time window applies
-        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc)
-
         small_notif = _op_event("custom_json", group_id="gid_small", short_id="3145_small_1")
         result = await ow._dispatch(small_notif)
-        # Absorbed by the optional small_notification_custom_json_op stage
+        # Absorbed by active external_to_hive (or completed external_to_keepsats)
         assert result is not None
-        assert len(ow.completed_flows[0].events) == 5
 
     @pytest.mark.asyncio
     async def test_invoice_does_not_create_other_flow_types(self):
@@ -316,4 +313,4 @@ class TestExternalToKeepsatsOverwatch:
         event = _op_event("invoice")
         await ow._try_create_flow(event, _fake_op())
         flow_names = {f.flow_definition.name for f in ow.active_flows}
-        assert flow_names == {"external_to_keepsats"}
+        assert flow_names == {"external_to_keepsats", "external_to_hive"}

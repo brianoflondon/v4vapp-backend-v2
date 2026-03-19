@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.process.overwatch_flows import (
+    EXTERNAL_TO_HIVE_FLOW,
     EXTERNAL_TO_KEEPSATS_FLOW,
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
@@ -399,7 +400,51 @@ def test_external_to_keepsats_log_str():
 
 
 # ---------------------------------------------------------------------------
-# 6. keepsats_internal_transfer — custom_json trigger, 2 required + 1 optional
+# 6. external_to_hive — invoice trigger, 6 required + 1 optional
+# ---------------------------------------------------------------------------
+
+
+def test_external_to_hive_log_str():
+    _banner("external_to_hive (invoice → 6 required, 1 optional)")
+    f = _make_flow(EXTERNAL_TO_HIVE_FLOW, short_id="B9XaNJm/x4")
+
+    # Trigger — 5,815 sat invoice received, converting to HIVE
+    f.add_event(_op("invoice", short_id="B9XaNJm/x4", event_value="5815 sats"))
+    _stage("after trigger", f)
+
+    # Deposit lightning
+    f.add_event(_ledger(LedgerType.DEPOSIT_LIGHTNING, event_value="5815 sats"))
+    _stage("after deposit (2/6)", f)
+
+    # Keepsats notification
+    f.add_event(
+        _op("custom_json", group_id="gid_notif", short_id="sid_notif", event_value="5815 sats")
+    )
+    f.add_event(
+        _ledger(
+            LedgerType.RECEIVE_LIGHTNING,
+            group_id="gid_notif",
+            short_id="sid_notif",
+            event_value="5815 sats",
+        )
+    )
+    _stage("after keepsats notification (4/6)", f)
+
+    # HIVE payout — 62.963 HIVE sent to customer
+    f.add_event(_op("transfer", group_id="gid_hive", short_id="sid_hive", event_value="5815 sats"))
+    f.add_event(
+        _ledger(
+            LedgerType.CUSTOMER_HIVE_OUT,
+            group_id="gid_hive",
+            short_id="sid_hive",
+            event_value="62.963 HIVE",
+        )
+    )
+    _stage("COMPLETED (6/6 required)", f)
+
+
+# ---------------------------------------------------------------------------
+# 7. keepsats_internal_transfer — custom_json trigger, 2 required + 1 optional
 # ---------------------------------------------------------------------------
 
 
@@ -423,7 +468,7 @@ def test_keepsats_internal_transfer_log_str():
 
 
 # ---------------------------------------------------------------------------
-# 7. Stalled flow example
+# 8. Stalled flow example
 # ---------------------------------------------------------------------------
 
 
@@ -448,7 +493,7 @@ def test_stalled_flow_log_str():
 
 
 # ---------------------------------------------------------------------------
-# 8. Summary of all flow definitions
+# 9. Summary of all flow definitions
 # ---------------------------------------------------------------------------
 
 
@@ -460,6 +505,7 @@ def test_all_definitions_summary():
         KEEPSATS_TO_HIVE_FLOW,
         KEEPSATS_TO_EXTERNAL_FLOW,
         EXTERNAL_TO_KEEPSATS_FLOW,
+        EXTERNAL_TO_HIVE_FLOW,
         KEEPSATS_INTERNAL_TRANSFER_FLOW,
     ]:
         req = len(defn.required_stages)

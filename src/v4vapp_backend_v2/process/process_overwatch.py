@@ -327,6 +327,10 @@ class FlowInstance(BaseModel):
             # Auto-populate flow_value from the first event with a non-empty value
             self.flow_value = event.event_value
 
+        # 
+        if not self.cust_id and event.op and hasattr(event.op, "cust_id"):
+            self.cust_id = getattr(event.op, "cust_id")
+
         # Try to match against stages not yet fulfilled
         for stage in self.flow_definition.stages:
             if stage.name not in previously_matched and stage.matches(event):
@@ -850,18 +854,29 @@ class Overwatch:
             return (s.event_type, s.op_type, s.ledger_type)
 
         winner_sigs = {_stage_sig(s) for s in winner_stages}
+        winner_req_sigs = {_stage_sig(s) for s in winner.flow_definition.required_stages}
 
         for candidate in candidates:
             # (1) Keep the candidate if it has events the winner can't explain
             has_unique_events = any(
                 not any(stage.matches(ev) for stage in winner_stages) for ev in candidate.events
             )
-            # (2) Keep if the candidate is a superset flow — every stage the
-            #     winner defines also exists in the candidate's definition,
-            #     but the candidate has additional stages.
+            # (2) Keep if the candidate is a superset flow.  Two checks:
+            #     a) All of the winner's stages exist in the candidate
+            #        (matching by event_type + op_type + ledger_type), AND
+            #        the candidate has additional stage signatures, OR
+            #     b) Both flows have the same total stage signatures, but
+            #        the candidate requires strictly more stages (i.e. the
+            #        winner's required-stage sigs are a proper subset of
+            #        the candidate's required-stage sigs).
             candidate_sigs = {_stage_sig(s) for s in candidate.flow_definition.stages}
-            winner_is_proper_subset = (
-                winner_sigs.issubset(candidate_sigs) and winner_sigs != candidate_sigs
+            candidate_req_sigs = {_stage_sig(s) for s in candidate.flow_definition.required_stages}
+            winner_is_proper_subset = winner_sigs.issubset(candidate_sigs) and (
+                winner_sigs != candidate_sigs
+                or (
+                    winner_req_sigs.issubset(candidate_req_sigs)
+                    and winner_req_sigs != candidate_req_sigs
+                )
             )
 
             if has_unique_events or winner_is_proper_subset:

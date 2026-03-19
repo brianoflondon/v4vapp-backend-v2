@@ -594,6 +594,94 @@ EXTERNAL_TO_KEEPSATS_FLOW = FlowDefinition(
 
 
 # ---------------------------------------------------------------------------
+# External-to-Hive Lightning flow
+# ---------------------------------------------------------------------------
+# Flow: An external Lightning invoice is paid to the server, the sats are
+# stored in the recipient's keepsats balance, and then immediately converted
+# to HIVE and sent back to the customer.  This is a superset of
+# external_to_keepsats — it includes all the same stages but the HIVE
+# notification transfer and CUSTOMER_HIVE_OUT are required (not optional).
+#
+# When the invoice arrives, both external_to_keepsats and external_to_hive
+# candidates are created.  external_to_keepsats completes at 4/4, and the
+# superset grace period keeps external_to_hive alive until the HIVE transfer
+# and CUSTOMER_HIVE_OUT arrive to complete it at 6/6.
+#
+# Primary events (same short_id as trigger — invoice hash):
+#   1. invoice op (trigger)
+#   2. deposit_l ledger — Deposit Lightning (external sats → system)
+#
+# Keepsats notification (reply group — different short_id):
+#   3. custom_json op — Keepsats balance notification on Hive
+#   4. recv_l ledger — RECEIVE_LIGHTNING (sats credited to customer)
+#
+# HIVE payout (reply group — different short_id, REQUIRED):
+#   5. transfer op — HIVE transfer to the customer
+#   6. cust_h_out ledger — CUSTOMER_HIVE_OUT
+#
+# Small-amount notification (reply group — different short_id, OPTIONAL):
+#   7. custom_json op — Notification custom_json (replaces HIVE transfer
+#      for very small amounts — but in this flow the HIVE transfer IS
+#      expected, so this remains optional)
+# ---------------------------------------------------------------------------
+
+EXTERNAL_TO_HIVE_FLOW = FlowDefinition(
+    name="external_to_hive",
+    description="External Lightning invoice received, stored in keepsats, then converted to HIVE",
+    trigger_op_type="invoice",
+    stages=[
+        # --- Primary stages (same short_id as trigger — invoice hash) ---
+        FlowStage(
+            name="trigger_invoice",
+            event_type="op",
+            op_type="invoice",
+            group="primary",
+        ),
+        FlowStage(
+            name="deposit_lightning",
+            event_type="ledger",
+            ledger_type=LedgerType.DEPOSIT_LIGHTNING,
+            group="primary",
+        ),
+        # --- Keepsats notification stages (reply group) ---
+        FlowStage(
+            name="keepsats_notification_op",
+            event_type="op",
+            op_type="custom_json",
+            group="keepsats_notification",
+        ),
+        FlowStage(
+            name="receive_lightning",
+            event_type="ledger",
+            ledger_type=LedgerType.RECEIVE_LIGHTNING,
+            group="keepsats_notification",
+        ),
+        # --- HIVE payout stages (reply group, REQUIRED) ---
+        FlowStage(
+            name="hive_notification_transfer_op",
+            event_type="op",
+            op_type="transfer",
+            group="hive_notification",
+        ),
+        FlowStage(
+            name="customer_hive_out",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOMER_HIVE_OUT,
+            group="hive_notification",
+        ),
+        # --- Small-amount notification (optional) ---
+        FlowStage(
+            name="small_notification_custom_json_op",
+            event_type="op",
+            op_type="custom_json",
+            group="small_notification",
+            required=False,
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Keepsats internal transfer flow
 # ---------------------------------------------------------------------------
 # Flow: A customer sends a custom_json op instructing the server to transfer
@@ -649,5 +737,6 @@ FLOW_DEFINITIONS = {
     "keepsats_to_hive": KEEPSATS_TO_HIVE_FLOW,
     "keepsats_to_external": KEEPSATS_TO_EXTERNAL_FLOW,
     "external_to_keepsats": EXTERNAL_TO_KEEPSATS_FLOW,
+    "external_to_hive": EXTERNAL_TO_HIVE_FLOW,
     "keepsats_internal_transfer": KEEPSATS_INTERNAL_TRANSFER_FLOW,
 }

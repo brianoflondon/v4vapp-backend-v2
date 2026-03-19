@@ -15,6 +15,7 @@ import pytest
 
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.process.overwatch_flows import (
+    EXTERNAL_TO_HIVE_FLOW,
     EXTERNAL_TO_KEEPSATS_FLOW,
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
@@ -86,6 +87,7 @@ def _register_all() -> Overwatch:
     Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
     Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
     Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_FLOW)
+    Overwatch.register_flow(EXTERNAL_TO_HIVE_FLOW)
     Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
     Overwatch._loaded_from_redis = True
     return ow
@@ -325,6 +327,12 @@ class TestLateEventTimeWindow:
         )
         assert len(ow.completed_flows) == 1
 
+        # Cancel the superset external_to_hive by expiring its grace period
+        for f in ow.active_flows:
+            if f.flow_definition.name == "external_to_hive":
+                f.superset_grace_expires = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
+        await ow.check_stalls()
+
         # Force completed_at to 5 minutes ago — outside the window
         ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
 
@@ -353,6 +361,12 @@ class TestLateEventTimeWindow:
             _ledger_event(LedgerType.RECEIVE_LIGHTNING, group_id="gid_ks", short_id="ks_notif")
         )
         assert len(ow.completed_flows) == 1
+
+        # Cancel the superset external_to_hive by expiring its grace period
+        for f in ow.active_flows:
+            if f.flow_definition.name == "external_to_hive":
+                f.superset_grace_expires = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
+        await ow.check_stalls()
 
         # Age the completed flow past the window
         ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
