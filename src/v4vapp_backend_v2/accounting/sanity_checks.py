@@ -211,6 +211,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
 
         tasks: dict[str, asyncio.Task] = {}
 
+        @async_time_decorator
         async def _fetch_balances() -> dict:
             """Run the blocking hive call in a thread with its own timeout and logs."""
             try:
