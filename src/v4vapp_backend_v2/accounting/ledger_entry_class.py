@@ -386,6 +386,21 @@ class LedgerEntry(BaseModel):
         """
         return {self.name(): self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)}
 
+    def formatted_amount(self) -> str:
+        """
+        Returns a formatted string representation of the credit amount with its unit.
+
+        This method formats the credit amount along with its unit for display purposes.
+        If the unit is MSATS, it converts the amount to SATS for a more user-friendly display.
+
+        Returns:
+            str: A formatted string representing the credit amount and its unit.
+        """
+        if self.credit_unit == Currency.MSATS:
+            return f"{self.credit_amount // 1000:.0f} sats"
+        else:
+            return f"{self.credit_amount:.3f} {self.credit_unit}"
+
     @property
     def log_str(self) -> str:
         """
@@ -398,11 +413,7 @@ class LedgerEntry(BaseModel):
             str: A formatted string representation of the LedgerEntry.
         """
         formatted_time = self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-        formatted_amount = (
-            f"{self.credit_amount:.3f} {self.credit_unit}"
-            if self.credit_unit != Currency.MSATS
-            else f"{self.credit_amount // 1000:.0f} sats"
-        )
+        formatted_amount = self.formatted_amount()
         return (
             f"{formatted_time} | "
             f"{self.ledger_type_str:<35} | {formatted_amount:>20} | "

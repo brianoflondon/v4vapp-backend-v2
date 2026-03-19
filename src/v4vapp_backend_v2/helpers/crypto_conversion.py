@@ -399,6 +399,38 @@ class CryptoConv(BaseModel):
 
         return self.amount_hive
 
+    def formatted_amount(self, currency: Currency | None = None, sats_only: bool = False) -> str:
+        """
+        Returns the conversion value formatted as a string with the appropriate currency symbol.
+
+        Args:
+            currency (Currency | None): The currency to format. If None, uses conv_from.
+            sats_only (bool): If True and currency is MSATS, formats as SATS instead.
+
+        Returns:
+            str: The formatted conversion value with currency symbol.
+        """
+        if currency is None:
+            currency = self.conv_from
+
+        if sats_only and currency == Currency.MSATS:
+            currency = Currency.SATS
+
+        if currency == Currency.HIVE:
+            return f"{self.hive:.3f} HIVE"
+        elif currency == Currency.HBD:
+            return f"{self.hbd:.3f} HBD"
+        elif currency == Currency.USD:
+            return f"${self.usd:.2f}"
+        elif currency == Currency.SATS:
+            return f"{self.sats:,.0f} sats"
+        elif currency == Currency.MSATS:
+            return f"{self.msats:,.0f} msats"
+        elif currency == Currency.BTC:
+            return f"{self.btc:.8f} BTC"
+
+        return f"{self.hive:.3f} HIVE"
+
     def v1(self) -> CryptoConvV1:
         """
         Converts the current instance to a CryptoConvV1 instance.

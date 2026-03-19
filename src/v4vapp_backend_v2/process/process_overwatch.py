@@ -39,6 +39,8 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case
+from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 
 ICON = "📒"
 
@@ -194,6 +196,7 @@ class FlowEvent(BaseModel):
         "primary",
         description="Which group this event belongs to (primary or a reply group name)",
     )
+    event_value: str = Field("", description="Optional value for logging or notifications")
 
     @classmethod
     def from_ledger_entry(
@@ -212,11 +215,20 @@ class FlowEvent(BaseModel):
             ledger_type=ledger_entry.ledger_type,
             op_type=None,
             group=group,
+            event_value=ledger_entry.formatted_amount(),
         )
 
     @classmethod
     def from_op(cls, op: TrackedAny, group: str = "primary") -> FlowEvent:
         """Create a FlowEvent from a TrackedAny operation."""
+
+        if isinstance(op, TrackedForwardEvent):
+            event_value = f"{op.amount:,.0f} sats"
+        elif op.conv:
+            event_value = op.conv.formatted_amount(sats_only=True)
+        else:
+            event_value = ""  # ensure amount_str is populated for logging
+
         return cls(
             event_type="op",
             timestamp=getattr(op, "timestamp", datetime.now(tz=timezone.utc)),
@@ -227,6 +239,7 @@ class FlowEvent(BaseModel):
             ledger_type=None,
             op_type=getattr(op, "op_type", getattr(op, "type", "")),
             group=group,
+            event_value=event_value,
         )
 
     @property
@@ -265,6 +278,7 @@ class FlowInstance(BaseModel):
     events: List[FlowEvent] = Field(
         default_factory=list, description="Recorded events in this flow"
     )
+    flow_value: str = Field("", description="Optional value for logging or notifications")
 
     def __init__(
         self,
@@ -276,6 +290,7 @@ class FlowInstance(BaseModel):
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
         events: List[FlowEvent] | None = None,
+        flow_value: str = "",
         **data: Any,
     ) -> None:
         """Explicit initializer for FlowInstance.
@@ -294,6 +309,7 @@ class FlowInstance(BaseModel):
             started_at=started_at or datetime.now(tz=timezone.utc),
             completed_at=completed_at,
             events=events or [],
+            flow_value=flow_value,
             **data,
         )
 
@@ -306,6 +322,10 @@ class FlowInstance(BaseModel):
         self.events.append(event)
         if self.status == FlowStatus.PENDING:
             self.status = FlowStatus.IN_PROGRESS
+
+        if not self.flow_value and event.event_value:
+            # Auto-populate flow_value from the first event with a non-empty value
+            self.flow_value = event.event_value
 
         # Try to match against stages not yet fulfilled
         for stage in self.flow_definition.stages:
@@ -367,13 +387,20 @@ class FlowInstance(BaseModel):
     @property
     def log_str(self) -> str:
         """Return a human-readable string summarizing this flow instance for logging."""
+        name_str = from_snake_case(self.flow_definition.name)
+
         return (
-            f"FlowInstance(flow='{self.flow_definition.name}', "
-            f"trigger_short_id='{self.trigger_short_id}', "
-            f"cust_id='{self.cust_id}', "
-            f"status='{self.status}', "
-            f"progress='{self.progress}')"
+            f"{name_str} for {self.cust_id} "
+            f"{self.flow_value} "
+            f"{self.trigger_short_id} "
+            f"{self.status} "
+            f"{self.progress}"
         )
+
+    @property
+    def notification_str(self) -> str:
+        """Return a string summarizing this flow instance for notifications."""
+        return self.log_str
 
     @property
     def log_extra(self) -> Dict[str, Any]:
@@ -712,9 +739,12 @@ class Overwatch:
                 if flow.is_complete:
                     newly_completed.append(flow)
                     logger.info(
-                        f"{ICON} ✅ {Fore.WHITE}Flow '{flow.flow_definition.name}' completed "
-                        f"({flow.trigger_short_id}) in {flow.duration:.1f}s.{event.log_str} {Fore.RESET}",
-                        extra={"notification": True, **flow.log_extra},
+                        f"{ICON} ✅ {Fore.WHITE}{flow.log_str} {Fore.RESET}",
+                        extra={
+                            "notification": True,
+                            "notification_str": f"{ICON} ✅ {flow.notification_str}",
+                            **flow.log_extra,
+                        },
                     )
                 await self._persist_flow(flow)
         for completed in newly_completed:
@@ -922,8 +952,13 @@ class Overwatch:
                 logger.warning(
                     f"{ICON} ⚠️ Flow '{flow.flow_definition.name}' "
                     f"({flow.trigger_short_id}) stalled — "
-                    f"{flow.progress}, last event {last_event_time:%H:%M:%S}",
-                    extra={"notification": False},
+                    f"{flow.progress}, last event {last_event_time:%H:%M:%S} "
+                    f"{flow.log_str}",
+                    extra={
+                        "notification": True,
+                        "error_code": "overwatch_flow_stalled",
+                        **flow.log_extra,
+                    },
                 )
                 await self._persist_flow(flow)
         return newly_stalled

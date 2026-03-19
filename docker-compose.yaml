@@ -65,7 +65,7 @@ services:
       - ./config:/app/config
       - ./logs_docker:/app/logs
     command: [
-      "python", "src/db_monitor.py",
+      "python", "src/db_monitor.py", "--overwatch",
       "--config", "devdocker.config.yaml",
     ]
     restart: on-failure:3
