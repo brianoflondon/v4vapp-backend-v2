@@ -275,6 +275,10 @@ class FlowInstance(BaseModel):
         None,
         description="If this candidate was kept alive as a superset, when the grace period expires",
     )
+    superset_winner_name: str | None = Field(
+        None,
+        description="Name of the sibling flow whose completion triggered the superset grace period",
+    )
     events: List[FlowEvent] = Field(
         default_factory=list, description="Recorded events in this flow"
     )
@@ -737,9 +741,22 @@ class Overwatch:
             if result is not None:
                 if first_result is None:
                     first_result = result
-                # Clear superset grace — the flow is actively progressing
+                # Clear superset grace only when the event is a
+                # *distinguishing* one — i.e. it matches a stage the
+                # candidate has but the simpler (winner) sibling does not.
+                # Events that match *required* stages shared with the winner
+                # (e.g. a notification custom_json common to both flows) are
+                # NOT enough evidence that this candidate is the real flow.
+                # Matching an optional-only stage in the winner IS
+                # distinguishing because the winner completed without it.
                 if flow.superset_grace_expires is not None:
-                    flow.superset_grace_expires = None
+                    winner_def = self._flow_definitions.get(flow.superset_winner_name or "")
+                    shared_event = winner_def is not None and any(
+                        s.matches(event) for s in winner_def.required_stages
+                    )
+                    if not shared_event:
+                        flow.superset_grace_expires = None
+                        flow.superset_winner_name = None
                 if flow.is_complete:
                     newly_completed.append(flow)
                     logger.info(
@@ -887,6 +904,7 @@ class Overwatch:
                     candidate.superset_grace_expires = (
                         datetime.now(tz=timezone.utc) + self.superset_grace_period
                     )
+                    candidate.superset_winner_name = winner.flow_definition.name
                 logger.info(
                     f"{ICON} 📌 Keeping candidate '{candidate.flow_definition.name}' "
                     f"({candidate.trigger_short_id}) — {reason} "

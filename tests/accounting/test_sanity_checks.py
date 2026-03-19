@@ -133,7 +133,7 @@ async def test_run_all_sanity_checks(module_monkeypatch):
     # Patch sanity_checks.account_hive_balances from ledger values
     await patch_account_hive_balances_from_ledger(module_monkeypatch)
 
-    results = await run_all_sanity_checks()
+    results = await run_all_sanity_checks(use_cache=False)
     for check_name, sanity_result in results.results:
         assert sanity_result.is_valid, (
             f"Sanity check '{check_name}' failed: {sanity_result.details}"
@@ -194,7 +194,8 @@ async def test_run_all_sanity_checks(module_monkeypatch):
     print("keepsats after injection", bal.msats)
     assert abs(bal.msats) >= Decimal("3000"), "injected entry did not affect keepsats balance"
 
-    results = await run_all_sanity_checks()
+    # Bypass the sanity-check cache so we re-evaluate the injected imbalance.
+    results = await run_all_sanity_checks(use_cache=False)
     pprint(results.model_dump())
     assert results.failed, "Expected failure not found (artificial imbalance was added)"
 

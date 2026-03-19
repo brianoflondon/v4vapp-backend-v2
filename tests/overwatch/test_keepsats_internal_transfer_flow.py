@@ -269,6 +269,35 @@ class TestKeepsatsInternalTransferOverwatch:
         assert len(ow.completed_flows) == 1
         assert ow.completed_flows[0].flow_definition.name == "keepsats_internal_transfer"
 
+    @pytest.mark.asyncio
+    async def test_notification_does_not_clear_superset_grace(self):
+        """Regression: a notification custom_json arriving after
+        keepsats_internal_transfer completes should NOT clear the grace
+        period on the keepsats_to_hive superset candidate — the
+        notification matches a shared (required) stage in the winner and
+        is not a distinguishing event."""
+        ow = _register_all()
+        trigger = _op_event("custom_json")
+        await ow._try_create_flow(trigger, _fake_op())
+
+        await ow._dispatch(_ledger_event(LedgerType.CUSTOM_JSON_TRANSFER))
+        superset = ow.active_flows[0]
+        assert superset.flow_definition.name == "keepsats_to_hive"
+        assert superset.superset_grace_expires is not None
+        grace_ts = superset.superset_grace_expires
+
+        # Notification custom_json arrives — matches both flows' stages
+        notif = _op_event("custom_json", group_id="gid_notif", short_id="3690_5a7a2f_1")
+        await ow._dispatch(notif)
+
+        # Grace must still be set (not cleared by shared event)
+        assert superset.superset_grace_expires == grace_ts
+
+        # Grace period expiry still cancels the candidate
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=31)
+        await ow.check_stalls(now=future)
+        assert len(ow.active_flows) == 0
+
 
 # ---------------------------------------------------------------------------
 # Tests: Late-event time window
