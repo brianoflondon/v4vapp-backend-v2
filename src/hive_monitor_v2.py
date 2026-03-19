@@ -14,7 +14,6 @@ import typer
 from colorama import Fore, Style
 from nectar.account import Account
 from nectar.amount import Amount
-from nectar.blockchain import Blockchain
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
@@ -202,9 +201,10 @@ async def db_store_op(
 
 async def balance_server_hive_level() -> None:
     """
-    This function is a placeholder for balancing the Hive level of the server account.
-    It currently does not contain any implementation and serves as a template for future
-    development.
+    This function checks the Hive balance of the server account and attempts to rebalance it
+    if it exceeds a certain threshold. It ensures that the server account has an active key
+    before proceeding. If the rebalance is successful, the transaction ID is logged. In case of
+    an error, the error is logged.
 
     Returns:
         None: The function does not return any value.
@@ -230,8 +230,7 @@ async def balance_server_hive_level() -> None:
         current_target_hive_balance = Amount(server_account.hive_balance)
         nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
         hive = get_hive_client(keys=server_account.keys, nobroadcast=nobroadcast)
-        blockchain_instance = Blockchain(hive)
-        account = Account(server_account.name, blockchain_instance=blockchain_instance)
+        account = Account(server_account.name, blockchain_instance=hive)
         balance: Dict[str, Amount] = {}
         balance["HIVE"] = account.available_balances[0]
         balance["HBD"] = account.available_balances[1]
