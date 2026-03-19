@@ -3,7 +3,11 @@ from decimal import Decimal
 import pytest
 
 from v4vapp_backend_v2.accounting import sanity_checks
-from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults
+from v4vapp_backend_v2.accounting.sanity_checks import (
+    SANITY_CHECK_TIMEOUT_SECONDS,
+    SanityCheckResult,
+    SanityCheckResults,
+)
 from v4vapp_backend_v2.helpers.currency_class import Currency
 
 
@@ -57,7 +61,7 @@ async def test_hive_task_failure_logged(caplog, monkeypatch):
         # only shorten the inner hive-fetch duration (20s) while leaving
         # the per‑check and overall timeouts alone so the check itself isn't
         # cancelled immediately.
-        if delay == 35.0:
+        if delay == SANITY_CHECK_TIMEOUT_SECONDS - 5:
             return orig_to(0.001)
         return orig_to(delay)
 
@@ -73,3 +77,44 @@ async def test_hive_task_failure_logged(caplog, monkeypatch):
     # exceptions and returns a failure result – our interest is the hive log above.
     # result should indicate failure (timeout bubbled out)
     assert results.failed
+
+
+@pytest.mark.asyncio
+async def test_run_all_sanity_checks_uses_redis_cache(monkeypatch):
+    """Ensure run_all_sanity_checks uses Redis cache when available."""
+
+    # Track how many times the check is executed
+    calls = {"count": 0}
+
+    async def fake_check(in_progress):
+        calls["count"] += 1
+        return SanityCheckResult(name="fake", is_valid=True, details="ok")
+
+    async def fake_all_held():
+        return {}
+
+    class FakeRedis:
+        def __init__(self):
+            self.store = {}
+
+        async def get(self, key):
+            return self.store.get(key)
+
+        async def setex(self, key, ttl, value):
+            self.store[key] = value
+
+    fake_redis = FakeRedis()
+
+    monkeypatch.setattr(sanity_checks.InternalConfig, "redis_async", fake_redis, raising=False)
+    monkeypatch.setattr(sanity_checks, "all_sanity_checks", [fake_check])
+    monkeypatch.setattr(sanity_checks, "all_held_msats", fake_all_held)
+
+    # first call should execute the check and cache the results
+    first = await sanity_checks.run_all_sanity_checks()
+    assert calls["count"] == 1
+
+    # second call should hit cache and not execute the check again
+    second = await sanity_checks.run_all_sanity_checks()
+    assert calls["count"] == 1
+    assert first.check_time == second.check_time
+    assert first.passed == second.passed

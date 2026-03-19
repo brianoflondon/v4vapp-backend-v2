@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -22,6 +24,12 @@ from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 ICON = "🧪"  # Test Tube
+
+SANITY_CHECK_TIMEOUT_SECONDS = 40.0  # per-check timeout for sanity checks
+SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 45.0  # overall timeout for running all checks
+
+SANITY_REDIS_CACHE_KEY = "sanity_check_results_cache"
+SANITY_REDIS_TIMEOUT_SECONDS = 60
 
 
 class SanityCheckResult(BaseModel):
@@ -105,6 +113,51 @@ class SanityCheckResults(BaseModel):
             dict: A dictionary with counts of passed and failed checks.
         """
         return {"sanity_check_results": self.model_dump()}
+
+
+async def _get_cached_sanity_check_results() -> "SanityCheckResults" | None:
+    """Attempt to retrieve cached sanity check results from Redis.
+
+    Returns:
+        SanityCheckResults | None: The cached results, or None on miss/error.
+    """
+    redis_client = getattr(InternalConfig, "redis_async", None)
+    if not redis_client:
+        return None
+    try:
+        raw = await redis_client.get(SANITY_REDIS_CACHE_KEY)
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="ignore")
+        if not raw:
+            return None
+        return SanityCheckResults.model_validate_json(raw)
+    except Exception as e:
+        logger.debug(
+            f"Sanity check cache miss/error: {e}",
+            extra={"notification": False},
+        )
+        return None
+
+
+async def _set_cached_sanity_check_results(results: "SanityCheckResults") -> None:
+    """Cache sanity check results in Redis with a TTL.
+
+    Errors are swallowed to avoid breaking the sanity check run.
+    """
+    redis_client = getattr(InternalConfig, "redis_async", None)
+    if not redis_client:
+        return
+    try:
+        await redis_client.setex(
+            SANITY_REDIS_CACHE_KEY,
+            SANITY_REDIS_TIMEOUT_SECONDS,
+            results.model_dump_json(),
+        )
+    except Exception as e:
+        logger.debug(
+            f"Failed to cache sanity check results: {e}",
+            extra={"notification": False},
+        )
 
 
 # MARK: Individual sanity check tests
@@ -216,7 +269,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
             """Run the blocking hive call in a thread with its own timeout and logs."""
             try:
                 # give the hive client its own generous timeout but still bounded
-                async with asyncio.timeout(35.0):
+                async with asyncio.timeout(SANITY_CHECK_TIMEOUT_SECONDS - 5):
                     return await asyncio.to_thread(account_hive_balances, hive_accname=server_id)
             except Exception as exc:
                 # this will include CancelledError/TimeoutError when the outer
@@ -376,10 +429,18 @@ all_sanity_checks: List[Callable[[InProgressResults], Coroutine[Any, Any, Sanity
 
 
 @async_time_decorator
-async def run_all_sanity_checks() -> SanityCheckResults:
+async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as
     a `SanityCheckResults` Pydantic model.
+
+    The results are optionally cached in Redis to reduce repeated heavy work.
+    Cache entries expire after `SANITY_REDIS_TIMEOUT_SECONDS`.
+
+    Args:
+        use_cache (bool): When True (default), attempt to return cached results if
+            available and cache new results. When False, forces re-run of all
+            checks.
 
     Each registered check is expected to be an async callable that returns a
     `SanityCheckResult` instance. Checks are scheduled concurrently using an
@@ -392,6 +453,13 @@ async def run_all_sanity_checks() -> SanityCheckResults:
         SanityCheckResults: Pydantic model containing `passed`, `failed` and
         `results` lists of tuples (check_name, SanityCheckResult).
     """
+    # Attempt to return cached results if available (avoid repeated heavy queries)
+    if use_cache:
+        cached_results = await _get_cached_sanity_check_results()
+        if cached_results is not None:
+            logger.info("Using cached sanity check results", extra={"notification": False})
+            return cached_results
+
     # Collect coroutines for checks so we can create TaskGroup tasks from coroutines
     all_held_result = await all_held_msats()
     in_progress = InProgressResults(results=all_held_result)
@@ -412,7 +480,7 @@ async def run_all_sanity_checks() -> SanityCheckResults:
             logger.debug(f"starting sanity check {name}")
             try:
                 # each individual check gets its own shorter timeout so we can tell which hung
-                async with asyncio.timeout(40.0):
+                async with asyncio.timeout(SANITY_CHECK_TIMEOUT_SECONDS):
                     return await coro
             except Exception as exc:  # including TimeoutError or CancelledError
                 logger.warning(
@@ -424,7 +492,9 @@ async def run_all_sanity_checks() -> SanityCheckResults:
                 logger.debug(f"completed sanity check {name}")
 
         try:
-            async with asyncio.timeout(45.0):  # 45 seconds timeout for all checks
+            async with asyncio.timeout(
+                SANITY_ALL_CHECKS_TIMEOUT_SECONDS
+            ):  # overall timeout for all checks
                 async with asyncio.TaskGroup() as tg:
                     for check_name, coro in coros:
                         task = tg.create_task(_run_check(check_name, coro))
@@ -459,10 +529,13 @@ async def run_all_sanity_checks() -> SanityCheckResults:
             all_results.append((check_name, sanity_result))
 
         # Optionally filter logging elsewhere; always return the full model
-        return SanityCheckResults(passed=passed, failed=failed, results=all_results)
+        results_model = SanityCheckResults(passed=passed, failed=failed, results=all_results)
+        if use_cache:
+            await _set_cached_sanity_check_results(results_model)
+        return results_model
     except Exception as e:
         logger.exception(f"Error running sanity checks: {e}", extra={"notification": False})
-        return SanityCheckResults(
+        results_model = SanityCheckResults(
             passed=[],
             failed=[
                 (
@@ -474,6 +547,9 @@ async def run_all_sanity_checks() -> SanityCheckResults:
             ],
             results=[],
         )
+        if use_cache:
+            await _set_cached_sanity_check_results(results_model)
+        return results_model
 
 
 async def log_all_sanity_checks(

@@ -39,7 +39,7 @@ async def test_timeout_logs_task_status(caplog, monkeypatch):
 
     caplog.set_level("DEBUG")  # capture start/finish at debug level
 
-    results: SanityCheckResults = await sanity_checks.run_all_sanity_checks()
+    results: SanityCheckResults = await sanity_checks.run_all_sanity_checks(use_cache=False)
 
     # the slow check should have timed out and therefore the wrapper will
     # have logged a warning about the exception it raised
