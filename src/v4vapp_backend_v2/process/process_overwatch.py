@@ -327,7 +327,7 @@ class FlowInstance(BaseModel):
             # Auto-populate flow_value from the first event with a non-empty value
             self.flow_value = event.event_value
 
-        # 
+        # if the flow doesn't have a cust_id after the first events, try to extract it later.
         if not self.cust_id and event.op and hasattr(event.op, "cust_id"):
             self.cust_id = getattr(event.op, "cust_id")
 
