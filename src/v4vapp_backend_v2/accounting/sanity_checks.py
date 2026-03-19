@@ -216,7 +216,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
             """Run the blocking hive call in a thread with its own timeout and logs."""
             try:
                 # give the hive client its own generous timeout but still bounded
-                async with asyncio.timeout(20.0):
+                async with asyncio.timeout(35.0):
                     return await asyncio.to_thread(account_hive_balances, hive_accname=server_id)
             except Exception as exc:
                 # this will include CancelledError/TimeoutError when the outer
