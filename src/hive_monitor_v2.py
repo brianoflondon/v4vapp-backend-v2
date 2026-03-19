@@ -14,6 +14,7 @@ import typer
 from colorama import Fore, Style
 from nectar.account import Account
 from nectar.amount import Amount
+from nectar.blockchain import Blockchain
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
@@ -229,7 +230,8 @@ async def balance_server_hive_level() -> None:
         current_target_hive_balance = Amount(server_account.hive_balance)
         nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
         hive = get_hive_client(keys=server_account.keys, nobroadcast=nobroadcast)
-        account = Account(server_account.name, hive_instance=hive)
+        blockchain_instance = Blockchain(hive)
+        account = Account(server_account.name, blockchain_instance=blockchain_instance)
         balance: Dict[str, Amount] = {}
         balance["HIVE"] = account.available_balances[0]
         balance["HBD"] = account.available_balances[1]
