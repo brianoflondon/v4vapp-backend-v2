@@ -1123,7 +1123,7 @@ async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal]
     expiry: datetime = oldest_ts + timedelta(hours=first_limit.hours)
     return expiry, sats_freed
 
-@async_time_decorator
+# @async_time_decorator
 async def keepsats_balance(
     cust_id: CustIDType = "",
     as_of_date: datetime | None = None,
@@ -1199,7 +1199,7 @@ async def keepsats_balance_printout(
 
     return net_msats, account_balance
 
-@async_time_decorator
+# @async_time_decorator
 async def notification_lines(cust_id: str, account: LiabilityAccount, account_balance: LedgerAccountDetails) -> None:
     """
     Fetches non-financial notifications for a given customer and adds them as synthetic ledger lines to the account balance history.

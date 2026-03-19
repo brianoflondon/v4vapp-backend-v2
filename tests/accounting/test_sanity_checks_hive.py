@@ -57,7 +57,7 @@ async def test_hive_task_failure_logged(caplog, monkeypatch):
         # only shorten the inner hive-fetch duration (20s) while leaving
         # the per‑check and overall timeouts alone so the check itself isn't
         # cancelled immediately.
-        if delay == 20.0:
+        if delay == 35.0:
             return orig_to(0.001)
         return orig_to(delay)
 

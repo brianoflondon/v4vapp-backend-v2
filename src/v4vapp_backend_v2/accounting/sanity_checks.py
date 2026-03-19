@@ -14,6 +14,7 @@ from v4vapp_backend_v2.accounting.in_progress_results_class import (
     all_held_msats,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -109,6 +110,7 @@ class SanityCheckResults(BaseModel):
 # MARK: Individual sanity check tests
 
 
+@async_time_decorator
 async def server_account_balances(in_progress: InProgressResults) -> SanityCheckResult:
     """Asynchronously verify that server-related accounts have near-zero balances.
 
@@ -180,6 +182,7 @@ async def server_account_balances(in_progress: InProgressResults) -> SanityCheck
     )
 
 
+@async_time_decorator
 async def server_account_hive_balances(in_progress: InProgressResults) -> SanityCheckResult:
     """
     Verify that the server's Hive blockchain account balances match the recorded customer deposits.
@@ -208,11 +211,12 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
 
         tasks: dict[str, asyncio.Task] = {}
 
+        @async_time_decorator
         async def _fetch_balances() -> dict:
             """Run the blocking hive call in a thread with its own timeout and logs."""
             try:
                 # give the hive client its own generous timeout but still bounded
-                async with asyncio.timeout(20.0):
+                async with asyncio.timeout(35.0):
                     return await asyncio.to_thread(account_hive_balances, hive_accname=server_id)
             except Exception as exc:
                 # this will include CancelledError/TimeoutError when the outer
@@ -371,7 +375,7 @@ all_sanity_checks: List[Callable[[InProgressResults], Coroutine[Any, Any, Sanity
 # MARK: Runner for all sanity checks
 
 
-# @async_time_decorator
+@async_time_decorator
 async def run_all_sanity_checks() -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as

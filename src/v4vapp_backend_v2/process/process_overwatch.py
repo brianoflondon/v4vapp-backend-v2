@@ -30,14 +30,17 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import Any, ClassVar, List, Literal
+from typing import Any, ClassVar, Dict, List, Literal
 
+from colorama import Fore
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case
+from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 
 ICON = "📒"
 
@@ -45,6 +48,7 @@ ICON = "📒"
 _REDIS_ACTIVE_KEY = "overwatch:flows:active"
 _REDIS_COMPLETED_PREFIX = "overwatch:flows:completed:"
 _COMPLETED_TTL_SECONDS = 24 * 60 * 60  # 24 hours
+_LATE_EVENT_WINDOW = timedelta(seconds=120)  # only absorb late events into recent completions
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +196,7 @@ class FlowEvent(BaseModel):
         "primary",
         description="Which group this event belongs to (primary or a reply group name)",
     )
+    event_value: str = Field("", description="Optional value for logging or notifications")
 
     @classmethod
     def from_ledger_entry(
@@ -210,11 +215,20 @@ class FlowEvent(BaseModel):
             ledger_type=ledger_entry.ledger_type,
             op_type=None,
             group=group,
+            event_value=ledger_entry.formatted_amount(),
         )
 
     @classmethod
     def from_op(cls, op: TrackedAny, group: str = "primary") -> FlowEvent:
         """Create a FlowEvent from a TrackedAny operation."""
+
+        if isinstance(op, TrackedForwardEvent):
+            event_value = f"{op.amount:,.0f} sats"
+        elif op.conv:
+            event_value = op.conv.formatted_amount(sats_only=True)
+        else:
+            event_value = ""  # ensure amount_str is populated for logging
+
         return cls(
             event_type="op",
             timestamp=getattr(op, "timestamp", datetime.now(tz=timezone.utc)),
@@ -225,7 +239,17 @@ class FlowEvent(BaseModel):
             ledger_type=None,
             op_type=getattr(op, "op_type", getattr(op, "type", "")),
             group=group,
+            event_value=event_value,
         )
+
+    @property
+    def log_str(self) -> str:
+        """Return a human-readable string summarizing this event for logging."""
+        if self.event_type == "ledger" and self.ledger_entry:
+            return self.ledger_entry.log_str
+        if self.event_type == "op" and self.op:
+            return self.op.log_str
+        return "UnknownEvent"
 
 
 class FlowInstance(BaseModel):
@@ -247,9 +271,14 @@ class FlowInstance(BaseModel):
         description="When the flow was initiated",
     )
     completed_at: datetime | None = Field(None, description="When the flow completed")
+    superset_grace_expires: datetime | None = Field(
+        None,
+        description="If this candidate was kept alive as a superset, when the grace period expires",
+    )
     events: List[FlowEvent] = Field(
         default_factory=list, description="Recorded events in this flow"
     )
+    flow_value: str = Field("", description="Optional value for logging or notifications")
 
     def __init__(
         self,
@@ -261,6 +290,7 @@ class FlowInstance(BaseModel):
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
         events: List[FlowEvent] | None = None,
+        flow_value: str = "",
         **data: Any,
     ) -> None:
         """Explicit initializer for FlowInstance.
@@ -279,6 +309,7 @@ class FlowInstance(BaseModel):
             started_at=started_at or datetime.now(tz=timezone.utc),
             completed_at=completed_at,
             events=events or [],
+            flow_value=flow_value,
             **data,
         )
 
@@ -292,11 +323,21 @@ class FlowInstance(BaseModel):
         if self.status == FlowStatus.PENDING:
             self.status = FlowStatus.IN_PROGRESS
 
+        if not self.flow_value and event.event_value:
+            # Auto-populate flow_value from the first event with a non-empty value
+            self.flow_value = event.event_value
+
+        # if the flow doesn't have a cust_id after the first events, try to extract it later.
+        if not self.cust_id and event.op and hasattr(event.op, "cust_id"):
+            self.cust_id = getattr(event.op, "cust_id")
+
         # Try to match against stages not yet fulfilled
         for stage in self.flow_definition.stages:
             if stage.name not in previously_matched and stage.matches(event):
-                # Check completeness after adding
-                if self.is_complete:
+                # Check completeness after adding — only record completed_at
+                # the first time so late-event absorption doesn't push the
+                # timestamp back and fall outside _LATE_EVENT_WINDOW.
+                if self.is_complete and self.completed_at is None:
                     self.status = FlowStatus.COMPLETED
                     self.completed_at = event.timestamp
                 return stage.name
@@ -347,6 +388,31 @@ class FlowInstance(BaseModel):
             return (self.completed_at - self.started_at).total_seconds()
         return None
 
+    @property
+    def log_str(self) -> str:
+        """Return a human-readable string summarizing this flow instance for logging."""
+        name_str = from_snake_case(self.flow_definition.name)
+
+        return (
+            f"{name_str} for {self.cust_id} "
+            f"{self.flow_value} "
+            f"{self.trigger_short_id} "
+            f"{self.status} "
+            f"{self.progress}"
+        )
+
+    @property
+    def notification_str(self) -> str:
+        """Return a string summarizing this flow instance for notifications."""
+        return self.log_str
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        """
+        Return extra fields for logging this flow instance.
+        """
+        return {"flow": self.summary()}
+
     def summary(self) -> dict[str, Any]:
         """Return a summary dict of this flow instance."""
         return {
@@ -370,6 +436,7 @@ class FlowInstance(BaseModel):
 # Default timeout — if a flow hasn't received new events for this long it
 # is marked as STALLED during the periodic report.
 DEFAULT_STALL_TIMEOUT = timedelta(minutes=5)
+DEFAULT_SUPERSET_GRACE_PERIOD = timedelta(seconds=30)
 
 
 class Overwatch:
@@ -379,10 +446,11 @@ class Overwatch:
     survive process restarts:
 
     - Active (pending / in_progress / stalled) flows are stored in a Redis
-      hash at ``overwatch:flows:active`` keyed by ``trigger_group_id``.
+      hash at ``overwatch:flows:active`` keyed by
+      ``<cust_id>:<trigger_group_id>:<flow_name>``.
     - Completed flows are moved to individual keys
-      ``overwatch:flows:completed:<trigger_group_id>`` with a 24-hour TTL so
-      they stay queryable for at least a day.
+      ``overwatch:flows:completed:<cust_id>:<trigger_group_id>:<flow_name>``
+      with a 24-hour TTL so they stay queryable for at least a day.
 
     If Redis is unreachable the system continues to operate purely in-memory
     and will attempt to persist again on the next mutation.
@@ -405,6 +473,7 @@ class Overwatch:
     flow_instances: ClassVar[List[FlowInstance]] = []
     _flow_definitions: ClassVar[dict[str, FlowDefinition]] = {}
     stall_timeout: ClassVar[timedelta] = DEFAULT_STALL_TIMEOUT
+    superset_grace_period: ClassVar[timedelta] = DEFAULT_SUPERSET_GRACE_PERIOD
     _loaded_from_redis: ClassVar[bool] = False
 
     def __new__(cls) -> Overwatch:
@@ -436,6 +505,11 @@ class Overwatch:
         except Exception:
             return None
 
+    @staticmethod
+    def _redis_flow_key(flow: FlowInstance) -> str:
+        """Composite Redis key allowing multiple candidates per trigger."""
+        return f"{flow.cust_id}:{flow.trigger_group_id}:{flow.flow_definition.name}"
+
     async def _persist_flow(self, flow: FlowInstance) -> None:
         """Write a single flow to Redis (active hash or completed key)."""
         r = self._redis()
@@ -443,13 +517,14 @@ class Overwatch:
             return
         try:
             data = flow.model_dump_json()
+            rkey = self._redis_flow_key(flow)
             if flow.status == FlowStatus.COMPLETED:
-                key = f"{_REDIS_COMPLETED_PREFIX}{flow.trigger_group_id}"
+                key = f"{_REDIS_COMPLETED_PREFIX}{rkey}"
                 await r.setex(key, _COMPLETED_TTL_SECONDS, data)
                 # Remove from the active hash
-                await r.hdel(_REDIS_ACTIVE_KEY, flow.trigger_group_id)
+                await r.hdel(_REDIS_ACTIVE_KEY, rkey)
             else:
-                await r.hset(_REDIS_ACTIVE_KEY, flow.trigger_group_id, data)
+                await r.hset(_REDIS_ACTIVE_KEY, rkey, data)
         except Exception as e:
             logger.warning(
                 f"{ICON} Redis persist failed: {e}",
@@ -462,7 +537,7 @@ class Overwatch:
         if r is None:
             return
         try:
-            await r.hdel(_REDIS_ACTIVE_KEY, flow.trigger_group_id)
+            await r.hdel(_REDIS_ACTIVE_KEY, self._redis_flow_key(flow))
         except Exception:
             pass
 
@@ -477,12 +552,12 @@ class Overwatch:
         if r is None:
             return 0
         loaded = 0
-        existing_ids = {f.trigger_group_id for f in self.flow_instances}
+        existing_ids = {self._redis_flow_key(f) for f in self.flow_instances}
         try:
             # Active flows
             active_data: dict[str, str] = await r.hgetall(_REDIS_ACTIVE_KEY)
-            for gid, raw in active_data.items():
-                if gid in existing_ids:
+            for rkey, raw in active_data.items():
+                if rkey in existing_ids:
                     continue
                 try:
                     flow = FlowInstance.model_validate_json(raw)
@@ -498,11 +573,11 @@ class Overwatch:
                         # also persist updated status immediately
                         await self._persist_flow(flow)
                     self.flow_instances.append(flow)
-                    existing_ids.add(gid)
+                    existing_ids.add(rkey)
                     loaded += 1
                 except Exception as e:
                     logger.warning(
-                        f"{ICON} Skipping corrupt active flow {gid}: {e}",
+                        f"{ICON} Skipping corrupt active flow {rkey}: {e}",
                         extra={"notification": False},
                     )
             # Completed flows (scan for keys)
@@ -514,12 +589,12 @@ class Overwatch:
                     count=100,
                 )
                 for key in keys:
-                    gid = (
+                    rkey = (
                         key.removeprefix(_REDIS_COMPLETED_PREFIX)
                         if isinstance(key, str)
                         else key.decode().removeprefix(_REDIS_COMPLETED_PREFIX)
                     )
-                    if gid in existing_ids:
+                    if rkey in existing_ids:
                         continue
                     raw_val: str | None = await r.get(key)
                     if raw_val is None:
@@ -527,11 +602,11 @@ class Overwatch:
                     try:
                         flow = FlowInstance.model_validate_json(raw_val)
                         self.flow_instances.append(flow)
-                        existing_ids.add(gid)
+                        existing_ids.add(rkey)
                         loaded += 1
                     except Exception as e:
                         logger.warning(
-                            f"{ICON} Skipping corrupt completed flow {gid}: {e}",
+                            f"{ICON} Skipping corrupt completed flow {rkey}: {e}",
                             extra={"notification": False},
                         )
                 if cursor == 0:
@@ -579,7 +654,7 @@ class Overwatch:
         """
         await self._ensure_loaded()
         event = FlowEvent.from_ledger_entry(ledger_entry, group=group)
-        logger.info(
+        logger.debug(
             f"{ICON} {ledger_entry.short_id} {ledger_entry.ledger_type_str}",
             extra={"notification": False},
         )
@@ -640,29 +715,84 @@ class Overwatch:
     async def _dispatch(self, event: FlowEvent) -> str | None:
         """Try to match *event* against every active flow instance.
 
+        Events are dispatched to **all** active flows (not just the first
+        match) so that multiple candidate flows for the same trigger can
+        accumulate stages in parallel.  When a candidate completes,
+        :pymethod:`_resolve_candidates` removes the remaining candidates.
+
+        If no active flow matches, recently completed flows are also
+        checked so that late-arriving optional events (e.g. notifications)
+        are absorbed rather than spawning spurious new candidates.
+
         Before attempting a match the event is checked for duplication —
         if a flow already contains an event with the same identity the
-        flow is skipped.  This prevents, for example, an updated trigger
-        op (now carrying reply IDs) from incorrectly matching the
-        ``change_transfer_op`` stage.
+        flow is skipped.
         """
+        first_result: str | None = None
+        newly_completed: list[FlowInstance] = []
         for flow in self.active_flows:
             if self._is_duplicate(flow, event):
                 continue
             result = flow.add_event(event)
             if result is not None:
+                if first_result is None:
+                    first_result = result
+                # Clear superset grace — the flow is actively progressing
+                if flow.superset_grace_expires is not None:
+                    flow.superset_grace_expires = None
                 if flow.is_complete:
+                    newly_completed.append(flow)
                     logger.info(
-                        f"{ICON} ✅ Flow '{flow.flow_definition.name}' completed "
-                        f"({flow.trigger_short_id}) in {flow.duration:.1f}s",
-                        extra={"notification": False},
+                        f"{ICON} ✅ {Fore.WHITE}{flow.log_str} {Fore.RESET}",
+                        extra={
+                            "notification": True,
+                            "notification_str": f"{ICON} ✅ {flow.notification_str}",
+                            **flow.log_extra,
+                        },
                     )
                 await self._persist_flow(flow)
-                return result
-        return None
+        for completed in newly_completed:
+            await self._resolve_candidates(completed)
+
+        # Second pass: absorb late events into recently-completed flows
+        # (e.g. notification custom_json arriving after all required stages).
+        # Only consider flows that completed within _LATE_EVENT_WINDOW to
+        # avoid greedily absorbing unrelated events from new transactions.
+        if first_result is None:
+            now = datetime.now(tz=timezone.utc)
+            for flow in self.completed_flows:
+                if (
+                    flow.completed_at is not None
+                    and (now - flow.completed_at) > _LATE_EVENT_WINDOW
+                ):
+                    continue
+                if self._is_duplicate(flow, event):
+                    continue
+                result = flow.add_event(event)
+                if result is not None:
+                    first_result = result
+                    logger.info(
+                        f"{ICON} 📎 {Fore.YELLOW}Late event '{result}' absorbed by "
+                        f"completed flow '{flow.flow_definition.name}' "
+                        f"({flow.trigger_short_id}){Fore.RESET}",
+                        extra={"notification": False},
+                    )
+                    await self._persist_flow(flow)
+                    break  # one match is enough
+
+        return first_result
 
     async def _try_create_flow(self, event: FlowEvent, op: TrackedAny) -> str | None:
-        """If *event* matches a registered trigger, spin up a new FlowInstance."""
+        """If *event* matches registered triggers, create candidate FlowInstances.
+
+        When multiple flow definitions share the same ``trigger_op_type`` a
+        candidate instance is created for **each** matching definition.  As
+        subsequent events arrive the correct candidate will naturally
+        accumulate the right stages and complete; the losers are cleaned up
+        by :pymethod:`_resolve_candidates`.
+        """
+        first_result: str | None = None
+        candidates: list[str] = []
         for defn in self._flow_definitions.values():
             if event.op_type == defn.trigger_op_type and event.group == "primary":
                 instance = FlowInstance(
@@ -675,14 +805,104 @@ class Overwatch:
                 )
                 self.flow_instances.append(instance)
                 result = instance.add_event(event)
+                if first_result is None and result is not None:
+                    first_result = result
+                candidates.append(defn.name)
+                await self._persist_flow(instance)
+        if candidates:
+            if len(candidates) == 1:
                 logger.info(
-                    f"{ICON} 🆕 New flow '{defn.name}' started "
-                    f"({event.short_id}) cust={instance.cust_id}",
+                    f"{ICON} 🆕 New flow '{candidates[0]}' started "
+                    f"({event.short_id}) cust={getattr(op, 'from_account', '')}",
                     extra={"notification": False},
                 )
-                await self._persist_flow(instance)
-                return result
-        return None
+            else:
+                logger.info(
+                    f"{ICON} 🆕 {len(candidates)} candidate flows started "
+                    f"({event.short_id}): {', '.join(candidates)}",
+                    extra={"notification": False},
+                )
+        return first_result
+
+    async def _resolve_candidates(self, winner: FlowInstance) -> None:
+        """Remove losing candidate flows that share the same trigger.
+
+        Called when *winner* completes.  A candidate is kept alive if:
+
+        1. It already has **events** the winner's definition can't explain
+           (e.g. a ``payment`` op not in the winner's stages), **or**
+        2. The winner's stage definitions are a **proper subset** of the
+           candidate's — meaning the candidate is a superset flow that
+           could still be the correct match once more events arrive.
+
+        Without check (2), a simple flow (e.g. ``keepsats_internal_transfer``
+        with 2 required stages) would kill a superset candidate
+        (``keepsats_to_hive`` with 12+ required stages) before the
+        distinguishing events have a chance to arrive.
+        """
+        candidates = [
+            f
+            for f in self.flow_instances
+            if f is not winner
+            and f.trigger_group_id == winner.trigger_group_id
+            and f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
+        ]
+        winner_stages = winner.flow_definition.stages
+
+        def _stage_sig(s: FlowStage) -> tuple:
+            """Hashable matching-criteria signature for a stage."""
+            return (s.event_type, s.op_type, s.ledger_type)
+
+        winner_sigs = {_stage_sig(s) for s in winner_stages}
+        winner_req_sigs = {_stage_sig(s) for s in winner.flow_definition.required_stages}
+
+        for candidate in candidates:
+            # (1) Keep the candidate if it has events the winner can't explain
+            has_unique_events = any(
+                not any(stage.matches(ev) for stage in winner_stages) for ev in candidate.events
+            )
+            # (2) Keep if the candidate is a superset flow.  Two checks:
+            #     a) All of the winner's stages exist in the candidate
+            #        (matching by event_type + op_type + ledger_type), AND
+            #        the candidate has additional stage signatures, OR
+            #     b) Both flows have the same total stage signatures, but
+            #        the candidate requires strictly more stages (i.e. the
+            #        winner's required-stage sigs are a proper subset of
+            #        the candidate's required-stage sigs).
+            candidate_sigs = {_stage_sig(s) for s in candidate.flow_definition.stages}
+            candidate_req_sigs = {_stage_sig(s) for s in candidate.flow_definition.required_stages}
+            winner_is_proper_subset = winner_sigs.issubset(candidate_sigs) and (
+                winner_sigs != candidate_sigs
+                or (
+                    winner_req_sigs.issubset(candidate_req_sigs)
+                    and winner_req_sigs != candidate_req_sigs
+                )
+            )
+
+            if has_unique_events or winner_is_proper_subset:
+                reason = "has unique events" if has_unique_events else "is a superset flow"
+                # Start the superset grace period so the candidate gets
+                # cancelled automatically if no distinguishing events arrive.
+                if winner_is_proper_subset and candidate.superset_grace_expires is None:
+                    candidate.superset_grace_expires = (
+                        datetime.now(tz=timezone.utc) + self.superset_grace_period
+                    )
+                logger.info(
+                    f"{ICON} 📌 Keeping candidate '{candidate.flow_definition.name}' "
+                    f"({candidate.trigger_short_id}) — {reason} "
+                    f"vs '{winner.flow_definition.name}'",
+                    extra={"notification": False, **candidate.log_extra},
+                )
+                continue
+            candidate.status = FlowStatus.FAILED
+            self.flow_instances.remove(candidate)
+            await self._remove_active_flow(candidate)
+            logger.info(
+                f"{ICON} 🗑️ Removed candidate '{candidate.flow_definition.name}' "
+                f"({candidate.trigger_short_id}) — "
+                f"'{winner.flow_definition.name}' completed",
+                extra={"notification": False, **candidate.log_extra},
+            )
 
     # ---- queries ----
 
@@ -710,10 +930,28 @@ class Overwatch:
     async def check_stalls(self, now: datetime | None = None) -> List[FlowInstance]:
         """Mark active flows that haven't received events recently as STALLED.
 
+        Also cancels superset candidates whose grace period has expired —
+        i.e. a simpler sibling flow already completed and this candidate
+        hasn't accumulated any distinguishing events in time.
+
         Returns the list of flows whose status was changed.
         """
         now = now or datetime.now(tz=timezone.utc)
         newly_stalled: List[FlowInstance] = []
+
+        # Rule 1: cancel superset candidates past their grace period
+        for flow in list(self.active_flows):
+            if flow.superset_grace_expires is not None and now >= flow.superset_grace_expires:
+                flow.status = FlowStatus.FAILED
+                self.flow_instances.remove(flow)
+                await self._remove_active_flow(flow)
+                logger.info(
+                    f"{ICON} 🗑️ Superset candidate '{flow.flow_definition.name}' "
+                    f"({flow.trigger_short_id}) cancelled — grace period "
+                    f"({self.superset_grace_period.total_seconds():.0f}s) expired",
+                    extra={"notification": False, **flow.log_extra},
+                )
+
         for flow in list(self.active_flows):
             # a definition change may have made the flow complete
             if flow.is_complete and flow.status != FlowStatus.COMPLETED:
@@ -729,8 +967,13 @@ class Overwatch:
                 logger.warning(
                     f"{ICON} ⚠️ Flow '{flow.flow_definition.name}' "
                     f"({flow.trigger_short_id}) stalled — "
-                    f"{flow.progress}, last event {last_event_time:%H:%M:%S}",
-                    extra={"notification": False},
+                    f"{flow.progress}, last event {last_event_time:%H:%M:%S} "
+                    f"{flow.log_str}",
+                    extra={
+                        "notification": True,
+                        "error_code": "overwatch_flow_stalled",
+                        **flow.log_extra,
+                    },
                 )
                 await self._persist_flow(flow)
         return newly_stalled
@@ -798,15 +1041,21 @@ class Overwatch:
         for flow in active:
             logger.info(
                 f"{ICON}   ↳ {flow.flow_definition.name} "
-                f"({flow.trigger_short_id}) {flow.progress}",
+                f"({flow.trigger_short_id}) {flow.progress} Started: {flow.started_at}",
                 extra={"notification": False},
             )
         for flow in stalled:
+            stalled_time = flow.events[-1].timestamp if flow.events else flow.started_at
+            since = datetime.now(tz=timezone.utc) - stalled_time
             logger.warning(
                 f"{ICON}   ↳ STALLED {flow.flow_definition.name} "
                 f"({flow.trigger_short_id}) {flow.progress} "
-                f"missing: {[s.name for s in flow.missing_stages]}",
-                extra={"notification": False},
+                f"missing: {[s.name for s in flow.missing_stages]}, last event: {stalled_time}, stalled for: {since}",
+                extra={
+                    "notification": True,
+                    "error_code": "overwatch_flow_stalled",
+                    **flow.__dict__,
+                },
             )
 
     # ---- housekeeping ----
@@ -817,6 +1066,7 @@ class Overwatch:
         cls.flow_instances.clear()
         cls._flow_definitions.clear()
         cls.stall_timeout = DEFAULT_STALL_TIMEOUT
+        cls.superset_grace_period = DEFAULT_SUPERSET_GRACE_PERIOD
         cls._loaded_from_redis = False
         cls._instance = None
 

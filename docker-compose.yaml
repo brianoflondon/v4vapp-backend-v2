@@ -65,7 +65,7 @@ services:
       - ./config:/app/config
       - ./logs_docker:/app/logs
     command: [
-      "python", "src/db_monitor.py",
+      "python", "src/db_monitor.py", "--overwatch",
       "--config", "devdocker.config.yaml",
     ]
     restart: on-failure:3
@@ -141,8 +141,8 @@ services:
       - .env
     healthcheck:
       test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "8080" , "--pretty"]
-      interval: 30s
-      timeout: 10s
+      interval: 240s
+      timeout: 60s
       retries: 3
       start_period: 30s
 
