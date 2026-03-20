@@ -439,8 +439,12 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
 
     Args:
         use_cache (bool): When True (default), attempt to return cached results if
-            available and cache new results. When False, forces re-run of all
-            checks.
+            available and cache new results only when all checks pass. When False,
+            force re-run of all checks and bypass cache.
+
+    Note:
+        Failed sanity checks are not cached. This avoids stale failure state and
+        ensures corrective changes are evaluated immediately.
 
     Each registered check is expected to be an async callable that returns a
     `SanityCheckResult` instance. Checks are scheduled concurrently using an
@@ -530,7 +534,7 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
 
         # Optionally filter logging elsewhere; always return the full model
         results_model = SanityCheckResults(passed=passed, failed=failed, results=all_results)
-        if use_cache:
+        if use_cache and not results_model.failed:
             await _set_cached_sanity_check_results(results_model)
         return results_model
     except Exception as e:
@@ -547,8 +551,7 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
             ],
             results=[],
         )
-        if use_cache:
-            await _set_cached_sanity_check_results(results_model)
+        # Do not cache failure responses
         return results_model
 
 

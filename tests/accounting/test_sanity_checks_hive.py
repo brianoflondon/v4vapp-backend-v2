@@ -118,3 +118,40 @@ async def test_run_all_sanity_checks_uses_redis_cache(monkeypatch):
     assert calls["count"] == 1
     assert first.check_time == second.check_time
     assert first.passed == second.passed
+
+
+@pytest.mark.asyncio
+async def test_run_all_sanity_checks_does_not_cache_failures(monkeypatch):
+    """Failure result should not be cached so next call re-runs checks."""
+
+    calls = {"count": 0}
+
+    async def fake_check(in_progress):
+        calls["count"] += 1
+        return SanityCheckResult(name="fake", is_valid=False, details="bad")
+
+    async def fake_all_held():
+        return {}
+
+    class FakeRedis:
+        def __init__(self):
+            self.store = {}
+
+        async def get(self, key):
+            return self.store.get(key)
+
+        async def setex(self, key, ttl, value):
+            self.store[key] = value
+
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(sanity_checks.InternalConfig, "redis_async", fake_redis, raising=False)
+    monkeypatch.setattr(sanity_checks, "all_sanity_checks", [fake_check])
+    monkeypatch.setattr(sanity_checks, "all_held_msats", fake_all_held)
+
+    first = await sanity_checks.run_all_sanity_checks()
+    assert calls["count"] == 1
+    assert first.failed
+
+    second = await sanity_checks.run_all_sanity_checks()
+    assert calls["count"] == 2
+    assert second.failed
