@@ -39,7 +39,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import find_short_id, from_snake_case
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 
 ICON = "📒"
@@ -692,6 +692,28 @@ class Overwatch:
         matched = await self._dispatch(event)
         if matched is None:
             matched = await self._try_create_flow(event, op)
+
+        # --- Detect payment-failure notifications that terminate flows ---
+        #
+        # Path 1: custom_json notification reply (parent_id + notification flag)
+        json_data = getattr(op, "json_data", None)
+        parent_id = getattr(json_data, "parent_id", None) if json_data else None
+        is_notification = getattr(json_data, "notification", False) if json_data else False
+        cj_memo = getattr(json_data, "memo", "") or ""
+        if parent_id and is_notification and "Payment failed" in cj_memo:
+            await self._complete_by_notification(reply_event=event, parent_id=parent_id)
+
+        # Path 2: transfer refund (Hive/HBD returned to customer with
+        # "Payment failed" in the memo and a § short_id back-reference).
+        if not parent_id:
+            op_memo = getattr(op, "memo", "") or ""
+            if "Payment failed" in op_memo:
+                ref_short_id = find_short_id(op_memo)
+                if ref_short_id:
+                    await self._complete_by_notification(
+                        reply_event=event, trigger_short_id=ref_short_id
+                    )
+
         return matched
 
     # ---- internal dispatch ----
@@ -879,6 +901,66 @@ class Overwatch:
                 )
         return first_result
 
+    async def _complete_by_notification(
+        self,
+        reply_event: FlowEvent,
+        parent_id: str | None = None,
+        trigger_short_id: str | None = None,
+    ) -> None:
+        """Complete active flows when a notification reply arrives.
+
+        A notification custom_json with ``parent_id`` signals that the server
+        has finished processing the original transaction — success, failure,
+        or refund.  This is the terminal event for all candidate flows sharing
+        the ``trigger_group_id`` (custom_json path) or ``trigger_short_id``
+        (transfer refund path).
+
+        The most-progressed candidate is marked COMPLETED; the rest are
+        cancelled as losing candidates.
+        """
+        matching = [
+            f
+            for f in self.active_flows
+            if (parent_id and f.trigger_group_id == parent_id)
+            or (trigger_short_id and f.trigger_short_id == trigger_short_id)
+        ]
+        if not matching:
+            return
+
+        # Pick the candidate with the most matched required stages.
+        best = max(
+            matching,
+            key=lambda f: len(f.flow_definition.required_stages) - len(f.missing_stages),
+        )
+
+        # Force-complete the best candidate
+        best.status = FlowStatus.COMPLETED
+        best.completed_at = reply_event.timestamp
+        logger.info(
+            f"{ICON} ✅ {Fore.WHITE}Flow '{best.flow_definition.name}' "
+            f"({best.trigger_short_id}) completed by notification reply"
+            f"{Fore.RESET}",
+            extra={
+                "notification": True,
+                "notification_str": f"{ICON} ✅ {best.notification_str}",
+                **best.log_extra,
+            },
+        )
+        await self._persist_flow(best)
+
+        # Cancel remaining candidates
+        for flow in matching:
+            if flow is best:
+                continue
+            flow.status = FlowStatus.FAILED
+            self.flow_instances.remove(flow)
+            await self._remove_active_flow(flow)
+            logger.info(
+                f"{ICON} 🗑️ Removed candidate '{flow.flow_definition.name}' "
+                f"({flow.trigger_short_id}) — completed by notification reply",
+                extra={"notification": False, **flow.log_extra},
+            )
+
     async def _resolve_candidates(self, winner: FlowInstance) -> None:
         """Remove losing candidate flows that share the same trigger.
 
@@ -1033,6 +1115,10 @@ class Overwatch:
                 )
 
         for flow in list(self.active_flows):
+            # Already stalled — nothing new to report.
+            if flow.status == FlowStatus.STALLED:
+                continue
+
             # a definition change may have made the flow complete
             if flow.is_complete and flow.status != FlowStatus.COMPLETED:
                 flow.status = FlowStatus.COMPLETED
@@ -1127,15 +1213,11 @@ class Overwatch:
         for flow in stalled:
             stalled_time = flow.events[-1].timestamp if flow.events else flow.started_at
             since = datetime.now(tz=timezone.utc) - stalled_time
-            logger.warning(
+            logger.info(
                 f"{ICON}   ↳ STALLED {flow.flow_definition.name} "
                 f"({flow.trigger_short_id}) {flow.progress} "
-                f"missing: {[s.name for s in flow.missing_stages]}, last event: {stalled_time}, stalled for: {since}",
-                extra={
-                    "notification": True,
-                    "error_code": "overwatch_flow_stalled",
-                    **flow.__dict__,
-                },
+                f"stalled for: {since}",
+                extra={"notification": False},
             )
 
     # ---- housekeeping ----
