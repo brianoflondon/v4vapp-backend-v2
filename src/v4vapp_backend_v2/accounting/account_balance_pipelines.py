@@ -166,21 +166,22 @@ def all_account_balances_pipeline(
     # checks both `debit.*` and `credit.*` when an account filter is known.
     # This short-circuits documents before the expensive `$facet` stage.
     pipeline: List[Mapping[str, Any]] = []
-    if hide_reversed:
-        pipeline.append({"$match": {"reversed": {"$exists": False}}})
-    pipeline.append({"$match": {"conv_signed": {"$exists": True}}})
+    # Combine all pre-facet filters into one $match stage.
     # filter by cust_id when specified.  Peer-to-peer internal transfers store
     # the parties in cust_id_from / cust_id_to (with cust_id="") so we check
     # all three indexed fields with equality matches — no regex required.
+    match: dict[str, Any] = {}
+    if hide_reversed:
+        match["reversed"] = {"$exists": False}
+    match["conv_signed"] = {"$exists": True}
     if cust_ids is not None:
-        or_clauses: list[Mapping[str, Any]] = []
-        for cid in cust_ids:
-            or_clauses.append({"cust_id": cid})
-            or_clauses.append({"cust_id_from": cid})
-            or_clauses.append({"cust_id_to": cid})
-        pipeline.append({"$match": {"$or": or_clauses}})
-    else:
-        pipeline.append({"$match": {}})
+        cid_list = list(cust_ids)
+        match["$or"] = [
+            {"cust_id": {"$in": cid_list}},
+            {"cust_id_from": {"$in": cid_list}},
+            {"cust_id_to": {"$in": cid_list}},
+        ]
+    pipeline.append({"$match": match})
 
     # minor optimization if we know the account, this is called very often for the server account and the keepsats account.
     if debit_match_query or credit_match_query:
@@ -604,7 +605,6 @@ def all_account_balances_pipeline(
             {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
         ]
     )
-    pprint(pipeline)
     return pipeline
 
 
