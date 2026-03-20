@@ -1,6 +1,11 @@
 from decimal import Decimal
 
-from v4vapp_backend_v2.conversion.binance_swap_adapter import BinanceSwapAdapter, ExchangeMinimums
+import pytest
+from v4vapp_backend_v2.conversion.binance_swap_adapter import (
+    BinanceSwapAdapter,
+    ExchangeConnectionError,
+    ExchangeMinimums,
+)
 
 
 class DummyClient:
@@ -53,3 +58,23 @@ def test_min_qty_no_override_for_other_asset(monkeypatch):
 
     mins = adapter.get_min_order_requirements("ABC", "BTC")
     assert mins.min_qty == reported
+
+
+def test_execute_swap_empty_quote_id_raises(monkeypatch):
+    adapter = BinanceSwapAdapter(testnet=False)
+
+    class DummyClientNoQuote(DummyClient):
+        def send_quote_request(self, *args, **kwargs):
+            return {
+                # missing quoteId intentionally to simulate service data issue
+                "ratio": "1",
+                "inverseRatio": "1",
+                "validTimestamp": 10_000_000_000,
+                "fromAmount": "100",
+                "toAmount": "0.001",
+            }
+
+    monkeypatch.setattr(adapter, "_get_client", lambda: DummyClientNoQuote([]))
+
+    with pytest.raises(ExchangeConnectionError, match="missing quoteId"):
+        adapter.market_sell("HIVE", "BTC", Decimal("100"))

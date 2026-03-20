@@ -432,6 +432,9 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             ExchangeConnectionError: If the API call fails
             ExchangeQuoteExpiredError: If the quote has expired
         """
+        if not quote_id:
+            raise ExchangeConnectionError("quote_id is required to accept Binance Convert quote")
+
         try:
             client = self._get_client()
             response = client.accept_quote(quoteId=quote_id)
@@ -653,6 +656,12 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             from_amount=from_amount,
             valid_time=valid_time,
         )
+
+        # Validate we got a usable Binance quote ID
+        if not quote.quote_id:
+            raise ExchangeConnectionError(
+                "Binance Convert quote response is missing quoteId."
+            )
 
         # Step 2: Accept the quote
         accept_result = self.accept_quote(quote.quote_id)

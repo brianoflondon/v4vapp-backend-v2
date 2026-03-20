@@ -318,26 +318,30 @@ class FlowInstance(BaseModel):
         )
 
     def add_event(self, event: FlowEvent) -> str | None:
-        """Add an event and return the matched stage name, or None if unmatched."""
-        # Snapshot which stages are already fulfilled BEFORE adding the event
+        """Add an event and return the matched stage name, or None if unmatched.
+
+        Only events that match a stage are appended to ``self.events``.
+        Unmatched events are silently ignored so they don't pollute the
+        event list or interfere with ``_resolve_candidates``.
+        """
+        # Snapshot which stages are already fulfilled BEFORE checking the event
         # so the new event isn't counted against itself.
         previously_matched = self.matched_stage_names
-
-        self.events.append(event)
-        if self.status == FlowStatus.PENDING:
-            self.status = FlowStatus.IN_PROGRESS
-
-        if not self.flow_value and event.event_value:
-            # Auto-populate flow_value from the first event with a non-empty value
-            self.flow_value = event.event_value
-
-        # if the flow doesn't have a cust_id after the first events, try to extract it later.
-        if not self.cust_id and event.op and hasattr(event.op, "cust_id"):
-            self.cust_id = getattr(event.op, "cust_id")
 
         # Try to match against stages not yet fulfilled
         for stage in self.flow_definition.stages:
             if stage.name not in previously_matched and stage.matches(event):
+                # Event matched — record it
+                self.events.append(event)
+                if self.status == FlowStatus.PENDING:
+                    self.status = FlowStatus.IN_PROGRESS
+
+                if not self.flow_value and event.event_value:
+                    self.flow_value = event.event_value
+
+                if not self.cust_id and event.op and hasattr(event.op, "cust_id"):
+                    self.cust_id = getattr(event.op, "cust_id")
+
                 # Check completeness after adding — only record completed_at
                 # the first time so late-event absorption doesn't push the
                 # timestamp back and fall outside _LATE_EVENT_WINDOW.
@@ -441,6 +445,7 @@ class FlowInstance(BaseModel):
 # is marked as STALLED during the periodic report.
 DEFAULT_STALL_TIMEOUT = timedelta(minutes=5)
 DEFAULT_SUPERSET_GRACE_PERIOD = timedelta(seconds=30)
+DEFAULT_TRIGGER_ONLY_TIMEOUT = timedelta(seconds=60)
 
 
 class Overwatch:
@@ -478,6 +483,7 @@ class Overwatch:
     _flow_definitions: ClassVar[dict[str, FlowDefinition]] = {}
     stall_timeout: ClassVar[timedelta] = DEFAULT_STALL_TIMEOUT
     superset_grace_period: ClassVar[timedelta] = DEFAULT_SUPERSET_GRACE_PERIOD
+    trigger_only_timeout: ClassVar[timedelta] = DEFAULT_TRIGGER_ONLY_TIMEOUT
     _loaded_from_redis: ClassVar[bool] = False
 
     def __new__(cls) -> Overwatch:
@@ -808,6 +814,24 @@ class Overwatch:
         accumulate the right stages and complete; the losers are cleaned up
         by :pymethod:`_resolve_candidates`.
         """
+        # Skip internal operational transfers between known system accounts
+        # (e.g. server↔treasury, server↔exchange).  These never produce
+        # customer-facing conversion events and would stall as false positives.
+        from_acc = getattr(op, "from_account", "")
+        to_acc = getattr(op, "to_account", "")
+        if from_acc and to_acc:
+            try:
+                internal = set(InternalConfig().config.hive.all_account_names)
+                if internal and from_acc in internal and to_acc in internal:
+                    logger.info(
+                        f"{ICON} ⏭️ Skipping flow creation for internal transfer "
+                        f"({from_acc} → {to_acc}, {event.short_id})",
+                        extra={"notification": False},
+                    )
+                    return None
+            except Exception:
+                pass  # config unavailable — proceed normally
+
         first_result: str | None = None
         candidates: list[str] = []
         for defn in self._flow_definitions.values():
@@ -970,6 +994,30 @@ class Overwatch:
                     extra={"notification": False, **flow.log_extra},
                 )
 
+        # Rule 2: cancel flows that haven't progressed past trigger-only.
+        # A flow created by _try_create_flow receives exactly one "op" event
+        # (the trigger).  If no subsequent stage-matched events arrive within
+        # trigger_only_timeout, the trigger was likely for an irrelevant op
+        # (e.g. a server-to-exchange transfer) and the flow should be cleaned up.
+        for flow in list(self.active_flows):
+            if flow.superset_grace_expires is not None:
+                continue  # handled by Rule 1
+            if (
+                len(flow.events) == 1
+                and flow.events[0].event_type == "op"
+                and now - flow.started_at > self.trigger_only_timeout
+            ):
+                flow.status = FlowStatus.FAILED
+                self.flow_instances.remove(flow)
+                await self._remove_active_flow(flow)
+                logger.info(
+                    f"{ICON} 🗑️ Flow '{flow.flow_definition.name}' "
+                    f"({flow.trigger_short_id}) cancelled — trigger-only "
+                    f"timeout ({self.trigger_only_timeout.total_seconds():.0f}s) "
+                    f"expired, no subsequent events matched",
+                    extra={"notification": False, **flow.log_extra},
+                )
+
         for flow in list(self.active_flows):
             # a definition change may have made the flow complete
             if flow.is_complete and flow.status != FlowStatus.COMPLETED:
@@ -1085,6 +1133,7 @@ class Overwatch:
         cls._flow_definitions.clear()
         cls.stall_timeout = DEFAULT_STALL_TIMEOUT
         cls.superset_grace_period = DEFAULT_SUPERSET_GRACE_PERIOD
+        cls.trigger_only_timeout = DEFAULT_TRIGGER_ONLY_TIMEOUT
         cls._loaded_from_redis = False
         cls._instance = None
 

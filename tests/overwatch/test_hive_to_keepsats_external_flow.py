@@ -447,3 +447,285 @@ class TestMixedTriggerTypes:
         assert "hive_to_keepsats" not in flow_names
         assert "hive_to_keepsats_external" not in flow_names
         assert flow_names == {"keepsats_to_hive", "keepsats_to_external"}
+
+
+# ---------------------------------------------------------------------------
+# Tests: Trigger-only timeout
+# ---------------------------------------------------------------------------
+
+
+class TestTriggerOnlyTimeout:
+    """Flows that only have their trigger op and no subsequent matched events
+    should be cancelled after trigger_only_timeout (default 60s).  This
+    prevents false positives from irrelevant ops (e.g. server-to-exchange
+    transfers) lingering as stalled flows."""
+
+    @pytest.mark.asyncio
+    async def test_trigger_only_flow_cancelled_after_timeout(self):
+        """A flow with only the trigger op is cancelled after trigger_only_timeout."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _op_event("transfer")
+        await ow._try_create_flow(trigger, _fake_op())
+        assert len(ow.active_flows) == 2  # both candidates created
+
+        # 61 seconds later — past trigger_only_timeout (60s)
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=61)
+        await ow.check_stalls(now=future)
+
+        # Both candidates should be cancelled (FAILED + removed)
+        assert len(ow.active_flows) == 0
+        assert all(
+            f.status == FlowStatus.FAILED
+            for f in ow.flow_instances
+            if f.flow_definition.name in ("hive_to_keepsats", "hive_to_keepsats_external")
+        )
+
+    @pytest.mark.asyncio
+    async def test_trigger_only_flow_survives_before_timeout(self):
+        """A trigger-only flow is NOT cancelled before timeout expires."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _op_event("transfer")
+        await ow._try_create_flow(trigger, _fake_op())
+
+        # 30 seconds later — before trigger_only_timeout
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=30)
+        await ow.check_stalls(now=future)
+
+        assert len(ow.active_flows) == 2  # still alive
+
+    @pytest.mark.asyncio
+    async def test_flow_with_subsequent_event_uses_normal_stall(self):
+        """A flow that received a post-trigger event uses the normal stall
+        timeout, NOT the trigger-only timeout."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _op_event("transfer")
+        await ow._try_create_flow(trigger, _fake_op())
+
+        # Dispatch a second event (ledger) so flows have 2 matched events
+        await ow._dispatch(_ledger_event(LedgerType.CUSTOMER_HIVE_IN))
+
+        # 90 seconds later — past trigger_only_timeout but before stall_timeout
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=90)
+        await ow.check_stalls(now=future)
+
+        # Flows should still be active (not cancelled by trigger-only rule)
+        assert len(ow.active_flows) == 2
+
+    @pytest.mark.asyncio
+    async def test_trigger_only_timeout_configurable(self):
+        """trigger_only_timeout can be customised."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.trigger_only_timeout = timedelta(seconds=10)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _op_event("transfer")
+        await ow._try_create_flow(trigger, _fake_op())
+
+        # 11 seconds — past custom timeout
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=11)
+        await ow.check_stalls(now=future)
+        assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_superset_grace_flow_not_caught_by_trigger_only(self):
+        """A flow in superset grace is handled by the grace rule, not trigger-only."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _SHARED_EVENTS[0]()
+        await ow._try_create_flow(trigger, _fake_op())
+        # Complete hive_to_keepsats → ext enters superset grace
+        for factory in _SHARED_EVENTS[1:]:
+            await ow._dispatch(factory())
+
+        ext = ow.active_flows[0]
+        assert ext.superset_grace_expires is not None
+
+        # 61s later — past trigger_only_timeout. But superset grace (30s)
+        # should have already cancelled it via Rule 1 instead of Rule 2.
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=61)
+        await ow.check_stalls(now=future)
+        assert len(ow.active_flows) == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests: add_event only appends matched events
+# ---------------------------------------------------------------------------
+
+
+class TestAddEventSelectiveAppend:
+    """Verify that add_event only appends events that match a stage."""
+
+    def test_unmatched_event_not_appended(self):
+        """An event that doesn't match any stage should not be in flow.events."""
+        from v4vapp_backend_v2.process.process_overwatch import FlowInstance
+
+        Overwatch.reset()
+        flow = FlowInstance(
+            flow_definition=HIVE_TO_KEEPSATS_FLOW,
+            trigger_group_id="gid_test",
+            trigger_short_id="sid_test",
+        )
+        # Add trigger event (matches)
+        trigger = _op_event("transfer", group_id="gid_test", short_id="sid_test")
+        result = flow.add_event(trigger)
+        assert result is not None
+        assert len(flow.events) == 1
+
+        # Add an event with a ledger type that doesn't match any stage
+        unmatched = _ledger_event(
+            LedgerType.SERVER_TO_EXCHANGE,
+            group_id="gid_test",
+            short_id="sid_test",
+        )
+        result = flow.add_event(unmatched)
+        assert result is None
+        assert len(flow.events) == 1  # unchanged — not appended
+
+    def test_matched_event_appended(self):
+        """A matched event IS appended normally."""
+        from v4vapp_backend_v2.process.process_overwatch import FlowInstance
+
+        Overwatch.reset()
+        flow = FlowInstance(
+            flow_definition=HIVE_TO_KEEPSATS_FLOW,
+            trigger_group_id="gid_test",
+            trigger_short_id="sid_test",
+        )
+        trigger = _op_event("transfer", group_id="gid_test", short_id="sid_test")
+        flow.add_event(trigger)
+
+        matched = _ledger_event(
+            LedgerType.CUSTOMER_HIVE_IN,
+            group_id="gid_test",
+            short_id="sid_test",
+        )
+        result = flow.add_event(matched)
+        assert result is not None
+        assert len(flow.events) == 2
+
+
+# ---------------------------------------------------------------------------
+# Tests: Internal account transfer filter
+# ---------------------------------------------------------------------------
+
+
+class TestInternalAccountFilter:
+    """Transfers between known system accounts (server, treasury, exchange,
+    funding) should NOT create flow candidates."""
+
+    @staticmethod
+    def _internal_op(
+        from_account: str,
+        to_account: str,
+        group_id: str = "gid_internal",
+        short_id: str = "sid_internal",
+    ) -> object:
+        return type(
+            "FakeOp",
+            (),
+            {
+                "group_id": group_id,
+                "short_id": short_id,
+                "op_type": "transfer",
+                "from_account": from_account,
+                "to_account": to_account,
+            },
+        )()
+
+    @pytest.mark.asyncio
+    async def test_server_to_exchange_skipped(self):
+        """Server → exchange transfer must not create flow candidates."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        op = self._internal_op("someaccount", "fiction")
+        trigger = _op_event("transfer", group_id="gid_internal", short_id="sid_internal")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is None
+        assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_server_to_treasury_skipped(self):
+        """Server → treasury transfer must not create flow candidates."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        op = self._internal_op("someaccount", "devtre.v4vapp")
+        trigger = _op_event("transfer", group_id="gid_internal", short_id="sid_internal")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is None
+        assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_treasury_to_exchange_skipped(self):
+        """Treasury → exchange transfer must not create flow candidates."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        op = self._internal_op("devtre.v4vapp", "fiction")
+        trigger = _op_event("transfer", group_id="gid_internal", short_id="sid_internal")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is None
+        assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_customer_to_server_not_skipped(self):
+        """Customer → server transfer MUST create flow candidates (deposit)."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        op = self._internal_op("v4vapp-test", "someaccount")
+        trigger = _op_event("transfer", group_id="gid_cust", short_id="sid_cust")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is not None
+        assert len(ow.active_flows) == 2  # both candidates created
+
+    @pytest.mark.asyncio
+    async def test_server_to_customer_not_skipped(self):
+        """Server → customer transfer MUST create flow candidates (withdrawal)."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        op = self._internal_op("someaccount", "v4vapp-test")
+        trigger = _op_event("transfer", group_id="gid_cust", short_id="sid_cust")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is not None
+        assert len(ow.active_flows) == 1
