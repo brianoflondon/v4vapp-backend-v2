@@ -47,8 +47,11 @@ Currently registered flows:
 |------|---------|-----------------|-------------|
 | `hive_to_keepsats` | `transfer` | 14 | HIVE deposit converted to sats stored on system |
 | `hive_to_keepsats_external` | `transfer` | 17 | HIVE converted to keepsats then paid to external Lightning invoice |
-| `keepsats_to_hbd` | `custom_json` | 12 (+ 5 optional) | Keepsats converted to HBD via exchange |
+| `keepsats_to_hive` | `custom_json` | 12 (+ 5 optional) | Keepsats converted to HBD via exchange |
 | `keepsats_to_external` | `custom_json` | 6 (+ 1 optional) | Keepsats paid to external Lightning invoice |
+| `external_to_keepsats` | `invoice` | 4 (+ 3 optional) | External Lightning payment received, converted to keepsats |
+| `external_to_hive` | `invoice` | 6 (+ 1 optional) | External Lightning payment received, converted to HIVE and sent on-chain |
+| `keepsats_internal_transfer` | `custom_json` | 2 (+ 1 optional) | Internal keepsats transfer between two customers |
 
 ### FlowEvent
 
@@ -166,6 +169,27 @@ hive_to_keepsats completes (14/14)
 hive_to_keepsats_external completes (17/17)  ← later, independently
 ```
 
+### Superset grace and shared events
+
+When a simpler flow completes and the superset candidate is kept alive, it
+enters a **grace period** (default 30 seconds, configurable via
+`Overwatch.superset_grace_period`).  During this window, distinguishing
+events (e.g. `payment`, `withdraw_l`) can still arrive to prove the superset
+flow is the correct one.
+
+The `FlowInstance` tracks:
+- `superset_grace_expires` — when the grace window ends.
+- `superset_winner_name` — the name of the sibling flow that completed first.
+
+**Shared events don't clear grace.** If a subsequent event matches a required
+stage that both the candidate *and* the winner share (e.g. a notification
+`custom_json` common to both flows), the grace timer is **not** cleared.
+Only events matching stages exclusive to the candidate (not in the winner's
+required stages) count as distinguishing evidence.
+
+If no distinguishing event arrives before the grace period expires,
+`check_stalls` cancels the candidate.
+
 ### Why this approach?
 
 - **No content inspection** — we don't need to parse memo fields or inspect
@@ -236,15 +260,78 @@ auto-completed.
 
 ## Stall detection
 
-The `report_loop` coroutine runs periodically (default 30 seconds) and:
+The `report_loop` coroutine runs periodically (default 30 seconds) and calls
+`check_stalls`, which applies three rules in order:
 
-1. Checks each active flow's last event timestamp.
-2. If no event has arrived within the `stall_timeout` (default 5 minutes),
-   the flow is marked `STALLED`.
-3. Logs a summary of active / stalled / completed flows.
+### Rule 1: Superset grace expiry
 
-Stalled flows remain tracked — if new events arrive later they resume
-normally.
+Candidates whose `superset_grace_expires` has passed are cancelled (status
+`FAILED`, removed from active flows).
+
+### Rule 2: Trigger-only timeout
+
+Flows that only contain their initial trigger op (`len(events) == 1` and
+`event_type == "op"`) and have been alive longer than
+`trigger_only_timeout` (default 60 seconds) are cancelled.
+
+This prevents false positives from **internal operational transfers** (e.g.
+server-to-exchange rebalancing, change returns) that match the trigger type
+but will never produce the expected conversion ledger entries. Without this
+rule, such flows linger until the 5-minute stall timeout and generate
+spurious warnings.
+
+Flows that have received *any* subsequent matched event (even one ledger
+entry) are exempt from this rule and use the normal stall timeout instead.
+
+### Rule 3: Normal stall timeout
+
+If no event has arrived within the `stall_timeout` (default 5 minutes),
+the flow is marked `STALLED`. Stalled flows remain tracked — if new events
+arrive later they resume normally.
+
+### Configurable timeouts
+
+| Timeout | Default | ClassVar |
+|---------|---------|----------|
+| Stall timeout | 5 minutes | `Overwatch.stall_timeout` |
+| Superset grace period | 30 seconds | `Overwatch.superset_grace_period` |
+| Trigger-only timeout | 60 seconds | `Overwatch.trigger_only_timeout` |
+
+---
+
+## Internal account filter
+
+Before creating candidate flows, `_try_create_flow` checks whether the
+trigger operation is an **internal transfer between known system accounts**
+(server, treasury, funding, exchange — from
+`InternalConfig().config.hive.all_account_names`).
+
+If both `from_account` and `to_account` are internal accounts, candidate
+creation is skipped entirely. This prevents operational transfers
+(server ↔ treasury, server → exchange rebalancing, etc.) from spawning
+false flow candidates that can never complete.
+
+This filter works together with the trigger-only timeout as a two-layer
+defense:
+1. **Proactive** — internal account filter blocks candidate creation
+   instantly.
+2. **Safety net** — trigger-only timeout catches any other non-customer ops
+   that slip through (e.g. if config is temporarily unavailable).
+
+---
+
+## Selective event append
+
+`FlowInstance.add_event` only appends events that match a stage to the
+`events` list. Unmatched events are silently ignored and return `None`
+without modifying the instance.
+
+This prevents unmatched events from:
+- Polluting the event list and inflating progress/debug output.
+- Interfering with `_resolve_candidates` logic (which checks whether a
+  candidate has events the winner "cannot explain").
+- Preventing the trigger-only timeout from firing (since `len(events)`
+  stays at 1 until a real stage-matched event arrives).
 
 ---
 
