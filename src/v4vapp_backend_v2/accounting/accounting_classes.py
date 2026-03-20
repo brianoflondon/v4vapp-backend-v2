@@ -147,6 +147,8 @@ class AccountBalanceLine(BaseModel):
     description: str = ""
     user_memo: str = ""
     cust_id: str = ""
+    cust_id_from: str = ""
+    cust_id_to: str = ""
     op_type: str = ""
     account_type: str = ""
     name: str = ""
@@ -248,7 +250,14 @@ class LedgerAccountDetails(LedgerAccount):
     @property
     def has_transactions(self) -> bool:
         """Returns True if there are any transactions in the combined balance other than an opening balance"""
+        if not self.combined_balance:
+            return False
         if len(self.combined_balance) > 1:
+            return True
+        if (
+            len(self.combined_balance) == 1
+            and self.combined_balance[0].ledger_type != LedgerType.OPENING_BALANCE.value
+        ):
             return True
         return False
 

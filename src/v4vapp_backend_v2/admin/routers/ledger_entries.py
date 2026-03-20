@@ -211,6 +211,8 @@ async def ledger_entries_data(
                 "description": e.description,
                 "link": getattr(e, "link", ""),
                 "cust_id": getattr(e, "cust_id", ""),
+                "cust_id_from": getattr(e, "cust_id_from", ""),
+                "cust_id_to": getattr(e, "cust_id_to", ""),
                 "debit": {
                     **debit,
                     "amount": str(getattr(e, "debit_amount", None)),

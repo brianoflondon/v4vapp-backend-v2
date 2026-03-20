@@ -353,7 +353,7 @@
             </div>
 
             <div class="d-flex justify-content-between mt-2">
-                <div><strong>Customer ID :</strong> {{ entry.cust_id or '' }}</div>
+                <div><strong>Customer ID :</strong> {% if entry.cust_id_from and entry.cust_id_to %}{{ entry.cust_id_from }} → {{ entry.cust_id_to }}{% else %}{{ entry.cust_id or '' }}{% endif %}</div>
                 <div class="text-muted position-relative">
                     {% if entry.reversed %}
                     <span class="badge bg-warning text-dark me-1">REVERSED</span>
@@ -742,7 +742,7 @@
                       </div>
                     </div>
                     <div class="d-flex justify-content-between mt-2">
-                      <div><strong>Customer ID :</strong> ${escapeHtml(entry.cust_id || "")}</div>
+                      <div><strong>Customer ID :</strong> ${entry.cust_id_from && entry.cust_id_to ? escapeHtml(entry.cust_id_from) + ' → ' + escapeHtml(entry.cust_id_to) : escapeHtml(entry.cust_id || "")}</div>
                       <div class="text-muted position-relative">
                         ${entry.reversed ? '<span class="badge bg-warning text-dark me-1">REVERSED</span>' : ''}
                         <span class="float-end">${escapeHtml(formattedDate)}</span>

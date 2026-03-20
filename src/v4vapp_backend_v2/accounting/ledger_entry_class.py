@@ -154,6 +154,12 @@ class LedgerEntry(BaseModel):
     cust_id: AccNameType = Field(
         "", description="Customer ID of any type associated with the ledger entry"
     )
+    cust_id_from: AccNameType = Field(
+        "", description="Sender account for peer-to-peer internal transfers"
+    )
+    cust_id_to: AccNameType = Field(
+        "", description="Recipient account for peer-to-peer internal transfers"
+    )
     debit_amount: Decimal = Field(Decimal(0), description="Amount of the debit transaction")
     debit_unit: Currency = Field(
         default=Currency.HIVE, description="Unit of the debit transaction"
@@ -197,6 +203,30 @@ class LedgerEntry(BaseModel):
     def convert_mongodb_decimals(cls, v):
         """Convert Decimal128 objects from MongoDB to Decimal objects for Pydantic validation."""
         return convert_decimal128_to_decimal(v)
+
+    @model_validator(mode="before")
+    @classmethod
+    def split_peer_cust_id(cls, data: Any) -> Any:
+        """Auto-split colon-form cust_id (e.g. 'alice:bob') into cust_id_from/cust_id_to.
+
+        Handles both new entries (where get_transfer_cust_id returns the colon form)
+        and old DB documents (backward-compatible read path). When split, cust_id is
+        cleared to '' so the indexed equality queries on the two new fields are used.
+        """
+        if isinstance(data, dict):
+            cust_id = data.get("cust_id", "")
+            if (
+                isinstance(cust_id, str)
+                and ":" in cust_id
+                and not data.get("cust_id_from")
+                and not data.get("cust_id_to")
+            ):
+                parts = cust_id.split(":", 1)
+                data = dict(data)
+                data["cust_id_to"] = parts[0]
+                data["cust_id_from"] = parts[1]
+                data["cust_id"] = ""
+        return data
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -952,7 +982,11 @@ class LedgerEntry(BaseModel):
         line_width = 100  # matches separator width below
 
         formatted_date = f"{self.timestamp:%b %d, %Y %H:%M:%S}"
-        customer_left = f"CUSTOMER_ID : {self.cust_id:<20}"
+        if self.cust_id_from and self.cust_id_to:
+            cust_display = f"{self.cust_id_from} \u2192 {self.cust_id_to}"
+        else:
+            cust_display = self.cust_id
+        customer_left = f"CUSTOMER_ID : {cust_display:<20}"
         # construct base line with right-aligned date (ignoring reversed word)
         if len(customer_left) + len(formatted_date) + 1 > line_width:
             base_line = f"{customer_left} {formatted_date}"

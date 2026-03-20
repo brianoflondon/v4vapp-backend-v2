@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Mapping, Sequence
+from pprint import pprint
+from typing import Any, List, Mapping, Sequence, Set
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 
@@ -86,7 +87,7 @@ def all_account_balances_pipeline(
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
     filter: Mapping[str, Any] | None = None,
-    cust_ids: Sequence[str] | None = None,
+    cust_ids: Set[str] | None = None,
     hide_reversed: bool = True,
 ) -> Sequence[Mapping[str, Any]]:
     """
@@ -104,7 +105,7 @@ def all_account_balances_pipeline(
         as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
         age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
         filter (Mapping[str, Any], optional): Additional MongoDB filter to apply to the transactions.
-        cust_ids (Sequence[str], optional): A list of customer IDs to restrict the transactions to. If provided, only transactions with `cust_id` in this list will be included.
+        cust_ids (Set[str] | None, optional): A set of customer IDs to restrict the transactions to. If provided, only transactions with `cust_id` in this set will be included.
         hide_reversed (bool, optional): If True, excludes transactions that have been reversed (i.e., those with a `reversed` field). Defaults to True.
 
     Returns:
@@ -165,23 +166,22 @@ def all_account_balances_pipeline(
     # checks both `debit.*` and `credit.*` when an account filter is known.
     # This short-circuits documents before the expensive `$facet` stage.
     pipeline: List[Mapping[str, Any]] = []
+    # Combine all pre-facet filters into one $match stage.
+    # filter by cust_id when specified.  Peer-to-peer internal transfers store
+    # the parties in cust_id_from / cust_id_to (with cust_id="") so we check
+    # all three indexed fields with equality matches — no regex required.
+    match: dict[str, Any] = {}
     if hide_reversed:
-        pipeline.append({"$match": {"reversed": {"$exists": False}}})
-    pipeline.append({"$match": {"conv_signed": {"$exists": True}}})
-    # filter by cust_id when specified.  Since some entries use a
-    # colon-suffixed form (e.g. "v4vapp.dev:podping") we match both exact
-    # values and any string beginning with the id plus a colon.
+        match["reversed"] = {"$exists": False}
+    match["conv_signed"] = {"$exists": True}
     if cust_ids is not None:
-        or_clauses: list[Mapping[str, Any]] = []
-        for cid in cust_ids:
-            or_clauses.append({"cust_id": cid})
-            # regex anchored to avoid accidental partial matches (e.g.
-            # "v4vapp.de" should not match "v4vapp.dev:...")
-            regex = f"^{cid}(:|$)"
-            or_clauses.append({"cust_id": {"$regex": regex}})
-        pipeline.append({"$match": {"$or": or_clauses}})
-    else:
-        pipeline.append({"$match": {}})
+        cid_list = list(cust_ids)
+        match["$or"] = [
+            {"cust_id": {"$in": cid_list}},
+            {"cust_id_from": {"$in": cid_list}},
+            {"cust_id_to": {"$in": cid_list}},
+        ]
+    pipeline.append({"$match": match})
 
     # minor optimization if we know the account, this is called very often for the server account and the keepsats account.
     if debit_match_query or credit_match_query:
@@ -214,6 +214,8 @@ def all_account_balances_pipeline(
                                 "description": 1,
                                 "user_memo": 1,
                                 "cust_id": 1,
+                                "cust_id_from": 1,
+                                "cust_id_to": 1,
                                 "amount": "$debit_amount",
                                 "amount_signed": "$debit_amount_signed",
                                 "unit": "$debit_unit",
@@ -241,6 +243,8 @@ def all_account_balances_pipeline(
                                 "description": 1,
                                 "user_memo": 1,
                                 "cust_id": 1,
+                                "cust_id_from": 1,
+                                "cust_id_to": 1,
                                 "amount": "$credit_amount",
                                 "amount_signed": "$credit_amount_signed",
                                 "unit": "$credit_unit",
@@ -601,7 +605,6 @@ def all_account_balances_pipeline(
             {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
         ]
     )
-
     return pipeline
 
 

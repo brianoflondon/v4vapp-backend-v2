@@ -201,15 +201,20 @@ async def reset_exchange_opening_balance(
     if hive_balance > 0:
         asset_entries.append(("hive", Currency.HIVE, hive_balance))
 
-    for asset_label, currency, balance_value in asset_entries:
-        # Bypass cache — opening balance checks must reflect current DB state
-        account_ledger_balance = await one_account_balance(check_account, use_cache=False)
+    # Snapshot the account balance ONCE before the loop so that entries written
+    # during the first iteration don't cause subsequent iterations to see
+    # has_transactions=True and produce "adjustment" instead of "open".
+    initial_ledger_balance = await one_account_balance(check_account, use_cache=False)
+    initial_msats = initial_ledger_balance.msats
+    initial_hive = initial_ledger_balance.hive
+    initial_has_transactions = initial_ledger_balance.has_transactions
 
-        # Determine existing balance in the relevant unit
+    for asset_label, currency, balance_value in asset_entries:
+        # Determine existing balance in the relevant unit from the pre-loop snapshot
         if currency == Currency.MSATS:
-            existing_balance = account_ledger_balance.msats
+            existing_balance = initial_msats
         else:
-            existing_balance = account_ledger_balance.hive
+            existing_balance = initial_hive
 
         # check if match within 0.1% to avoid creating adjustment entries for tiny differences due to conversion or timing
         if (
@@ -223,7 +228,7 @@ async def reset_exchange_opening_balance(
             )
             continue
 
-        if account_ledger_balance.has_transactions:
+        if initial_has_transactions:
             logger.warning(
                 f"Ledger balance for {check_account.name} (Sub: {check_account.sub}) "
                 f"{asset_label} is {existing_balance:,.0f} {currency.value}, "

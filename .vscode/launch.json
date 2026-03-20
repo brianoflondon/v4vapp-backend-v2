@@ -104,6 +104,27 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Production Admin Interface",
+            "type": "debugpy",
+            "consoleName": "Production Admin Interface",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/v4vapp_backend_v2/admin/run_admin.py",
+            "args": [
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080",
+                "--config",
+                "production.fromhome.config.yaml"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Hive Monitor v4vapp no Sale",
             "type": "debugpy",
             "consoleName": "Hive Monitor v4vapp no SALE",
