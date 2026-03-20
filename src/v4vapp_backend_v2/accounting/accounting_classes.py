@@ -250,7 +250,14 @@ class LedgerAccountDetails(LedgerAccount):
     @property
     def has_transactions(self) -> bool:
         """Returns True if there are any transactions in the combined balance other than an opening balance"""
+        if not self.combined_balance:
+            return False
         if len(self.combined_balance) > 1:
+            return True
+        if (
+            len(self.combined_balance) == 1
+            and self.combined_balance[0].ledger_type != LedgerType.OPENING_BALANCE.value
+        ):
             return True
         return False
 
