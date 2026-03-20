@@ -729,3 +729,110 @@ class TestInternalAccountFilter:
 
         assert result is not None
         assert len(ow.active_flows) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: Reply op filter (parent_id check)
+# ---------------------------------------------------------------------------
+
+
+class TestReplyOpFilter:
+    """Custom_json ops that carry a parent_id (fee, notification) are NOT
+    independent customer triggers and must not create new flow candidates."""
+
+    @staticmethod
+    def _reply_op(
+        from_account: str = "threespeakselfie",
+        to_account: str = "v4vapp",
+        parent_id: str | None = "parent_group_id_abc",
+        group_id: str = "gid_reply",
+        short_id: str = "sid_reply",
+    ) -> object:
+        """Fake custom_json op whose json_data carries an optional parent_id."""
+        json_data = type("FakeJsonData", (), {"parent_id": parent_id})()
+        return type(
+            "FakeCustomJsonOp",
+            (),
+            {
+                "group_id": group_id,
+                "short_id": short_id,
+                "op_type": "custom_json",
+                "from_account": from_account,
+                "to_account": to_account,
+                "json_data": json_data,
+            },
+        )()
+
+    @pytest.mark.asyncio
+    async def test_reply_op_with_parent_id_skipped(self):
+        """Custom_json with parent_id must NOT create flow candidates."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        op = self._reply_op(parent_id="104796233_2453fa_1_real")
+        trigger = _op_event("custom_json", group_id="gid_reply", short_id="sid_reply")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is None
+        assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_customer_op_without_parent_id_not_skipped(self):
+        """Customer custom_json WITHOUT parent_id MUST create flow candidates."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        op = self._reply_op(parent_id=None)
+        trigger = _op_event("custom_json", group_id="gid_cust", short_id="sid_cust")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is not None
+        assert len(ow.active_flows) == 2  # both candidates created
+
+    @pytest.mark.asyncio
+    async def test_customer_op_with_empty_parent_id_not_skipped(self):
+        """Custom_json with empty string parent_id is treated as no parent."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        op = self._reply_op(parent_id="")
+        trigger = _op_event("custom_json", group_id="gid_cust", short_id="sid_cust")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is not None
+        assert len(ow.active_flows) == 2
+
+    @pytest.mark.asyncio
+    async def test_op_without_json_data_not_skipped(self):
+        """Ops without json_data (e.g. transfers) must not be affected."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        # Transfer op — no json_data attribute
+        op = type(
+            "FakeTransferOp",
+            (),
+            {
+                "group_id": "gid_transfer",
+                "short_id": "sid_transfer",
+                "op_type": "transfer",
+                "from_account": "customer",
+                "to_account": "someaccount",
+            },
+        )()
+        trigger = _op_event("transfer", group_id="gid_transfer", short_id="sid_transfer")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is not None
+        assert len(ow.active_flows) == 1

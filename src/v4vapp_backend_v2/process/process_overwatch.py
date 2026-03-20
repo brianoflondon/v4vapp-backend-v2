@@ -814,6 +814,20 @@ class Overwatch:
         accumulate the right stages and complete; the losers are cleaned up
         by :pymethod:`_resolve_candidates`.
         """
+        # Skip reply ops that reference a parent transaction.
+        # Fee/notification custom_jsons have a parent_id linking them to the
+        # original customer operation.  They are side-effects, not new customer
+        # triggers, and would create false candidate flows that stall forever.
+        json_data = getattr(op, "json_data", None)
+        parent_id = getattr(json_data, "parent_id", None) if json_data else None
+        if parent_id:
+            logger.info(
+                f"{ICON} ⏭️ Skipping flow creation for reply op "
+                f"({event.short_id}, parent_id present)",
+                extra={"notification": False},
+            )
+            return None
+
         # Skip internal operational transfers between known system accounts
         # (e.g. server↔treasury, server↔exchange).  These never produce
         # customer-facing conversion events and would stall as false positives.
