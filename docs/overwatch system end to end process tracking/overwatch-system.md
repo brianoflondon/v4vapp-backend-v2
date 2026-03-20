@@ -311,10 +311,32 @@ creation is skipped entirely. This prevents operational transfers
 (server ↔ treasury, server → exchange rebalancing, etc.) from spawning
 false flow candidates that can never complete.
 
-This filter works together with the trigger-only timeout as a two-layer
+---
+
+## Reply op filter (parent_id check)
+
+Before creating candidate flows, `_try_create_flow` checks whether the
+trigger operation carries a **`parent_id`** (on the op's `json_data`).
+Custom JSON ops broadcast as side-effects of another transaction — fees,
+notifications, keepsats balance updates — always include a `parent_id`
+linking them to the originating operation.
+
+If a non-empty `parent_id` is present, candidate creation is skipped.
+This prevents reply ops from spawning independent flow candidates that
+stall forever.
+
+**Loopback scenario example**: A Hive deposit with a lightning address
+memo (e.g. `lightning:user@sats.v4v.app`) triggers an outbound payment
+that loops back to the same LND node. This creates more custom_json ops
+than a normal deposit — the extra fee/notification custom_jsons exhaust
+the existing flow's custom_json slots. Without this filter, the leftover
+custom_json would create false `keepsats_to_hive` / `keepsats_to_external`
+candidates.
+
+These filters work together with the trigger-only timeout as a multi-layer
 defense:
-1. **Proactive** — internal account filter blocks candidate creation
-   instantly.
+1. **Proactive** — reply op filter and internal account filter block
+   candidate creation instantly.
 2. **Safety net** — trigger-only timeout catches any other non-customer ops
    that slip through (e.g. if config is temporarily unavailable).
 
