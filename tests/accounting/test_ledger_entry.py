@@ -131,6 +131,7 @@ async def test_ledger_entry_constructor_conv_account():
 
     print(ledger_entry.conv_signed)
 
+
 @pytest.mark.asyncio
 async def test_print_journal_entry_reversed():
     """Journal output should include the word REVERSED when entry is reversed."""
@@ -149,3 +150,73 @@ async def test_print_journal_entry_reversed():
     journal = entry.print_journal_entry()
     assert "REVERSED" in journal
 
+
+def test_peer_transfer_cust_id_splits_on_colon():
+    """Colon-form cust_id (e.g. 'alice:bob') must be split into cust_id_to/cust_id_from
+    and cust_id must be cleared to '' so per-account queries use indexed fields."""
+    entry = LedgerEntry(
+        cust_id="alice:bob",
+        group_id="g1",
+        debit=AssetAccount(name="Unset"),
+        credit=AssetAccount(name="Unset"),
+        debit_unit=Currency.HIVE,
+        credit_unit=Currency.HIVE,
+        debit_amount=1,
+        credit_amount=1,
+    )
+    assert entry.cust_id == ""
+    assert entry.cust_id_to == "alice"
+    assert entry.cust_id_from == "bob"
+
+
+def test_peer_transfer_cust_id_journal_shows_arrow():
+    """print_journal_entry should show 'from → to' for peer transfers."""
+    entry = LedgerEntry(
+        cust_id="alice:bob",
+        group_id="g2",
+        debit=AssetAccount(name="Unset"),
+        credit=AssetAccount(name="Unset"),
+        debit_unit=Currency.HIVE,
+        credit_unit=Currency.HIVE,
+        debit_amount=1,
+        credit_amount=1,
+    )
+    journal = entry.print_journal_entry()
+    assert "bob" in journal
+    assert "alice" in journal
+    assert "→" in journal
+
+
+def test_normal_cust_id_unchanged():
+    """A normal (non-colon) cust_id must be preserved as-is."""
+    entry = LedgerEntry(
+        cust_id="v4vapp-test",
+        group_id="g3",
+        debit=AssetAccount(name="Unset"),
+        credit=AssetAccount(name="Unset"),
+        debit_unit=Currency.HIVE,
+        credit_unit=Currency.HIVE,
+        debit_amount=1,
+        credit_amount=1,
+    )
+    assert entry.cust_id == "v4vapp-test"
+    assert entry.cust_id_from == ""
+    assert entry.cust_id_to == ""
+
+
+def test_existing_cust_id_from_to_not_overwritten():
+    """If cust_id_from/cust_id_to are already set, the validator must not overwrite them."""
+    entry = LedgerEntry(
+        cust_id="alice:bob",
+        cust_id_from="charlie",
+        cust_id_to="dave",
+        group_id="g4",
+        debit=AssetAccount(name="Unset"),
+        credit=AssetAccount(name="Unset"),
+        debit_unit=Currency.HIVE,
+        credit_unit=Currency.HIVE,
+        debit_amount=1,
+        credit_amount=1,
+    )
+    assert entry.cust_id_from == "charlie"
+    assert entry.cust_id_to == "dave"

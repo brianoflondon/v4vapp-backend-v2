@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from timeit import default_timer as timer
-from typing import Any, List, Mapping, Tuple
+from typing import Any, List, Mapping, Set, Tuple
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     account_notifications_pipeline,
@@ -146,7 +146,7 @@ async def all_account_balances(
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
     filter: Mapping[str, Any] | None = None,
-    cust_ids: List[str] | None = None,
+    cust_ids: Set[str] | None = None,
 ) -> AccountBalances:
     """
     Retrieve all account balances as of a specified date, optionally aged by a given timedelta.
@@ -157,7 +157,7 @@ async def all_account_balances(
         sub (str, optional): The sub identifier to filter transactions. Used if `account` and `account_name` are not provided.
         as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
         age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
-        cust_ids (List[str] | None, optional): If provided, pre-filters ledger entries by cust_id (indexed) before the expensive aggregation. Used for restricting to active accounts.
+        cust_ids (Set[str] | None, optional): If provided, pre-filters ledger entries by cust_id (indexed) before the expensive aggregation. Used for restricting to active accounts.
 
     Returns:
         AccountBalances: An object containing the validated account balances.
@@ -206,17 +206,17 @@ async def all_account_balances(
         account.last_transaction_date = max_timestamp
     _t8 = timer()
 
-    # logger.info(
-    #     f"aggregate={(_t2 - _t1):.3f}s, "
-    #     # f"to_list={(_t3 - _t2):.3f}s, "
-    #     # f"validate={(_t5 - _t4):.3f}s, "
-    #     f"held_msats={(_t6 - _t5):.3f}s, "
-    #     # f"in_progress={(_t7 - _t6):.3f}s, "
-    #     # f"post_process={(_t8 - _t7):.3f}s, "
-    #     f"total={(_t8 - _t0):.3f}s "
-    #     f"all_account_balances timing "
-    #     f"({len(account_balances.root)} accounts, {len(results)} result docs)"
-    # )
+    logger.info(
+        f"aggregate={(_t2 - _t1):.3f}s, "
+        # f"to_list={(_t3 - _t2):.3f}s, "
+        # f"validate={(_t5 - _t4):.3f}s, "
+        f"held_msats={(_t6 - _t5):.3f}s, "
+        # f"in_progress={(_t7 - _t6):.3f}s, "
+        # f"post_process={(_t8 - _t7):.3f}s, "
+        f"total={(_t8 - _t0):.3f}s "
+        f"all_account_balances timing "
+        f"({len(account_balances.root)} accounts, {len(results)} result docs)"
+    )
 
     return account_balances
 
@@ -921,7 +921,7 @@ async def account_balance_printout_grouped_by_customer(
 async def list_active_account_subs(
     account_name: str,
     min_transactions: int = 2,
-) -> List[str]:
+) -> Set[str]:
     """
     Returns the list of account sub identifiers that have at least `min_transactions`
     ledger entries for the given account name.
@@ -935,12 +935,12 @@ async def list_active_account_subs(
             Defaults to 2.
 
     Returns:
-        List[str]: Sorted list of active sub identifiers.
+        Set[str]: Set of active sub identifiers.
     """
     pipeline = active_account_subs_pipeline(account_name, min_transactions)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
-    return [doc["sub"] for doc in results]
+    return {doc["sub"] for doc in results}
 
 
 async def list_all_accounts() -> List[LedgerAccount]:

@@ -147,6 +147,8 @@ class AccountBalanceLine(BaseModel):
     description: str = ""
     user_memo: str = ""
     cust_id: str = ""
+    cust_id_from: str = ""
+    cust_id_to: str = ""
     op_type: str = ""
     account_type: str = ""
     name: str = ""

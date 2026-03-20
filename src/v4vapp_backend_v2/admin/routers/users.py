@@ -58,7 +58,7 @@ def get_limit_entries():
         {
             "hours": limit.hours,
             "sats": limit.sats,
-            "label": f"{limit.hours}h ({format_sats_for_label(limit.sats)})",
+            "label": f"{limit.hours}h ({format_sats_for_label(int(limit.sats))})",
         }
         for limit in lightning_rate_limits
     ]
@@ -83,6 +83,8 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
         active_cust_ids = await list_active_account_subs(
             account_name="VSC Liability", min_transactions=2
         )
+        # Remove "OpeningBalance" from the active_cust_ids
+        active_cust_ids = {cust_id for cust_id in active_cust_ids if cust_id != "OpeningBalance"}
     else:
         active_cust_ids = None  # No filtering, include all accounts
     account_balances = await all_account_balances(
