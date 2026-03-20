@@ -18,6 +18,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.process.overwatch_flows import (
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
+    KEEPSATS_INTERNAL_TRANSFER_FLOW,
     KEEPSATS_TO_EXTERNAL_FLOW,
     KEEPSATS_TO_HIVE_FLOW,
 )
@@ -835,4 +836,356 @@ class TestReplyOpFilter:
         result = await ow._try_create_flow(trigger, op)
 
         assert result is not None
+        assert len(ow.active_flows) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: Notification reply completion
+# ---------------------------------------------------------------------------
+
+
+class TestNotificationReplyCompletion:
+    """When a notification custom_json with parent_id arrives, active flows
+    tied to that parent should be completed — this is the terminal signal
+    that the transaction has been fully processed (success or failure)."""
+
+    @staticmethod
+    def _notification_op(
+        parent_id: str = "gid_trigger",
+        notification: bool = True,
+        memo: str = "Lightning error: Payment failed: FAILURE_REASON_INCORRECT_PAYMENT_DETAILS",
+        from_account: str = "v4vapp",
+        to_account: str = "jannost",
+        group_id: str = "gid_notif",
+        short_id: str = "sid_notif",
+    ) -> object:
+        """Fake notification custom_json op with parent_id + notification flag."""
+        json_data = type(
+            "FakeJsonData",
+            (),
+            {"parent_id": parent_id, "notification": notification, "memo": memo},
+        )()
+        return type(
+            "FakeNotifOp",
+            (),
+            {
+                "group_id": group_id,
+                "short_id": short_id,
+                "op_type": "custom_json",
+                "from_account": from_account,
+                "to_account": to_account,
+                "json_data": json_data,
+                "conv": None,
+                "timestamp": _TS,
+                "log_str": f"notif {short_id}",
+            },
+        )()
+
+    @staticmethod
+    def _customer_op(
+        group_id: str = "gid_trigger",
+        short_id: str = "sid_trigger",
+        from_account: str = "jannost",
+        to_account: str = "v4vapp",
+    ) -> object:
+        """Fake customer custom_json trigger op (no parent_id)."""
+        json_data = type("FD", (), {"parent_id": None, "notification": False})()
+        return type(
+            "FakeCustomerOp",
+            (),
+            {
+                "group_id": group_id,
+                "short_id": short_id,
+                "op_type": "custom_json",
+                "from_account": from_account,
+                "to_account": to_account,
+                "json_data": json_data,
+                "conv": None,
+                "timestamp": _TS,
+                "log_str": f"cust {short_id}",
+            },
+        )()
+
+    @pytest.mark.asyncio
+    async def test_failed_payment_completed_by_notification(self):
+        """Keepsats-to-external with failed payment: the notification reply
+        should complete the most-progressed flow and cancel the others."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        # 1. Customer custom_json trigger creates 3 candidates
+        trigger_gid = "104800922_53b2e5_1_real"
+        customer_op = self._customer_op(group_id=trigger_gid, short_id="0922_53b2e5_1")
+        await ow.ingest_op(customer_op)
+        assert len(ow.active_flows) == 3
+
+        # 2. Dispatch hold/release keepsats + failed payment (no withdraw/fee)
+        for ev in [
+            _ledger_event(
+                LedgerType.HOLD_KEEPSATS, group_id=trigger_gid, short_id="0922_53b2e5_1"
+            ),
+            _ledger_event(
+                LedgerType.RELEASE_KEEPSATS, group_id=trigger_gid, short_id="0922_53b2e5_1"
+            ),
+            _op_event("payment", group_id="gid_payment", short_id="sid_payment"),
+        ]:
+            await ow._dispatch(ev)
+
+        # keepsats_to_external should be at 4/6 (trigger, hold, release, payment)
+        ext_flow = next(
+            f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_external"
+        )
+        assert ext_flow.progress == "4/6 required stages complete"
+        assert len(ow.active_flows) == 3  # all still active
+
+        # 3. Notification reply arrives with parent_id
+        notif_op = self._notification_op(parent_id=trigger_gid)
+        await ow.ingest_op(notif_op)
+
+        # The most progressed flow (keepsats_to_external) should be completed
+        assert ext_flow.status == FlowStatus.COMPLETED
+        # No active flows should remain
+        assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_notification_without_notification_flag_does_not_complete(self):
+        """A reply op with parent_id but notification=False (e.g. fee op)
+        must NOT force-complete active flows."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger_gid = "gid_trigger_abc"
+        customer_op = self._customer_op(group_id=trigger_gid, short_id="sid_trigger")
+        await ow.ingest_op(customer_op)
+        assert len(ow.active_flows) == 2
+
+        # Fee op: has parent_id but notification=False
+        fee_op = self._notification_op(
+            parent_id=trigger_gid, notification=False, group_id="gid_fee", short_id="sid_fee"
+        )
+        await ow.ingest_op(fee_op)
+
+        # Flows should still be active (fee doesn't complete them)
+        assert len(ow.active_flows) == 2
+
+    @pytest.mark.asyncio
+    async def test_success_notification_does_not_force_complete(self):
+        """A notification with parent_id but without 'Payment failed' in the
+        memo (i.e. a success notification) must NOT force-complete flows —
+        success flows complete naturally via their stage events."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger_gid = "gid_trigger_success"
+        customer_op = self._customer_op(group_id=trigger_gid, short_id="sid_success")
+        await ow.ingest_op(customer_op)
+        assert len(ow.active_flows) == 2
+
+        # Success notification: has parent_id and notification=True but no failure text
+        success_notif = self._notification_op(
+            parent_id=trigger_gid,
+            memo="Sent 950 sats to Boltz | Thank you for using v4v.app",
+            group_id="gid_snotif",
+            short_id="sid_snotif",
+        )
+        await ow.ingest_op(success_notif)
+
+        # Flows should still be active (success notifications don't force-complete)
+        assert len(ow.active_flows) == 2
+
+    @pytest.mark.asyncio
+    async def test_notification_no_matching_flows_is_no_op(self):
+        """Notification for a parent_id that has no active flows does nothing."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        # No flows created — just send a notification
+        notif_op = self._notification_op(parent_id="nonexistent_parent")
+        await ow.ingest_op(notif_op)
+
+        assert len(ow.active_flows) == 0
+        assert len(ow.completed_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_best_candidate_selected_by_progress(self):
+        """When multiple candidates match, the one with the most matched
+        required stages should be selected as the completed flow."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger_gid = "gid_trigger_best"
+        customer_op = self._customer_op(group_id=trigger_gid, short_id="sid_best")
+        await ow.ingest_op(customer_op)
+        assert len(ow.active_flows) == 2
+
+        # Give keepsats_to_external more matched stages
+        for ev in [
+            _ledger_event(LedgerType.HOLD_KEEPSATS, group_id=trigger_gid, short_id="sid_best"),
+            _ledger_event(LedgerType.RELEASE_KEEPSATS, group_id=trigger_gid, short_id="sid_best"),
+        ]:
+            await ow._dispatch(ev)
+
+        # keepsats_to_external: 3/6, keepsats_to_hive: 1/12
+        ext = next(f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_external")
+        hive = next(f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_hive")
+        assert ext.progress == "3/6 required stages complete"
+        assert hive.progress == "1/12 required stages complete"
+
+        # Notification arrives
+        notif = self._notification_op(parent_id=trigger_gid)
+        await ow.ingest_op(notif)
+
+        # keepsats_to_external should win (more progress)
+        assert ext.status == FlowStatus.COMPLETED
+        assert hive.status == FlowStatus.FAILED
+        assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_already_completed_flow_not_affected(self):
+        """If the flow already completed naturally before the notification,
+        _complete_by_notification should be a no-op."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger_gid = "gid_completed"
+        customer_op = self._customer_op(group_id=trigger_gid, short_id="sid_completed")
+        await ow.ingest_op(customer_op)
+        assert len(ow.active_flows) == 1
+
+        # Complete all required stages naturally
+        for ev in [
+            _ledger_event(
+                LedgerType.HOLD_KEEPSATS, group_id=trigger_gid, short_id="sid_completed"
+            ),
+            _ledger_event(
+                LedgerType.RELEASE_KEEPSATS, group_id=trigger_gid, short_id="sid_completed"
+            ),
+            _op_event("payment", group_id="gid_pay", short_id="sid_pay"),
+            _ledger_event(LedgerType.WITHDRAW_LIGHTNING, group_id="gid_pay", short_id="sid_pay"),
+            _ledger_event(LedgerType.FEE_EXPENSE, group_id="gid_pay", short_id="sid_pay"),
+        ]:
+            await ow._dispatch(ev)
+
+        assert len(ow.active_flows) == 0
+        assert len(ow.completed_flows) == 1
+
+        # Now the notification arrives — should be a no-op
+        notif = self._notification_op(parent_id=trigger_gid)
+        await ow.ingest_op(notif)
+
+        assert len(ow.completed_flows) == 1
+        assert len(ow.active_flows) == 0
+
+    @staticmethod
+    def _transfer_refund_op(
+        ref_short_id: str = "0922_53b2e5_1",
+        memo: str = "Lightning error: 🆅 lnbc550u1p56t2 Payment failed: FAILURE_REASON_ERROR | § {ref} | Thank you for using v4v.app",
+        group_id: str = "gid_refund",
+        short_id: str = "sid_refund",
+        from_account: str = "v4vapp",
+        to_account: str = "bitcoinman",
+    ) -> object:
+        """Fake transfer op representing a Hive/HBD refund with § short_id."""
+        final_memo = memo.replace("{ref}", ref_short_id)
+        return type(
+            "FakeTransferRefund",
+            (),
+            {
+                "group_id": group_id,
+                "short_id": short_id,
+                "op_type": "transfer",
+                "from_account": from_account,
+                "to_account": to_account,
+                "memo": final_memo,
+                "json_data": None,
+                "conv": None,
+                "timestamp": _TS,
+                "log_str": f"refund {short_id}",
+            },
+        )()
+
+    @pytest.mark.asyncio
+    async def test_transfer_refund_completes_flow_by_short_id(self):
+        """A Hive/HBD transfer refund with 'Payment failed' and § short_id
+        in the memo should complete active flows via trigger_short_id match."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger_gid = "104281476_d9b6d8_1_real"
+        trigger_sid = "1476_d9b6d8_1"
+        customer_op = self._customer_op(group_id=trigger_gid, short_id=trigger_sid)
+        await ow.ingest_op(customer_op)
+        assert len(ow.active_flows) == 3
+
+        # Dispatch some progress on keepsats_to_external
+        for ev in [
+            _ledger_event(
+                LedgerType.HOLD_KEEPSATS,
+                group_id=trigger_gid,
+                short_id=trigger_sid,
+            ),
+            _ledger_event(
+                LedgerType.RELEASE_KEEPSATS,
+                group_id=trigger_gid,
+                short_id=trigger_sid,
+            ),
+        ]:
+            await ow._dispatch(ev)
+
+        ext_flow = next(
+            f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_external"
+        )
+        assert ext_flow.progress == "3/6 required stages complete"
+
+        # Transfer refund arrives — memo contains "Payment failed" + § short_id
+        refund_op = self._transfer_refund_op(ref_short_id=trigger_sid)
+        await ow.ingest_op(refund_op)
+
+        # Best candidate completed, rest cancelled
+        assert ext_flow.status == FlowStatus.COMPLETED
+        assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_transfer_without_payment_failed_does_not_complete(self):
+        """A transfer with § short_id but without 'Payment failed' in memo
+        should NOT force-complete flows (e.g. a normal refund memo)."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger_gid = "gid_trigger_norefund"
+        customer_op = self._customer_op(group_id=trigger_gid, short_id="sid_norefund")
+        await ow.ingest_op(customer_op)
+        assert len(ow.active_flows) == 1
+
+        # Transfer with § short_id but no "Payment failed" in memo
+        normal_transfer = self._transfer_refund_op(
+            ref_short_id="sid_norefund",
+            memo="Refund: § sid_norefund | Thank you",
+        )
+        await ow.ingest_op(normal_transfer)
+
+        # Flow should still be active
         assert len(ow.active_flows) == 1
