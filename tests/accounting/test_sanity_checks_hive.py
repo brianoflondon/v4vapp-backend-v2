@@ -155,3 +155,73 @@ async def test_run_all_sanity_checks_does_not_cache_failures(monkeypatch):
     second = await sanity_checks.run_all_sanity_checks()
     assert calls["count"] == 2
     assert second.failed
+
+
+@pytest.mark.asyncio
+async def test_server_account_hive_balances_open_orders_show_info(monkeypatch):
+    """Mismatch with open orders should be shown but flagged as pass."""
+
+    async def fake_one_account_balance(*args, **kwargs):
+        account = kwargs.get("account") or (args[0] if args else None)
+
+        class Dummy:
+            balances_net = {Currency.HIVE: Decimal("0.000"), Currency.HBD: Decimal("0.000")}
+
+        result = Dummy()
+        if account and getattr(account, "name", "") == "Customer Deposits Hive":
+            result.balances_net = {
+                Currency.HIVE: Decimal("5697.668"),
+                Currency.HBD: Decimal("860.061"),
+            }
+        elif account and getattr(account, "name", "") == "Traded Deposits Hive":
+            result.balances_net = {Currency.HIVE: Decimal("0.000"), Currency.HBD: Decimal("0.000")}
+        return result
+
+    def fake_account_hive_balances(hive_accname):
+        return {"HIVE": Decimal("5697.668"), "HBD": Decimal("1000.0")}
+
+    class DummyConfig:
+        server_id = "v4vapp"
+
+    async def fake_all_held():
+        return {}
+
+    class FakeAmount:
+        def __init__(self, value):
+            self.amount_decimal = Decimal(value)
+
+    monkeypatch.setattr(sanity_checks, "Amount", FakeAmount)
+    monkeypatch.setattr(sanity_checks, "one_account_balance", fake_one_account_balance)
+    monkeypatch.setattr(sanity_checks, "account_hive_balances", fake_account_hive_balances)
+    monkeypatch.setattr(sanity_checks, "InternalConfig", lambda *args, **kwargs: DummyConfig())
+    monkeypatch.setattr(
+        sanity_checks,
+        "LimitOrderCreate",
+        type(
+            "L",
+            (),
+            {
+                "get_hive_open_orders": staticmethod(
+                    lambda: [{"orderid": 946901416}, {"orderid": 1364100027}]
+                )
+            },
+        ),
+    )
+    monkeypatch.setattr(sanity_checks, "all_held_msats", fake_all_held)
+    monkeypatch.setattr(
+        sanity_checks, "all_sanity_checks", [sanity_checks.server_account_hive_balances]
+    )
+
+    results = await sanity_checks.run_all_sanity_checks(use_cache=False)
+    entry = next(
+        (r for name, r in results.results if name == "server_account_hive_balances"), None
+    )
+    assert entry is not None
+    assert entry.is_valid is True
+    assert (
+        "Open Hive orders may be affecting balances. Open order IDs: 946901416, 1364100027."
+        in entry.details
+    )
+    assert entry.details.startswith("**Server Hive Mismatch:**\n")
+    assert "0.000 HIVE" in entry.details
+    assert "-139.939 HBD" in entry.details

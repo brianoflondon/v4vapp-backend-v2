@@ -177,32 +177,13 @@ def all_account_balances_pipeline(
     match["timestamp"] = date_range_query
     if filter:
         match.update(filter)
-    # Collect all $or clauses and combine with $and if there are multiple.
-    and_clauses: list[Mapping[str, Any]] = []
-    if cust_ids is not None:
-        cid_list = list(cust_ids)
-        and_clauses.append(
-            {
-                "$or": [
-                    {"cust_id": {"$in": cid_list}},
-                    {"cust_id_from": {"$in": cid_list}},
-                    {"cust_id_to": {"$in": cid_list}},
-                ]
-            }
-        )
-    if debit_match_query or credit_match_query:
-        account_or: list[Mapping[str, Any]] = []
-        if debit_match_query:
-            account_or.append(debit_match_query)
-        if credit_match_query:
-            account_or.append(credit_match_query)
-        and_clauses.append({"$or": account_or})
-    if len(and_clauses) == 1:
-        match["$or"] = and_clauses[0]["$or"]
-    elif len(and_clauses) > 1:
-        match["$and"] = and_clauses
-    pipeline.append({"$match": match})
 
+    if cust_ids is not None:
+        match["all_cust_ids"] = {
+            "$in": list(cust_ids)
+        }  # matches if any of cust_id, cust_id_from, cust_id_to is in cust_ids
+
+    pipeline.append({"$match": match})
     pipeline.extend(
         [
             {
@@ -614,7 +595,6 @@ def all_account_balances_pipeline(
             {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
         ]
     )
-    # pprint(pipeline)
     return pipeline
 
 

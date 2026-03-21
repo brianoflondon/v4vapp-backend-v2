@@ -343,7 +343,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                         str(o.get("orderid")) for o in open_orders if isinstance(o, dict)
                     )
                     orders_info = f"Open Hive orders may be affecting balances. Open order IDs: {open_orders_str}."
-                    is_valid = True  # we consider this a passed check.
+                    is_valid = True  # report success to avoid failed status when open orders are expected
                 else:
                     is_valid = False
                     orders_info = "No open Hive orders found."
@@ -351,15 +351,16 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 logger.error(
                     f"Failed to fetch Hive open orders: {e}", extra={"notification": False}
                 )
-                is_valid = True
+                is_valid = False
                 orders_info = f"Failed to fetch Hive open orders: {e}"
             return SanityCheckResult(
                 name="server_account_hive_balances",
                 is_valid=is_valid,
                 details=(
-                    f"Server Hive Mismatch: {hive_delta:,.3f} \n"
-                    f"HIVE\n{hbd_delta:,.3f} HBD; \n"
-                    f"balances mismatch: \nHIVE deposits {hive_deposits:,.3f} vs actual {hive_actual.amount_decimal:,.3f}, \n"
+                    f"**Server Hive Mismatch:**\n"
+                    f"{hive_delta:,.3f} HIVE\n"
+                    f"{hbd_delta:,.3f} HBD;\n"
+                    f"balances mismatch:\nHIVE deposits {hive_deposits:,.3f} vs actual {hive_actual.amount_decimal:,.3f},\n"
                     f"HBD deposits {hbd_deposits:,.3f} vs actual {hbd_actual.amount_decimal:,.3f}.\n"
                     f"Includes Customer Deposits Hive and Traded Deposits Hive accounts. Tolerance is {tolerance} (1 thousandth of a token).\n"
                     f"{orders_info}"
