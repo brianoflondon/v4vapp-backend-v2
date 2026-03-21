@@ -357,6 +357,7 @@ KEEPSATS_TO_EXTERNAL_FLOW = FlowDefinition(
             event_type="ledger",
             ledger_type=LedgerType.FEE_EXPENSE,
             group="payment",
+            required=False,  # Zero-fee payments don't generate a fee_expense entry
         ),
         # --- Notification stages (reply group) ---
         FlowStage(
@@ -458,6 +459,7 @@ HIVE_TO_KEEPSATS_EXTERNAL_FLOW = FlowDefinition(
             event_type="ledger",
             ledger_type=LedgerType.FEE_EXPENSE,
             group="payment",
+            required=False,  # Zero-fee payments don't generate a fee_expense entry
         ),
         # --- Fee notification stages (reply group) ---
         FlowStage(
