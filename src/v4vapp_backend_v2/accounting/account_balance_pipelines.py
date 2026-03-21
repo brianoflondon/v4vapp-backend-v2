@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from pprint import pprint
 from typing import Any, List, Mapping, Sequence, Set
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
@@ -595,6 +594,146 @@ def all_account_balances_pipeline(
             {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
         ]
     )
+    return pipeline
+
+
+def all_account_balances_summary_pipeline(
+    account_name: str | None = None,
+    cust_ids: Set[str] | None = None,
+    as_of_date: datetime | None = None,
+    hide_reversed: bool = True,
+) -> Sequence[Mapping[str, Any]]:
+    """
+    Lightweight pipeline that returns one summary document per
+    (account_type, name, sub, unit) with summed balances and conversion totals.
+
+    Unlike ``all_account_balances_pipeline`` this does **not** compute
+    per-transaction running totals (the O(n²) bottleneck). It is intended
+    for bulk balance queries (e.g. the admin users list) where only final
+    totals are needed.
+
+    Args:
+        account_name: Filter by account name (e.g. "VSC Liability").
+        cust_ids: Restrict to these customer sub-identifiers.
+        as_of_date: Only consider entries up to this timestamp.
+        hide_reversed: Exclude reversed entries (default True).
+
+    Returns:
+        A MongoDB aggregation pipeline returning documents with:
+        account_type, name, sub, unit, total_amount,
+        total_conv_{hive,hbd,usd,sats,msats}, max_timestamp,
+        count, has_non_opening.
+    """
+    # --- facet match queries ---
+    if account_name:
+        debit_match_query: dict[str, Any] = {"debit.name": account_name}
+        credit_match_query: dict[str, Any] = {"credit.name": account_name}
+    else:
+        debit_match_query = {}
+        credit_match_query = {}
+
+    if cust_ids is not None:
+        debit_match_query["debit.sub"] = {"$in": list(cust_ids)}
+        credit_match_query["credit.sub"] = {"$in": list(cust_ids)}
+
+    # --- top-level $match ---
+    match: dict[str, Any] = {}
+    if hide_reversed:
+        match["reversed"] = {"$exists": False}
+    match["conv_signed"] = {"$exists": True}
+    if as_of_date:
+        match["timestamp"] = {"$lte": as_of_date}
+    else:
+        match["timestamp"] = {"$exists": True}
+    if cust_ids is not None:
+        match["all_cust_ids"] = {"$in": list(cust_ids)}
+
+    pipeline: List[Mapping[str, Any]] = [
+        {"$match": match},
+        {
+            "$facet": {
+                "debits_view": [
+                    {"$match": debit_match_query},
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "account_type": "$debit.account_type",
+                            "name": "$debit.name",
+                            "sub": "$debit.sub",
+                            "contra": "$debit.contra",
+                            "amount_signed": "$debit_amount_signed",
+                            "unit": "$debit_unit",
+                            "conv_signed": "$conv_signed.debit",
+                            "timestamp": 1,
+                            "ledger_type": 1,
+                        }
+                    },
+                ],
+                "credits_view": [
+                    {"$match": credit_match_query},
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "account_type": "$credit.account_type",
+                            "name": "$credit.name",
+                            "sub": "$credit.sub",
+                            "contra": "$credit.contra",
+                            "amount_signed": "$credit_amount_signed",
+                            "unit": "$credit_unit",
+                            "conv_signed": "$conv_signed.credit",
+                            "timestamp": 1,
+                            "ledger_type": 1,
+                        }
+                    },
+                ],
+            }
+        },
+        {"$project": {"combined": {"$concatArrays": ["$debits_view", "$credits_view"]}}},
+        {"$unwind": "$combined"},
+        {"$replaceRoot": {"newRoot": "$combined"}},
+        {
+            "$group": {
+                "_id": {
+                    "account_type": "$account_type",
+                    "name": "$name",
+                    "sub": "$sub",
+                    "contra": "$contra",
+                    "unit": "$unit",
+                },
+                "total_amount": {"$sum": "$amount_signed"},
+                "total_conv_hive": {"$sum": "$conv_signed.hive"},
+                "total_conv_hbd": {"$sum": "$conv_signed.hbd"},
+                "total_conv_usd": {"$sum": "$conv_signed.usd"},
+                "total_conv_sats": {"$sum": "$conv_signed.sats"},
+                "total_conv_msats": {"$sum": "$conv_signed.msats"},
+                "max_timestamp": {"$max": "$timestamp"},
+                "count": {"$sum": 1},
+                "has_non_opening": {
+                    "$max": {"$cond": [{"$ne": ["$ledger_type", "open_bal"]}, True, False]}
+                },
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "account_type": "$_id.account_type",
+                "name": "$_id.name",
+                "sub": "$_id.sub",
+                "contra": "$_id.contra",
+                "unit": "$_id.unit",
+                "total_amount": 1,
+                "total_conv_hive": 1,
+                "total_conv_hbd": 1,
+                "total_conv_usd": 1,
+                "total_conv_sats": 1,
+                "total_conv_msats": 1,
+                "max_timestamp": 1,
+                "count": 1,
+                "has_non_opening": 1,
+            }
+        },
+        {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
+    ]
     return pipeline
 
 

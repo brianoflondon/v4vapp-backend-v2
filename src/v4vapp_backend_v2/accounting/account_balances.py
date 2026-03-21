@@ -7,6 +7,7 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     account_notifications_pipeline,
     active_account_subs_pipeline,
     all_account_balances_pipeline,
+    all_account_balances_summary_pipeline,
     list_all_accounts_pipeline,
     list_all_ledger_types_pipeline,
 )
@@ -216,6 +217,121 @@ async def all_account_balances(
         f"total={(_t8 - _t0):.3f}s "
         f"all_account_balances timing "
         f"({len(account_balances.root)} accounts, {len(results)} result docs)"
+    )
+
+    return account_balances
+
+
+async def all_account_balances_summary(
+    account_name: str | None = None,
+    cust_ids: Set[str] | None = None,
+    as_of_date: datetime | None = None,
+) -> AccountBalances:
+    """Lightweight bulk balance query.
+
+    Uses a simple ``$group`` aggregation instead of the O(n²) running-total
+    pipeline.  Returns the same ``AccountBalances`` type so callers that only
+    need final totals (sats, conv_total, has_transactions, last_transaction_date)
+    can swap in this function without other changes.
+
+    Per-transaction detail is **not** included — use ``one_account_balance``
+    for that.
+    """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+    _t0 = timer()
+    pipeline = all_account_balances_summary_pipeline(
+        account_name=account_name,
+        cust_ids=cust_ids,
+        as_of_date=as_of_date,
+    )
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list()
+    results = convert_decimal128_to_decimal(results)
+    _t1 = timer()
+
+    # Group rows by (account_type, name, sub, contra) — same grouping as the
+    # full pipeline so contra variants stay separate.
+    account_groups: dict[tuple, dict] = {}
+    for row in results:
+        key = (row["account_type"], row["name"], row["sub"], row.get("contra", False))
+        if key not in account_groups:
+            account_groups[key] = {
+                "account_type": row["account_type"],
+                "name": row["name"],
+                "sub": row["sub"],
+                "contra": row.get("contra", False),
+                "units": {},
+                "max_timestamp": None,
+                "total_count": 0,
+                "has_non_opening": False,
+            }
+        group = account_groups[key]
+        group["units"][row["unit"]] = row
+        ts = row.get("max_timestamp")
+        if ts and (group["max_timestamp"] is None or ts > group["max_timestamp"]):
+            group["max_timestamp"] = ts
+        group["total_count"] += row.get("count", 0)
+        if row.get("has_non_opening"):
+            group["has_non_opening"] = True
+    _t2 = timer()
+
+    all_held_result = await all_held_msats()
+    in_progress = InProgressResults(results=all_held_result)
+    _t3 = timer()
+
+    details_list: List[LedgerAccountDetails] = []
+    for group in account_groups.values():
+        balances: dict[Currency, list[AccountBalanceLine]] = {}
+        for unit_str, row in group["units"].items():
+            currency = Currency(unit_str)
+            ledger_type = (
+                "summary" if group["has_non_opening"] else LedgerType.OPENING_BALANCE.value
+            )
+            conv_summary = ConvertedSummary(
+                hive=Decimal(str(row["total_conv_hive"])),
+                hbd=Decimal(str(row["total_conv_hbd"])),
+                usd=Decimal(str(row["total_conv_usd"])),
+                sats=Decimal(str(row["total_conv_sats"])),
+                msats=Decimal(str(row["total_conv_msats"])),
+            )
+            line = AccountBalanceLine(
+                ledger_type=ledger_type,
+                timestamp=row.get("max_timestamp") or datetime.now(tz=timezone.utc),
+                amount_signed=Decimal(str(row["total_amount"])),
+                amount_running_total=Decimal(str(row["total_amount"])),
+                unit=unit_str,
+                conv_signed=CryptoConv(
+                    hive=conv_summary.hive,
+                    hbd=conv_summary.hbd,
+                    usd=conv_summary.usd,
+                    sats=conv_summary.sats,
+                    msats=conv_summary.msats,
+                ),
+                conv_running_total=conv_summary,
+            )
+            balances[currency] = [line]
+
+        details = LedgerAccountDetails(
+            name=group["name"],
+            account_type=group["account_type"],
+            sub=group["sub"],
+            contra=group.get("contra", False),
+            balances=balances,
+        )
+        details.last_transaction_date = group["max_timestamp"]
+        details.in_progress_msats = in_progress.get_net_held(group["sub"])
+        details_list.append(details)
+    _t4 = timer()
+
+    account_balances = AccountBalances(root=details_list)
+
+    logger.info(
+        f"aggregate={(_t1 - _t0):.3f}s, "
+        f"held_msats={(_t3 - _t2):.3f}s, "
+        f"total={(_t4 - _t0):.3f}s "
+        f"all_account_balances_summary timing "
+        f"({len(details_list)} accounts, {len(results)} result docs)"
     )
 
     return account_balances
@@ -1123,6 +1239,7 @@ async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal]
     expiry: datetime = oldest_ts + timedelta(hours=first_limit.hours)
     return expiry, sats_freed
 
+
 # @async_time_decorator
 async def keepsats_balance(
     cust_id: CustIDType = "",
@@ -1199,8 +1316,11 @@ async def keepsats_balance_printout(
 
     return net_msats, account_balance
 
+
 # @async_time_decorator
-async def notification_lines(cust_id: str, account: LiabilityAccount, account_balance: LedgerAccountDetails) -> None:
+async def notification_lines(
+    cust_id: str, account: LiabilityAccount, account_balance: LedgerAccountDetails
+) -> None:
     """
     Fetches non-financial notifications for a given customer and adds them as synthetic ledger lines to the account balance history.
     This allows the frontend to display notifications alongside financial transactions in the account history.

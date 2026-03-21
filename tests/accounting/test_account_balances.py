@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from pprint import pprint
 
@@ -11,6 +12,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
     account_balance_printout_grouped_by_customer,
     all_account_balances,
+    all_account_balances_summary,
     keepsats_balance,
     list_all_accounts,
     one_account_balance,
@@ -220,6 +222,59 @@ async def test_all_account_balances():
         for currency, lines in item.balances.items():
             last_running_total = lines[-1].amount_running_total
             print(f"  Last Running Total: {last_running_total:,.2f}  {currency}")
+
+
+async def test_all_account_balances_summary():
+    """Test that the summary function produces the same final totals as the full pipeline."""
+    full = await all_account_balances()
+    summary = await all_account_balances_summary()
+
+    assert isinstance(summary, AccountBalances)
+    assert len(summary.root) > 0
+
+    # Build lookup from the full results keyed by (account_type, name, sub, contra)
+    full_map = {(a.account_type, a.name, a.sub, a.contra): a for a in full.root}
+
+    for s_acct in summary.root:
+        key = (s_acct.account_type, s_acct.name, s_acct.sub, s_acct.contra)
+        f_acct = full_map.get(key)
+        assert f_acct is not None, f"Summary account {key} not found in full results"
+
+        # Final balances must match
+        assert s_acct.sats == f_acct.sats, (
+            f"sats mismatch for {key}: summary={s_acct.sats} full={f_acct.sats}"
+        )
+        assert s_acct.msats == f_acct.msats, (
+            f"msats mismatch for {key}: summary={s_acct.msats} full={f_acct.msats}"
+        )
+        assert abs(s_acct.hive - f_acct.hive) <= Decimal("0.001"), (
+            f"hive mismatch for {key}: summary={s_acct.hive} full={f_acct.hive}"
+        )
+        assert abs(s_acct.hbd - f_acct.hbd) <= Decimal("0.001"), (
+            f"hbd mismatch for {key}: summary={s_acct.hbd} full={f_acct.hbd}"
+        )
+
+        # Converted totals should match within tolerance
+        assert abs(s_acct.conv_total.usd - f_acct.conv_total.usd) <= Decimal("0.01"), (
+            f"conv_total.usd mismatch for {key}"
+        )
+        assert abs(s_acct.conv_total.sats - f_acct.conv_total.sats) <= Decimal("1"), (
+            f"conv_total.sats mismatch for {key}"
+        )
+
+
+async def test_all_account_balances_summary_with_cust_ids():
+    """Test summary with cust_ids filter matches full pipeline."""
+    cust_ids = {"v4vapp.qrc"}
+    full = await all_account_balances(account_name="VSC Liability", cust_ids=cust_ids)
+    summary = await all_account_balances_summary(account_name="VSC Liability", cust_ids=cust_ids)
+    assert len(summary.root) == len(full.root)
+    for s_acct, f_acct in zip(
+        sorted(summary.root, key=lambda a: a.sub),
+        sorted(full.root, key=lambda a: a.sub),
+    ):
+        assert s_acct.sats == f_acct.sats
+        assert s_acct.msats == f_acct.msats
 
 
 async def test_one_account_balances():

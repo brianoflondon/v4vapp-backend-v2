@@ -141,7 +141,7 @@ def time_decorator(func):
             result = func(*args, **kwargs)
             execution_time = timer() - start_time
             logger.info(
-                f"{ICON} Function '{func.__qualname__[:26]:<26}' took {execution_time:.6f}s{extra_info}",
+                f"{ICON} Function '{func.__qualname__[:26]:<26}' took {execution_time:.4f}s{extra_info}",
                 extra={
                     "func_name": func.__qualname__,
                     "call_kwargs": kwargs,
