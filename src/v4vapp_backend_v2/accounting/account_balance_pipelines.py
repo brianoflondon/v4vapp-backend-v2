@@ -174,28 +174,37 @@ def all_account_balances_pipeline(
     if hide_reversed:
         match["reversed"] = {"$exists": False}
     match["conv_signed"] = {"$exists": True}
+    match["timestamp"] = date_range_query
+    if filter:
+        match.update(filter)
+    # Collect all $or clauses and combine with $and if there are multiple.
+    and_clauses: list[Mapping[str, Any]] = []
     if cust_ids is not None:
         cid_list = list(cust_ids)
-        match["$or"] = [
-            {"cust_id": {"$in": cid_list}},
-            {"cust_id_from": {"$in": cid_list}},
-            {"cust_id_to": {"$in": cid_list}},
-        ]
-    pipeline.append({"$match": match})
-
-    # minor optimization if we know the account, this is called very often for the server account and the keepsats account.
+        and_clauses.append(
+            {
+                "$or": [
+                    {"cust_id": {"$in": cid_list}},
+                    {"cust_id_from": {"$in": cid_list}},
+                    {"cust_id_to": {"$in": cid_list}},
+                ]
+            }
+        )
     if debit_match_query or credit_match_query:
-        or_clauses: list[Mapping[str, Any]] = []
+        account_or: list[Mapping[str, Any]] = []
         if debit_match_query:
-            or_clauses.append(debit_match_query)
+            account_or.append(debit_match_query)
         if credit_match_query:
-            or_clauses.append(credit_match_query)
-        pipeline.append({"$match": {"$or": or_clauses}})
+            account_or.append(credit_match_query)
+        and_clauses.append({"$or": account_or})
+    if len(and_clauses) == 1:
+        match["$or"] = and_clauses[0]["$or"]
+    elif len(and_clauses) > 1:
+        match["$and"] = and_clauses
+    pipeline.append({"$match": match})
 
     pipeline.extend(
         [
-            {"$match": {"timestamp": date_range_query}},
-            {"$match": filter},
             {
                 "$facet": {
                     "debits_view": [
@@ -605,6 +614,7 @@ def all_account_balances_pipeline(
             {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
         ]
     )
+    pprint(pipeline)
     return pipeline
 
 
