@@ -126,28 +126,26 @@ async def test_all_account_balances_pipeline():
     assert isinstance(pipeline_none, list)
     assert len(pipeline_none) == len(pipeline)
 
-    # There should be an early top-level $match that short-circuits documents
-    # by checking both `debit.*` and `credit.*` fields with an `$or` so the
-    # `$facet` stage processes far fewer documents.
-    or_stage = next(
-        (
-            s
-            for s in pipeline
-            if "$match" in s and isinstance(s["$match"], dict) and "$or" in s["$match"]
-        ),
-        None,
-    )
-    assert or_stage is not None, "expected top-level $match with $or for account filtering"
-    assert {
-        "debit.name": account.name,
-        "debit.sub": account.sub,
-        "debit.account_type": account.account_type,
-    } in or_stage["$match"]["$or"]
-    assert {
-        "credit.name": account.name,
-        "credit.sub": account.sub,
-        "credit.account_type": account.account_type,
-    } in or_stage["$match"]["$or"]
+    # New behavior: account filter is applied within the $facet stage, not top-level $or.
+    facet_stage = next((s for s in pipeline if "$facet" in s), None)
+    assert facet_stage is not None, "expected $facet stage in pipeline"
+
+    debits_view = facet_stage["$facet"]["debits_view"]
+    credits_view = facet_stage["$facet"]["credits_view"]
+    assert debits_view[0] == {
+        "$match": {
+            "debit.name": account.name,
+            "debit.sub": account.sub,
+            "debit.account_type": account.account_type,
+        }
+    }
+    assert credits_view[0] == {
+        "$match": {
+            "credit.name": account.name,
+            "credit.sub": account.sub,
+            "credit.account_type": account.account_type,
+        }
+    }
 
     # verify that the date match stage exists
     date_stage = next(
