@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2.accounting.account_balances import (
-    all_account_balances,
+    all_account_balances_summary,
     check_hive_conversion_limits,
     list_active_account_subs,
 )
@@ -87,7 +87,7 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
         active_cust_ids = {cust_id for cust_id in active_cust_ids if cust_id != "OpeningBalance"}
     else:
         active_cust_ids = None  # No filtering, include all accounts
-    account_balances = await all_account_balances(
+    account_balances = await all_account_balances_summary(
         account_name="VSC Liability", cust_ids=active_cust_ids
     )
 
