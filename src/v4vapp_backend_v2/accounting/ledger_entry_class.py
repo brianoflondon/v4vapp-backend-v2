@@ -209,6 +209,9 @@ class LedgerEntry(BaseModel):
     def split_peer_cust_id(cls, data: Any) -> Any:
         """Auto-split colon-form cust_id (e.g. 'alice:bob') into cust_id_from/cust_id_to.
 
+        DEPRECIATED AND CAN BE REMOVED ONCE ALL COLON-FORM ENTRIES ARE MIGRATED
+        TO THE NEW SCHEMA.
+
         Handles both new entries (where get_transfer_cust_id returns the colon form)
         and old DB documents (backward-compatible read path). When split, cust_id is
         cleared to '' so the indexed equality queries on the two new fields are used.
@@ -279,6 +282,15 @@ class LedgerEntry(BaseModel):
         This is used to ensure that the credit amount is always positive in accounting terms.
         """
         return self.credit_amount * self.credit_sign
+
+    @computed_field
+    def all_cust_ids(self) -> List[AccNameType]:
+        """
+        Returns a list of all customer IDs associated with this ledger entry, including cust_id, cust_id_from, and cust_id_to.
+        This is useful for querying and indexing purposes when we want to find all entries related to a specific customer ID.
+        """
+        cust_ids = {x for x in (self.cust_id, self.credit.sub, self.debit.sub) if x}
+        return list(cust_ids)
 
     @property
     def icon(self) -> str:
