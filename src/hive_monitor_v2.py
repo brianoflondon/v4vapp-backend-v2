@@ -69,7 +69,7 @@ app = typer.Typer()
 ICON = "🐝"
 
 NOTIFICATION_QUITE_MODE = (
-    False  # Set to True to disable notifications if db_monitor will provide these
+    True  # Set to True to disable notifications if db_monitor will provide these
 )
 
 # os.environ["http_proxy"] = "http://home-imac.tail400e5.ts.net:8888"

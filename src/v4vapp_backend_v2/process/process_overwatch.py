@@ -42,7 +42,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import find_short_id, from_snake_case
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 
-ICON = "📒"
+ICON = "🌟"
 
 # Redis key prefixes / TTLs
 _REDIS_ACTIVE_KEY = "overwatch:flows:active"
