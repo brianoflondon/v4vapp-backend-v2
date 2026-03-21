@@ -166,11 +166,11 @@ class TestKeepsatsToExternalDefinition:
         assert KEEPSATS_TO_EXTERNAL_FLOW.stage_names == expected
 
     def test_required_stages_count(self):
-        assert len(KEEPSATS_TO_EXTERNAL_FLOW.required_stages) == 6
+        assert len(KEEPSATS_TO_EXTERNAL_FLOW.required_stages) == 5
 
     def test_optional_stages_listed(self):
         optional = [s.name for s in KEEPSATS_TO_EXTERNAL_FLOW.stages if not s.required]
-        assert optional == ["notification_custom_json_op"]
+        assert optional == ["fee_expense", "notification_custom_json_op"]
 
     def test_stage_count(self):
         assert len(KEEPSATS_TO_EXTERNAL_FLOW.stages) == 7
@@ -272,7 +272,7 @@ class TestKeepsatsToExternalComplete:
     ):
         for event in ke_all_flow_events:
             ke_flow_instance.add_event(event)
-        assert ke_flow_instance.progress == "6/6 required stages complete"
+        assert ke_flow_instance.progress == "5/5 required stages complete"
 
     def test_event_count(
         self,
@@ -321,7 +321,7 @@ class TestKeepsatsToExternalIncomplete:
     ):
         assert not ke_flow_instance.is_complete
         assert ke_flow_instance.status == FlowStatus.PENDING
-        assert len(ke_flow_instance.missing_stages) == 6
+        assert len(ke_flow_instance.missing_stages) == 5
 
     def test_trigger_only_not_complete(
         self,
@@ -343,8 +343,8 @@ class TestKeepsatsToExternalIncomplete:
         )
         assert not ke_flow_instance.is_complete
         assert ke_flow_instance.status == FlowStatus.IN_PROGRESS
-        assert len(ke_flow_instance.missing_stages) == 5
-        assert ke_flow_instance.progress == "1/6 required stages complete"
+        assert len(ke_flow_instance.missing_stages) == 4
+        assert ke_flow_instance.progress == "1/5 required stages complete"
 
     def test_primary_events_only_not_complete(
         self,
@@ -371,9 +371,9 @@ class TestKeepsatsToExternalIncomplete:
 
         assert not ke_flow_instance.is_complete
         assert ke_flow_instance.status == FlowStatus.IN_PROGRESS
-        # 3 matched (trigger + hold_k + release_k), 3 remaining (payment_op, withdraw_l, fee_exp)
-        assert len(ke_flow_instance.missing_stages) == 3
-        assert ke_flow_instance.progress == "3/6 required stages complete"
+        # 3 matched (trigger + hold_k + release_k), 2 remaining (payment_op, withdraw_l)
+        assert len(ke_flow_instance.missing_stages) == 2
+        assert ke_flow_instance.progress == "3/5 required stages complete"
 
     def test_without_notification_still_complete(
         self,
@@ -703,3 +703,136 @@ class TestMultiCandidateDisambiguation:
         # The completed flow absorbed the notification
         completed = ow.completed_flows[0]
         assert "notification_custom_json_op" in completed.matched_stage_names
+
+
+# ---------------------------------------------------------------------------
+# Tests: Zero-fee lightning payment (fee_expense absent)
+# ---------------------------------------------------------------------------
+
+
+class TestZeroFeePaymentCompletes:
+    """When a lightning payment has 0 routing fee, no fee_expense ledger entry
+    is created.  The flow should still complete because fee_expense is optional."""
+
+    def test_without_fee_expense_still_complete(
+        self,
+        ke_flow_instance: FlowInstance,
+        ke_flow_data: dict,
+        ke_primary_ledger_entries: dict[str, LedgerEntry],
+        ke_payment_ledger_entries: dict[str, LedgerEntry],
+    ):
+        """Flow completes at 5/5 when fee_expense is never ingested."""
+        # 1. Trigger
+        trigger = ke_flow_data["trigger_custom_json"]
+        ke_flow_instance.add_event(
+            FlowEvent(
+                event_type="op",
+                timestamp=trigger["timestamp"],
+                group_id=trigger["group_id"],
+                short_id=trigger["short_id"],
+                op_type=trigger["type"],
+                group="primary",
+            )
+        )
+
+        # 2. Primary ledger entries (hold_k, release_k)
+        for le in ke_primary_ledger_entries.values():
+            ke_flow_instance.add_event(FlowEvent.from_ledger_entry(le, group="primary"))
+
+        # 3. Payment op
+        payment = ke_flow_data["payment_op"]
+        ke_flow_instance.add_event(
+            FlowEvent(
+                event_type="op",
+                timestamp=payment["timestamp"],
+                group_id=payment["group_id"],
+                short_id=payment["short_id"],
+                op_type=payment["type"],
+                group="primary",
+            )
+        )
+
+        # 4. withdraw_lightning only — NO fee_expense (zero-fee payment)
+        withdraw_le = ke_payment_ledger_entries["withdraw_l"]
+        ke_flow_instance.add_event(FlowEvent.from_ledger_entry(withdraw_le, group="primary"))
+
+        # Flow should be complete (5/5 required stages)
+        assert ke_flow_instance.is_complete
+        assert ke_flow_instance.status == FlowStatus.COMPLETED
+        assert ke_flow_instance.progress == "5/5 required stages complete"
+        assert "fee_expense" not in ke_flow_instance.matched_stage_names
+
+    def test_with_fee_expense_also_complete(
+        self,
+        ke_flow_instance: FlowInstance,
+        ke_all_flow_events: list[FlowEvent],
+    ):
+        """Flow still completes when fee_expense IS present (non-zero fee)."""
+        for event in ke_all_flow_events:
+            ke_flow_instance.add_event(event)
+        assert ke_flow_instance.is_complete
+        assert "fee_expense" in ke_flow_instance.matched_stage_names
+
+    @pytest.mark.asyncio
+    async def test_zero_fee_completes_and_resolves_candidates(
+        self,
+        ke_flow_data: dict,
+        ke_primary_ledger_entries: dict[str, LedgerEntry],
+        ke_payment_ledger_entries: dict[str, LedgerEntry],
+    ):
+        """Full Overwatch integration: zero-fee flow completes and resolves
+        the competing keepsats_to_hive candidate."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        # Create candidates from trigger
+        trigger = ke_flow_data["trigger_custom_json"]
+        trigger_event = FlowEvent(
+            event_type="op",
+            timestamp=trigger["timestamp"],
+            group_id=trigger["group_id"],
+            short_id=trigger["short_id"],
+            op_type=trigger["type"],
+            group="primary",
+        )
+        fake_op = type(
+            "FakeOp",
+            (),
+            {
+                "group_id": trigger["group_id"],
+                "short_id": trigger["short_id"],
+                "op_type": trigger["type"],
+                "from_account": trigger.get("cust_id", ""),
+            },
+        )()
+        await ow._try_create_flow(trigger_event, fake_op)
+        assert len(ow.active_flows) == 2
+
+        # Dispatch primary ledger entries
+        for le in ke_primary_ledger_entries.values():
+            await ow._dispatch(FlowEvent.from_ledger_entry(le, group="primary"))
+
+        # Dispatch payment op
+        payment = ke_flow_data["payment_op"]
+        await ow._dispatch(
+            FlowEvent(
+                event_type="op",
+                timestamp=payment["timestamp"],
+                group_id=payment["group_id"],
+                short_id=payment["short_id"],
+                op_type=payment["type"],
+                group="primary",
+            )
+        )
+
+        # Dispatch withdraw_lightning only — NO fee_expense
+        withdraw_le = ke_payment_ledger_entries["withdraw_l"]
+        await ow._dispatch(FlowEvent.from_ledger_entry(withdraw_le, group="primary"))
+
+        # keepsats_to_external should complete and resolve the hive candidate
+        assert len(ow.completed_flows) == 1
+        assert ow.completed_flows[0].flow_definition.name == "keepsats_to_external"
+        assert len(ow.active_flows) == 0

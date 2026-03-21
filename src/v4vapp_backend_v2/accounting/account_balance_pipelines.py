@@ -614,7 +614,7 @@ def all_account_balances_pipeline(
             {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
         ]
     )
-    pprint(pipeline)
+    # pprint(pipeline)
     return pipeline
 
 

@@ -119,7 +119,7 @@ class TestHiveToKeepsatsExternalDefinition:
         assert HIVE_TO_KEEPSATS_EXTERNAL_FLOW.trigger_op_type == "transfer"
 
     def test_has_17_required_stages(self):
-        assert len(HIVE_TO_KEEPSATS_EXTERNAL_FLOW.required_stages) == 17
+        assert len(HIVE_TO_KEEPSATS_EXTERNAL_FLOW.required_stages) == 16
 
     def test_includes_all_hive_to_keepsats_stages(self):
         base_names = set(HIVE_TO_KEEPSATS_FLOW.stage_names)
@@ -935,11 +935,11 @@ class TestNotificationReplyCompletion:
         ]:
             await ow._dispatch(ev)
 
-        # keepsats_to_external should be at 4/6 (trigger, hold, release, payment)
+        # keepsats_to_external should be at 4/5 (trigger, hold, release, payment)
         ext_flow = next(
             f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_external"
         )
-        assert ext_flow.progress == "4/6 required stages complete"
+        assert ext_flow.progress == "4/5 required stages complete"
         assert len(ow.active_flows) == 3  # all still active
 
         # 3. Notification reply arrives with parent_id
@@ -1040,10 +1040,10 @@ class TestNotificationReplyCompletion:
         ]:
             await ow._dispatch(ev)
 
-        # keepsats_to_external: 3/6, keepsats_to_hive: 1/12
+        # keepsats_to_external: 3/5, keepsats_to_hive: 1/12
         ext = next(f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_external")
         hive = next(f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_hive")
-        assert ext.progress == "3/6 required stages complete"
+        assert ext.progress == "3/5 required stages complete"
         assert hive.progress == "1/12 required stages complete"
 
         # Notification arrives
@@ -1156,7 +1156,7 @@ class TestNotificationReplyCompletion:
         ext_flow = next(
             f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_external"
         )
-        assert ext_flow.progress == "3/6 required stages complete"
+        assert ext_flow.progress == "3/5 required stages complete"
 
         # Transfer refund arrives — memo contains "Payment failed" + § short_id
         refund_op = self._transfer_refund_op(ref_short_id=trigger_sid)
