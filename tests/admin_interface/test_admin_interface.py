@@ -248,9 +248,9 @@ class TestAdminTemplates:
         )
         # For the purposes of this API test we don't need to exercise the
         # merge helper again; that behaviour is covered by a separate unit
-        # test.  Here we simply patch ``all_account_balances`` to return a
-        # single consolidated account so that the endpoint produces exactly
-        # one row.
+        # test. Here we patch the actual function used by the endpoint
+        # (`all_account_balances_summary`) to return a single consolidated
+        # account row.
         merged = LedgerAccountDetails(
             name="VSC Liability",
             account_type="Liability",
@@ -260,7 +260,7 @@ class TestAdminTemplates:
         merged.msats = Decimal(10000000)
         merged.sats = Decimal(10000)
         mocker.patch(
-            "v4vapp_backend_v2.admin.routers.users.all_account_balances",
+            "v4vapp_backend_v2.admin.routers.users.all_account_balances_summary",
             return_value=AccountBalances(root=[merged]),
         )
         # simple empty limit result
