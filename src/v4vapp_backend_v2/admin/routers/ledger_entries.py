@@ -4,7 +4,9 @@ Ledger Entries Router
 Provides a simple page and data endpoint to browse ledger entries.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
+from timeit import default_timer as timer
 from typing import Optional
 
 from fastapi import APIRouter, Body, Request
@@ -13,7 +15,6 @@ from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2.accounting.account_balances import list_all_ledger_types
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_entries
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import (
     LedgerType,
@@ -27,6 +28,7 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import parse_dt_with_tz
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -291,20 +293,29 @@ async def ledger_entries_page(
     age_hours: Optional[int] = 0,
 ):
     """Render ledger entries page. Supports simple GET search parameters."""
+
+    sanity_results_task = asyncio.create_task(run_all_sanity_checks())
+
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
 
     # Get accounts for selector (reuse list_all_accounts if available lazily)
     from v4vapp_backend_v2.accounting.account_balances import list_all_accounts
 
+    start = timer()
     try:
         all_accounts = await list_all_accounts()
     except Exception:
         all_accounts = []
+    t1 = timer()
+    logger.info(f"Fetched all accounts in {t1 - start:.3f} s")
 
     try:
         # Prefer async to the existing async helper if available
         ledger_type_options = await list_all_ledger_types()
+
+        t2 = timer()
+        logger.info(f"Fetched ledger types in {t2 - t1:.3f} s")
 
     except Exception:
         try:
@@ -359,6 +370,9 @@ async def ledger_entries_page(
         for lt in ledger_type_options
     ]
 
+    t3 = timer()
+    logger.info(f"Processed ledger type options in {t3 - t2:.3f} s")
+
     # Compute selected display for initial button text
     selected_display = "Any"
     if ledger_type:
@@ -380,34 +394,25 @@ async def ledger_entries_page(
             accounts_by_type[account_type] = []
         accounts_by_type[account_type].append(acc)
 
+    t4 = timer()
+    logger.info(f"Grouped accounts by type in {t4 - t3:.3f} s")
+
     # Sort each group
     for account_type in accounts_by_type:
         accounts_by_type[account_type].sort(key=lambda x: (x.name, x.sub))
 
-    account = None
-    if account_string:
-        try:
-            account = LedgerAccount.from_string(account_string)
-        except Exception:
-            account = None
-    # legacy as_of_date removed; page uses from_date_str/to_date_str via client-side API. No server-side cutoff applied here for initial render.
-    ledger_entries = []
-    try:
-        ledger_entries = await get_ledger_entries(
-            as_of_date=None,  # page renders server entries only for non-JS fallback; we rely on client data endpoint for full results
-            filter_by_account=account,
-            group_id=group_id,
-            short_id=short_id,
-            sub_account=(None if account else sub_filter),
-            age_hours=age_hours,
-        )
-    except Exception:
-        # swallow DB errors and render page
-        ledger_entries = []
+    # Server-side entry fetch removed: the client-side JS calls the paginated
+    # /data endpoint on DOMContentLoaded, so pre-fetching all entries here was
+    # redundant and extremely slow when unfiltered (fetched every document).
+    ledger_entries: list = []
+
+    t5 = timer()
 
     nav_items = nav_manager.get_navigation_items("/admin/ledger-entries")
-    sanity_results = await run_all_sanity_checks()
+    sanity_results = await sanity_results_task
 
+    t6 = timer()
+    logger.info(f"Completed sanity checks in {t6 - t5:.3f} s")
     return templates.TemplateResponse(
         "ledger_entries/entries.html",
         {
