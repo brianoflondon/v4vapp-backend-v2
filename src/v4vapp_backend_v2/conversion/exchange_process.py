@@ -46,7 +46,11 @@ async def rebalance_queue_task(
         )
         logger.info(
             f"{rebalance_result.log_str}",
-            extra={**rebalance_result.log_extra, "group_id": tracked_op.group_id},
+            extra={
+                "notification": True,
+                "group_id": tracked_op.group_id,
+                **rebalance_result.log_extra,
+            },
         )
 
         if rebalance_result.error:

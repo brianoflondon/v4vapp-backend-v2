@@ -251,7 +251,7 @@ async def custom_json_internal_transfer(
 
     if message:
         if fee_transfer:
-            logger.warning(message)
+            logger.info(message)
         # The order in which refunds arrive from payment, and fees are taken is not always predictable
         # ALWAYS account for fees when processing refunds
         if not fee_transfer:
