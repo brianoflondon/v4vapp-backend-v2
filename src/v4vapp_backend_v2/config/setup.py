@@ -1000,6 +1000,7 @@ class InternalConfig:
     """
 
     _instance = None
+    app_name: str = "v4vapp_backend_v2"
     config: Config
     config_filename: str = DEFAULT_CONFIG_FILENAME
     base_config_path: Path = BASE_CONFIG_PATH
@@ -1054,6 +1055,7 @@ class InternalConfig:
             if not log_filename.endswith(".jsonl"):
                 log_filename += ".jsonl"
 
+            self.app_name = Path(log_filename).stem
             self.local_machine_name = os.getenv("LOCAL_MACHINE_NAME", "unknown")
             print(f"Starting initialization... {config_filename} {log_filename}")
             # Set _initialized early to prevent re-entrant calls during setup,
@@ -1075,6 +1077,7 @@ class InternalConfig:
                 )
                 logger.info(f"{ICON} Config filename: {config_filename}")
                 logger.info(f"{ICON} Log filename: {log_filename}")
+                logger.info(f"{ICON} App name: {self.app_name}")
                 if self.config.dbs_config.default_db_connection:
                     logger.info(
                         f"{ICON} Database URI: {self.config.dbs_config.default_db_connection.hosts_str}"
@@ -1173,7 +1176,6 @@ class InternalConfig:
         except (FileNotFoundError, IsADirectoryError) as ex:
             print(f"Logging config file not found: {ex}")
             return
-            raise ex
 
         # Ensure log folder exists
         log_folder = self.config.logging.log_folder

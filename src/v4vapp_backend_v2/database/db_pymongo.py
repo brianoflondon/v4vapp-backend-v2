@@ -1,6 +1,4 @@
 import asyncio
-import os
-import sys
 from datetime import datetime, timezone
 from typing import Any, Dict
 from urllib.parse import quote_plus
@@ -11,8 +9,6 @@ from pymongo.database import Database
 from pymongo.errors import CollectionInvalid, OperationFailure, ServerSelectionTimeoutError
 
 from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, logger
-
-app_name = os.path.basename(sys.argv[0])
 
 DATABASE_ICON = "📁"
 
@@ -64,7 +60,7 @@ class DBConn:
             readPreference="primaryPreferred",  # Prefer primary for reads
             w=1,  # Ensure write operations are acknowledged by the majority of nodes
             journal=True,  # If True block until write operations have been committed to the journal
-            appName=app_name,  # Optional: for MongoDB monitoring
+            appName=InternalConfig().app_name,  # Optional: for MongoDB monitoring
         )
 
         return client
@@ -79,7 +75,7 @@ class DBConn:
         Returns:
             AsyncMongoClient: An instance of AsyncMongoClient connected to the admin database.
         """
-        return AsyncMongoClient(self.admin_uri, tz_aware=True)
+        return AsyncMongoClient(self.admin_uri, tz_aware=True, appName=InternalConfig().app_name)
 
     def db(self) -> AsyncDatabase[Dict[str, Any]]:
         """
@@ -241,7 +237,7 @@ class DBConn:
             readPreference="primaryPreferred",  # Prefer primary for reads
             w=1,  # Ensure write operations are acknowledged by the majority of nodes
             journal=True,  # If True block until write operations have been committed to the journal
-            appName=app_name,  # Optional: for MongoDB monitoring
+            appName=InternalConfig().app_name,  # Optional: for MongoDB monitoring
         )
 
     def db_sync(self) -> Database[Dict[str, Any]]:  # pragma: no cover
@@ -273,6 +269,7 @@ class DBConn:
                 tz_aware=True,
                 connectTimeoutMS=600_000,
                 serverSelectionTimeoutMS=30_000,
+                appName=InternalConfig().app_name,
             )
             async with admin_client:
                 await self.setup_user(admin_client=admin_client)
@@ -284,7 +281,9 @@ class DBConn:
             )
             # if InternalConfig.db_client:
             #     await InternalConfig.db_client.close()
-            InternalConfig.db_client = AsyncMongoClient(self.uri, tz_aware=True)
+            InternalConfig.db_client = AsyncMongoClient(
+                self.uri, tz_aware=True, appName=InternalConfig().app_name
+            )
             InternalConfig.db = InternalConfig.db_client[self.db_name]
             logger.info(
                 f"{DATABASE_ICON} Database {self.db_name} client is set up for InternalConfig"
@@ -460,7 +459,9 @@ class DBConn:
             ConnectionError: If the connection to the database fails.
         """
         uri = self.admin_uri if admin else self.uri
-        client: MongoClient[Dict[str, Any]] = MongoClient(uri, tz_aware=True)
+        client: MongoClient[Dict[str, Any]] = MongoClient(
+            uri, tz_aware=True, appName=InternalConfig().app_name
+        )
         try:
             with timeout(timeout_seconds):
                 with client:
@@ -481,7 +482,7 @@ class DBConn:
         InternalConfig.db_uri = self.uri
         if not self._setup:
             self._setup = True
-            admin_client: MongoClient[Dict[str, Any]] = MongoClient(self.admin_uri, tz_aware=True)
+            admin_client: MongoClient[Dict[str, Any]] = MongoClient(self.admin_uri, tz_aware=True, appName=InternalConfig().app_name)
             with admin_client:
                 self.setup_user_sync(admin_client=admin_client)
                 self.setup_collections_indexes_sync(admin_client=admin_client)
@@ -492,7 +493,7 @@ class DBConn:
             )
             if InternalConfig.db_client_sync:
                 InternalConfig.db_client_sync.close()
-            InternalConfig.db_client_sync = MongoClient(self.uri, tz_aware=True)
+            InternalConfig.db_client_sync = MongoClient(self.uri, tz_aware=True, appName=InternalConfig().app_name)
             InternalConfig.db_sync = InternalConfig.db_client_sync[self.db_name]
             logger.info(
                 f"{DATABASE_ICON} Database {self.db_name} client is set up for InternalConfig"
@@ -547,7 +548,7 @@ class DBConn:
             create_user = {} if not create_user else create_user
             logger.error(
                 f"{DATABASE_ICON} {logger.name} Failed to create user {self.db_user}: {e}",
-                extra={"error": e, "create_user": create_user},
+                extra={"error": str(e), "create_user": create_user},
             )
             pass
 
