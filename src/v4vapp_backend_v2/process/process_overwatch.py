@@ -828,21 +828,15 @@ class Overwatch:
         Helper to log a message after a short delay, allowing the current flow state to settle.
         Also lets the process_tracked_events to complete.
         """
-        await asyncio.sleep(0.3)
-        if notification:
-            logger.info(
-                f"{message}",
-                extra={
-                    "notification": False,
-                    "notification_str": f"{ICON} ✅ {flow.notification_str}",
-                    **flow.log_extra,
-                },
-            )
-        else:
-            logger.info(
-                f"{message}",
-                extra={"notification": False, **flow.log_extra},
-            )
+        await asyncio.sleep(1)
+        logger.info(
+            f"{message}",
+            extra={
+                "notification": notification,
+                "notification_str": f"{ICON} ✅ {flow.notification_str}",
+                **flow.log_extra,
+            },
+        )
 
     async def _try_create_flow(self, event: FlowEvent, op: TrackedAny) -> str | None:
         """If *event* matches registered triggers, create candidate FlowInstances.
