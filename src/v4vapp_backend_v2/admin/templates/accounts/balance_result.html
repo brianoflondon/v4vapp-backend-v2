@@ -824,14 +824,14 @@
             filterQuickSwitchBySub();
         })();
 
-            if (!lineSwitch.checked) {
-                // Turn off memos and disable the control so user cannot re-enable it
-                memosSwitch.checked = false;
-                memosSwitch.disabled = true;
-            } else {
-                // Re-enable memos when line items are enabled
-                memosSwitch.disabled = false;
-            }
+        if (!lineSwitch.checked) {
+            // Turn off memos and disable the control so user cannot re-enable it
+            memosSwitch.checked = false;
+            memosSwitch.disabled = true;
+        } else {
+            // Re-enable memos when line items are enabled
+            memosSwitch.disabled = false;
+        }
         }
 
         function downloadReport() {
