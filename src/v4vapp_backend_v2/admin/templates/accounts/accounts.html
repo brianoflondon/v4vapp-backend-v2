@@ -263,8 +263,13 @@
         // Reset selection
         accountSelect.value = '';
 
+        function isVscAccountName(accountName) {
+            return (accountName || '').toLowerCase().includes('vsc liability');
+        }
+
         function isVscOption(opt) {
-            return opt.getAttribute('data-name') === 'VSC Liability';
+            const accountName = opt.getAttribute('data-name') || '';
+            return isVscAccountName(accountName);
         }
 
         // If no filter, show/hide options according to the exclude checkbox
@@ -322,7 +327,7 @@
 
         const subsSet = new Set();
         options.forEach(o => {
-            if (excludeVsc && o.getAttribute('data-name') === 'VSC Liability' && !isExceptionSubAccount(o)) return;
+            if (excludeVsc && isVscAccountName(o.getAttribute('data-name')) && !isExceptionSubAccount(o)) return;
             const s = o.getAttribute('data-sub');
             if (s) subsSet.add(s);
         });

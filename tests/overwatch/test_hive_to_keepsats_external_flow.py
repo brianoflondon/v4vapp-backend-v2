@@ -878,6 +878,7 @@ class TestNotificationReplyCompletion:
                 "conv": None,
                 "timestamp": _TS,
                 "log_str": f"notif {short_id}",
+                "log_extra": {},
             },
         )()
 
@@ -903,6 +904,7 @@ class TestNotificationReplyCompletion:
                 "conv": None,
                 "timestamp": _TS,
                 "log_str": f"cust {short_id}",
+                "log_extra": {},
             },
         )()
 
@@ -1118,6 +1120,7 @@ class TestNotificationReplyCompletion:
                 "conv": None,
                 "timestamp": _TS,
                 "log_str": f"refund {short_id}",
+                "log_extra": {},
             },
         )()
 

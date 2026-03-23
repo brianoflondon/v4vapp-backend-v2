@@ -226,6 +226,7 @@ class AdminApp:
             server_id = InternalConfig().server_id
 
             return self.templates.TemplateResponse(
+                request,
                 "dashboard.html",
                 {
                     "request": request,

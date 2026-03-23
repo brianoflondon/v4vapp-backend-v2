@@ -189,6 +189,7 @@ async def process_custom_json_func(
     )
 
 
+# MARK: CustomJson InternalTransfer Logic
 async def custom_json_internal_transfer(
     custom_json: CustomJson,
     keepsats_transfer: KeepsatsTransfer,
@@ -219,14 +220,24 @@ async def custom_json_internal_transfer(
     logger.debug(
         f"{custom_json.short_id} Processing CustomJson transfer: {keepsats_transfer.log_str}"
     )
-    if not keepsats_transfer or not keepsats_transfer.sats:
+    if not keepsats_transfer:
         raise CustomJsonToLightningError("Keepsats transfer amount is zero.")
 
-    keepsats_transfer.msats = (
-        Decimal(keepsats_transfer.sats * 1_000)
-        if not keepsats_transfer.msats
-        else keepsats_transfer.msats
-    )
+    if keepsats_transfer.msats is None and keepsats_transfer.sats is not None:
+        keepsats_transfer.msats = keepsats_transfer.sats * Decimal(1000)
+
+    if keepsats_transfer.sats is None and keepsats_transfer.msats is not None:
+        keepsats_transfer.sats = (keepsats_transfer.msats / Decimal(1000)).quantize(
+            Decimal("1"), rounding=ROUND_HALF_UP
+        )
+
+    if (
+        (keepsats_transfer.msats is None and keepsats_transfer.sats is None)
+        or keepsats_transfer.msats
+        and keepsats_transfer.msats <= Decimal(0)
+    ):
+        raise CustomJsonToLightningError("Keepsats transfer amount is not set.")
+
     server_id = InternalConfig().server_id
     message = ""
     fee_transfer = False
@@ -285,7 +296,12 @@ async def custom_json_internal_transfer(
     ledger_entries: List[LedgerEntry] = []
 
     fee_text = f"Fee {debit_credit_amount_sats:,.0f} sats " if fee_transfer else "Transfer "
-    description = f"{fee_text}{keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
+    amount_text = (
+        f"{debit_credit_amount_sats:,.0f} sats "
+        if debit_credit_amount_msats >= Decimal(1000)
+        else f"{debit_credit_amount_msats:,.0f} msats "
+    )
+    description = f"{fee_text}{keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {amount_text}"
 
     # Do not use a long user_memo if this is a fee transfer, the Description will suffice
     if fee_transfer:
@@ -297,8 +313,8 @@ async def custom_json_internal_transfer(
         ledger_type = LedgerType.RECEIVE_LIGHTNING
         user_memo = (
             lightning_memo(keepsats_transfer.user_memo)
-            + f" | received {keepsats_transfer.sats:,} sats from Lightning"
-            or f"Received {keepsats_transfer.sats:,} sats from Lightning"
+            + f" | received {amount_text} from Lightning"
+            or f"Received {amount_text} from Lightning"
         )
     else:
         ledger_type = (
@@ -307,12 +323,15 @@ async def custom_json_internal_transfer(
         lightning_strip_memo = lightning_memo(keepsats_transfer.user_memo)
         user_memo = (
             lightning_strip_memo
-            + f" | {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
-            or f"{keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
+            + f" | {amount_text} from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
+            or f"{amount_text} from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
         )
 
     transfer_ledger_entry = LedgerEntry(
-        cust_id=custom_json.cust_id,
+        cust_id=custom_json.cust_id if ledger_type == LedgerType.CUSTOM_JSON_FEE else "",
+        # Correctly set from and to for custom json transfers
+        cust_id_from=keepsats_transfer.from_account,
+        cust_id_to=keepsats_transfer.to_account,
         short_id=custom_json.short_id,
         ledger_type=ledger_type,
         group_id=f"{custom_json.group_id}_{ledger_type.value}",

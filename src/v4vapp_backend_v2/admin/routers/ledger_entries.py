@@ -476,7 +476,7 @@ async def ledger_entries_page(
 
     t6 = timer()
     logger.info(f"Completed sanity checks in {t6 - t5:.3f} s")
-    return templates.TemplateResponse(
+    return templates.TemplateResponse(request, 
         "ledger_entries/entries.html",
         {
             "request": request,

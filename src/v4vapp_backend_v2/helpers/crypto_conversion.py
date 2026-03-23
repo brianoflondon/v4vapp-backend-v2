@@ -413,7 +413,7 @@ class CryptoConv(BaseModel):
         if currency is None:
             currency = self.conv_from
 
-        if sats_only and currency == Currency.MSATS:
+        if sats_only and currency == Currency.MSATS and self.sats >= Decimal(1):
             currency = Currency.SATS
 
         if currency == Currency.HIVE:
