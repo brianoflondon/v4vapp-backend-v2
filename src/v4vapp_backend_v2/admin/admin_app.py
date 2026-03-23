@@ -13,13 +13,13 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from single_source import get_version
 
 from v4vapp_backend_v2 import __version__ as project_version
 
 # cache helper used by admin flush button
 from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
+from v4vapp_backend_v2.admin import __version__
 from v4vapp_backend_v2.admin.data_helpers import admin_data_helper
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import v4vconfig
@@ -27,8 +27,6 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 # LND and accounting helpers used on dashboard
-
-ADMIN_VERSION = get_version(__name__, Path(__file__).parent, default_return="1.1.0") or "1.1.0"
 
 
 @asynccontextmanager
@@ -51,7 +49,7 @@ class AdminApp:
             lifespan=lifespan,
             title="V4VApp Admin Interface",
             description="Administration interface for V4VApp backend services",
-            version=ADMIN_VERSION,
+            version=__version__,
             docs_url="/admin/docs",
             redoc_url="/admin/redoc",
         )
@@ -236,7 +234,7 @@ class AdminApp:
                     "pending_transactions": admin_data.pending_transactions,
                     "sanity_results": admin_data.sanity_results,
                     "admin_info": {
-                        "admin_version": ADMIN_VERSION,
+                        "admin_version": __version__,
                         "project_version": project_version,
                         "config_file": self.config.config_filename,
                         "server_account": server_id,
@@ -269,7 +267,7 @@ class AdminApp:
 
             payload = {
                 "status": "FAIL" if sanity_results.failed else "OK",
-                "admin_version": ADMIN_VERSION,
+                "admin_version": __version__,
                 "project_version": project_version,
                 "config": self.config.config_filename,
                 "local_machine_name": InternalConfig().local_machine_name,

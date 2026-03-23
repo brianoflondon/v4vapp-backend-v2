@@ -11,6 +11,7 @@ from pathlib import Path
 
 import uvicorn
 
+from v4vapp_backend_v2.admin import __version__
 from v4vapp_backend_v2.admin.admin_app import create_admin_app
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -57,7 +58,7 @@ Examples:
         sys.exit(1)
 
     # Print startup information
-    logger.info("🚀 Starting V4VApp Admin Interface")
+    logger.info(f"🚀 Starting V4VApp Admin Interface: {__version__}")
     logger.info(f"📁 Config file: {args.config}")
     logger.info(f"🌐 Server: http://{args.host}:{args.port}/admin")
     logger.info(f"📊 API Docs: http://{args.host}:{args.port}/admin/docs")
