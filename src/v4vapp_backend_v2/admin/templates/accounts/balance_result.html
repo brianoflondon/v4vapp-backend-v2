@@ -644,8 +644,8 @@
         }
 
         function isVscOption(option) {
-            const accountName = option.getAttribute('data-name');
-            return accountName === 'VSC Liability';
+            const accountName = option.getAttribute('data-name') || '';
+            return accountName.toLowerCase().includes('vsc liability');
         }
 
         function switchAccount() {
@@ -806,6 +806,15 @@
             const lineSwitch = document.getElementById('lineItemsSwitch');
             const memosSwitch = document.getElementById('userMemosSwitch');
             if (!lineSwitch || !memosSwitch) return;
+
+            if (!lineSwitch.checked) {
+                // Turn off memos and disable the control so user cannot re-enable it
+                memosSwitch.checked = false;
+                memosSwitch.disabled = true;
+            } else {
+                // Re-enable memos when line items are enabled
+                memosSwitch.disabled = false;
+            }
         }
 
         // Bind exclude switch for quick switch filter behavior
@@ -823,16 +832,6 @@
             // Initial filter pass when the page loads
             filterQuickSwitchBySub();
         })();
-
-        if (!lineSwitch.checked) {
-            // Turn off memos and disable the control so user cannot re-enable it
-            memosSwitch.checked = false;
-            memosSwitch.disabled = true;
-        } else {
-            // Re-enable memos when line items are enabled
-            memosSwitch.disabled = false;
-        }
-        }
 
         function downloadReport() {
             const content = document.getElementById('balancePrintout').textContent;

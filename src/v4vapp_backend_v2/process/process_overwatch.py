@@ -664,7 +664,7 @@ class Overwatch:
         """
         await self._ensure_loaded()
         event = FlowEvent.from_ledger_entry(ledger_entry, group=group)
-        logger.debug(
+        logger.info(
             f"{ICON} {ledger_entry.short_id} {ledger_entry.log_str}",
             extra={"notification": False, **ledger_entry.log_extra},
         )

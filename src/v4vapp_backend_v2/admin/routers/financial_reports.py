@@ -55,7 +55,7 @@ async def financial_reports_page(request: Request):
 
     nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
     sanity_results = await run_all_sanity_checks()
-    return templates.TemplateResponse(
+    return templates.TemplateResponse(request, 
         "financial_reports/index.html",
         {
             "request": request,
@@ -92,7 +92,7 @@ async def balance_sheet_page(request: Request):
 
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         sanity_results = await run_all_sanity_checks()
-        return templates.TemplateResponse(
+        return templates.TemplateResponse(request, 
             "financial_reports/balance_sheet.html",
             {
                 "request": request,
@@ -111,7 +111,7 @@ async def balance_sheet_page(request: Request):
         )
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
-        return templates.TemplateResponse(
+        return templates.TemplateResponse(request, 
             "financial_reports/error.html",
             {
                 "request": request,
@@ -144,7 +144,7 @@ async def profit_loss_page(request: Request):
 
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         sanity_results = await run_all_sanity_checks()
-        return templates.TemplateResponse(
+        return templates.TemplateResponse(request, 
             "financial_reports/profit_loss.html",
             {
                 "request": request,
@@ -163,7 +163,7 @@ async def profit_loss_page(request: Request):
         )
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
-        return templates.TemplateResponse(
+        return templates.TemplateResponse(request, 
             "financial_reports/error.html",
             {
                 "request": request,
@@ -197,7 +197,7 @@ async def trading_pnl_page(request: Request, sub: Optional[str] = None):
 
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         sanity_results = await run_all_sanity_checks()
-        return templates.TemplateResponse(
+        return templates.TemplateResponse(request, 
             "financial_reports/trading_pnl.html",
             {
                 "request": request,
@@ -216,7 +216,7 @@ async def trading_pnl_page(request: Request, sub: Optional[str] = None):
         )
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
-        return templates.TemplateResponse(
+        return templates.TemplateResponse(request, 
             "financial_reports/error.html",
             {
                 "request": request,
@@ -294,7 +294,7 @@ async def complete_report_page(
 
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         sanity_results = await run_all_sanity_checks()
-        return templates.TemplateResponse(
+        return templates.TemplateResponse(request, 
             "financial_reports/complete_report.html",
             {
                 "request": request,
@@ -316,7 +316,7 @@ async def complete_report_page(
         )
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
-        return templates.TemplateResponse(
+        return templates.TemplateResponse(request, 
             "financial_reports/error.html",
             {
                 "request": request,

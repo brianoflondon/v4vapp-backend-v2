@@ -53,6 +53,7 @@ async def accounts_page(request: Request):
     sanity_results = await run_all_sanity_checks()
 
     return templates.TemplateResponse(
+        request,
         "accounts/accounts.html",
         {
             "request": request,
@@ -141,6 +142,7 @@ async def get_user_balance_get(
                     }
         sanity_results = await sanity_results_task
         return templates.TemplateResponse(
+            request,
             "accounts/balance_result.html",
             {
                 "request": request,
@@ -169,6 +171,7 @@ async def get_user_balance_get(
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
         return templates.TemplateResponse(
+            request,
             "accounts/balance_error.html",
             {
                 "request": request,
@@ -272,6 +275,7 @@ async def get_user_balance(
                     }
         sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(
+            request,
             "accounts/balance_result.html",
             {
                 "request": request,
@@ -301,6 +305,7 @@ async def get_user_balance(
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
         return templates.TemplateResponse(
+            request,
             "accounts/balance_error.html",
             {
                 "request": request,
@@ -402,6 +407,7 @@ async def get_account_balance(
             as_of_date = datetime.now(tz=timezone.utc)
         exception_sub_accounts = InternalConfig().config.development.allowed_hive_accounts
         return templates.TemplateResponse(
+            request,
             "accounts/balance_result.html",
             {
                 "request": request,
@@ -433,6 +439,7 @@ async def get_account_balance(
         logger.exception(e)
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
         return templates.TemplateResponse(
+            request,
             "accounts/balance_error.html",
             {
                 "request": request,
