@@ -302,7 +302,7 @@
                 <input type="hidden" name="age_hours" value="{{ age_hours if age_hours else 0 }}">
 
                 <div class="row">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="quickSubFilter" class="form-label">
                             <i class="bi bi-funnel me-1"></i>
                             Filter by Sub
@@ -322,6 +322,13 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="exclude_vsc_liability" checked
+                                onchange="filterQuickSwitchBySub()">
+                            <label class="form-check-label" for="exclude_vsc_liability">Exclude VSC Liability</label>
+                        </div>
+                    </div>
                     <div class="col-md-6">
                         <label for="accountSelector" class="form-label">
                             <i class="bi bi-folder2-open me-1"></i>
@@ -334,8 +341,8 @@
                             <optgroup label="{{ account_type }}">
                                 {% for acc in accounts %}
                                 <option value="{{ acc.__str__() }}" data-sub="{{ acc.sub if acc.sub else '' }}"
-                                    data-type="{{ account_type }}" {{ 'selected' if acc.__str__()==account_string
-                                    else '' }}>
+                                    data-type="{{ account_type }}" data-name="{{ acc.name }}" {{ 'selected' if
+                                    acc.__str__()==account_string else '' }}>
                                     {{ acc.name }}{% if acc.sub %} - {{ acc.sub }}{% endif %}
                                     {% if acc.contra %} (Contra){% endif %}
                                 </option>
@@ -629,6 +636,18 @@
             }
         }
 
+        const exceptionSubAccounts = {{ exception_sub_accounts | tojson | safe }};
+
+        function isExceptionSubAccount(option) {
+            const sub = option.getAttribute('data-sub');
+            return sub && exceptionSubAccounts.includes(sub);
+        }
+
+        function isVscOption(option) {
+            const accountName = option.getAttribute('data-name');
+            return accountName === 'VSC Liability';
+        }
+
         function switchAccount() {
             const accountSelector = document.getElementById('accountSelector');
             const selectedAccount = accountSelector.value;
@@ -653,6 +672,7 @@
             const accountSelect = document.getElementById('accountSelector');
             const options = accountSelect.querySelectorAll('option');
             const optgroups = accountSelect.querySelectorAll('optgroup');
+            const excludeVsc = document.getElementById('exclude_vsc_liability')?.checked;
 
             // Reset selection
             accountSelect.value = '';
@@ -660,10 +680,16 @@
             // If no filter, show all options
             if (!subFilter) {
                 options.forEach(option => {
-                    option.style.display = '';
+                    if (option.value === '') { option.style.display = ''; return; }
+                    if (excludeVsc && isVscOption(option) && !isExceptionSubAccount(option)) {
+                        option.style.display = 'none';
+                    } else {
+                        option.style.display = '';
+                    }
                 });
                 optgroups.forEach(optgroup => {
-                    optgroup.style.display = '';
+                    const hasVisible = Array.from(optgroup.querySelectorAll('option')).some(o => o.value !== '' && o.style.display !== 'none');
+                    optgroup.style.display = hasVisible ? '' : 'none';
                 });
                 return;
             }
@@ -680,6 +706,8 @@
                 if (option.value === '') {
                     // Keep the "Select an account..." option
                     option.style.display = '';
+                } else if (excludeVsc && isVscOption(option) && !isExceptionSubAccount(option)) {
+                    option.style.display = 'none';
                 } else if (optionSub === subFilter) {
                     option.style.display = '';
                     visibleOptgroups.add(optionType);
@@ -778,6 +806,23 @@
             const lineSwitch = document.getElementById('lineItemsSwitch');
             const memosSwitch = document.getElementById('userMemosSwitch');
             if (!lineSwitch || !memosSwitch) return;
+        }
+
+        // Bind exclude switch for quick switch filter behavior
+        (function () {
+            const excludeCheckbox = document.getElementById('exclude_vsc_liability');
+            const subFilter = document.getElementById('quickSubFilter');
+
+            if (excludeCheckbox) {
+                excludeCheckbox.addEventListener('change', filterQuickSwitchBySub);
+            }
+            if (subFilter) {
+                subFilter.addEventListener('change', filterQuickSwitchBySub);
+            }
+
+            // Initial filter pass when the page loads
+            filterQuickSwitchBySub();
+        })();
 
             if (!lineSwitch.checked) {
                 // Turn off memos and disable the control so user cannot re-enable it

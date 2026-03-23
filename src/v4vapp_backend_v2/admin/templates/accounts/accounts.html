@@ -236,6 +236,13 @@
         });
     })();
 
+    const exceptionSubAccounts = {{ exception_sub_accounts | tojson | safe }};
+
+    function isExceptionSubAccount(option) {
+        const sub = option.getAttribute('data-sub');
+        return sub && exceptionSubAccounts.includes(sub);
+    }
+
     // Auto-update datetime field to current time
     function updateCurrentTime() {
         const now = new Date();
@@ -264,7 +271,7 @@
         if (!subFilter) {
             options.forEach(option => {
                 if (option.value === '') { option.style.display = ''; return; }
-                if (excludeVsc && isVscOption(option)) option.style.display = 'none';
+                if (excludeVsc && isVscOption(option) && !isExceptionSubAccount(option)) option.style.display = 'none';
                 else option.style.display = '';
             });
             optgroups.forEach(optgroup => {
@@ -280,7 +287,7 @@
 
         options.forEach(option => {
             if (option.value === '') { option.style.display = ''; return; }
-            if (excludeVsc && isVscOption(option)) { option.style.display = 'none'; return; }
+            if (excludeVsc && isVscOption(option) && !isExceptionSubAccount(option)) { option.style.display = 'none'; return; }
             const optionSub = option.getAttribute('data-sub');
             const optionType = option.getAttribute('data-type');
 
@@ -315,7 +322,7 @@
 
         const subsSet = new Set();
         options.forEach(o => {
-            if (excludeVsc && o.getAttribute('data-name') === 'VSC Liability') return;
+            if (excludeVsc && o.getAttribute('data-name') === 'VSC Liability' && !isExceptionSubAccount(o)) return;
             const s = o.getAttribute('data-sub');
             if (s) subsSet.add(s);
         });
