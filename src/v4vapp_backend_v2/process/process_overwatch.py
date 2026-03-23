@@ -665,8 +665,8 @@ class Overwatch:
         await self._ensure_loaded()
         event = FlowEvent.from_ledger_entry(ledger_entry, group=group)
         logger.debug(
-            f"{ICON} {ledger_entry.short_id} {ledger_entry.ledger_type_str}",
-            extra={"notification": False},
+            f"{ICON} {ledger_entry.short_id} {ledger_entry.log_str}",
+            extra={"notification": False, **ledger_entry.log_extra},
         )
         return await self._dispatch(event)
 
@@ -684,8 +684,8 @@ class Overwatch:
         await self._ensure_loaded()
         event = FlowEvent.from_op(op, group=group)
         logger.info(
-            f"{ICON} {op.short_id} {op.op_type}",
-            extra={"notification": False},
+            f"{ICON} {op.short_id} {op.log_str}",
+            extra={"notification": False, **op.log_extra},
         )
 
         # Auto-create a flow instance when a trigger op arrives
@@ -787,14 +787,8 @@ class Overwatch:
                         flow.superset_winner_name = None
                 if flow.is_complete:
                     newly_completed.append(flow)
-                    logger.info(
-                        f"{ICON} ✅ {Fore.WHITE}{flow.log_str} {Fore.RESET}",
-                        extra={
-                            "notification": True,
-                            "notification_str": f"{ICON} ✅ {flow.notification_str}",
-                            **flow.log_extra,
-                        },
-                    )
+                    message = f"{ICON} ✅ {Fore.WHITE}{flow.log_str} {Fore.RESET}"
+                    asyncio.create_task(self._delay_log(flow, message))
                 await self._persist_flow(flow)
         for completed in newly_completed:
             await self._resolve_candidates(completed)
@@ -816,16 +810,39 @@ class Overwatch:
                 result = flow.add_event(event)
                 if result is not None:
                     first_result = result
-                    logger.info(
+                    message = (
                         f"{ICON} 📎 {Fore.YELLOW}Late event '{result}' absorbed by "
                         f"completed flow '{flow.flow_definition.name}' "
-                        f"({flow.trigger_short_id}){Fore.RESET}",
-                        extra={"notification": False},
+                        f"({flow.trigger_short_id}){Fore.RESET}"
                     )
+                    asyncio.create_task(self._delay_log(flow, message, notification=False))
                     await self._persist_flow(flow)
                     break  # one match is enough
 
         return first_result
+
+    async def _delay_log(
+        self, flow: FlowInstance, message: str, notification: bool = True
+    ) -> None:
+        """
+        Helper to log a message after a short delay, allowing the current flow state to settle.
+        Also lets the process_tracked_events to complete.
+        """
+        await asyncio.sleep(0.3)
+        if notification:
+            logger.info(
+                f"{message}",
+                extra={
+                    "notification": False,
+                    "notification_str": f"{ICON} ✅ {flow.notification_str}",
+                    **flow.log_extra,
+                },
+            )
+        else:
+            logger.info(
+                f"{message}",
+                extra={"notification": False, **flow.log_extra},
+            )
 
     async def _try_create_flow(self, event: FlowEvent, op: TrackedAny) -> str | None:
         """If *event* matches registered triggers, create candidate FlowInstances.

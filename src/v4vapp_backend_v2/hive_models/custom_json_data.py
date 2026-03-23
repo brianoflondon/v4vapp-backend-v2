@@ -178,9 +178,12 @@ class KeepsatsTransfer(BaseModel):
         # This is the case if we are passing the lighting invoice to be paid via Keepsats
         if not self.msats or self.msats == Decimal(0):
             return f"⏩️{self.from_account} instruction to {self.to_account} to pay {lightning_memo(self.memo)} sats via Keepsats"
-        return (
-            f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
+        amount = (
+            f"{self.sats:,.0f} sats "
+            if self.msats > Decimal(1000)
+            else f"{self.msats:,.0f} msats "
         )
+        return f"⏩️{self.from_account} sent {amount} to {self.to_account} via KeepSats"
 
     def lightning_invoice_in_memo(self) -> bool:
         """
