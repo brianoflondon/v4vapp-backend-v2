@@ -29,7 +29,7 @@ SANITY_CHECK_TIMEOUT_SECONDS = 40.0  # per-check timeout for sanity checks
 SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 45.0  # overall timeout for running all checks
 
 SANITY_REDIS_CACHE_KEY = "sanity_check_results_cache"
-SANITY_REDIS_TIMEOUT_SECONDS = 60
+SANITY_REDIS_TIMEOUT_SECONDS = 180
 
 
 class SanityCheckResult(BaseModel):
@@ -343,7 +343,9 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                         str(o.get("orderid")) for o in open_orders if isinstance(o, dict)
                     )
                     orders_info = f"Open Hive orders may be affecting balances. Open order IDs: {open_orders_str}."
-                    is_valid = True  # report success to avoid failed status when open orders are expected
+                    is_valid = (
+                        True  # report success to avoid failed status when open orders are expected
+                    )
                 else:
                     is_valid = False
                     orders_info = "No open Hive orders found."

@@ -7,6 +7,7 @@ FastAPI application for V4VApp backend administration.
 from contextlib import asynccontextmanager
 from pathlib import Path
 from timeit import default_timer as timer
+from typing import List
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
@@ -297,6 +298,11 @@ class AdminApp:
                 )
                 # propagate an error to the client
                 raise HTTPException(status_code=500, detail=f"Cache flush failed: {e}")
+
+        @self.app.get("/dev_accounts")
+        async def get_dev_accounts() -> List[str]:
+            """Endpoint to get list of accounts for development/testing purposes"""
+            return InternalConfig().config.development.allowed_hive_accounts
 
 
 def create_admin_app(config_filename: str = "devhive.config.yaml") -> FastAPI:
