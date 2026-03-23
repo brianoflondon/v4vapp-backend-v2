@@ -15,6 +15,9 @@ from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2.accounting.account_balances import list_all_ledger_types
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_entries import (
+    get_ledger_entries as get_ledger_entries_from_db,
+)
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import (
     LedgerType,
@@ -27,6 +30,7 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
 )
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
+from v4vapp_backend_v2.admin.routers.helper_functions import get_accounts_by_type_for_selector
 from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import parse_dt_with_tz
@@ -44,6 +48,29 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
     global templates, nav_manager
     templates = tmpl
     nav_manager = nav
+
+
+async def get_ledger_entries(
+    as_of_date: datetime | None = None,
+    filter_by_account: LedgerAccount | None = None,
+    cust_id: str | None = None,
+    filter_by_ledger_types: list[LedgerType] | None = None,
+    group_id: str | None = None,
+    short_id: str | None = None,
+    sub_account: str | None = None,
+    age_hours: int | None = 0,
+) -> list[LedgerEntry]:
+    """Proxy to accounting layer from admin routes (test patch point)."""
+    return await get_ledger_entries_from_db(
+        as_of_date=as_of_date,
+        filter_by_account=filter_by_account,
+        cust_id=cust_id,
+        filter_by_ledger_types=filter_by_ledger_types,
+        group_id=group_id,
+        short_id=short_id,
+        sub_account=sub_account,
+        age_hours=age_hours,
+    )
 
 
 @router.get("/data")
@@ -299,6 +326,25 @@ async def ledger_entries_page(
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
 
+    # compute date window for query analogously to /data
+    to_date = datetime.now(tz=timezone.utc)
+    from_date = None
+    if to_date_str:
+        parsed = parse_dt_with_tz(to_date_str)
+        if parsed:
+            to_date = parsed
+    if from_date_str:
+        parsed = parse_dt_with_tz(from_date_str)
+        if parsed:
+            from_date = parsed
+
+    # reconcile age_hours and from_date into filtered age (for entry query)
+    age = None
+    if age_hours and age_hours > 0:
+        age = timedelta(hours=age_hours)
+    elif from_date:
+        age = to_date - from_date
+
     # Get accounts for selector (reuse list_all_accounts if available lazily)
     from v4vapp_backend_v2.accounting.account_balances import list_all_accounts
 
@@ -310,6 +356,7 @@ async def ledger_entries_page(
     t1 = timer()
     logger.info(f"Fetched all accounts in {t1 - start:.3f} s")
 
+    t2 = timer()
     try:
         # Prefer async to the existing async helper if available
         ledger_type_options = await list_all_ledger_types()
@@ -373,6 +420,17 @@ async def ledger_entries_page(
     t3 = timer()
     logger.info(f"Processed ledger type options in {t3 - t2:.3f} s")
 
+    # Convert ledger_type parameter to LedgerType list for the query
+    ledger_types = None
+    if ledger_type:
+        try:
+            ledger_types = [LedgerType(ledger_type)]
+        except Exception:
+            try:
+                ledger_types = [LedgerType[ledger_type]]
+            except Exception:
+                ledger_types = None
+
     # Compute selected display for initial button text
     selected_display = "Any"
     if ledger_type:
@@ -386,25 +444,30 @@ async def ledger_entries_page(
                 )
                 break
 
-    # Group accounts by type similar to accounts page
-    accounts_by_type: dict[str, list[LedgerAccount]] = {}
-    for acc in all_accounts:
-        account_type = acc.account_type.value
-        if account_type not in accounts_by_type:
-            accounts_by_type[account_type] = []
-        accounts_by_type[account_type].append(acc)
+    # Group accounts by type using shared helper from accounts router
+    accounts_by_type = await get_accounts_by_type_for_selector()
 
     t4 = timer()
     logger.info(f"Grouped accounts by type in {t4 - t3:.3f} s")
 
-    # Sort each group
-    for account_type in accounts_by_type:
-        accounts_by_type[account_type].sort(key=lambda x: (x.name, x.sub))
+    # Resolve account filter from query string before fetching entries
+    account = None
+    if account_string:
+        try:
+            account = LedgerAccount.from_string(account_string)
+        except Exception:
+            account = None
 
-    # Server-side entry fetch removed: the client-side JS calls the paginated
-    # /data endpoint on DOMContentLoaded, so pre-fetching all entries here was
-    # redundant and extremely slow when unfiltered (fetched every document).
-    ledger_entries: list = []
+    # Fetch entries on server-side so tests that verify content can see them
+    ledger_entries = await get_ledger_entries(
+        as_of_date=to_date,
+        filter_by_account=account,
+        filter_by_ledger_types=ledger_types,
+        group_id=group_id,
+        short_id=short_id,
+        sub_account=(None if account else sub_filter),
+        age_hours=age_hours,
+    )
 
     t5 = timer()
 

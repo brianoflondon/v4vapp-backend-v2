@@ -4,6 +4,7 @@ Account Balances Router
 Handles routes for displaying account balances and ledger information.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -19,6 +20,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
+from v4vapp_backend_v2.admin.routers.helper_functions import get_accounts_by_type_for_selector
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -110,6 +112,8 @@ async def get_user_balance_get(
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
 
+    sanity_results_task = asyncio.create_task(run_all_sanity_checks())
+
     try:
         # Default parameters for GET request
         line_items_bool = True
@@ -144,39 +148,7 @@ async def get_user_balance_get(
             )
 
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
-
-        # Get all accounts for the selector
-        try:
-            all_accounts = await list_all_accounts()
-        except Exception:
-            # If database is not available, use mock data
-            from v4vapp_backend_v2.accounting.ledger_account_classes import (
-                AssetAccount,
-                ExpenseAccount,
-                LiabilityAccount,
-                RevenueAccount,
-            )
-
-            all_accounts = [
-                AssetAccount(name="Customer Deposits Hive", sub="devser.v4vapp"),
-                AssetAccount(name="Treasury Lightning", sub="from_keepsats"),
-                LiabilityAccount(name="VSC Liability", sub="v4vapp-test"),
-                LiabilityAccount(name="VSC Liability", sub="v4vapp.qrc"),
-                RevenueAccount(name="Fee Income Keepsats", sub="from_keepsats"),
-                ExpenseAccount(name="Fee Expenses Lightning", sub=""),
-            ]
-
-        # Group accounts by type for the selector
-        accounts_by_type: dict[str, list[LedgerAccount]] = {}
-        for acc in all_accounts:
-            account_type = acc.account_type.value
-            if account_type not in accounts_by_type:
-                accounts_by_type[account_type] = []
-            accounts_by_type[account_type].append(acc)
-
-        # Sort each group
-        for account_type in accounts_by_type:
-            accounts_by_type[account_type].sort(key=lambda x: (x.name, x.sub))
+        accounts_by_type = await get_accounts_by_type_for_selector()
 
         # Convert details to JSON-serializable format
         details_json = None
@@ -194,8 +166,7 @@ async def get_user_balance_get(
                         "error": f"Could not serialize details: {str(e)}",
                         "string_repr": str(details),
                     }
-        sanity_results = await run_all_sanity_checks()
-
+        sanity_results = await sanity_results_task
         return templates.TemplateResponse(
             "accounts/balance_result.html",
             {
@@ -306,39 +277,7 @@ async def get_user_balance(
             )
 
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
-
-        # Get all accounts for the selector
-        try:
-            all_accounts = await list_all_accounts()
-        except Exception:
-            # If database is not available, use mock data
-            from v4vapp_backend_v2.accounting.ledger_account_classes import (
-                AssetAccount,
-                ExpenseAccount,
-                LiabilityAccount,
-                RevenueAccount,
-            )
-
-            all_accounts = [
-                AssetAccount(name="Customer Deposits Hive", sub="devser.v4vapp"),
-                AssetAccount(name="Treasury Lightning", sub="from_keepsats"),
-                LiabilityAccount(name="VSC Liability", sub="v4vapp-test"),
-                LiabilityAccount(name="VSC Liability", sub="v4vapp.qrc"),
-                RevenueAccount(name="Fee Income Keepsats", sub="from_keepsats"),
-                ExpenseAccount(name="Fee Expenses Lightning", sub=""),
-            ]
-
-        # Group accounts by type for the selector
-        accounts_by_type: dict[str, list[LedgerAccount]] = {}
-        for acc in all_accounts:
-            account_type = acc.account_type.value
-            if account_type not in accounts_by_type:
-                accounts_by_type[account_type] = []
-            accounts_by_type[account_type].append(acc)
-
-        # Sort each group
-        for account_type in accounts_by_type:
-            accounts_by_type[account_type].sort(key=lambda x: (x.name, x.sub))
+        accounts_by_type = await get_accounts_by_type_for_selector()
 
         # Convert details to JSON-serializable format
         details_json = None
