@@ -660,10 +660,10 @@ class HiveConfig(BaseConfig):
     @property
     def all_account_names(self) -> List[str]:
         """
-        Retrieve the names of all accounts. All names must be set in order to receive any.
+        Retrieve the names of all significant accounts. All names must be set in order to receive any.
 
         Returns:
-            List[str]: A list containing the names of all accounts.
+            List[str]: A list containing the names of all significant accounts.
         """
         if (
             self.server_account

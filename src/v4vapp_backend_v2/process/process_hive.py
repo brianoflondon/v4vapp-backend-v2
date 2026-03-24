@@ -276,6 +276,7 @@ async def process_transfer_op(
     ):
         # Use the configured exchange adapter name as the Exchange Holdings sub-account
         exchange_sub = get_exchange_adapter().exchange_name
+        ledger_entry.cust_id = exchange_sub
         ledger_entry.debit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Exchange transfer: {base_description}"
@@ -286,6 +287,7 @@ async def process_transfer_op(
         and hive_transfer.to_account == exchange_account
     ):
         exchange_sub = get_exchange_adapter().exchange_name
+        ledger_entry.cust_id = exchange_sub
         ledger_entry.debit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.description = f"Server to Exchange transfer: {base_description}"
@@ -295,8 +297,10 @@ async def process_transfer_op(
         hive_transfer.from_account in exchange_accounts
         and hive_transfer.to_account == treasury_account
     ):
-        ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)
-        ledger_entry.credit = AssetAccount(name="Exchange Deposits Hive", sub=treasury_account)
+        exchange_sub = get_exchange_adapter().exchange_name
+        ledger_entry.cust_id = exchange_sub
+        ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
+        ledger_entry.credit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
         ledger_entry.description = f"Exchange to Treasury transfer: {base_description}"
         ledger_entry.user_memo = lightning_memo(hive_transfer.user_memo)
         ledger_entry.ledger_type = LedgerType.EXCHANGE_TO_TREASURY
