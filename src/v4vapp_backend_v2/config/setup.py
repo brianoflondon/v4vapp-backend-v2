@@ -885,6 +885,12 @@ class Config(BaseModel):
         if len(tokens) != len(set(tokens)):
             raise ValueError("Two notification bots have the same token")
 
+        # Check that hive is called hive_config
+        if not hasattr(self, "hive_config"):
+            raise ValueError(
+                "Hive configuration must be defined under the 'hive_config' attribute"
+            )
+
         # Validate expense_account_name against the ExpenseAccount name literal
         from v4vapp_backend_v2.accounting.ledger_account_classes import ExpenseAccount
 
