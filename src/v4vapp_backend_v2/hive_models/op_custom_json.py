@@ -84,7 +84,7 @@ class CustomJson(OpBase):
                     if (
                         self.json_data.from_account in self.required_auths
                         or self.required_auths[0]
-                        in InternalConfig().config.hive.server_account_names
+                        in InternalConfig().config.hive_config.server_account_names
                     ):
                         # Use the shared transfer logic so custom_json follows the same cust_id rules
                         from_acc = getattr(self.json_data, "from_account", "")
@@ -135,7 +135,7 @@ class CustomJson(OpBase):
         """
         if (
             self.required_auths
-            and self.required_auths[0] in InternalConfig().config.hive.server_account_names
+            and self.required_auths[0] in InternalConfig().config.hive_config.server_account_names
         ):
             return True
         if OpBase.watch_users:

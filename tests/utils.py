@@ -331,7 +331,7 @@ async def send_hive_customer_to_server(
     else:
         hive_amount = amount
 
-    hive_config = InternalConfig().config.hive
+    hive_config = InternalConfig().config.hive_config
     hive_client = await get_verified_hive_client_for_accounts([customer])
     server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
 
