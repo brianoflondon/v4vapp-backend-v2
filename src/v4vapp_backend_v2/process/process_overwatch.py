@@ -868,7 +868,7 @@ class Overwatch:
         to_acc = getattr(op, "to_account", "")
         if from_acc and to_acc:
             try:
-                internal = set(InternalConfig().config.hive_config.all_account_names)
+                internal = set(InternalConfig().config.hive_config.extended_all_account_names)
                 if internal and from_acc in internal and to_acc in internal:
                     logger.info(
                         f"{ICON} ⏭️ Skipping flow creation for internal transfer "

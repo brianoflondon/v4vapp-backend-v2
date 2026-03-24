@@ -679,6 +679,19 @@ class HiveConfig(BaseConfig):
             ]
         return []
 
+    @property
+    def extended_all_account_names(self) -> List[str]:
+        """
+        Retrieve the names of all accounts, including alternate names.
+        Returns:
+            List[str]: A list containing the names of all accounts, including alternate names.
+
+        """
+        names = self.all_account_names
+        if self.exchange_account:
+            names.extend(self.exchange_account.alternate_names)
+        return names
+
     def get_account_names_by_role(self, role: HiveRoles) -> List[str]:
         """
         Retrieve all accounts that match a specific role.
