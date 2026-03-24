@@ -363,7 +363,7 @@ async def get_verified_hive_client(
     Raises:
         HiveToLightningError: If the server account configuration or required keys are missing.
     """
-    hive_config = InternalConfig().config.hive
+    hive_config = InternalConfig().config.hive_config
     hive_account = hive_config.get_hive_role_account(hive_role)
     if not hive_account:
         raise HiveToLightningError("Missing Hive server account configuration for repayment")
@@ -403,7 +403,7 @@ async def get_verified_hive_client_for_accounts(
     Raises:
         HiveToLightningError: If the server account configuration or required keys are missing.
     """
-    hive_config = InternalConfig().config.hive
+    hive_config = InternalConfig().config.hive_config
     hive_accounts = []
     keys = []
     accounts = list(
@@ -453,7 +453,7 @@ def get_transfer_cust_id(
         CustIDType: computed customer id following the same rules as the original method.
     """
     if hive_config is None:
-        hive_config = InternalConfig().config.hive
+        hive_config = InternalConfig().config.hive_config
     account_names = hive_config.all_account_names
 
     # Defensive check - ensure we have exactly 4 account names
@@ -466,7 +466,7 @@ def get_transfer_cust_id(
         expense_accounts or InternalConfig().config.expense_config.hive_expense_accounts or []
     )
     exchange_accounts = (
-        exchange_accounts or InternalConfig().config.hive.exchange_account_names or []
+        exchange_accounts or InternalConfig().config.hive_config.exchange_account_names or []
     )
 
     # Server to Treasury: cust_id = to_account (treasury)

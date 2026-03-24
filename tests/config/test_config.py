@@ -49,7 +49,7 @@ def test_valid_hive_config():
         print(e)
         assert False
 
-    hive_config = config.hive
+    hive_config = config.hive_config
     assert hive_config is not None
     assert hive_config.server_account is not None
     assert hive_config.hive_accs is not None
@@ -93,6 +93,7 @@ def test_singleton_config():
     assert internal_config is internal_config2
     internal_config.shutdown()
 
+
 def test_bad_internal_config(monkeypatch: pytest.MonkeyPatch):
     with pytest.raises(StartupFailure):
         InternalConfig(config_filename="bad.config.yaml")
@@ -117,10 +118,16 @@ def test_notification_bot_find_bot_name():
 
 def test_hive_acc_name():
     internal_config = InternalConfig()
-    hive_accs = internal_config.config.hive.hive_accs
+    hive_accs = internal_config.config.hive_config.hive_accs
     assert hive_accs is not None
     hive_acc = hive_accs["someaccount"]
     assert hive_acc.name == "someaccount"
+
+    hive_exchange_acc = hive_accs["fiction"]
+    assert hive_exchange_acc.name == "fiction"
+    assert hive_exchange_acc.role == "exchange"
+    assert hive_exchange_acc.alternate_names == ["b-hot2", "b-hot3"]
+    assert hive_exchange_acc.all_names() == ["fiction", "b-hot2", "b-hot3"]
 
 
 def test_alternate_config_file():
@@ -137,36 +144,3 @@ def test_alternate_config_file():
     except Exception as e:
         print(e)
         assert False
-
-
-# @pytest.mark.skip(reason="Not implemented yet")
-# def test_update_config(set_base_config_path: None):
-#     internal_config = InternalConfig()
-#     assert internal_config.config is not None
-#     sample_telegram_bot = NotificationBotConfig(
-#         name="@update_bot",
-#         token="555555555:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
-#         chat_id=1234567890,
-#     )
-#     insert = {sample_telegram_bot.name: sample_telegram_bot}
-#     internal_config.update_config(setting="notification_bots", insert=insert)
-#     assert (
-#         internal_config.config.notification_bots[sample_telegram_bot.name] == sample_telegram_bot
-#     )
-
-
-# @pytest.mark.skip(reason="Not implemented yet")
-# def test_update_config_fail(set_base_config_path: None):
-#     """
-#     Fails because of a duplication in bot token
-#     """
-#     internal_config = InternalConfig()
-#     assert internal_config.config is not None
-#     sample_telegram_bot = NotificationBotConfig(
-#         name="@update_bot",
-#         token="1234567890:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
-#         chat_id=1234567890,
-#     )
-#     insert = {sample_telegram_bot.name: sample_telegram_bot}
-#     with pytest.raises(ValueError):
-#         internal_config.update_config(setting="notification_bots", insert=insert)

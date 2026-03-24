@@ -101,7 +101,7 @@ async def follow_on_transfer(
         if not tracked_op.conv or tracked_op.conv.is_unset():
             raise HiveTransferError("Conversion not set in operation.")
 
-    hive_config = InternalConfig().config.hive
+    hive_config = InternalConfig().config.hive_config
     lnd_config = InternalConfig().config.lnd_config
 
     if (

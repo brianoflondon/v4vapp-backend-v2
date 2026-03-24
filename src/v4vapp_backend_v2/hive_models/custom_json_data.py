@@ -288,7 +288,7 @@ def all_custom_json_ids() -> List[str]:
     Returns:
         List[str]: A list of custom JSON IDs.
     """
-    extra_ids = InternalConfig().config.hive.custom_json_ids_tracked
+    extra_ids = InternalConfig().config.hive_config.custom_json_ids_tracked
     duplicates_removed = set(list(CUSTOM_JSON_IDS.keys()) + extra_ids)
     return list(duplicates_removed)
 
@@ -319,7 +319,7 @@ def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
         return CUSTOM_JSON_IDS[cj_id] if isinstance(CUSTOM_JSON_IDS[cj_id], type) else None
 
     # Extra steps to combine the custom_json_prefix with the suffixes to check for valid IDs, this allows us to not have to hardcode every custom JSON ID in the config
-    prefix = getattr(InternalConfig().config.hive, "custom_json_prefix", None)
+    prefix = getattr(InternalConfig().config.hive_config, "custom_json_prefix", None)
     if prefix:
         if cj_id.startswith(prefix):
             suffix = cj_id[len(prefix) :]

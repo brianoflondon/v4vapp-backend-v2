@@ -182,10 +182,16 @@ async def process_transfer_op(
     )
     processed_d_memo = lightning_memo(hive_transfer.d_memo)
     base_description = f"{hive_transfer.amount_str} from {hive_transfer.from_account} to {hive_transfer.to_account} {processed_d_memo}"
-    hive_config = InternalConfig().config.hive
+    hive_config = InternalConfig().config.hive_config
+
     server_account, treasury_account, funding_account, exchange_account = (
         hive_config.all_account_names
     )
+    if hive_config.exchange_account:
+        exchange_accounts = hive_config.exchange_account.all_names()
+    else:
+        exchange_accounts = [exchange_account]
+
     expense_accounts = InternalConfig().config.expense_config.hive_expense_accounts
     if not server_account or not treasury_account or not funding_account or not exchange_account:
         raise LedgerEntryCreationException(
@@ -286,7 +292,7 @@ async def process_transfer_op(
         ledger_entry.ledger_type = LedgerType.SERVER_TO_EXCHANGE
     # MARK: Exchange to Treasury
     elif (
-        hive_transfer.from_account == exchange_account
+        hive_transfer.from_account in exchange_accounts
         and hive_transfer.to_account == treasury_account
     ):
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)

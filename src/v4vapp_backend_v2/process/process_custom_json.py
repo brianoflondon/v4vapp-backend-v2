@@ -50,7 +50,10 @@ async def process_custom_json_func(
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
     server_id = InternalConfig().server_id
-    if custom_json.cj_id == InternalConfig().config.hive.custom_json_prefix + "_notification":
+    if (
+        custom_json.cj_id
+        == InternalConfig().config.hive_config.custom_json_prefix + "_notification"
+    ):
         logger.debug(f"Notification CustomJson: {custom_json.json_data.memo}")
         return []
 
@@ -59,7 +62,7 @@ async def process_custom_json_func(
         logger.warning(message, extra={"notification": False, **custom_json.log_extra})
         raise CustomJsonAuthorizationError(message)
 
-    if custom_json.cj_id == InternalConfig().config.hive.custom_json_prefix + "_transfer":
+    if custom_json.cj_id == InternalConfig().config.hive_config.custom_json_prefix + "_transfer":
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
         keepsats_transfer.msats = (
             Decimal(keepsats_transfer.sats * 1000)

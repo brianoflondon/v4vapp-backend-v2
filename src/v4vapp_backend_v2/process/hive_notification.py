@@ -212,9 +212,11 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             notification=True,
         )
         if details.msats and details.msats > 0:
-            custom_json_id = InternalConfig().config.hive.custom_json_prefix + "_transfer"
+            custom_json_id = InternalConfig().config.hive_config.custom_json_prefix + "_transfer"
         else:
-            custom_json_id = InternalConfig().config.hive.custom_json_prefix + "_notification"
+            custom_json_id = (
+                InternalConfig().config.hive_config.custom_json_prefix + "_notification"
+            )
         try:
             trx = await send_custom_json(
                 json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
@@ -345,7 +347,7 @@ async def send_transfer_custom_json(
         # TODO: #169 add pending for custom_json
         json_data = transfer.model_dump(exclude_none=True, exclude_unset=True)
         json_data_converted = convert_decimals_for_mongodb(json_data)
-        id = InternalConfig().config.hive.custom_json_prefix + "_transfer"
+        id = InternalConfig().config.hive_config.custom_json_prefix + "_transfer"
         trx = await send_custom_json(
             json_data=json_data_converted,
             send_account=send_from,

@@ -52,8 +52,8 @@ class Witness(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         # Ensure witness_machine is set to witness_name if not provided
-        if InternalConfig().config.hive:
-            self.witness_machine = InternalConfig().config.hive.witness_key_to_machine_name(
+        if InternalConfig().config.hive_config:
+            self.witness_machine = InternalConfig().config.hive_config.witness_key_to_machine_name(
                 self.witness_name, self.signing_key
             )
 

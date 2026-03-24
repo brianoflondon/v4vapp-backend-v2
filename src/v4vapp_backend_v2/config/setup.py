@@ -25,7 +25,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.error_code_manager import ErrorCodeManager
 
 load_dotenv()
-MIN_CONFIG_VERSION = "0.4.2"
+MIN_CONFIG_VERSION = "0.4.3"
 logger = logging.getLogger("backend")  # __name__ is a common choice
 ICON = "⚙️"
 
@@ -396,6 +396,10 @@ class HiveAccountConfig(BaseConfig):
 
     name: str = ""
     role: HiveRoles = HiveRoles.customer
+    alternate_names: List[str] = Field(
+        default_factory=list,
+        description="Alternate names for the account, e.g. exchange hot wallet names",
+    )
     posting_key: str = ""
     active_key: str = ""
     memo_key: str = ""
@@ -414,6 +418,15 @@ class HiveAccountConfig(BaseConfig):
             List[str]]: A list of the private keys for the account.
         """
         return [key for key in [self.posting_key, self.active_key, self.memo_key] if key]
+
+    def all_names(self) -> List[str]:
+        """
+        Retrieve all names associated with the Hive account, including the primary name and any alternate names.
+
+        Returns:
+            List[str]: A list of all names associated with the Hive account.
+        """
+        return [self.name] + self.alternate_names
 
 
 class WitnessMachineConfig(BaseConfig):
@@ -821,7 +834,7 @@ class Config(BaseModel):
     notification_bots: Dict[str, NotificationBotConfig] = {}
 
     api_keys: ApiKeys = ApiKeys()
-    hive: HiveConfig = HiveConfig()
+    hive_config: HiveConfig = HiveConfig()
     expense_config: ExpenseConfig = ExpenseConfig(default_ledger_type=LedgerType.EXPENSE)
 
     admin_config: AdminConfig = AdminConfig()
@@ -893,9 +906,9 @@ class Config(BaseModel):
         Returns:
             bool: True if the configuration is valid, False otherwise.
         """
-        if not self.hive:
+        if not self.hive_config:
             return False
-        return self.hive.valid_hive_config
+        return self.hive_config.valid_hive_config
 
     @property
     def lnd_connections_names(self) -> str:
@@ -1499,8 +1512,8 @@ class InternalConfig:
         Returns:
             str: The server ID, which is the name of the server account.
         """
-        if self.config.hive.server_account:
-            return self.config.hive.server_account.name
+        if self.config.hive_config.server_account:
+            return self.config.hive_config.server_account.name
         return ""
 
     @property
