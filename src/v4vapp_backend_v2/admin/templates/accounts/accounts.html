@@ -252,6 +252,10 @@
         document.getElementById('as_of_date_str').value = isoString;
     }
 
+    function isVscAccountName(accountName) {
+        return (accountName || '').toLowerCase().includes('vsc liability');
+    }
+
     // Filter accounts by sub account (supports excluding VSC Liability)
     function filterBySubAccount() {
         const subFilter = document.getElementById('sub_filter').value;
@@ -262,10 +266,6 @@
 
         // Reset selection
         accountSelect.value = '';
-
-        function isVscAccountName(accountName) {
-            return (accountName || '').toLowerCase().includes('vsc liability');
-        }
 
         function isVscOption(opt) {
             const accountName = opt.getAttribute('data-name') || '';
