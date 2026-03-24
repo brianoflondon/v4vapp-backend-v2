@@ -61,7 +61,7 @@ async def send_hive_customer_to_server(
     else:
         hive_amount = amount
 
-    hive_config = InternalConfig().config.hive
+    hive_config = InternalConfig().config.hive_config
     hive_client = await get_verified_hive_client_for_accounts([customer])
     server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
 
@@ -93,7 +93,7 @@ async def main():
     #     5010, "v4vapp.qrc #v4vapp Sending sats to another account"
     # )
 
-    custom_json_prefix = InternalConfig().config.hive.custom_json_prefix
+    custom_json_prefix = InternalConfig().config.hive_config.custom_json_prefix
     connection_name = "voltage"
     send_to = "devser.v4vapp"
 
@@ -118,7 +118,6 @@ async def main():
     )
     hive_client = get_hive_client(keys=[active_key])
     # hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
-
 
     trx = await send_custom_json(
         json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
@@ -159,8 +158,6 @@ async def main():
         hive_client=hive_client,
     )
     pprint(trx)
-
-
 
     sats = 1007
     transfer = KeepsatsTransfer(

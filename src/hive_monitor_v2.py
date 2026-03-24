@@ -210,7 +210,7 @@ async def balance_server_hive_level() -> None:
         None: The function does not return any value.
     """
     # Placeholder for future implementation of balancing Hive level
-    server_account = InternalConfig().config.hive.server_account
+    server_account = InternalConfig().config.hive_config.server_account
     if not server_account:
         return
 
@@ -281,15 +281,15 @@ async def balance_server_hbd_level(transfer: Transfer | None = None) -> None:
     use_account = None
     try:
         if not transfer:
-            use_account = CONFIG.hive.server_account_names[0]
+            use_account = CONFIG.hive_config.server_account_names[0]
         else:
-            if transfer.from_account in CONFIG.hive.server_account_names:
+            if transfer.from_account in CONFIG.hive_config.server_account_names:
                 use_account = transfer.from_account
-            elif transfer.to_account in CONFIG.hive.server_account_names:
+            elif transfer.to_account in CONFIG.hive_config.server_account_names:
                 use_account = transfer.to_account
             else:
                 return
-        hive_acc = CONFIG.hive.hive_accs.get(use_account, None)
+        hive_acc = CONFIG.hive_config.hive_accs.get(use_account, None)
         if hive_acc and hive_acc.active_key:
             # set the amount to the current HBD balance taken from Config
             set_amount_to = Amount(hive_acc.hbd_balance)
@@ -487,7 +487,7 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
     """
     global TIME_DELAY
     failure_state = False
-    witness_configs = InternalConfig().config.hive.witness_configs
+    witness_configs = InternalConfig().config.hive_config.witness_configs
     witness_config = witness_configs.get(witness_name, None)
     if not witness_config:
         logger.warning(
@@ -527,7 +527,7 @@ async def witness_check_startup() -> None:
         None
     """
     try:
-        witness_configs = InternalConfig().config.hive.witness_configs
+        witness_configs = InternalConfig().config.hive_config.witness_configs
         for witness_name in witness_configs.keys():
             asyncio.create_task(witness_check_heartbeat_loop(witness_name=witness_name))
     except Exception as e:
@@ -563,9 +563,9 @@ async def all_ops_loop(
         f"{ICON} Combined Loop Watching users: {watch_users} and witnesses {watch_witnesses}"
     )
     OpBase.watch_users = watch_users
-    OpBase.proposals_tracked = InternalConfig().config.hive.proposals_tracked
-    OpBase.custom_json_ids_tracked = InternalConfig().config.hive.custom_json_ids_tracked
-    server_accounts = InternalConfig().config.hive.server_account_names
+    OpBase.proposals_tracked = InternalConfig().config.hive_config.proposals_tracked
+    OpBase.custom_json_ids_tracked = InternalConfig().config.hive_config.custom_json_ids_tracked
+    server_accounts = InternalConfig().config.hive_config.server_account_names
     if server_accounts:
         v4v_config = V4VConfig(server_accname=server_accounts[0])
     else:
@@ -575,7 +575,7 @@ async def all_ops_loop(
     for witness in watch_witnesses:
         asyncio.create_task(witness_first_run(witness), name=f"witness_first_run_{witness}")
 
-    hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
+    hive_client = get_hive_client(keys=InternalConfig().config.hive_config.memo_keys)
     if start_block == 0:
         last_good_block = await get_last_good_block() + 1
     elif start_block == -1:
@@ -730,7 +730,7 @@ async def all_ops_loop(
                     f"{ICON} Hive client not available, re-fetching new hive-client",
                     extra={"notification": False},
                 )
-                hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
+                hive_client = get_hive_client(keys=InternalConfig().config.hive_config.memo_keys)
 
 
 async def combined_logging(
@@ -1008,9 +1008,9 @@ def main(
     # sleep for a random amount of time 0.1 to 0.8 seconds
     sleep(time_delay)
     if not watch_users:
-        watch_users = CONFIG.hive.watch_users
+        watch_users = CONFIG.hive_config.watch_users
     if not watch_witnesses:
-        watch_witnesses = CONFIG.hive.watch_witnesses
+        watch_witnesses = CONFIG.hive_config.watch_witnesses
     COMMAND_LINE_WATCH_ONLY = watch_only
     asyncio.run(main_async_start(watch_users, watch_witnesses, start_block=start_block))
 

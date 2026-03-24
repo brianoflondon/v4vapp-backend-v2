@@ -37,9 +37,11 @@ async def process_witness_event(tracked_op: TrackedProducer) -> None:
     Raises:
         None: Exceptions are caught internally and logged.
     """
-    if tracked_op.producer not in InternalConfig().config.hive.watch_witnesses:
+    if tracked_op.producer not in InternalConfig().config.hive_config.watch_witnesses:
         return
-    witness_config = InternalConfig().config.hive.witness_configs.get(tracked_op.producer, None)
+    witness_config = InternalConfig().config.hive_config.witness_configs.get(
+        tracked_op.producer, None
+    )
     if not witness_config:
         return
     try:
@@ -92,7 +94,7 @@ async def check_witness_heartbeat(
     Returns:
         None
     """
-    witness_config = InternalConfig().config.hive.witness_configs.get(witness_name, None)
+    witness_config = InternalConfig().config.hive_config.witness_configs.get(witness_name, None)
     if not witness_config:
         logger.warning(
             f"{ICON} Witness {witness_name} configuration not found.",
@@ -277,7 +279,7 @@ async def send_kuma_heartbeat(
     Returns:
         None
     """
-    witness_config = InternalConfig().config.hive.witness_configs.get(witness, None)
+    witness_config = InternalConfig().config.hive_config.witness_configs.get(witness, None)
     if not witness_config:
         logger.warning(
             f"{ICON} Kuma webhook URL not configured. Skipping heartbeat.",
@@ -484,7 +486,9 @@ async def update_witness_properties_switch_machine(
         new_signing_key = "STM1111111111111111111111111111111114T1Anm"  # Disable witness
     else:
         new_signing_key = ""
-        for machine in InternalConfig().config.hive.witness_configs[witness_name].witness_machines:
+        for machine in (
+            InternalConfig().config.hive_config.witness_configs[witness_name].witness_machines
+        ):
             if machine.name == machine_name:
                 new_signing_key = machine.signing_key
                 break

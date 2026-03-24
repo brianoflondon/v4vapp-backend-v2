@@ -27,7 +27,7 @@ def test_custom_json_uses_transfer_logic_authorized_server_to_treasury(monkeypat
         "_instance",
         SimpleNamespace(
             config=SimpleNamespace(
-                hive=SimpleNamespace(
+                hive_config=SimpleNamespace(
                     all_account_names=["server", "treasury", "funding", "exchange"],
                     server_account_names=["server"],
                     exchange_account_names=["exchange"],
@@ -67,7 +67,7 @@ def test_custom_json_uses_transfer_logic_authorized_server_to_customer(monkeypat
         "_instance",
         SimpleNamespace(
             config=SimpleNamespace(
-                hive=SimpleNamespace(
+                hive_config=SimpleNamespace(
                     all_account_names=["server", "treasury", "funding", "exchange"],
                     server_account_names=["server"],
                     exchange_account_names=["exchange"],
@@ -106,7 +106,7 @@ def test_custom_json_unauthorized_sets_server_id(monkeypatch):
         "_instance",
         SimpleNamespace(
             config=SimpleNamespace(
-                hive=SimpleNamespace(
+                hive_config=SimpleNamespace(
                     all_account_names=["server", "treasury", "funding", "exchange"],
                     server_account_names=["server"],
                     custom_json_ids_tracked=[],

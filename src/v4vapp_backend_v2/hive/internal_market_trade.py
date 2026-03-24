@@ -48,7 +48,7 @@ def account_trade(
     """
     if hive_acc is None:
         raise ValueError(f"Account {hive_acc.name} not found in config")
-    hive_configs = InternalConfig().config.hive
+    hive_configs = InternalConfig().config.hive_config
     if not hive_configs or not hive_configs.hive_accs:
         message = "No Hive accounts found in config"
         logger.error(f"{ICON} {message}")
@@ -146,7 +146,7 @@ def market_trade(
     """
     quote = None
     try:
-        hive_configs = InternalConfig().config.hive
+        hive_configs = InternalConfig().config.hive_config
         if hive_acc.name in hive_configs.hive_accs:
             hive_acc = hive_configs.hive_accs[hive_acc.name]
 

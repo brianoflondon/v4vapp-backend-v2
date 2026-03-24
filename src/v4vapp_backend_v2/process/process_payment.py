@@ -228,7 +228,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     # factors
 
     if cust_id in InternalConfig().config.expense_config.all_lnd_rule_hive_accounts(
-        InternalConfig().config.hive
+        InternalConfig().config.hive_config
     ):
         expense_rule = InternalConfig().config.expense_config.lnd_expense_rules.get(
             payment.destination_p

@@ -59,7 +59,7 @@ async def test_process_transfer_op_deposit_hive():
     Side Effects:
         - Ledger database contains one deposit entry for the customer account.
     """
-    hive_config = InternalConfig().config.hive
+    hive_config = InternalConfig().config.hive_config
     server_account, treasury_account, funding_account, exchange_account = (
         hive_config.all_account_names
     )

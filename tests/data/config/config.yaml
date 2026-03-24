@@ -1,5 +1,5 @@
 ########### TEST CONFIG NO SECRETS #################
-version: "0.4.2"
+version: "0.4.3"
 
 logging:
   log_config_file: 2-stderr-json-file.json
@@ -219,7 +219,7 @@ api_keys:
 
 ########### TEST CONFIG NO SECRETS #################
 
-hive:
+hive_config:
   hive_accs:
     someaccount:
       role: server
@@ -243,6 +243,9 @@ hive:
       role: funding
     fiction:
       role: exchange
+      alternate_names:
+        - b-hot2
+        - b-hot3
     brianoflondon:
       active_key: 5K5xuVxQs7jxp75yY6vsvHxdoyV5y2w8A5Lt6XQBG2yqFbWpALx
       role: witness
