@@ -99,6 +99,33 @@ class LedgerType(StrEnum):
         return ans
 
 
+@dataclass(frozen=True)
+class LedgerHierarchy:
+    exchange = [
+        LedgerType.EXCHANGE_CONVERSION,
+        LedgerType.EXCHANGE_FEES,
+        LedgerType.SERVER_TO_EXCHANGE,
+        LedgerType.EXCHANGE_TO_TREASURY,
+        LedgerType.TREASURY_TO_EXCHANGE,
+    ]
+    customer = [
+        LedgerType.CUSTOMER_HIVE_IN,
+        LedgerType.CUSTOMER_HIVE_OUT,
+        LedgerType.CONV_CUSTOMER,
+        LedgerType.CONSUME_CUSTOMER_KEEPSATS,
+        LedgerType.WITHDRAW_HIVE,
+        LedgerType.DEPOSIT_HIVE,
+        LedgerType.DEPOSIT_LIGHTNING,
+        LedgerType.WITHDRAW_LIGHTNING,
+    ]
+    fees = [
+        LedgerType.FEE_INCOME,
+        LedgerType.FEE_EXPENSE,
+        LedgerType.CUSTOM_JSON_FEE,
+        LedgerType.CUSTOM_JSON_FEE_REFUND,
+    ]
+
+
 """
 These two classes are used in the accounting classes to provide icons and string representations
 for different ledger types.

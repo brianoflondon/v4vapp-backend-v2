@@ -7,7 +7,7 @@ Provides a simple page and data endpoint to browse ledger entries.
 import asyncio
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
-from typing import Optional
+from typing import Any, Mapping, Optional, Sequence
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -164,6 +164,80 @@ async def ledger_entries_data(
     # Count total matching documents
     total = await LedgerEntry.collection().count_documents(query)
 
+    # Compute aggregate totals for matching query (all entries, not only current page)
+    totals_pipeline: Sequence[Mapping[str, Any]] = [
+        {"$match": query},
+        {
+            "$group": {
+                "_id": None,
+                "hive": {
+                    "$sum": {
+                        "$ifNull": [
+                            "$debit_conv.hive",
+                            {"$ifNull": ["$credit_conv.hive", 0]},
+                        ]
+                    }
+                },
+                "hbd": {
+                    "$sum": {
+                        "$ifNull": [
+                            "$debit_conv.hbd",
+                            {"$ifNull": ["$credit_conv.hbd", 0]},
+                        ]
+                    }
+                },
+                "usd": {
+                    "$sum": {
+                        "$ifNull": [
+                            "$debit_conv.usd",
+                            {"$ifNull": ["$credit_conv.usd", 0]},
+                        ]
+                    }
+                },
+                "sats": {
+                    "$sum": {
+                        "$ifNull": [
+                            "$debit_conv.sats_rounded",
+                            {
+                                "$ifNull": [
+                                    "$debit_conv.sats",
+                                    {
+                                        "$ifNull": [
+                                            "$credit_conv.sats_rounded",
+                                            {"$ifNull": ["$credit_conv.sats", 0]},
+                                        ]
+                                    },
+                                ]
+                            },
+                        ]
+                    }
+                },
+            }
+        },
+    ]
+
+    agg_cursor = await LedgerEntry.collection().aggregate(totals_pipeline)
+    totals_agg = await agg_cursor.to_list(length=1)
+    totals_doc = totals_agg[0] if totals_agg else {}
+    from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
+
+    totals_doc = convert_decimal128_to_decimal(totals_doc)
+    from decimal import Decimal
+
+    def _normalize_num(val):
+        if isinstance(val, Decimal):
+            return float(val)
+        if val is None:
+            return 0
+        return val
+
+    totals = {
+        "hive": _normalize_num(totals_doc.get("hive", 0)),
+        "hbd": _normalize_num(totals_doc.get("hbd", 0)),
+        "usd": _normalize_num(totals_doc.get("usd", 0)),
+        "sats": _normalize_num(totals_doc.get("sats", 0)),
+    }
+
     # Fetch paginated documents
     cursor = (
         LedgerEntry.collection()
@@ -270,7 +344,7 @@ async def ledger_entries_data(
             }
         )
 
-    return JSONResponse({"count": total, "entries": entries})
+    return JSONResponse({"count": total, "entries": entries, "totals": totals})
 
 
 @router.post("/reverse")
@@ -458,17 +532,9 @@ async def ledger_entries_page(
         except Exception:
             account = None
 
-    # Fetch entries on server-side so tests that verify content can see them
-    ledger_entries = await get_ledger_entries(
-        as_of_date=to_date,
-        filter_by_account=account,
-        filter_by_ledger_types=ledger_types,
-        group_id=group_id,
-        short_id=short_id,
-        sub_account=(None if account else sub_filter),
-        age_hours=age_hours,
-    )
-
+    # Avoid fetching all matching entries for initial page render (very large datasets can make this slow).
+    # AJAX fetchEntries() will load paged data in the browser.
+    ledger_entries = []
     t5 = timer()
 
     nav_items = nav_manager.get_navigation_items("/admin/ledger-entries")
@@ -476,7 +542,8 @@ async def ledger_entries_page(
 
     t6 = timer()
     logger.info(f"Completed sanity checks in {t6 - t5:.3f} s")
-    return templates.TemplateResponse(request, 
+    return templates.TemplateResponse(
+        request,
         "ledger_entries/entries.html",
         {
             "request": request,

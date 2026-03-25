@@ -36,6 +36,11 @@ class DummyCursor:
     def limit(self, n):
         return self
 
+    async def to_list(self, length=None):
+        if length is None or length < 0:
+            return list(self._items)
+        return list(self._items)[:length]
+
 
 class DummyCollection:
     def __init__(self, items):
@@ -46,6 +51,10 @@ class DummyCollection:
 
     def find(self, *args, **kwargs):
         return DummyCursor(self._items)
+
+    async def aggregate(self, pipeline):
+        # return zero totals for simple dummy entries for testing
+        return DummyCursor([{"_id": None, "hive": 0, "hbd": 0, "usd": 0, "sats": 0}])
 
 
 @pytest.mark.asyncio
@@ -95,6 +104,9 @@ async def test_ledger_entries_data_includes_op_type(monkeypatch):
     data = json.loads(body)
     assert "reversed" in data["entries"][0]
     assert data["entries"][0]["reversed"] is not None
+    assert "totals" in data
+    assert data["totals"]["hive"] == 0
+    assert data["totals"]["sats"] == 0
 
 
 @pytest.mark.asyncio
