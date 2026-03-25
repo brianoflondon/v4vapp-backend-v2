@@ -99,6 +99,7 @@ class LedgerType(StrEnum):
         return ans
 
 
+@dataclass(frozen=True)
 class LedgerHierarchy:
     exchange = [
         LedgerType.EXCHANGE_CONVERSION,
