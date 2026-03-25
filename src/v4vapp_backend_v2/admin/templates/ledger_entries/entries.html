@@ -615,13 +615,13 @@
         }
 
         totalSummary.innerHTML = `
-            <table class="table table-sm table-bordered mb-0" style="width:auto; min-width:320px;">
+            <table class="table table-sm table-bordered mb-0" style="width:auto; min-width:360px;">
                 <thead><tr><th colspan="2">Total Converted Value (all matching entries)</th></tr></thead>
                 <tbody>
-                    <tr><td>HIVE</td><td>${formatTotalNumber(totals.hive, 3)} HIVE</td></tr>
-                    <tr><td>HBD</td><td>${formatTotalNumber(totals.hbd, 3)} HBD</td></tr>
-                    <tr><td>USD</td><td>${formatTotalNumber(totals.usd, 2)} USD</td></tr>
-                    <tr><td>SATS</td><td>${formatTotalNumber(totals.sats, 0)} SATS</td></tr>
+                    <tr><td>HIVE</td><td class="text-end">${formatTotalNumber(totals.hive, 3)}</td></tr>
+                    <tr><td>HBD</td><td class="text-end">${formatTotalNumber(totals.hbd, 3)}</td></tr>
+                    <tr><td>USD</td><td class="text-end">${formatTotalNumber(totals.usd, 2)}</td></tr>
+                    <tr><td>SATS</td><td class="text-end">${formatTotalNumber(totals.sats, 0)}</td></tr>
                 </tbody>
             </table>
         `
