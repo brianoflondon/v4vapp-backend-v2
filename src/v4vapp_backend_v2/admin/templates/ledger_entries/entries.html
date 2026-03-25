@@ -320,8 +320,11 @@
 
 <!-- Search metadata and controls -->
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <div>Found <strong id="entries-count">0</strong> entries <span id="ledger-last-query"
-            class="text-muted small ms-2"></span></div>
+    <div>
+        Found <strong id="entries-count">0</strong> entries
+        <span id="ledger-last-query" class="text-muted small ms-2"></span>
+        <div id="ledger-total-summary" class="mt-2"></div>
+    </div>
     <div>
         <div id="ledger-alert" class="alert alert-danger d-none py-1 px-2 mb-0" role="alert"
             style="display:inline-block"></div>
@@ -353,7 +356,8 @@
             </div>
 
             <div class="d-flex justify-content-between mt-2">
-                <div><strong>Customer ID :</strong> {% if entry.cust_id_from and entry.cust_id_to %}{{ entry.cust_id_from }} → {{ entry.cust_id_to }}{% else %}{{ entry.cust_id or '' }}{% endif %}</div>
+                <div><strong>Customer ID :</strong> {% if entry.cust_id_from and entry.cust_id_to %}{{
+                    entry.cust_id_from }} → {{ entry.cust_id_to }}{% else %}{{ entry.cust_id or '' }}{% endif %}</div>
                 <div class="text-muted position-relative">
                     {% if entry.reversed %}
                     <span class="badge bg-warning text-dark me-1">REVERSED</span>
@@ -592,6 +596,37 @@
             .join(" &nbsp;&nbsp; ")
     }
 
+    function formatTotalNumber(amount, decimals) {
+        if (amount === null || amount === undefined) return "0"
+        const n = Number(amount)
+        if (isNaN(n)) return String(amount)
+        return n.toLocaleString(undefined, {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+        })
+    }
+
+    function renderTotals(totals) {
+        const totalSummary = document.getElementById("ledger-total-summary")
+        if (!totalSummary) return
+        if (!totals || (totals.hive == null && totals.hbd == null && totals.usd == null && totals.sats == null)) {
+            totalSummary.innerHTML = ""
+            return
+        }
+
+        totalSummary.innerHTML = `
+            <table class="table table-sm table-bordered mb-0" style="width:auto; min-width:320px;">
+                <thead><tr><th colspan="2">Total Converted Value (all matching entries)</th></tr></thead>
+                <tbody>
+                    <tr><td>HIVE</td><td>${formatTotalNumber(totals.hive, 3)} HIVE</td></tr>
+                    <tr><td>HBD</td><td>${formatTotalNumber(totals.hbd, 3)} HBD</td></tr>
+                    <tr><td>USD</td><td>${formatTotalNumber(totals.usd, 2)} USD</td></tr>
+                    <tr><td>SATS</td><td>${formatTotalNumber(totals.sats, 0)} SATS</td></tr>
+                </tbody>
+            </table>
+        `
+    }
+
     async function fetchEntries() {
         const params = new URLSearchParams()
         const form = document.querySelector(".needs-validation")
@@ -650,7 +685,10 @@
         const url = "/admin/ledger-entries/data?" + params.toString()
         try {
             const res = await fetch(url)
-            document.getElementById('ledger-last-query').innerText = url
+            const queryEl = document.getElementById('ledger-last-query')
+            if (queryEl) {
+                queryEl.innerHTML = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`
+            }
             const ledgerAlert = document.getElementById('ledger-alert')
             ledgerAlert.classList.add('d-none')
             ledgerAlert.style.display = 'none'
@@ -663,9 +701,10 @@
                 return
             }
             const data = await res.json()
-            // update total count and entries
+            // update total count, totals, and entries
             window.__ledger_entries_total = data.count
             document.getElementById("entries-count").innerText = data.count
+            renderTotals(data.totals || null)
             renderEntries(data.entries || [], data.count)
             // Manage Load more button state
             const loadMoreBtn = document.getElementById("load-more-entries")
