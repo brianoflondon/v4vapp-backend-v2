@@ -343,6 +343,7 @@ async def one_account_balance(
     age: timedelta | None = None,
     in_progress: InProgressResults | None = None,
     use_cache: bool = True,
+    use_checkpoints: bool = True,
 ) -> LedgerAccountDetails:
     """
     Retrieve the balance details for a single ledger account as of a specified date.
@@ -353,6 +354,8 @@ async def one_account_balance(
         age (timedelta | None, optional): Optional age filter for the balance calculation.
         in_progress (InProgressResults | None, optional): Pre-computed in-progress results. If None, fetched fresh.
         use_cache (bool): If True, try Redis cache before hitting the database. Defaults to True.
+        use_checkpoints (bool): If True and ``as_of_date`` is provided, try to start from a
+            pre-calculated checkpoint and only aggregate the incremental delta.  Defaults to True.
     Returns:
         LedgerAccountDetails: The details of the account balance as of the specified date.
     Raises:
@@ -381,14 +384,37 @@ async def one_account_balance(
                 all_held_result = await all_held_msats()
                 in_progress = InProgressResults(results=all_held_result)
             cached_result.in_progress_msats = in_progress.get_net_held(account.sub)
-            _t1 = timer()
-            # logger.info(
-            #     f"cache_hit={(_t1 - _t0):.3f}s for one_account_balance "
-            #     f"(account={account}, age={age})"
-            # )
             return cached_result
 
-    pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
+    # --- Checkpoint lookup (only for explicit historical queries without an age window) ---
+    checkpoint = None
+    from_date: datetime | None = None
+    if use_checkpoints and as_of_date is not None and age is None:
+        from v4vapp_backend_v2.accounting.ledger_checkpoints import get_latest_checkpoint_before
+
+        try:
+            checkpoint = await get_latest_checkpoint_before(account, as_of_date)
+            if checkpoint is not None:
+                from_date = checkpoint.period_end
+                logger.debug(
+                    f"📌 Using checkpoint for {account.name}:{account.sub} "
+                    f"@ {checkpoint.period_end.date()} → delta from {from_date.date()} to {as_of_date.date()}",
+                    extra={"notification": False},
+                )
+        except Exception as e:
+            logger.debug(
+                f"Checkpoint lookup failed for {account.name}:{account.sub}: {e}",
+                extra={"notification": False},
+            )
+            checkpoint = None
+            from_date = None
+
+    pipeline = all_account_balances_pipeline(
+        account=account,
+        as_of_date=as_of_date,
+        age=age,
+        from_date=from_date,
+    )
     _t1 = timer()
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
@@ -399,38 +425,95 @@ async def one_account_balance(
     # If there are multiple entries (e.g., contra and non-contra groups), merge them so both show up
     if account_balance.root and len(account_balance.root) > 0:
         if len(account_balance.root) == 1:
-            ledger_details = account_balance.root[0]
+            merged_balances = {
+                unit: [line.model_copy() for line in lines]
+                for unit, lines in account_balance.root[0].balances.items()
+            }
         else:
             # Merge balances from multiple groups (preserve per-row contra flag and order)
-            merged_balances: dict = {}
+            merged_balances = {}
             for group in account_balance.root:
                 for unit, lines in group.balances.items():
                     merged_balances.setdefault(unit, [])
                     # copy to avoid mutating original objects
                     merged_balances[unit].extend([line.model_copy() for line in lines])
 
-            # Sort and recompute running totals (amount_running_total and conv_running_total)
-            from datetime import datetime as _dt
+        # Sort and recompute running totals (amount_running_total and conv_running_total)
+        from datetime import datetime as _dt
 
+        for unit, rows in merged_balances.items():
+            rows.sort(key=lambda x: x.timestamp or _dt.min.replace(tzinfo=_dt.now().tzinfo))
+            running_amount = Decimal(0)
+            running_conv = ConvertedSummary()
+            for row in rows:
+                running_amount += row.amount_signed
+                row.amount_running_total = running_amount
+                running_conv = running_conv + ConvertedSummary.from_crypto_conv(row.conv_signed)
+                row.conv_running_total = running_conv
+
+        # --- Apply checkpoint offsets to running totals ---
+        if checkpoint is not None:
             for unit, rows in merged_balances.items():
-                rows.sort(key=lambda x: x.timestamp or _dt.min.replace(tzinfo=_dt.now().tzinfo))
-                running_amount = Decimal(0)
-                running_conv = ConvertedSummary()
+                cp_net = checkpoint.balances_net.get(str(unit), Decimal(0))
+                cp_conv_raw = checkpoint.conv_totals.get(str(unit))
+                cp_conv = (
+                    cp_conv_raw.to_converted_summary()
+                    if cp_conv_raw is not None
+                    else ConvertedSummary()
+                )
                 for row in rows:
-                    running_amount += row.amount_signed
-                    row.amount_running_total = running_amount
-                    running_conv = running_conv + ConvertedSummary.from_crypto_conv(
-                        row.conv_signed
-                    )
-                    row.conv_running_total = running_conv
+                    row.amount_running_total += cp_net
+                    row.conv_running_total = row.conv_running_total + cp_conv
 
-            ledger_details = LedgerAccountDetails(
+        ledger_details = LedgerAccountDetails(
+            name=account.name,
+            account_type=account.account_type,
+            sub=account.sub,
+            contra=account.contra,
+            balances=merged_balances,
+        )
+    elif checkpoint is not None:
+        # Delta pipeline returned no rows; balance equals checkpoint values.
+        # Construct a synthetic set of balance lines so callers see non-zero totals.
+        from v4vapp_backend_v2.accounting.accounting_classes import AccountBalanceLine
+
+        synthetic_balances = {}
+        for unit_str, net_val in checkpoint.balances_net.items():
+            if net_val == Decimal(0):
+                continue
+            from v4vapp_backend_v2.helpers.currency_class import Currency
+
+            try:
+                currency = Currency(unit_str)
+            except ValueError:
+                continue
+            cp_conv_raw = checkpoint.conv_totals.get(unit_str)
+            cp_conv = (
+                cp_conv_raw.to_converted_summary()
+                if cp_conv_raw is not None
+                else ConvertedSummary()
+            )
+            line = AccountBalanceLine(
+                timestamp=checkpoint.period_end,
+                description="Checkpoint balance",
+                unit=unit_str,
+                amount=abs(net_val),
+                amount_signed=net_val,
+                amount_running_total=net_val,
+                conv_running_total=cp_conv,
+                account_type=str(account.account_type),
                 name=account.name,
-                account_type=account.account_type,
                 sub=account.sub,
                 contra=account.contra,
-                balances=merged_balances,
             )
+            synthetic_balances[currency] = [line]
+        ledger_details = LedgerAccountDetails(
+            name=account.name,
+            account_type=account.account_type,
+            sub=account.sub,
+            contra=account.contra,
+            balances=synthetic_balances,
+        )
     else:
         ledger_details = LedgerAccountDetails(
             name=account.name,
@@ -446,6 +529,10 @@ async def one_account_balance(
             for line in balance_lines:
                 if line.timestamp and (max_timestamp is None or line.timestamp > max_timestamp):
                     max_timestamp = line.timestamp
+        # When using a checkpoint, the last transaction date could be in the checkpoint
+        if checkpoint is not None and checkpoint.last_transaction_date is not None:
+            if max_timestamp is None or checkpoint.last_transaction_date > max_timestamp:
+                max_timestamp = checkpoint.last_transaction_date
         ledger_details.last_transaction_date = max_timestamp
 
     if in_progress is None:
@@ -453,14 +540,6 @@ async def one_account_balance(
         in_progress = InProgressResults(results=all_held_result)
     ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
     _t5 = timer()
-    # logger.info(
-    #     # f"pipeline_build={(_t1 - _t0):.3f}s, "
-    #     f"aggregate={(_t2 - _t1):.3f}s, "
-    #     f"to_list={(_t3 - _t2):.3f}s, "
-    #     # f"clean={(_t4 - _t3):.3f}s, "
-    #     # f"merge={(_t5 - _t4):.3f}s, "
-    #     f"total={(_t5 - _t0):.3f}s for one_account_balance (account={account}, age={age})"
-    # )
 
     # --- Cache store ---
     if use_cache:

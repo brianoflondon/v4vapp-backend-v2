@@ -85,6 +85,7 @@ def all_account_balances_pipeline(
     sub: str | None = None,
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
+    from_date: datetime | None = None,
     filter: Mapping[str, Any] | None = None,
     cust_ids: Set[str] | None = None,
     hide_reversed: bool = True,
@@ -94,6 +95,10 @@ def all_account_balances_pipeline(
     Notes:
     - The pipeline can be filtered by specific account details (account object, account name, or sub).
     - The pipeline considers transactions up to a specified date (`as_of_date`) and can be limited to a certain age (time window) if `age` is provided.
+    - When `from_date` is provided the pipeline fetches only transactions with
+      ``timestamp > from_date`` (and ``≤ as_of_date``).  This is used by the
+      checkpoint system to run incremental queries from a known checkpoint state.
+      ``from_date`` takes precedence over ``age``.
     - The resulting documents include running totals for amounts and conversions in various currencies, grouped by account and unit.
     The order of precedence for filtering is: `account` > `account_name` > `sub`. If none are provided, the pipeline will include all accounts.
 
@@ -103,6 +108,7 @@ def all_account_balances_pipeline(
         sub (str, optional): The sub identifier to filter transactions.
         as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
         age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
+        from_date (datetime | None, optional): Lower-bound for the timestamp filter (exclusive).  When set, overrides ``age``.  Used by the checkpoint system.
         filter (Mapping[str, Any], optional): Additional MongoDB filter to apply to the transactions.
         cust_ids (Set[str] | None, optional): A set of customer IDs to restrict the transactions to. If provided, only transactions with `cust_id` in this set will be included.
         hide_reversed (bool, optional): If True, excludes transactions that have been reversed (i.e., those with a `reversed` field). Defaults to True.
@@ -154,7 +160,13 @@ def all_account_balances_pipeline(
     facet_debit_match = {"$match": debit_match_query}
     facet_credit_match = {"$match": credit_match_query}
 
-    if age:
+    if from_date is not None:
+        # Incremental / checkpoint mode: fetch only transactions strictly after
+        # from_date up to as_of_date.
+        if as_of_date is None:
+            as_of_date = datetime.now(tz=timezone.utc)
+        date_range_query = {"$gt": from_date, "$lte": as_of_date}
+    elif age:
         if not as_of_date:
             as_of_date = datetime.now(tz=timezone.utc)
         date_range_query = {"$gte": as_of_date - age, "$lte": as_of_date}
