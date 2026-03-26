@@ -80,13 +80,14 @@ async def _log_outstanding_locks() -> None:
                 f"{f' | {preview}{suffix}' if preview else ''}"
             )
         logger.info(
-            f"{ICON} {Fore.YELLOW}Outstanding lock waiters:\n"
-            + "\n".join(lines)
-            + f"{Style.RESET_ALL}",
+            f"{ICON} {Fore.YELLOW}Outstanding lock waiters:{Style.RESET_ALL}",
             extra={"notification": False},
         )
-    # else:
-    #     logger.debug(f"{ICON} No outstanding lock waiters.", extra={"notification": False})
+        for line in lines:
+            logger.info(
+                f"{ICON} {line}",
+                extra={"notification": False},
+            )
 
     # Active Redis locks (cross-process visibility)
     try:
