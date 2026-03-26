@@ -342,6 +342,51 @@ class LedgerAccountDetails(LedgerAccount):
         """
         return self.balances_printout()
 
+    def _recompute_summaries(self) -> None:
+        """Recompute scalar summary fields from the current state of `balances`.
+
+        Call this after mutating `amount_running_total` / `conv_running_total` on
+        balance rows (e.g. after applying an opening-balance offset) so that
+        `hive`, `hbd`, `msats`, `sats`, `balances_net`, and `balances_totals`
+        all reflect the updated values.
+        """
+        self.hive = Decimal(0)
+        self.hbd = Decimal(0)
+        self.usd = Decimal(0)
+        self.msats = Decimal(0)
+        self.sats = Decimal(0)
+        self.conv_total = ConvertedSummary()
+
+        if Currency.HIVE in self.balances and self.balances[Currency.HIVE]:
+            self.hive = self.balances[Currency.HIVE][-1].amount_running_total.quantize(
+                Decimal("0.001"), rounding="ROUND_HALF_UP"
+            )
+            self.conv_total += self.balances[Currency.HIVE][-1].conv_running_total
+        if Currency.HBD in self.balances and self.balances[Currency.HBD]:
+            self.hbd = self.balances[Currency.HBD][-1].amount_running_total.quantize(
+                Decimal("0.001"), rounding="ROUND_HALF_UP"
+            )
+            self.conv_total += self.balances[Currency.HBD][-1].conv_running_total
+        if Currency.USD in self.balances and self.balances[Currency.USD]:
+            self.usd = self.balances[Currency.USD][-1].amount_running_total.quantize(
+                Decimal("0.001"), rounding="ROUND_HALF_UP"
+            )
+            self.conv_total += self.balances[Currency.USD][-1].conv_running_total
+        if Currency.MSATS in self.balances and self.balances[Currency.MSATS]:
+            self.msats = self.balances[Currency.MSATS][-1].amount_running_total
+            self.conv_total += self.balances[Currency.MSATS][-1].conv_running_total
+            self.sats = Decimal(self.msats / Decimal(1000)).quantize(
+                Decimal("1"), rounding="ROUND_HALF_UP"
+            )
+
+        for currency, balance_lines in self.balances.items():
+            if balance_lines:
+                self.balances_totals[currency] = balance_lines[-1].conv_running_total
+                self.balances_net[currency] = balance_lines[-1].amount_running_total
+            else:
+                self.balances_totals[currency] = ConvertedSummary()
+                self.balances_net[currency] = Decimal(0)
+
     def balances_printout(self) -> str:
         """
         Returns a formatted string representation of the account details for Keepsats.

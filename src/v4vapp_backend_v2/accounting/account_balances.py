@@ -139,7 +139,7 @@ def _merge_duplicate_accounts(account_balances: AccountBalances) -> AccountBalan
     return account_balances
 
 
-# @async_time_stats_decorator()
+@async_time_decorator
 async def all_account_balances(
     account: LedgerAccount | None = None,
     account_name: str | None = None,
@@ -337,6 +337,7 @@ async def all_account_balances_summary(
     return account_balances
 
 
+@async_time_decorator
 async def one_account_balance(
     account: LedgerAccount | str,
     as_of_date: datetime | None = None,
@@ -495,7 +496,7 @@ async def one_account_balance(
             )
             line = AccountBalanceLine(
                 timestamp=checkpoint.period_end,
-                description="Checkpoint balance",
+                description="Opening Balance",
                 unit=unit_str,
                 amount=abs(net_val),
                 amount_signed=net_val,
@@ -658,6 +659,7 @@ async def account_balance_printout(
     age: timedelta | None = None,
     ledger_account_details: LedgerAccountDetails | None = None,
     quote: QuoteResponse | None = None,
+    period_start: datetime | None = None,
 ) -> Tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account (and optional sub-account).
@@ -671,6 +673,8 @@ async def account_balance_printout(
         age (timedelta | None, optional): An optional age filter for transactions. Defaults to None.
         ledger_account_details (LedgerAccountDetails | None, optional): Pre-computed ledger account details. If None, it will be fetched. Defaults to None.
         quote (QuoteResponse | None, optional): Pre-fetched quote for currency conversions. If None, it will be updated. Defaults to None.
+        period_start (datetime | None, optional): When set and the period produces no transactions, the balance
+            at this date is fetched and shown as the carried-forward opening balance.
 
         Tuple[str, LedgerAccountDetails]: A tuple containing a formatted string with the balance printout and the LedgerAccountDetails object.
 
@@ -687,6 +691,41 @@ async def account_balance_printout(
         ledger_account_details = await one_account_balance(
             account=account, as_of_date=as_of_date, age=age
         )
+
+    # When a period filter is active, fetch the opening balance at period_start and
+    # either: (a) use it directly if there are no transactions in the period, or
+    # (b) apply it as an offset to all running totals so the display shows cumulative
+    # balances from the start of time, not just the incremental period change.
+    opening_balance_carried_forward = False
+    opening_details: LedgerAccountDetails | None = None
+    if period_start is not None:
+        opening_details = await one_account_balance(
+            account=account, as_of_date=period_start, use_cache=False
+        )
+
+    if (
+        not ledger_account_details.balances
+        and opening_details is not None
+        and opening_details.balances
+    ):
+        ledger_account_details = opening_details
+        opening_balance_carried_forward = True
+    elif (
+        ledger_account_details.balances
+        and opening_details is not None
+        and opening_details.balances_net
+    ):
+        # Apply opening balance as offset to every running total in the period window.
+        for unit, rows in ledger_account_details.balances.items():
+            opening_net = opening_details.balances_net.get(unit, Decimal(0))
+            opening_conv = opening_details.balances_totals.get(unit, ConvertedSummary())
+            if opening_net == Decimal(0):
+                continue
+            for row in rows:
+                row.amount_running_total += opening_net
+                row.conv_running_total = row.conv_running_total + opening_conv
+        ledger_account_details._recompute_summaries()
+
     units = set(ledger_account_details.balances.keys())
     if not quote:
         quote = await TrackedBaseModel.update_quote()
@@ -696,6 +735,10 @@ async def account_balance_printout(
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
+    if opening_balance_carried_forward:
+        output.append(
+            f"No new transactions since {period_start.date()} — opening balance carried forward:"
+        )
     output.append("-" * max_width)
 
     if not ledger_account_details.balances:
@@ -743,6 +786,38 @@ async def account_balance_printout(
         )
         all_rows = ledger_account_details.balances[unit]
         if all_rows:
+            # If there's an opening balance from a prior period, emit a synthetic
+            # "=== <period_start date> ===" block with an "Opening Balance" row first.
+            if (
+                not opening_balance_carried_forward
+                and opening_details is not None
+                and opening_details.balances_net
+            ):
+                ob_net = opening_details.balances_net.get(unit, Decimal(0))
+                if ob_net != Decimal(0):
+                    ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
+                    output.append(f"\n=== {ob_date_str} ===")
+                    _, _, ob_bal_fmt = _format_amounts_for_display(
+                        unit,
+                        Decimal(0),
+                        Decimal(0),
+                        ob_net,
+                        conversion_factor,
+                        use_ksats,
+                        msats_nonks_format="one_decimal",
+                    )
+                    ob_desc = truncate_text("Opening Balance", 50)
+                    output.append(
+                        f"{'':>{COL_TS}} "
+                        f"{ob_desc:<{COL_DESC}} "
+                        f"{'   '} "
+                        f"{'':>{COL_DEBIT}} "
+                        f"{'':>{COL_CREDIT}} "
+                        f"{ob_bal_fmt:>{COL_BAL}} "
+                        f"{'':>{COL_SHORT_ID}} "
+                        f"{'ob':>{COL_LEDGER_TYPE}}"
+                    )
+
             transactions_by_date: dict[str, list] = {}
             transactions_by_cust_id: dict[str, list] = {}
             for row in all_rows:
@@ -831,6 +906,7 @@ async def account_balance_printout_grouped_by_customer(
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
     ledger_account_details: LedgerAccountDetails | None = None,
+    period_start: datetime | None = None,
 ) -> Tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account with transactions grouped by date and customer ID.
@@ -846,6 +922,8 @@ async def account_balance_printout_grouped_by_customer(
         as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to None (current date).
         age (timedelta | None, optional): Optional age filter for the balance calculation.
         ledger_account_details (LedgerAccountDetails | None, optional): Pre-fetched account details.
+        period_start (datetime | None, optional): When set and the period produces no transactions, the balance
+            at this date is fetched and shown as the carried-forward opening balance.
 
     Returns:
         str: A formatted string containing the balance with customer-grouped transactions.
@@ -862,6 +940,41 @@ async def account_balance_printout_grouped_by_customer(
         ledger_account_details = await one_account_balance(
             account=account, as_of_date=as_of_date, age=age
         )
+
+    # When a period filter is active, fetch the opening balance at period_start and
+    # either: (a) use it directly if there are no transactions in the period, or
+    # (b) apply it as an offset to all running totals so the display shows cumulative
+    # balances from the start of time, not just the incremental period change.
+    opening_balance_carried_forward = False
+    opening_details: LedgerAccountDetails | None = None
+    if period_start is not None:
+        opening_details = await one_account_balance(
+            account=account, as_of_date=period_start, use_cache=False
+        )
+
+    if (
+        not ledger_account_details.balances
+        and opening_details is not None
+        and opening_details.balances
+    ):
+        ledger_account_details = opening_details
+        opening_balance_carried_forward = True
+    elif (
+        ledger_account_details.balances
+        and opening_details is not None
+        and opening_details.balances_net
+    ):
+        # Apply opening balance as offset to every running total in the period window.
+        for unit, rows in ledger_account_details.balances.items():
+            opening_net = opening_details.balances_net.get(unit, Decimal(0))
+            opening_conv = opening_details.balances_totals.get(unit, ConvertedSummary())
+            if opening_net == Decimal(0):
+                continue
+            for row in rows:
+                row.amount_running_total += opening_net
+                row.conv_running_total = row.conv_running_total + opening_conv
+        ledger_account_details._recompute_summaries()
+
     units = set(ledger_account_details.balances.keys())
     quote = await TrackedBaseModel.update_quote()
 
@@ -870,6 +983,10 @@ async def account_balance_printout_grouped_by_customer(
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
+    if opening_balance_carried_forward:
+        output.append(
+            f"No new transactions since {period_start.date()} — opening balance carried forward:"
+        )
     output.append("-" * max_width)
 
     if not ledger_account_details.balances:
@@ -924,6 +1041,31 @@ async def account_balance_printout_grouped_by_customer(
         )
         all_rows = ledger_account_details.balances[unit]
         if all_rows:
+            # If there's an opening balance from a prior period, emit a synthetic
+            # "=== <period_start date> ===" block with an "Opening Balance" row first.
+            if (
+                not opening_balance_carried_forward
+                and opening_details is not None
+                and opening_details.balances_net
+            ):
+                ob_net = opening_details.balances_net.get(unit, Decimal(0))
+                if ob_net != Decimal(0):
+                    ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
+                    output.append(f"\n=== {ob_date_str} ===")
+                    ob_display = ob_net / conversion_factor if unit.upper() == "MSATS" else ob_net
+                    ob_fmt = f"{ob_display:>11,.3f}"
+                    ob_desc = truncate_text("Opening Balance", 50)
+                    output.append(
+                        f"{'':>{COL_TS}} "
+                        f"{ob_desc:<{COL_DESC}} "
+                        f"{'   '} "
+                        f"{'':>{COL_DEBIT}} "
+                        f"{'':>{COL_CREDIT}} "
+                        f"{ob_fmt:>{COL_BAL}} "
+                        f"{'':>{COL_SHORT_ID}} "
+                        f"{'ob':>{COL_LEDGER_TYPE}}"
+                    )
+
             # Group by date first
             transactions_by_date: dict[str, list] = {}
             for row in all_rows:

@@ -40,6 +40,7 @@ from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
+from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
@@ -256,6 +257,36 @@ def period_end_for_date(period_type: PeriodType, d: date) -> datetime:
     raise ValueError(f"Unknown period type: {period_type}")
 
 
+def last_completed_period_end(period_type: PeriodType, now: datetime | None = None) -> datetime:
+    """Return the end datetime of the last fully completed period before *now*.
+
+    Unlike :func:`period_end_for_date`, which returns the end of the period
+    *containing* a given date (which may be in the future), this function
+    always returns a period boundary that has already passed:
+
+    - **daily**  → end of yesterday
+    - **weekly** → end of the most-recently completed ISO week (last Sunday)
+    - **monthly** → end of the previous calendar month
+    """
+    if now is None:
+        now = datetime.now(tz=timezone.utc)
+    today = now.date()
+
+    if period_type == PeriodType.DAILY:
+        d = today - timedelta(days=1)
+    elif period_type == PeriodType.WEEKLY:
+        # weekday(): Mon=0 … Sun=6; go back enough days to land on the last Sunday
+        days_since_last_sunday = today.weekday() + 1  # Mon→1, Tue→2, …, Sun→7
+        d = today - timedelta(days=days_since_last_sunday)
+    elif period_type == PeriodType.MONTHLY:
+        # First day of this month minus one day = last day of previous month
+        d = date(today.year, today.month, 1) - timedelta(days=1)
+    else:
+        raise ValueError(f"Unknown period type: {period_type}")
+
+    return period_end_for_date(period_type, d)
+
+
 def completed_period_ends_since(
     period_type: PeriodType,
     since: datetime,
@@ -337,6 +368,7 @@ async def get_latest_checkpoint_before(
         return None
 
 
+@async_time_decorator
 async def create_checkpoint(
     account: LedgerAccount,
     period_type: PeriodType,

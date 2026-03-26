@@ -18,6 +18,9 @@ from pathlib import Path
 
 import pytest
 from bson import json_util
+
+from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     CheckpointConvSummary,
     LedgerCheckpoint,
@@ -26,11 +29,9 @@ from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     completed_period_ends_since,
     create_checkpoint,
     get_latest_checkpoint_before,
+    last_completed_period_end,
     period_end_for_date,
 )
-
-from v4vapp_backend_v2.accounting.account_balances import one_account_balance
-from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -113,6 +114,53 @@ class TestPeriodEndForDate:
     def test_monthly_february_leap(self):
         d = date(2024, 2, 1)
         end = period_end_for_date(PeriodType.MONTHLY, d)
+        assert end == datetime(2024, 2, 29, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+
+class TestLastCompletedPeriodEnd:
+    """last_completed_period_end always returns a boundary that has already passed."""
+
+    def test_daily(self):
+        # Wednesday March 26, 2026 at noon → yesterday = March 25
+        now = datetime(2026, 3, 26, 12, 0, 0, tzinfo=timezone.utc)
+        end = last_completed_period_end(PeriodType.DAILY, now)
+        assert end == datetime(2026, 3, 25, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    def test_weekly_wednesday(self):
+        # Wednesday March 25, 2026 → last completed Sunday = March 22
+        now = datetime(2026, 3, 25, 12, 0, 0, tzinfo=timezone.utc)
+        end = last_completed_period_end(PeriodType.WEEKLY, now)
+        assert end == datetime(2026, 3, 22, 23, 59, 59, 999999, tzinfo=timezone.utc)
+        assert end.weekday() == 6  # Sunday
+
+    def test_weekly_monday(self):
+        # Monday March 23, 2026 → last completed Sunday = March 22
+        now = datetime(2026, 3, 23, 6, 0, 0, tzinfo=timezone.utc)
+        end = last_completed_period_end(PeriodType.WEEKLY, now)
+        assert end == datetime(2026, 3, 22, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    def test_weekly_sunday(self):
+        # Sunday March 29, 2026 → last completed Sunday = March 22 (not today)
+        now = datetime(2026, 3, 29, 12, 0, 0, tzinfo=timezone.utc)
+        end = last_completed_period_end(PeriodType.WEEKLY, now)
+        assert end == datetime(2026, 3, 22, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    def test_monthly_march(self):
+        # March 26, 2026 → previous month end = February 28, 2026
+        now = datetime(2026, 3, 26, 12, 0, 0, tzinfo=timezone.utc)
+        end = last_completed_period_end(PeriodType.MONTHLY, now)
+        assert end == datetime(2026, 2, 28, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    def test_monthly_first_of_month(self):
+        # March 1, 2026 → previous month end = February 28, 2026
+        now = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
+        end = last_completed_period_end(PeriodType.MONTHLY, now)
+        assert end == datetime(2026, 2, 28, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    def test_monthly_leap_year(self):
+        # March 5, 2024 → previous month end = February 29, 2024 (leap year)
+        now = datetime(2024, 3, 5, 12, 0, 0, tzinfo=timezone.utc)
+        end = last_completed_period_end(PeriodType.MONTHLY, now)
         assert end == datetime(2024, 2, 29, 23, 59, 59, 999999, tzinfo=timezone.utc)
 
 

@@ -17,6 +17,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout_grouped_by_customer,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers.helper_functions import get_accounts_by_type_for_selector
@@ -155,7 +156,7 @@ async def get_user_balance_get(
                 "line_items": line_items_bool,
                 "user_memos": user_memos_bool,
                 "as_of_date": as_of_date,
-                "age_hours": 0,
+                "display_period": "all",
                 "accounts_by_type": accounts_by_type,
                 "exception_sub_accounts": exception_sub_accounts,
                 "pending_transactions": await PendingTransaction.list_all_str(),
@@ -198,7 +199,7 @@ async def get_user_balance(
     user_memos: Optional[str] = Form("true"),
     customer_grouping: Optional[str] = Form("false"),
     as_of_date_str: Optional[str] = Form(None),
-    age_hours: Optional[int] = Form(0),
+    display_period: Optional[str] = Form("all"),
 ):
     """Get balance printout for a specific VSC Liability user account"""
     if not templates or not nav_manager:
@@ -224,6 +225,10 @@ async def get_user_balance(
         account = LedgerAccount.from_string(account_string)
         exception_sub_accounts = InternalConfig().config.development.allowed_hive_accounts
 
+        # Flush the Redis cache for this account so the display always reflects
+        # the latest ledger state.
+        await invalidate_ledger_cache(account.name, account.sub, account.name, account.sub)
+
         # Parse the as_of_date if provided
         as_of_date = datetime.now(tz=timezone.utc)
         if as_of_date_str:
@@ -233,8 +238,22 @@ async def get_user_balance(
                 # If parsing fails, use current time
                 pass
 
-        # Create age timedelta
-        age = timedelta(hours=age_hours) if age_hours and age_hours > 0 else timedelta(seconds=0)
+        # Compute age from calendar period boundaries
+        age: timedelta | None = None
+        period_start: datetime | None = None
+        if display_period and display_period != "all":
+            from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+                PeriodType,
+                last_completed_period_end,
+            )
+
+            try:
+                period_type = PeriodType(display_period)
+                now = datetime.now(tz=timezone.utc)
+                period_start = last_completed_period_end(period_type, now)
+                age = now - period_start
+            except ValueError:
+                pass
 
         # Get the balance printout - choose function based on customer_grouping parameter
         if customer_grouping_bool:
@@ -244,6 +263,7 @@ async def get_user_balance(
                 user_memos=user_memos_bool,
                 as_of_date=as_of_date,
                 age=age,
+                period_start=period_start,
             )
         else:
             printout, details = await account_balance_printout(
@@ -252,6 +272,7 @@ async def get_user_balance(
                 user_memos=user_memos_bool,
                 as_of_date=as_of_date,
                 age=age,
+                period_start=period_start,
             )
 
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
@@ -289,7 +310,7 @@ async def get_user_balance(
                 "user_memos": user_memos_bool,
                 "customer_grouping": customer_grouping_bool,
                 "as_of_date": as_of_date,
-                "age_hours": age_hours,
+                "display_period": display_period or "all",
                 "accounts_by_type": accounts_by_type,
                 "exception_sub_accounts": exception_sub_accounts,
                 "pending_transactions": await PendingTransaction.list_all_str(),
@@ -332,7 +353,7 @@ async def get_account_balance(
     user_memos: Optional[str] = Form("true"),
     customer_grouping: Optional[str] = Form("false"),
     as_of_date_str: Optional[str] = Form(None),
-    age_hours: Optional[int] = Form(0),
+    display_period: Optional[str] = Form("all"),
 ):
     """Get balance printout for a specific account"""
     if not templates or not nav_manager:
@@ -354,6 +375,10 @@ async def get_account_balance(
         # Parse the account from string
         account = LedgerAccount.from_string(account_string)
 
+        # Flush the Redis cache for this account so the display always reflects
+        # the latest ledger state (avoids stale data when navigating back to the page).
+        await invalidate_ledger_cache(account.name, account.sub, account.name, account.sub)
+
         as_of_date = None
         if as_of_date_str:
             try:
@@ -362,8 +387,23 @@ async def get_account_balance(
                 # If parsing fails, use current time
                 pass
 
-        # Create age timedelta
-        age = timedelta(hours=age_hours) if age_hours and age_hours > 0 else None
+        # Compute age from calendar period boundaries so that "monthly" means
+        # "since last month end", not a rolling 30-day window.
+        age: timedelta | None = None
+        period_start: datetime | None = None
+        if display_period and display_period != "all":
+            from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+                PeriodType,
+                last_completed_period_end,
+            )
+
+            try:
+                period_type = PeriodType(display_period)
+                now = datetime.now(tz=timezone.utc)
+                period_start = last_completed_period_end(period_type, now)
+                age = now - period_start
+            except ValueError:
+                pass
 
         # Get the balance printout - choose function based on customer_grouping parameter
         if customer_grouping_bool:
@@ -373,6 +413,7 @@ async def get_account_balance(
                 user_memos=user_memos_bool,
                 as_of_date=as_of_date,
                 age=age,
+                period_start=period_start,
             )
         else:
             printout, details = await account_balance_printout(
@@ -381,6 +422,7 @@ async def get_account_balance(
                 user_memos=user_memos_bool,
                 as_of_date=as_of_date,
                 age=age,
+                period_start=period_start,
             )
 
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
@@ -421,7 +463,7 @@ async def get_account_balance(
                 "user_memos": user_memos_bool,
                 "customer_grouping": customer_grouping_bool,
                 "as_of_date": as_of_date,
-                "age_hours": age_hours,
+                "display_period": display_period or "all",
                 "accounts_by_type": accounts_by_type,
                 "exception_sub_accounts": exception_sub_accounts,
                 "pending_transactions": await PendingTransaction.list_all_str(),
@@ -477,15 +519,14 @@ async def create_account_checkpoint(
     from v4vapp_backend_v2.accounting.ledger_checkpoints import (
         PeriodType,
         create_checkpoint,
-        period_end_for_date,
+        last_completed_period_end,
     )
 
     try:
         account = LedgerAccount.from_string(account_string)
         period_type = PeriodType(period_type_str)
         now = datetime.now(tz=timezone.utc)
-        yesterday = (now - timedelta(days=1)).date()
-        period_end = period_end_for_date(period_type, yesterday)
+        period_end = last_completed_period_end(period_type, now)
         checkpoint = await create_checkpoint(account, period_type, period_end)
         logger.info(
             f"📌 Admin created {period_type} checkpoint for "

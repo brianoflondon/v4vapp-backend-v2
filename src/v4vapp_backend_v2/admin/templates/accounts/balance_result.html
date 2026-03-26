@@ -294,10 +294,10 @@
                     <span class="detail-label">Report Date:</span>
                     <span class="detail-value">{{ as_of_date.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
                 </div>
-                {% if age_hours and age_hours > 0 %}
+                {% if display_period and display_period != 'all' %}
                 <div class="detail-item">
-                    <span class="detail-label">Age Filter:</span>
-                    <span class="detail-value">{{ age_hours }} hours</span>
+                    <span class="detail-label">Period Filter:</span>
+                    <span class="detail-value">Since last {{ display_period }} end</span>
                 </div>
                 {% endif %}
             </div>
@@ -318,7 +318,7 @@
                 <input type="hidden" name="user_memos" value="{{ 'true' if user_memos else 'false' }}">
                 <input type="hidden" name="customer_grouping" value="{{ 'true' if customer_grouping else 'false' }}">
                 <input type="hidden" name="as_of_date_str" value="{{ as_of_date.isoformat() if as_of_date else '' }}">
-                <input type="hidden" name="age_hours" value="{{ age_hours if age_hours else 0 }}">
+                <input type="hidden" name="display_period" value="{{ display_period if display_period else 'all' }}">
 
                 <div class="row">
                     <div class="col-md-3">
@@ -430,16 +430,16 @@
                         <small class="text-muted">Group transactions by customer ID within dates</small>
                     </div>
                     <div class="col-md-3">
-                        <label for="ageHoursSelect" class="form-label fw-semibold">
+                        <label for="displayPeriodSelect" class="form-label fw-semibold">
                             <i class="bi bi-calendar-range me-1"></i>
                             Entries to show
                         </label>
-                        <select class="form-select form-select-sm" id="ageHoursSelect" name="age_hours"
+                        <select class="form-select form-select-sm" id="displayPeriodSelect" name="display_period"
                             onchange="updateBalanceReport()">
-                            <option value="0" {{ 'selected' if not age_hours or age_hours==0 else '' }}>All entries
-                            </option>
-                            <option value="168" {{ 'selected' if age_hours==168 else '' }}>Since last week</option>
-                            <option value="720" {{ 'selected' if age_hours==720 else '' }}>Since last month</option>
+                            <option value="all" {{ 'selected' if not display_period or display_period=='all' else '' }}>All entries</option>
+                            <option value="daily" {{ 'selected' if display_period=='daily' else '' }}>Since yesterday</option>
+                            <option value="weekly" {{ 'selected' if display_period=='weekly' else '' }}>Since last week end</option>
+                            <option value="monthly" {{ 'selected' if display_period=='monthly' else '' }}>Since last month end</option>
                         </select>
                     </div>
                 </div>
