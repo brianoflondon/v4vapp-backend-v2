@@ -39,7 +39,7 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
 
 
 @router.get("/", response_class=HTMLResponse)
-async def accounts_page(request: Request):
+async def accounts_page(request: Request, flash: str = ""):
     """Main accounts page with account selector"""
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
@@ -52,6 +52,13 @@ async def accounts_page(request: Request):
     # Fetch pending transactions
     pending_transactions = await PendingTransaction.list_all_str()
     sanity_results = await run_all_sanity_checks()
+
+    checkpoint_message = None
+    checkpoint_error = None
+    if flash.startswith("checkpoint_created="):
+        checkpoint_message = f"✅ {flash.split('=', 1)[1]}"
+    elif flash.startswith("checkpoint_error="):
+        checkpoint_error = f"❌ Build failed: {flash.split('=', 1)[1]}"
 
     return templates.TemplateResponse(
         request,
@@ -68,6 +75,8 @@ async def accounts_page(request: Request):
             ],
             "sanity_results": sanity_results,
             "exception_sub_accounts": exception_sub_accounts,
+            "checkpoint_message": checkpoint_message,
+            "checkpoint_error": checkpoint_error,
         },
     )
 
@@ -540,6 +549,43 @@ async def create_account_checkpoint(
 
     params = urlencode({"account_string": account_string, "flash": flash_msg})
     return RedirectResponse(url=f"/admin/accounts/balance/post?{params}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Build all checkpoints endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post("/balance/build-checkpoints", response_class=HTMLResponse)
+async def build_all_checkpoints(
+    request: Request,
+    account_string: str = Form(""),
+    period_type_str: str = Form("monthly"),
+):
+    """Run build_checkpoints_for_period for all accounts for the selected period type."""
+    from urllib.parse import urlencode
+
+    from fastapi.responses import RedirectResponse
+
+    from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+        PeriodType,
+        build_checkpoints_for_period,
+    )
+
+    try:
+        period_type = PeriodType(period_type_str)
+        total = await build_checkpoints_for_period(period_type)
+        logger.info(
+            f"📌 Admin triggered build_checkpoints_for_period({period_type}): {total} written.",
+            extra={"notification": False},
+        )
+        flash_msg = f"checkpoint_created=Built {total} {period_type} checkpoints for all accounts"
+    except Exception as e:
+        logger.exception(f"Failed to build checkpoints: {e}")
+        flash_msg = f"checkpoint_error={e}"
+
+    params = urlencode({"flash": flash_msg})
+    return RedirectResponse(url=f"/admin/accounts?{params}", status_code=303)
 
 
 @router.get("/balance/post", response_class=HTMLResponse)

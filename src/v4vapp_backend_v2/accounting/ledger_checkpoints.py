@@ -413,6 +413,7 @@ async def create_checkpoint(
         last_transaction_date=ledger_details.last_transaction_date,
     )
     await checkpoint.save()
+    logger.info(f"Created checkpoint for {account} at {period_end} ({period_type})")
     return checkpoint
 
 
@@ -452,7 +453,7 @@ async def build_checkpoints_for_period(
             logger.info("📌 No ledger entries found; skipping checkpoint build.")
             return 0
         since = first_doc["timestamp"]
-        if since.tzinfo is None:
+        if since and since.tzinfo is None:
             since = since.replace(tzinfo=timezone.utc)
 
     period_ends = completed_period_ends_since(period_type, since, until)

@@ -49,6 +49,23 @@
 
 {% block content %}
 <div class="container-fluid">
+
+    {% if checkpoint_message %}
+    <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-bookmark-check me-2"></i>
+        {{ checkpoint_message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    {% if checkpoint_error %}
+    <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        {{ checkpoint_error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
     <div class="row">
         <div class="col-12">
             <!-- Account Selection Form -->
@@ -210,6 +227,34 @@
                         all types
                     </small>
                 </div>
+            </div>
+
+            <!-- Build All Checkpoints -->
+            <div class="card account-form">
+                <h5 class="mb-3">
+                    <i class="bi bi-bookmarks me-2"></i>
+                    Build Checkpoints for All Accounts
+                </h5>
+                <form method="post" action="/admin/accounts/balance/build-checkpoints"
+                      class="d-flex gap-2 align-items-center flex-wrap">
+                    <input type="hidden" name="account_string" value="">
+                    <label for="buildPeriodSelect" class="form-label mb-0">Period:</label>
+                    <select name="period_type_str" id="buildPeriodSelect"
+                            class="form-select form-select-sm" style="width:auto;"
+                            title="Period granularity for checkpoint generation">
+                        <option value="monthly">Monthly</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="daily">Daily</option>
+                    </select>
+                    <button type="submit" class="btn btn-outline-danger btn-sm"
+                            title="Build balance checkpoints for ALL accounts for every completed period"
+                            onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm\' role=\'status\'></span> Building…'; this.form.submit();">
+                        <i class="bi bi-bookmarks me-1"></i>
+                        Build All Checkpoints
+                    </button>
+                    <small class="text-muted">Scans all ledger entries and creates missing checkpoints.
+                        May take a while.</small>
+                </form>
             </div>
         </div>
     </div>

@@ -236,7 +236,7 @@
     <form id="checkpointForm" method="post" action="/admin/accounts/balance/checkpoint"
           class="d-flex gap-1 align-items-center">
         <input type="hidden" name="account_string" value="{{ account_string }}">
-        <select name="period_type_str" class="form-select form-select-sm" style="width:auto;"
+        <select name="period_type_str" id="checkpointPeriodSelect" class="form-select form-select-sm" style="width:auto;"
                 title="Checkpoint period granularity">
             <option value="monthly">Monthly</option>
             <option value="weekly">Weekly</option>
