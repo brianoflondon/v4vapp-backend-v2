@@ -203,33 +203,52 @@
 {% endblock %}
 
 {% block page_actions %}
-<div class="btn-group" role="group">
-    <a href="/admin/users" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>
-        Back to Users
-    </a>
-    <a href="/admin/accounts" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>
-        Back to Accounts
-    </a>
-    <button type="button" class="btn btn-outline-secondary" onclick="toggleAccountSelector()"
-        title="Quick switch account (Ctrl+K or Cmd+K)">
-        <i class="bi bi-arrow-left-right me-1"></i>
-        Quick Switch
-    </button>
-    <button type="button" class="btn btn-outline-success" onclick="refreshBalance()"
-        title="Refresh the current balance report (F5 or Ctrl+R)" id="refreshBtn">
-        <i class="bi bi-arrow-clockwise me-1"></i>
-        Refresh
-    </button>
-    <button type="button" class="btn btn-outline-primary" onclick="downloadReport()">
-        <i class="bi bi-download me-1"></i>
-        Download
-    </button>
-    <button type="button" class="btn btn-outline-info" onclick="copyToClipboard()">
-        <i class="bi bi-clipboard me-1"></i>
-        Copy
-    </button>
+<div class="d-flex gap-2 align-items-center flex-wrap">
+    <div class="btn-group" role="group">
+        <a href="/admin/users" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>
+            Back to Users
+        </a>
+        <a href="/admin/accounts" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>
+            Back to Accounts
+        </a>
+        <button type="button" class="btn btn-outline-secondary" onclick="toggleAccountSelector()"
+            title="Quick switch account (Ctrl+K or Cmd+K)">
+            <i class="bi bi-arrow-left-right me-1"></i>
+            Quick Switch
+        </button>
+        <button type="button" class="btn btn-outline-success" onclick="refreshBalance()"
+            title="Refresh the current balance report (F5 or Ctrl+R)" id="refreshBtn">
+            <i class="bi bi-arrow-clockwise me-1"></i>
+            Refresh
+        </button>
+        <button type="button" class="btn btn-outline-primary" onclick="downloadReport()">
+            <i class="bi bi-download me-1"></i>
+            Download
+        </button>
+        <button type="button" class="btn btn-outline-info" onclick="copyToClipboard()">
+            <i class="bi bi-clipboard me-1"></i>
+            Copy
+        </button>
+    </div>
+    <!-- Checkpoint form -->
+    <form id="checkpointForm" method="post" action="/admin/accounts/balance/checkpoint"
+          class="d-flex gap-1 align-items-center">
+        <input type="hidden" name="account_string" value="{{ account_string }}">
+        <select name="period_type_str" class="form-select form-select-sm" style="width:auto;"
+                title="Checkpoint period granularity">
+            <option value="monthly">Monthly</option>
+            <option value="weekly">Weekly</option>
+            <option value="daily">Daily</option>
+        </select>
+        <button type="submit" class="btn btn-outline-warning btn-sm"
+                title="Calculate and save a balance checkpoint for this account"
+                onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm\' role=\'status\'></span> Saving…'; this.form.submit();">
+            <i class="bi bi-bookmark-plus me-1"></i>
+            Create Checkpoint
+        </button>
+    </form>
 </div>
 {% endblock %}
 
@@ -374,10 +393,9 @@
             <form id="balanceOptionsForm" method="post" action="/admin/accounts/balance">
                 <input type="hidden" name="account_string" value="{{ account_string }}">
                 <input type="hidden" name="as_of_date_str" value="{{ as_of_date.isoformat() if as_of_date else '' }}">
-                <input type="hidden" name="age_hours" value="{{ age_hours if age_hours else 0 }}">
 
-                <div class="row">
-                    <div class="col-md-4">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="lineItemsSwitch" name="line_items"
                                 value="true" {{ 'checked' if line_items else '' }} onchange="updateBalanceReport()">
@@ -388,7 +406,7 @@
                         </div>
                         <small class="text-muted">Display individual transaction lines</small>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="userMemosSwitch" name="user_memos"
                                 value="true" {{ 'checked' if user_memos else '' }} onchange="updateBalanceReport()">
@@ -399,7 +417,7 @@
                         </div>
                         <small class="text-muted">Display user memo information</small>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="customerGroupingSwitch"
                                 name="customer_grouping" value="true" {{ 'checked' if customer_grouping else '' }}
@@ -410,6 +428,19 @@
                             </label>
                         </div>
                         <small class="text-muted">Group transactions by customer ID within dates</small>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="ageHoursSelect" class="form-label fw-semibold">
+                            <i class="bi bi-calendar-range me-1"></i>
+                            Entries to show
+                        </label>
+                        <select class="form-select form-select-sm" id="ageHoursSelect" name="age_hours"
+                            onchange="updateBalanceReport()">
+                            <option value="0" {{ 'selected' if not age_hours or age_hours==0 else '' }}>All entries
+                            </option>
+                            <option value="168" {{ 'selected' if age_hours==168 else '' }}>Since last week</option>
+                            <option value="720" {{ 'selected' if age_hours==720 else '' }}>Since last month</option>
+                        </select>
                     </div>
                 </div>
             </form>

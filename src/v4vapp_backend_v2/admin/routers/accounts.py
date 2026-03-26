@@ -456,3 +456,84 @@ async def get_account_balance(
                 "sanity_results": SanityCheckResults(),
             },
         )
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint creation endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post("/balance/checkpoint", response_class=HTMLResponse)
+async def create_account_checkpoint(
+    request: Request,
+    account_string: str = Form(...),
+    period_type_str: str = Form("monthly"),
+):
+    """Create a balance checkpoint for the given account at the end of the last completed period."""
+    from urllib.parse import urlencode
+
+    from fastapi.responses import RedirectResponse
+
+    from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+        PeriodType,
+        create_checkpoint,
+        period_end_for_date,
+    )
+
+    try:
+        account = LedgerAccount.from_string(account_string)
+        period_type = PeriodType(period_type_str)
+        now = datetime.now(tz=timezone.utc)
+        yesterday = (now - timedelta(days=1)).date()
+        period_end = period_end_for_date(period_type, yesterday)
+        checkpoint = await create_checkpoint(account, period_type, period_end)
+        logger.info(
+            f"📌 Admin created {period_type} checkpoint for "
+            f"{account.name}:{account.sub} @ {checkpoint.period_end.date()}",
+            extra={"notification": False},
+        )
+        flash_msg = f"checkpoint_created={period_type}:{checkpoint.period_end.date()}"
+    except Exception as e:
+        logger.exception(f"Failed to create checkpoint: {e}")
+        flash_msg = f"checkpoint_error={e}"
+
+    params = urlencode({"account_string": account_string, "flash": flash_msg})
+    return RedirectResponse(url=f"/admin/accounts/balance/post?{params}", status_code=303)
+
+
+@router.get("/balance/post", response_class=HTMLResponse)
+async def balance_after_redirect(
+    request: Request,
+    account_string: str = "",
+    flash: str = "",
+):
+    """GET landing page after a checkpoint redirect — auto-submits back to the balance POST."""
+    nav_items = nav_manager.get_navigation_items("/admin/accounts")
+    sanity_results = await run_all_sanity_checks()
+
+    checkpoint_message = None
+    checkpoint_error = None
+    if flash.startswith("checkpoint_created="):
+        checkpoint_message = f"✅ Checkpoint created: {flash.split('=', 1)[1]}"
+    elif flash.startswith("checkpoint_error="):
+        checkpoint_error = f"❌ Checkpoint failed: {flash.split('=', 1)[1]}"
+
+    return templates.TemplateResponse(
+        request,
+        "accounts/balance_post_redirect.html",
+        {
+            "request": request,
+            "title": "Balance",
+            "nav_items": nav_items,
+            "account_string": account_string,
+            "checkpoint_message": checkpoint_message,
+            "checkpoint_error": checkpoint_error,
+            "pending_transactions": await PendingTransaction.list_all_str(),
+            "breadcrumbs": [
+                {"name": "Admin", "url": "/admin"},
+                {"name": "Accounts", "url": "/admin/accounts"},
+                {"name": "Balance", "url": "#"},
+            ],
+            "sanity_results": sanity_results,
+        },
+    )
