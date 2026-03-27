@@ -23,13 +23,15 @@ from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
 from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     PeriodType,
     build_checkpoints_for_period,
+    create_checkpoint,
+    last_completed_period_end,
 )
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers.helper_functions import get_accounts_by_type_for_selector
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
-from v4vapp_backend_v2.accounting.ledger_checkpoints import create_checkpoint
+
 router = APIRouter()
 
 # Will be set by the main app
@@ -264,6 +266,7 @@ async def get_user_balance(
 
             try:
                 from v4vapp_backend_v2.accounting.ledger_checkpoints import create_checkpoint
+
                 period_type = PeriodType(display_period)
                 now = datetime.now(tz=timezone.utc)
                 period_start = last_completed_period_end(period_type, now)
@@ -409,13 +412,7 @@ async def get_account_balance(
         age: timedelta | None = None
         period_start: datetime | None = None
         if display_period and display_period != "all":
-            from v4vapp_backend_v2.accounting.ledger_checkpoints import (
-                PeriodType,
-                last_completed_period_end,
-            )
-
             try:
-                from v4vapp_backend_v2.accounting.ledger_checkpoints import create_checkpoint
                 period_type = PeriodType(display_period)
                 now = datetime.now(tz=timezone.utc)
                 period_start = last_completed_period_end(period_type, now)
@@ -531,15 +528,6 @@ async def create_account_checkpoint(
     period_type_str: str = Form("monthly"),
 ):
     """Create a balance checkpoint for the given account at the end of the last completed period."""
-    from urllib.parse import urlencode
-
-    from fastapi.responses import RedirectResponse
-
-    from v4vapp_backend_v2.accounting.ledger_checkpoints import (
-        PeriodType,
-        create_checkpoint,
-        last_completed_period_end,
-    )
 
     try:
         account = LedgerAccount.from_string(account_string)
