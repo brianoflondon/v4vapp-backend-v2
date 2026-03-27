@@ -332,6 +332,14 @@ class LedgerEntry(BaseModel):
         }
 
     @property
+    def conv_signed_p(self) -> Dict[str, CryptoConv]:
+        """
+        Returns the conversion details as a property (not computed field)
+        this stops type checking problems
+        """
+        return self.conv_signed()
+
+    @property
     def ledger_type_str(self) -> str:
         """Returns the string representation of the ledger type.
 
@@ -598,11 +606,6 @@ class LedgerEntry(BaseModel):
         """
         if not self.is_completed:
             raise LedgerEntryCreationException("LedgerEntry is not completed.")
-        # Additional integrity checks for specific ledger types
-        try:
-            from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
-        except Exception:
-            LedgerType = None
 
         # Helper to convert values to float safely
         def _to_num(v):
@@ -613,9 +616,9 @@ class LedgerEntry(BaseModel):
 
         # If this is an exchange conversion, ensure the conversion sides net to zero
         if LedgerType is not None and self.ledger_type == LedgerType.EXCHANGE_CONVERSION:
-            conv = self.conv_signed
-            debit_conv = conv.get("debit", None)  # type: ignore
-            credit_conv = conv.get("credit", None)  # type: ignore
+            conv = self.conv_signed_p
+            debit_conv = conv.get("debit", None)
+            credit_conv = conv.get("credit", None)
             if not debit_conv or not credit_conv:
                 raise LedgerEntryCreationException(
                     "Missing conversion details for exc_conv entry."
@@ -651,6 +654,7 @@ class LedgerEntry(BaseModel):
         # If this is an exchange fee, ensure msats/netting holds
         if LedgerType is not None and self.ledger_type == LedgerType.EXCHANGE_FEES:
             conv = self.conv_signed
+
             debit_conv = conv.get("debit", None)  # pyright: ignore[reportAttributeAccessIssue]
             credit_conv = conv.get("credit", None)  # pyright: ignore[reportAttributeAccessIssue]
             if debit_conv and credit_conv:
