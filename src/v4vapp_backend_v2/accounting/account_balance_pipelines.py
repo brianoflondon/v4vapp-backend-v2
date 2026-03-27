@@ -54,6 +54,74 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
     return pipeline
 
 
+def list_all_active_accounts_pipeline(
+    min_transactions: int = 2,
+) -> Sequence[Mapping[str, Any]]:
+    """
+    Returns a MongoDB aggregation pipeline that lists all accounts across both debit and
+    credit sides that have at least `min_transactions` ledger entries.
+
+    Unlike `list_all_accounts_pipeline` (which deduplicates with no frequency filter),
+    this pipeline counts how many times each unique `{account_type, name, sub, contra}`
+    combination appears and only returns those that meet the minimum threshold. This
+    makes it suitable for identifying genuinely active accounts while ignoring one-off
+    setup entries.
+
+    Args:
+        min_transactions: Minimum number of ledger entries required for an account to be
+            included in the results. Defaults to 2.
+
+    Returns:
+        Sequence[Mapping[str, Any]]: A MongoDB aggregation pipeline that returns
+            documents with `account_type`, `name`, `sub`, and `contra` fields, sorted
+            by `account_type`, `name`, `sub`.
+    """
+    pipeline: Sequence[Mapping[str, Any]] = [
+        {
+            "$project": {
+                "accounts": [
+                    {
+                        "account_type": "$debit.account_type",
+                        "name": "$debit.name",
+                        "sub": "$debit.sub",
+                        "contra": "$debit.contra",
+                    },
+                    {
+                        "account_type": "$credit.account_type",
+                        "name": "$credit.name",
+                        "sub": "$credit.sub",
+                        "contra": "$credit.contra",
+                    },
+                ]
+            }
+        },
+        {"$unwind": "$accounts"},
+        {
+            "$group": {
+                "_id": {
+                    "account_type": "$accounts.account_type",
+                    "name": "$accounts.name",
+                    "sub": "$accounts.sub",
+                    "contra": "$accounts.contra",
+                },
+                "transaction_count": {"$sum": 1},
+            }
+        },
+        {"$match": {"transaction_count": {"$gte": min_transactions}}},
+        {
+            "$project": {
+                "_id": 0,
+                "account_type": "$_id.account_type",
+                "name": "$_id.name",
+                "sub": "$_id.sub",
+                "contra": "$_id.contra",
+            }
+        },
+        {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
+    ]
+    return pipeline
+
+
 def list_all_ledger_types_pipeline() -> Sequence[Mapping[str, Any]]:
     """
     Returns a MongoDB aggregation pipeline to list all unique ledger types in the ledger.

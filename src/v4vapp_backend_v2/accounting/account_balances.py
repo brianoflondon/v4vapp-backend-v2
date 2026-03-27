@@ -9,6 +9,7 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
     all_account_balances_summary_pipeline,
     list_all_accounts_pipeline,
+    list_all_active_accounts_pipeline,
     list_all_ledger_types_pipeline,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
@@ -1290,6 +1291,24 @@ async def list_all_accounts() -> List[LedgerAccount]:
         List[Account]: A list of unique Account objects sorted by account type, name, and sub-account.
     """
     pipeline = list_all_accounts_pipeline()
+
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    accounts = []
+    async for doc in cursor:
+        account = LedgerAccount.model_validate(doc)
+        accounts.append(account)
+    return accounts
+
+
+async def list_all_active_accounts() -> List[LedgerAccount]:
+    """
+    Lists all unique active accounts in the ledger by aggregating debit and credit accounts.
+    An active account is defined as having at least 2 transactions.
+
+    Returns:
+        List[Account]: A list of unique active Account objects sorted by account type, name, and sub-account.
+    """
+    pipeline = list_all_active_accounts_pipeline()
 
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     accounts = []
