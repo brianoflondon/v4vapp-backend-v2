@@ -29,7 +29,7 @@ from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers.helper_functions import get_accounts_by_type_for_selector
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
-
+from v4vapp_backend_v2.accounting.ledger_checkpoints import create_checkpoint
 router = APIRouter()
 
 # Will be set by the main app
@@ -263,11 +263,13 @@ async def get_user_balance(
             )
 
             try:
+                from v4vapp_backend_v2.accounting.ledger_checkpoints import create_checkpoint
                 period_type = PeriodType(display_period)
                 now = datetime.now(tz=timezone.utc)
                 period_start = last_completed_period_end(period_type, now)
                 age = now - period_start
-            except ValueError:
+                await create_checkpoint(account, period_type, period_start)
+            except (ValueError, Exception):
                 pass
 
         # Get the balance printout - choose function based on customer_grouping parameter
@@ -392,7 +394,7 @@ async def get_account_balance(
 
         # Flush the Redis cache for this account so the display always reflects
         # the latest ledger state (avoids stale data when navigating back to the page).
-        await invalidate_ledger_cache(account.name, account.sub, account.name, account.sub)
+        await invalidate_ledger_cache(account.name, account.sub)
 
         as_of_date = None
         if as_of_date_str:
@@ -413,11 +415,13 @@ async def get_account_balance(
             )
 
             try:
+                from v4vapp_backend_v2.accounting.ledger_checkpoints import create_checkpoint
                 period_type = PeriodType(display_period)
                 now = datetime.now(tz=timezone.utc)
                 period_start = last_completed_period_end(period_type, now)
                 age = now - period_start
-            except ValueError:
+                await create_checkpoint(account, period_type, period_start)
+            except (ValueError, Exception):
                 pass
 
         # Get the balance printout - choose function based on customer_grouping parameter
