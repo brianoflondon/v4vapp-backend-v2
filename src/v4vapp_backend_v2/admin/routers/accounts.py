@@ -6,10 +6,12 @@ Handles routes for displaying account balances and ledger information.
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from timeit import default_timer as timer
 from typing import Optional
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2.accounting.account_balances import (
@@ -18,6 +20,10 @@ from v4vapp_backend_v2.accounting.account_balances import (
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
+from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+    PeriodType,
+    build_checkpoints_for_period,
+)
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers.helper_functions import get_accounts_by_type_for_selector
@@ -563,23 +569,17 @@ async def build_all_checkpoints(
     period_type_str: str = Form("monthly"),
 ):
     """Run build_checkpoints_for_period for all accounts for the selected period type."""
-    from urllib.parse import urlencode
-
-    from fastapi.responses import RedirectResponse
-
-    from v4vapp_backend_v2.accounting.ledger_checkpoints import (
-        PeriodType,
-        build_checkpoints_for_period,
-    )
 
     try:
         period_type = PeriodType(period_type_str)
+        start = timer()
         total = await build_checkpoints_for_period(period_type)
+        elapsed = timer() - start
         logger.info(
-            f"📌 Admin triggered build_checkpoints_for_period({period_type}): {total} written.",
+            f"📌 Admin triggered build_checkpoints_for_period({period_type}): {total} written in {elapsed:.2f} s.",
             extra={"notification": False},
         )
-        flash_msg = f"checkpoint_created=Built {total} {period_type} checkpoints for all accounts"
+        flash_msg = f"checkpoint_created=Built {total} {period_type} checkpoints for all accounts in {elapsed:.2f} s."
     except Exception as e:
         logger.exception(f"Failed to build checkpoints: {e}")
         flash_msg = f"checkpoint_error={e}"

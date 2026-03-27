@@ -28,6 +28,7 @@ Each document covers one account × one period:
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -520,18 +521,25 @@ async def build_checkpoints_for_period(
     accounts = await list_all_accounts()
     total = 0
 
-    for account in accounts:
-        for period_end in period_ends:
-            try:
-                _, new_checkpoint = await create_checkpoint(account, period_type, period_end)
-                if new_checkpoint:
-                    total += 1
-            except Exception as e:
-                logger.warning(
-                    f"⚠️  Could not create {period_type} checkpoint for "
-                    f"{account.name}:{account.sub} at {period_end}: {e}",
-                    extra={"notification": False},
-                )
+    async def _run_one(account: LedgerAccount, period_end: datetime) -> bool:
+        try:
+            _, new_checkpoint = await create_checkpoint(account, period_type, period_end)
+            return bool(new_checkpoint)
+        except Exception as e:
+            logger.warning(
+                f"⚠️  Could not create {period_type} checkpoint for "
+                f"{account.name}:{account.sub} at {period_end}: {e}",
+                extra={"notification": False},
+            )
+            return False
+
+    pairs = [(account, period_end) for account in accounts for period_end in period_ends]
+    batch_size = 100
+    for i in range(0, len(pairs), batch_size):
+        batch = pairs[i : i + batch_size]
+        async with asyncio.TaskGroup() as tg:
+            tasks = [tg.create_task(_run_one(acc, pe)) for acc, pe in batch]
+        total += sum(t.result() for t in tasks)
 
     logger.info(
         f"{ICON} Built {total} {period_type} checkpoints "
