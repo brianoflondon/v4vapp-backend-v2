@@ -258,7 +258,8 @@ async def test_create_checkpoint_matches_full_balance():
     # Use a period_end well beyond the test data range so everything is captured
     period_end = datetime(2030, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
 
-    checkpoint = await create_checkpoint(account, PeriodType.MONTHLY, period_end)
+    checkpoint, new_checkpoint = await create_checkpoint(account, PeriodType.MONTHLY, period_end)
+    assert new_checkpoint is True, "Expected to create a new checkpoint document"
 
     full_balance = await one_account_balance(
         account, as_of_date=period_end, use_cache=False, use_checkpoints=False

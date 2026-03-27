@@ -32,16 +32,19 @@ import calendar
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from bson import Decimal128
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.asynchronous.collection import AsyncCollection
 
+from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+
+ICON = "📌"
 
 
 class PeriodType(StrEnum):
@@ -137,7 +140,7 @@ class LedgerCheckpoint(BaseModel):
                 ("account_sub", ASCENDING),
                 ("account_type", ASCENDING),
                 ("period_type", ASCENDING),
-                ("period_end", ASCENDING),
+                ("period_end", DESCENDING),
             ],
             unique=True,
             name="checkpoint_unique",
@@ -368,20 +371,73 @@ async def get_latest_checkpoint_before(
         return None
 
 
+async def get_checkpoint_by_id(
+    account: LedgerAccount,
+    period_type: PeriodType,
+    period_end: datetime,
+) -> LedgerCheckpoint | None:
+    """
+    Return the checkpoint matching the unique combination of identifying fields.
+
+    Arguments:
+    - *account*: identifies the account by name, sub, and type
+    - *period_type*: granularity of the checkpoint (daily/weekly/monthly)
+    - *period_end*: inclusive end of the period covered by the checkpoint
+
+    Returns ``None`` when no matching checkpoint exists.
+    """
+    query = {
+        "account_name": account.name,
+        "account_sub": account.sub,
+        "account_type": str(account.account_type),
+        "period_type": str(period_type),
+        "period_end": period_end,
+    }
+    doc = await LedgerCheckpoint.collection().find_one(filter=query)
+    if doc is None:
+        return None
+    try:
+        return LedgerCheckpoint._from_mongo_doc(doc)
+    except Exception as e:
+        logger.warning(
+            f"⚠️  Failed to deserialise checkpoint document: {e}",
+            extra={"notification": False},
+        )
+        return None
+
+
 @async_time_decorator
 async def create_checkpoint(
     account: LedgerAccount,
     period_type: PeriodType,
     period_end: datetime,
-) -> LedgerCheckpoint:
-    """Compute and persist a checkpoint for *account* at *period_end*.
+    force: bool = False,
+) -> Tuple[LedgerCheckpoint, bool]:
+    """
+    Compute and persist a checkpoint for *account* at *period_end*.
+
+    If *force* is False (default), the checkpoint is only created if one does
+        not already exist for the same account/period.  When a checkpoint already
+        exists, it is returned along with a boolean flag indicating that it was
+        not newly created.
 
     The balance is computed by calling ``one_account_balance`` with
     ``as_of_date=period_end`` and cache/checkpoint lookup disabled so that
     the result is authoritative.
+
+    Returns:
+    - The checkpoint instance (newly created or existing)
+    - A boolean flag indicating whether a new checkpoint was created (True) or an existing one was returned (False)
+
     """
-    # Import here to avoid circular imports
-    from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+    if not force:
+        existing_checkpoint = await get_checkpoint_by_id(account, period_type, period_end)
+        if existing_checkpoint is not None:
+            logger.info(
+                f"{ICON} Checkpoint already exists for {account} at {period_end} ({period_type}); skipping.",
+                extra={"notification": False},
+            )
+            return existing_checkpoint, False
 
     ledger_details = await one_account_balance(
         account=account,
@@ -413,8 +469,8 @@ async def create_checkpoint(
         last_transaction_date=ledger_details.last_transaction_date,
     )
     await checkpoint.save()
-    logger.info(f"Created checkpoint for {account} at {period_end} ({period_type})")
-    return checkpoint
+    logger.info(f"{ICON} Created checkpoint for {account} at {period_end} ({period_type})")
+    return checkpoint, True
 
 
 async def build_checkpoints_for_period(
@@ -450,7 +506,7 @@ async def build_checkpoints_for_period(
             filter={}, sort=[("timestamp", ASCENDING)]
         )
         if first_doc is None:
-            logger.info("📌 No ledger entries found; skipping checkpoint build.")
+            logger.info(f"{ICON} No ledger entries found; skipping checkpoint build.")
             return 0
         since = first_doc["timestamp"]
         if since and since.tzinfo is None:
@@ -458,7 +514,7 @@ async def build_checkpoints_for_period(
 
     period_ends = completed_period_ends_since(period_type, since, until)
     if not period_ends:
-        logger.info(f"📌 No completed {period_type} periods to checkpoint.")
+        logger.info(f"{ICON} No completed {period_type} periods to checkpoint.")
         return 0
 
     accounts = await list_all_accounts()
@@ -467,8 +523,9 @@ async def build_checkpoints_for_period(
     for account in accounts:
         for period_end in period_ends:
             try:
-                await create_checkpoint(account, period_type, period_end)
-                total += 1
+                _, new_checkpoint = await create_checkpoint(account, period_type, period_end)
+                if new_checkpoint:
+                    total += 1
             except Exception as e:
                 logger.warning(
                     f"⚠️  Could not create {period_type} checkpoint for "
@@ -477,7 +534,7 @@ async def build_checkpoints_for_period(
                 )
 
     logger.info(
-        f"📌 Built {total} {period_type} checkpoints "
+        f"{ICON} Built {total} {period_type} checkpoints "
         f"({len(accounts)} accounts × {len(period_ends)} periods).",
         extra={"notification": False},
     )

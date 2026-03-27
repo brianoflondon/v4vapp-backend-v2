@@ -236,19 +236,18 @@
                     Build Checkpoints for All Accounts
                 </h5>
                 <form method="post" action="/admin/accounts/balance/build-checkpoints"
-                      class="d-flex gap-2 align-items-center flex-wrap">
+                    class="d-flex gap-2 align-items-center flex-wrap">
                     <input type="hidden" name="account_string" value="">
                     <label for="buildPeriodSelect" class="form-label mb-0">Period:</label>
-                    <select name="period_type_str" id="buildPeriodSelect"
-                            class="form-select form-select-sm" style="width:auto;"
-                            title="Period granularity for checkpoint generation">
+                    <select name="period_type_str" id="buildPeriodSelect" class="form-select form-select-sm"
+                        style="width:auto;" title="Period granularity for checkpoint generation">
                         <option value="monthly">Monthly</option>
                         <option value="weekly">Weekly</option>
                         <option value="daily">Daily</option>
                     </select>
                     <button type="submit" class="btn btn-outline-danger btn-sm"
-                            title="Build balance checkpoints for ALL accounts for every completed period"
-                            onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm\' role=\'status\'></span> Building…'; this.form.submit();">
+                        title="Build balance checkpoints for ALL accounts for every completed period"
+                        onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm\' role=\'status\'></span> Building…'; this.form.submit();">
                         <i class="bi bi-bookmarks me-1"></i>
                         Build All Checkpoints
                     </button>

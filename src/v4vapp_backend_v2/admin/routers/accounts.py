@@ -536,9 +536,9 @@ async def create_account_checkpoint(
         period_type = PeriodType(period_type_str)
         now = datetime.now(tz=timezone.utc)
         period_end = last_completed_period_end(period_type, now)
-        checkpoint = await create_checkpoint(account, period_type, period_end)
+        checkpoint, new_checkpoint = await create_checkpoint(account, period_type, period_end)
         logger.info(
-            f"📌 Admin created {period_type} checkpoint for "
+            f"📌 Admin {'created' if new_checkpoint else 'fetched'} {period_type} checkpoint for "
             f"{account.name}:{account.sub} @ {checkpoint.period_end.date()}",
             extra={"notification": False},
         )

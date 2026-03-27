@@ -337,7 +337,10 @@ class LedgerEntry(BaseModel):
         Returns the conversion details as a property (not computed field)
         this stops type checking problems
         """
-        return self.conv_signed()
+        return {
+            "debit": self.debit_conv * self.debit_sign,
+            "credit": self.credit_conv * self.credit_sign,
+        }
 
     @property
     def ledger_type_str(self) -> str:

@@ -234,17 +234,17 @@
     </div>
     <!-- Checkpoint form -->
     <form id="checkpointForm" method="post" action="/admin/accounts/balance/checkpoint"
-          class="d-flex gap-1 align-items-center">
+        class="d-flex gap-1 align-items-center">
         <input type="hidden" name="account_string" value="{{ account_string }}">
-        <select name="period_type_str" id="checkpointPeriodSelect" class="form-select form-select-sm" style="width:auto;"
-                title="Checkpoint period granularity">
+        <select name="period_type_str" id="checkpointPeriodSelect" class="form-select form-select-sm"
+            style="width:auto;" title="Checkpoint period granularity">
             <option value="monthly">Monthly</option>
             <option value="weekly">Weekly</option>
             <option value="daily">Daily</option>
         </select>
         <button type="submit" class="btn btn-outline-warning btn-sm"
-                title="Calculate and save a balance checkpoint for this account"
-                onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm\' role=\'status\'></span> Saving…'; this.form.submit();">
+            title="Calculate and save a balance checkpoint for this account"
+            onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm\' role=\'status\'></span> Saving…'; this.form.submit();">
             <i class="bi bi-bookmark-plus me-1"></i>
             Create Checkpoint
         </button>
@@ -436,10 +436,14 @@
                         </label>
                         <select class="form-select form-select-sm" id="displayPeriodSelect" name="display_period"
                             onchange="updateBalanceReport()">
-                            <option value="all" {{ 'selected' if not display_period or display_period=='all' else '' }}>All entries</option>
-                            <option value="daily" {{ 'selected' if display_period=='daily' else '' }}>Since yesterday</option>
-                            <option value="weekly" {{ 'selected' if display_period=='weekly' else '' }}>Since last week end</option>
-                            <option value="monthly" {{ 'selected' if display_period=='monthly' else '' }}>Since last month end</option>
+                            <option value="all" {{ 'selected' if not display_period or display_period=='all' else '' }}>
+                                All entries</option>
+                            <option value="daily" {{ 'selected' if display_period=='daily' else '' }}>Since yesterday
+                            </option>
+                            <option value="weekly" {{ 'selected' if display_period=='weekly' else '' }}>Since last week
+                                end</option>
+                            <option value="monthly" {{ 'selected' if display_period=='monthly' else '' }}>Since last
+                                month end</option>
                         </select>
                     </div>
                 </div>
