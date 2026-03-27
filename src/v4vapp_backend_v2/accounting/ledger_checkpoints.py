@@ -33,6 +33,7 @@ import calendar
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from enum import StrEnum
+from timeit import default_timer as timer
 from typing import Any, Dict, List, Optional, Tuple
 
 from bson import Decimal128
@@ -40,9 +41,9 @@ from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.asynchronous.collection import AsyncCollection
 
-from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+from v4vapp_backend_v2.accounting.account_balances import list_all_accounts, one_account_balance
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-from v4vapp_backend_v2.config.decorators import async_time_decorator
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 ICON = "📌"
@@ -407,11 +408,11 @@ async def get_checkpoint_by_id(
         return None
 
 
-@async_time_decorator
 async def create_checkpoint(
     account: LedgerAccount,
     period_type: PeriodType,
     period_end: datetime,
+    use_cache: bool = True,
     force: bool = False,
 ) -> Tuple[LedgerCheckpoint, bool]:
     """
@@ -422,6 +423,10 @@ async def create_checkpoint(
         exists, it is returned along with a boolean flag indicating that it was
         not newly created.
 
+    if *use_cache* is True (default), the balance computation will consult the cache
+        for the full balance, if False it will force a full aggregation from the ledger entries.
+        This is the redis temp cache.
+
     The balance is computed by calling ``one_account_balance`` with
     ``as_of_date=period_end`` and cache/checkpoint lookup disabled so that
     the result is authoritative.
@@ -431,11 +436,12 @@ async def create_checkpoint(
     - A boolean flag indicating whether a new checkpoint was created (True) or an existing one was returned (False)
 
     """
+    start = timer()
     if not force:
         existing_checkpoint = await get_checkpoint_by_id(account, period_type, period_end)
         if existing_checkpoint is not None:
             logger.info(
-                f"{ICON} Checkpoint already exists for {account} at {period_end} ({period_type}); skipping.",
+                f"{ICON} Checkpoint already exists for {account} at {period_end} ({period_type}); skipping. (took {timer() - start:.2f}s)",
                 extra={"notification": False},
             )
             return existing_checkpoint, False
@@ -443,7 +449,7 @@ async def create_checkpoint(
     ledger_details = await one_account_balance(
         account=account,
         as_of_date=period_end,
-        use_cache=False,
+        use_cache=use_cache,
         use_checkpoints=False,
     )
 
@@ -470,7 +476,9 @@ async def create_checkpoint(
         last_transaction_date=ledger_details.last_transaction_date,
     )
     await checkpoint.save()
-    logger.info(f"{ICON} Created checkpoint for {account} at {period_end} ({period_type})")
+    logger.info(
+        f"{ICON} Created checkpoint for {account} at {period_end} ({period_type}) (took {timer() - start:.2f}s)"
+    )
     return checkpoint, True
 
 
@@ -494,9 +502,7 @@ async def build_checkpoints_for_period(
     Returns:
         The total number of checkpoints written.
     """
-    from v4vapp_backend_v2.accounting.account_balances import list_all_accounts
-    from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
-
+    start = timer()
     now = datetime.now(tz=timezone.utc)
     if until is None:
         until = now
@@ -507,7 +513,9 @@ async def build_checkpoints_for_period(
             filter={}, sort=[("timestamp", ASCENDING)]
         )
         if first_doc is None:
-            logger.info(f"{ICON} No ledger entries found; skipping checkpoint build.")
+            logger.info(
+                f"{ICON} No ledger entries found; skipping checkpoint build. (took {timer() - start:.2f}s)"
+            )
             return 0
         since = first_doc["timestamp"]
         if since and since.tzinfo is None:
@@ -515,15 +523,19 @@ async def build_checkpoints_for_period(
 
     period_ends = completed_period_ends_since(period_type, since, until)
     if not period_ends:
-        logger.info(f"{ICON} No completed {period_type} periods to checkpoint.")
+        logger.info(
+            f"{ICON} No completed {period_type} periods to checkpoint. (took {timer() - start:.2f}s)"
+        )
         return 0
 
     accounts = await list_all_accounts()
     total = 0
 
-    async def _run_one(account: LedgerAccount, period_end: datetime) -> bool:
+    async def _run_one(account: LedgerAccount, period_end: datetime, use_cache: bool) -> bool:
         try:
-            _, new_checkpoint = await create_checkpoint(account, period_type, period_end)
+            _, new_checkpoint = await create_checkpoint(
+                account, period_type, period_end, use_cache=use_cache, force=False
+            )
             return bool(new_checkpoint)
         except Exception as e:
             logger.warning(
@@ -533,17 +545,15 @@ async def build_checkpoints_for_period(
             )
             return False
 
-    pairs = [(account, period_end) for account in accounts for period_end in period_ends]
-    batch_size = 100
-    for i in range(0, len(pairs), batch_size):
-        batch = pairs[i : i + batch_size]
+    for account in accounts:
         async with asyncio.TaskGroup() as tg:
-            tasks = [tg.create_task(_run_one(acc, pe)) for acc, pe in batch]
+            tasks = [tg.create_task(_run_one(account, pe, use_cache=True)) for pe in period_ends]
+
         total += sum(t.result() for t in tasks)
 
     logger.info(
         f"{ICON} Built {total} {period_type} checkpoints "
-        f"({len(accounts)} accounts × {len(period_ends)} periods).",
+        f"({len(accounts)} accounts x {len(period_ends)} periods). (took {timer() - start:.2f}s)",
         extra={"notification": False},
     )
     return total
