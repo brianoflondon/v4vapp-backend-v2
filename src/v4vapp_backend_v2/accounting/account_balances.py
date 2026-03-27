@@ -9,6 +9,7 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
     all_account_balances_summary_pipeline,
     list_all_accounts_pipeline,
+    list_all_active_accounts_pipeline,
     list_all_ledger_types_pipeline,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
@@ -139,7 +140,7 @@ def _merge_duplicate_accounts(account_balances: AccountBalances) -> AccountBalan
     return account_balances
 
 
-# @async_time_stats_decorator()
+@async_time_decorator
 async def all_account_balances(
     account: LedgerAccount | None = None,
     account_name: str | None = None,
@@ -337,12 +338,14 @@ async def all_account_balances_summary(
     return account_balances
 
 
+# @async_time_decorator
 async def one_account_balance(
     account: LedgerAccount | str,
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
     in_progress: InProgressResults | None = None,
     use_cache: bool = True,
+    use_checkpoints: bool = True,
 ) -> LedgerAccountDetails:
     """
     Retrieve the balance details for a single ledger account as of a specified date.
@@ -353,6 +356,8 @@ async def one_account_balance(
         age (timedelta | None, optional): Optional age filter for the balance calculation.
         in_progress (InProgressResults | None, optional): Pre-computed in-progress results. If None, fetched fresh.
         use_cache (bool): If True, try Redis cache before hitting the database. Defaults to True.
+        use_checkpoints (bool): If True and ``as_of_date`` is provided, try to start from a
+            pre-calculated checkpoint and only aggregate the incremental delta.  Defaults to True.
     Returns:
         LedgerAccountDetails: The details of the account balance as of the specified date.
     Raises:
@@ -381,14 +386,37 @@ async def one_account_balance(
                 all_held_result = await all_held_msats()
                 in_progress = InProgressResults(results=all_held_result)
             cached_result.in_progress_msats = in_progress.get_net_held(account.sub)
-            _t1 = timer()
-            # logger.info(
-            #     f"cache_hit={(_t1 - _t0):.3f}s for one_account_balance "
-            #     f"(account={account}, age={age})"
-            # )
             return cached_result
 
-    pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
+    # --- Checkpoint lookup (only for explicit historical queries without an age window) ---
+    checkpoint = None
+    from_date: datetime | None = None
+    if use_checkpoints and as_of_date is not None and age is None:
+        from v4vapp_backend_v2.accounting.ledger_checkpoints import get_latest_checkpoint_before
+
+        try:
+            checkpoint = await get_latest_checkpoint_before(account, as_of_date)
+            if checkpoint is not None:
+                from_date = checkpoint.period_end
+                logger.debug(
+                    f"📌 Using checkpoint for {account.name}:{account.sub} "
+                    f"@ {checkpoint.period_end.date()} → delta from {from_date.date()} to {as_of_date.date()}",
+                    extra={"notification": False},
+                )
+        except Exception as e:
+            logger.debug(
+                f"Checkpoint lookup failed for {account.name}:{account.sub}: {e}",
+                extra={"notification": False},
+            )
+            checkpoint = None
+            from_date = None
+
+    pipeline = all_account_balances_pipeline(
+        account=account,
+        as_of_date=as_of_date,
+        age=age,
+        from_date=from_date,
+    )
     _t1 = timer()
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
@@ -399,38 +427,95 @@ async def one_account_balance(
     # If there are multiple entries (e.g., contra and non-contra groups), merge them so both show up
     if account_balance.root and len(account_balance.root) > 0:
         if len(account_balance.root) == 1:
-            ledger_details = account_balance.root[0]
+            merged_balances = {
+                unit: [line.model_copy() for line in lines]
+                for unit, lines in account_balance.root[0].balances.items()
+            }
         else:
             # Merge balances from multiple groups (preserve per-row contra flag and order)
-            merged_balances: dict = {}
+            merged_balances = {}
             for group in account_balance.root:
                 for unit, lines in group.balances.items():
                     merged_balances.setdefault(unit, [])
                     # copy to avoid mutating original objects
                     merged_balances[unit].extend([line.model_copy() for line in lines])
 
-            # Sort and recompute running totals (amount_running_total and conv_running_total)
-            from datetime import datetime as _dt
+        # Sort and recompute running totals (amount_running_total and conv_running_total)
+        from datetime import datetime as _dt
 
+        for unit, rows in merged_balances.items():
+            rows.sort(key=lambda x: x.timestamp or _dt.min.replace(tzinfo=_dt.now().tzinfo))
+            running_amount = Decimal(0)
+            running_conv = ConvertedSummary()
+            for row in rows:
+                running_amount += row.amount_signed
+                row.amount_running_total = running_amount
+                running_conv = running_conv + ConvertedSummary.from_crypto_conv(row.conv_signed)
+                row.conv_running_total = running_conv
+
+        # --- Apply checkpoint offsets to running totals ---
+        if checkpoint is not None:
             for unit, rows in merged_balances.items():
-                rows.sort(key=lambda x: x.timestamp or _dt.min.replace(tzinfo=_dt.now().tzinfo))
-                running_amount = Decimal(0)
-                running_conv = ConvertedSummary()
+                cp_net = checkpoint.balances_net.get(str(unit), Decimal(0))
+                cp_conv_raw = checkpoint.conv_totals.get(str(unit))
+                cp_conv = (
+                    cp_conv_raw.to_converted_summary()
+                    if cp_conv_raw is not None
+                    else ConvertedSummary()
+                )
                 for row in rows:
-                    running_amount += row.amount_signed
-                    row.amount_running_total = running_amount
-                    running_conv = running_conv + ConvertedSummary.from_crypto_conv(
-                        row.conv_signed
-                    )
-                    row.conv_running_total = running_conv
+                    row.amount_running_total += cp_net
+                    row.conv_running_total = row.conv_running_total + cp_conv
 
-            ledger_details = LedgerAccountDetails(
+        ledger_details = LedgerAccountDetails(
+            name=account.name,
+            account_type=account.account_type,
+            sub=account.sub,
+            contra=account.contra,
+            balances=merged_balances,
+        )
+    elif checkpoint is not None:
+        # Delta pipeline returned no rows; balance equals checkpoint values.
+        # Construct a synthetic set of balance lines so callers see non-zero totals.
+        from v4vapp_backend_v2.accounting.accounting_classes import AccountBalanceLine
+
+        synthetic_balances = {}
+        for unit_str, net_val in checkpoint.balances_net.items():
+            if net_val == Decimal(0):
+                continue
+            from v4vapp_backend_v2.helpers.currency_class import Currency
+
+            try:
+                currency = Currency(unit_str)
+            except ValueError:
+                continue
+            cp_conv_raw = checkpoint.conv_totals.get(unit_str)
+            cp_conv = (
+                cp_conv_raw.to_converted_summary()
+                if cp_conv_raw is not None
+                else ConvertedSummary()
+            )
+            line = AccountBalanceLine(
+                timestamp=checkpoint.period_end,
+                description="Opening Balance",
+                unit=unit_str,
+                amount=abs(net_val),
+                amount_signed=net_val,
+                amount_running_total=net_val,
+                conv_running_total=cp_conv,
+                account_type=str(account.account_type),
                 name=account.name,
-                account_type=account.account_type,
                 sub=account.sub,
                 contra=account.contra,
-                balances=merged_balances,
             )
+            synthetic_balances[currency] = [line]
+        ledger_details = LedgerAccountDetails(
+            name=account.name,
+            account_type=account.account_type,
+            sub=account.sub,
+            contra=account.contra,
+            balances=synthetic_balances,
+        )
     else:
         ledger_details = LedgerAccountDetails(
             name=account.name,
@@ -446,6 +531,10 @@ async def one_account_balance(
             for line in balance_lines:
                 if line.timestamp and (max_timestamp is None or line.timestamp > max_timestamp):
                     max_timestamp = line.timestamp
+        # When using a checkpoint, the last transaction date could be in the checkpoint
+        if checkpoint is not None and checkpoint.last_transaction_date is not None:
+            if max_timestamp is None or checkpoint.last_transaction_date > max_timestamp:
+                max_timestamp = checkpoint.last_transaction_date
         ledger_details.last_transaction_date = max_timestamp
 
     if in_progress is None:
@@ -453,20 +542,14 @@ async def one_account_balance(
         in_progress = InProgressResults(results=all_held_result)
     ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
     _t5 = timer()
-    # logger.info(
-    #     # f"pipeline_build={(_t1 - _t0):.3f}s, "
-    #     f"aggregate={(_t2 - _t1):.3f}s, "
-    #     f"to_list={(_t3 - _t2):.3f}s, "
-    #     # f"clean={(_t4 - _t3):.3f}s, "
-    #     # f"merge={(_t5 - _t4):.3f}s, "
-    #     f"total={(_t5 - _t0):.3f}s for one_account_balance (account={account}, age={age})"
-    # )
 
     # --- Cache store ---
-    if use_cache:
+    try:
         ttl = LIVE_TTL_SECONDS if as_of_date is None else HISTORICAL_TTL_SECONDS
         # pass the original intent (None for live) so key doesn't drift
         await set_cached_balance(account, as_of_date, age, ledger_details, ttl=ttl)
+    except Exception as e:
+        logger.warning(f"Failed to set cache for {account.name}:{account.sub}: {e}")
 
     return ledger_details
 
@@ -579,6 +662,7 @@ async def account_balance_printout(
     age: timedelta | None = None,
     ledger_account_details: LedgerAccountDetails | None = None,
     quote: QuoteResponse | None = None,
+    period_start: datetime | None = None,
 ) -> Tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account (and optional sub-account).
@@ -592,6 +676,8 @@ async def account_balance_printout(
         age (timedelta | None, optional): An optional age filter for transactions. Defaults to None.
         ledger_account_details (LedgerAccountDetails | None, optional): Pre-computed ledger account details. If None, it will be fetched. Defaults to None.
         quote (QuoteResponse | None, optional): Pre-fetched quote for currency conversions. If None, it will be updated. Defaults to None.
+        period_start (datetime | None, optional): When set and the period produces no transactions, the balance
+            at this date is fetched and shown as the carried-forward opening balance.
 
         Tuple[str, LedgerAccountDetails]: A tuple containing a formatted string with the balance printout and the LedgerAccountDetails object.
 
@@ -608,6 +694,41 @@ async def account_balance_printout(
         ledger_account_details = await one_account_balance(
             account=account, as_of_date=as_of_date, age=age
         )
+
+    # When a period filter is active, fetch the opening balance at period_start and
+    # either: (a) use it directly if there are no transactions in the period, or
+    # (b) apply it as an offset to all running totals so the display shows cumulative
+    # balances from the start of time, not just the incremental period change.
+    opening_balance_carried_forward = False
+    opening_details: LedgerAccountDetails | None = None
+    if period_start is not None:
+        opening_details = await one_account_balance(
+            account=account, as_of_date=period_start, use_cache=False
+        )
+
+    if (
+        not ledger_account_details.balances
+        and opening_details is not None
+        and opening_details.balances
+    ):
+        ledger_account_details = opening_details
+        opening_balance_carried_forward = True
+    elif (
+        ledger_account_details.balances
+        and opening_details is not None
+        and opening_details.balances_net
+    ):
+        # Apply opening balance as offset to every running total in the period window.
+        for unit, rows in ledger_account_details.balances.items():
+            opening_net = opening_details.balances_net.get(unit, Decimal(0))
+            opening_conv = opening_details.balances_totals.get(unit, ConvertedSummary())
+            if opening_net == Decimal(0):
+                continue
+            for row in rows:
+                row.amount_running_total += opening_net
+                row.conv_running_total = row.conv_running_total + opening_conv
+        ledger_account_details._recompute_summaries()
+
     units = set(ledger_account_details.balances.keys())
     if not quote:
         quote = await TrackedBaseModel.update_quote()
@@ -617,6 +738,10 @@ async def account_balance_printout(
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
+    if opening_balance_carried_forward:
+        output.append(
+            f"No new transactions since {period_start.date()} — opening balance carried forward:"
+        )
     output.append("-" * max_width)
 
     if not ledger_account_details.balances:
@@ -664,6 +789,38 @@ async def account_balance_printout(
         )
         all_rows = ledger_account_details.balances[unit]
         if all_rows:
+            # If there's an opening balance from a prior period, emit a synthetic
+            # "=== <period_start date> ===" block with an "Opening Balance" row first.
+            if (
+                not opening_balance_carried_forward
+                and opening_details is not None
+                and opening_details.balances_net
+            ):
+                ob_net = opening_details.balances_net.get(unit, Decimal(0))
+                if ob_net != Decimal(0):
+                    ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
+                    output.append(f"\n=== {ob_date_str} ===")
+                    _, _, ob_bal_fmt = _format_amounts_for_display(
+                        unit,
+                        Decimal(0),
+                        Decimal(0),
+                        ob_net,
+                        conversion_factor,
+                        use_ksats,
+                        msats_nonks_format="one_decimal",
+                    )
+                    ob_desc = truncate_text("Opening Balance", 50)
+                    output.append(
+                        f"{'':>{COL_TS}} "
+                        f"{ob_desc:<{COL_DESC}} "
+                        f"{'   '} "
+                        f"{'':>{COL_DEBIT}} "
+                        f"{'':>{COL_CREDIT}} "
+                        f"{ob_bal_fmt:>{COL_BAL}} "
+                        f"{'':>{COL_SHORT_ID}} "
+                        f"{'ob':>{COL_LEDGER_TYPE}}"
+                    )
+
             transactions_by_date: dict[str, list] = {}
             transactions_by_cust_id: dict[str, list] = {}
             for row in all_rows:
@@ -752,6 +909,7 @@ async def account_balance_printout_grouped_by_customer(
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
     ledger_account_details: LedgerAccountDetails | None = None,
+    period_start: datetime | None = None,
 ) -> Tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account with transactions grouped by date and customer ID.
@@ -767,6 +925,8 @@ async def account_balance_printout_grouped_by_customer(
         as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to None (current date).
         age (timedelta | None, optional): Optional age filter for the balance calculation.
         ledger_account_details (LedgerAccountDetails | None, optional): Pre-fetched account details.
+        period_start (datetime | None, optional): When set and the period produces no transactions, the balance
+            at this date is fetched and shown as the carried-forward opening balance.
 
     Returns:
         str: A formatted string containing the balance with customer-grouped transactions.
@@ -783,6 +943,41 @@ async def account_balance_printout_grouped_by_customer(
         ledger_account_details = await one_account_balance(
             account=account, as_of_date=as_of_date, age=age
         )
+
+    # When a period filter is active, fetch the opening balance at period_start and
+    # either: (a) use it directly if there are no transactions in the period, or
+    # (b) apply it as an offset to all running totals so the display shows cumulative
+    # balances from the start of time, not just the incremental period change.
+    opening_balance_carried_forward = False
+    opening_details: LedgerAccountDetails | None = None
+    if period_start is not None:
+        opening_details = await one_account_balance(
+            account=account, as_of_date=period_start, use_cache=False
+        )
+
+    if (
+        not ledger_account_details.balances
+        and opening_details is not None
+        and opening_details.balances
+    ):
+        ledger_account_details = opening_details
+        opening_balance_carried_forward = True
+    elif (
+        ledger_account_details.balances
+        and opening_details is not None
+        and opening_details.balances_net
+    ):
+        # Apply opening balance as offset to every running total in the period window.
+        for unit, rows in ledger_account_details.balances.items():
+            opening_net = opening_details.balances_net.get(unit, Decimal(0))
+            opening_conv = opening_details.balances_totals.get(unit, ConvertedSummary())
+            if opening_net == Decimal(0):
+                continue
+            for row in rows:
+                row.amount_running_total += opening_net
+                row.conv_running_total = row.conv_running_total + opening_conv
+        ledger_account_details._recompute_summaries()
+
     units = set(ledger_account_details.balances.keys())
     quote = await TrackedBaseModel.update_quote()
 
@@ -791,6 +986,10 @@ async def account_balance_printout_grouped_by_customer(
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
+    if opening_balance_carried_forward:
+        output.append(
+            f"No new transactions since {period_start.date()} — opening balance carried forward:"
+        )
     output.append("-" * max_width)
 
     if not ledger_account_details.balances:
@@ -845,6 +1044,31 @@ async def account_balance_printout_grouped_by_customer(
         )
         all_rows = ledger_account_details.balances[unit]
         if all_rows:
+            # If there's an opening balance from a prior period, emit a synthetic
+            # "=== <period_start date> ===" block with an "Opening Balance" row first.
+            if (
+                not opening_balance_carried_forward
+                and opening_details is not None
+                and opening_details.balances_net
+            ):
+                ob_net = opening_details.balances_net.get(unit, Decimal(0))
+                if ob_net != Decimal(0):
+                    ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
+                    output.append(f"\n=== {ob_date_str} ===")
+                    ob_display = ob_net / conversion_factor if unit.upper() == "MSATS" else ob_net
+                    ob_fmt = f"{ob_display:>11,.3f}"
+                    ob_desc = truncate_text("Opening Balance", 50)
+                    output.append(
+                        f"{'':>{COL_TS}} "
+                        f"{ob_desc:<{COL_DESC}} "
+                        f"{'   '} "
+                        f"{'':>{COL_DEBIT}} "
+                        f"{'':>{COL_CREDIT}} "
+                        f"{ob_fmt:>{COL_BAL}} "
+                        f"{'':>{COL_SHORT_ID}} "
+                        f"{'ob':>{COL_LEDGER_TYPE}}"
+                    )
+
             # Group by date first
             transactions_by_date: dict[str, list] = {}
             for row in all_rows:
@@ -1067,6 +1291,24 @@ async def list_all_accounts() -> List[LedgerAccount]:
         List[Account]: A list of unique Account objects sorted by account type, name, and sub-account.
     """
     pipeline = list_all_accounts_pipeline()
+
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    accounts = []
+    async for doc in cursor:
+        account = LedgerAccount.model_validate(doc)
+        accounts.append(account)
+    return accounts
+
+
+async def list_all_active_accounts() -> List[LedgerAccount]:
+    """
+    Lists all unique active accounts in the ledger by aggregating debit and credit accounts.
+    An active account is defined as having at least 2 transactions.
+
+    Returns:
+        List[Account]: A list of unique active Account objects sorted by account type, name, and sub-account.
+    """
+    pipeline = list_all_active_accounts_pipeline()
 
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     accounts = []

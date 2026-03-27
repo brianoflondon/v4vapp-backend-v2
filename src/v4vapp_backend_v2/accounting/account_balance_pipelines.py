@@ -54,6 +54,74 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
     return pipeline
 
 
+def list_all_active_accounts_pipeline(
+    min_transactions: int = 2,
+) -> Sequence[Mapping[str, Any]]:
+    """
+    Returns a MongoDB aggregation pipeline that lists all accounts across both debit and
+    credit sides that have at least `min_transactions` ledger entries.
+
+    Unlike `list_all_accounts_pipeline` (which deduplicates with no frequency filter),
+    this pipeline counts how many times each unique `{account_type, name, sub, contra}`
+    combination appears and only returns those that meet the minimum threshold. This
+    makes it suitable for identifying genuinely active accounts while ignoring one-off
+    setup entries.
+
+    Args:
+        min_transactions: Minimum number of ledger entries required for an account to be
+            included in the results. Defaults to 2.
+
+    Returns:
+        Sequence[Mapping[str, Any]]: A MongoDB aggregation pipeline that returns
+            documents with `account_type`, `name`, `sub`, and `contra` fields, sorted
+            by `account_type`, `name`, `sub`.
+    """
+    pipeline: Sequence[Mapping[str, Any]] = [
+        {
+            "$project": {
+                "accounts": [
+                    {
+                        "account_type": "$debit.account_type",
+                        "name": "$debit.name",
+                        "sub": "$debit.sub",
+                        "contra": "$debit.contra",
+                    },
+                    {
+                        "account_type": "$credit.account_type",
+                        "name": "$credit.name",
+                        "sub": "$credit.sub",
+                        "contra": "$credit.contra",
+                    },
+                ]
+            }
+        },
+        {"$unwind": "$accounts"},
+        {
+            "$group": {
+                "_id": {
+                    "account_type": "$accounts.account_type",
+                    "name": "$accounts.name",
+                    "sub": "$accounts.sub",
+                    "contra": "$accounts.contra",
+                },
+                "transaction_count": {"$sum": 1},
+            }
+        },
+        {"$match": {"transaction_count": {"$gte": min_transactions}}},
+        {
+            "$project": {
+                "_id": 0,
+                "account_type": "$_id.account_type",
+                "name": "$_id.name",
+                "sub": "$_id.sub",
+                "contra": "$_id.contra",
+            }
+        },
+        {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
+    ]
+    return pipeline
+
+
 def list_all_ledger_types_pipeline() -> Sequence[Mapping[str, Any]]:
     """
     Returns a MongoDB aggregation pipeline to list all unique ledger types in the ledger.
@@ -85,6 +153,7 @@ def all_account_balances_pipeline(
     sub: str | None = None,
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
+    from_date: datetime | None = None,
     filter: Mapping[str, Any] | None = None,
     cust_ids: Set[str] | None = None,
     hide_reversed: bool = True,
@@ -94,6 +163,10 @@ def all_account_balances_pipeline(
     Notes:
     - The pipeline can be filtered by specific account details (account object, account name, or sub).
     - The pipeline considers transactions up to a specified date (`as_of_date`) and can be limited to a certain age (time window) if `age` is provided.
+    - When `from_date` is provided the pipeline fetches only transactions with
+      ``timestamp > from_date`` (and ``≤ as_of_date``).  This is used by the
+      checkpoint system to run incremental queries from a known checkpoint state.
+      ``from_date`` takes precedence over ``age``.
     - The resulting documents include running totals for amounts and conversions in various currencies, grouped by account and unit.
     The order of precedence for filtering is: `account` > `account_name` > `sub`. If none are provided, the pipeline will include all accounts.
 
@@ -103,6 +176,7 @@ def all_account_balances_pipeline(
         sub (str, optional): The sub identifier to filter transactions.
         as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
         age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
+        from_date (datetime | None, optional): Lower-bound for the timestamp filter (exclusive).  When set, overrides ``age``.  Used by the checkpoint system.
         filter (Mapping[str, Any], optional): Additional MongoDB filter to apply to the transactions.
         cust_ids (Set[str] | None, optional): A set of customer IDs to restrict the transactions to. If provided, only transactions with `cust_id` in this set will be included.
         hide_reversed (bool, optional): If True, excludes transactions that have been reversed (i.e., those with a `reversed` field). Defaults to True.
@@ -154,7 +228,13 @@ def all_account_balances_pipeline(
     facet_debit_match = {"$match": debit_match_query}
     facet_credit_match = {"$match": credit_match_query}
 
-    if age:
+    if from_date is not None:
+        # Incremental / checkpoint mode: fetch only transactions strictly after
+        # from_date up to as_of_date.
+        if as_of_date is None:
+            as_of_date = datetime.now(tz=timezone.utc)
+        date_range_query = {"$gt": from_date, "$lte": as_of_date}
+    elif age:
         if not as_of_date:
             as_of_date = datetime.now(tz=timezone.utc)
         date_range_query = {"$gte": as_of_date - age, "$lte": as_of_date}

@@ -122,7 +122,7 @@ async def invalidate_all_ledger_cache() -> int:
 
 
 async def invalidate_ledger_cache(
-    debit_name: str, debit_sub: str, credit_name: str, credit_sub: str
+    debit_name: str, debit_sub: str, credit_name: str = "", credit_sub: str = ""
 ) -> int:
     """Remove cached balances matching either debit or credit account.
 
@@ -140,7 +140,13 @@ async def invalidate_ledger_cache(
     # These patterns MUST match the _make_cache_key format,
     # especially the position of name/sub and the generation wildcard.
     debit_key = f"ledger:bal:v*:{debit_sub}:{debit_name}:*"
-    credit_key = f"ledger:bal:v*:{credit_sub}:{credit_name}:*"
+    patterns = [debit_key]
+    if credit_name and credit_sub:
+        credit_key = f"ledger:bal:v*:{credit_sub}:{credit_name}:*"
+        patterns.append(credit_key)
+    else:
+        credit_key = None
+
     try:
         # Use SCAN to locate and delete matching keys.  In a typical
         # deployment only a few cache entries will match the account pair, so
@@ -148,7 +154,7 @@ async def invalidate_ledger_cache(
         # the whole ledger: namespace that we would incur with a naive
         # invalidation.
         tasks = []
-        for pattern in [debit_key, credit_key]:
+        for pattern in patterns:
             cursor_val = 0
             while True:
                 cursor_val, keys = await InternalConfig.redis_async.scan(
