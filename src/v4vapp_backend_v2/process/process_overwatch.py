@@ -283,6 +283,9 @@ class FlowInstance(BaseModel):
         default_factory=list, description="Recorded events in this flow"
     )
     flow_value: str = Field("", description="Optional value for logging or notifications")
+    last_stall_reported_at: datetime | None = Field(
+        None, description="When the stall was last logged in the report loop"
+    )
 
     def __init__(
         self,
@@ -446,6 +449,7 @@ class FlowInstance(BaseModel):
 DEFAULT_STALL_TIMEOUT = timedelta(minutes=5)
 DEFAULT_SUPERSET_GRACE_PERIOD = timedelta(seconds=30)
 DEFAULT_TRIGGER_ONLY_TIMEOUT = timedelta(seconds=60)
+DEFAULT_STALL_LOG_INTERVAL = timedelta(hours=1)
 
 
 class Overwatch:
@@ -484,6 +488,7 @@ class Overwatch:
     stall_timeout: ClassVar[timedelta] = DEFAULT_STALL_TIMEOUT
     superset_grace_period: ClassVar[timedelta] = DEFAULT_SUPERSET_GRACE_PERIOD
     trigger_only_timeout: ClassVar[timedelta] = DEFAULT_TRIGGER_ONLY_TIMEOUT
+    stall_log_interval: ClassVar[timedelta] = DEFAULT_STALL_LOG_INTERVAL
     _loaded_from_redis: ClassVar[bool] = False
 
     def __new__(cls) -> Overwatch:
@@ -1222,8 +1227,16 @@ class Overwatch:
                 extra={"notification": False},
             )
         for flow in stalled:
+            now = datetime.now(tz=timezone.utc)
+            # Throttle stall log lines: only log once per stall_log_interval
+            if (
+                flow.last_stall_reported_at is not None
+                and now - flow.last_stall_reported_at < self.stall_log_interval
+            ):
+                continue
+            flow.last_stall_reported_at = now
             stalled_time = flow.events[-1].timestamp if flow.events else flow.started_at
-            since = datetime.now(tz=timezone.utc) - stalled_time
+            since = now - stalled_time
             logger.info(
                 f"{ICON}   ↳ STALLED {flow.flow_definition.name} "
                 f"({flow.trigger_short_id}) {flow.progress} "
@@ -1241,6 +1254,7 @@ class Overwatch:
         cls.stall_timeout = DEFAULT_STALL_TIMEOUT
         cls.superset_grace_period = DEFAULT_SUPERSET_GRACE_PERIOD
         cls.trigger_only_timeout = DEFAULT_TRIGGER_ONLY_TIMEOUT
+        cls.stall_log_interval = DEFAULT_STALL_LOG_INTERVAL
         cls._loaded_from_redis = False
         cls._instance = None
 

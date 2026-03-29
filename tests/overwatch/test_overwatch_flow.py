@@ -706,6 +706,45 @@ class TestOverwatch:
         assert len(stalled) == 1
         assert flow_instance.status == FlowStatus.STALLED
 
+    async def test_stall_log_throttled_to_interval(
+        self,
+        flow_instance: FlowInstance,
+        primary_ledger_entries: dict[str, LedgerEntry],
+        caplog,
+    ):
+        """Stalled flows should only be logged once per stall_log_interval."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.stall_log_interval = timedelta(minutes=30)  # shorten for test
+        flow_instance.add_event(FlowEvent.from_ledger_entry(primary_ledger_entries["cust_h_in"]))
+        ow.flow_instances.append(flow_instance)
+
+        # Mark flow as stalled
+        far_future = flow_instance.started_at + Overwatch.stall_timeout + timedelta(seconds=1)
+        await ow.check_stalls(now=far_future)
+        assert flow_instance.status == FlowStatus.STALLED
+
+        # First _log_report should emit the STALLED line
+        caplog.clear()
+        caplog.set_level("INFO")
+        ow._log_report()
+        stall_lines = [r for r in caplog.records if "STALLED" in r.message]
+        assert len(stall_lines) == 1
+        assert flow_instance.last_stall_reported_at is not None
+
+        # Immediate second call — should be throttled (no new STALLED line)
+        caplog.clear()
+        ow._log_report()
+        stall_lines = [r for r in caplog.records if "STALLED" in r.message]
+        assert len(stall_lines) == 0
+
+        # Advance past the interval — should log again
+        flow_instance.last_stall_reported_at -= timedelta(minutes=31)
+        caplog.clear()
+        ow._log_report()
+        stall_lines = [r for r in caplog.records if "STALLED" in r.message]
+        assert len(stall_lines) == 1
+
     async def test_load_upgrades_stalled_flow_to_completed(self):
         """A flow persisted under an older definition should complete when
         the registered definition later makes some stages optional.
