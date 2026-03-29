@@ -319,7 +319,7 @@ async def test_cache_key_is_fully_human_readable():
     # Must NOT contain a 16-char hex fragment (old hash format)
     assert not re.search(r":[0-9a-f]{16}$", key), f"Key still has hash suffix: {key}"
     # Must contain the checkpoint flag
-    assert "cp1" in key or "cp0" in key, f"Key missing cp flag: {key}"
+    assert ":cp:" in key or ":nocp:" in key, f"Key missing cp flag: {key}"
     # Must contain the account type
     assert "Liability" in key, f"Key missing account_type: {key}"
     # Must contain account name and sub
