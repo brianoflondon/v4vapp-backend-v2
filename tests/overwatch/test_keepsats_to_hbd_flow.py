@@ -233,12 +233,13 @@ class TestKeepsatsToHbdDefinition:
         assert KEEPSATS_TO_HIVE_FLOW.stage_names == expected
 
     def test_required_stages_count(self):
-        # five stages were marked optional in the definition
-        assert len(KEEPSATS_TO_HIVE_FLOW.required_stages) == 12
+        # six stages were marked optional in the definition
+        assert len(KEEPSATS_TO_HIVE_FLOW.required_stages) == 11
 
     def test_optional_stages_listed(self):
         optional = [s.name for s in KEEPSATS_TO_HIVE_FLOW.stages if not s.required]
         expected = [
+            "exchange_fees",
             "notification_custom_json_op",
             "limit_order_create_op",
             "limit_order_create",
@@ -374,8 +375,8 @@ class TestKeepsatsToHbdComplete:
     ):
         for event in ks_all_flow_events:
             ks_flow_instance.add_event(event)
-        # only 12 stages are required after marking some optional
-        assert ks_flow_instance.progress == "12/12 required stages complete"
+        # only 11 stages are required after marking some optional
+        assert ks_flow_instance.progress == "11/11 required stages complete"
 
     def test_event_count(
         self,
@@ -426,8 +427,8 @@ class TestKeepsatsToHbdIncomplete:
     ):
         assert not ks_flow_instance.is_complete
         assert ks_flow_instance.status == FlowStatus.PENDING
-        # only 12 stages are required now
-        assert len(ks_flow_instance.missing_stages) == 12
+        # only 11 stages are required now
+        assert len(ks_flow_instance.missing_stages) == 11
 
     def test_partial_primary_events_not_complete(
         self,
@@ -455,9 +456,9 @@ class TestKeepsatsToHbdIncomplete:
 
         assert not ks_flow_instance.is_complete
         assert ks_flow_instance.status == FlowStatus.IN_PROGRESS
-        # 12 required stages total, 3 added leaving 9 missing
-        assert len(ks_flow_instance.missing_stages) == 9
-        assert ks_flow_instance.progress == "3/12 required stages complete"
+        # 11 required stages total, 3 added leaving 8 missing
+        assert len(ks_flow_instance.missing_stages) == 8
+        assert ks_flow_instance.progress == "3/11 required stages complete"
 
     def test_missing_fill_order_events_not_complete(
         self,

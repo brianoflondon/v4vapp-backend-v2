@@ -1046,7 +1046,7 @@ class TestNotificationReplyCompletion:
         ext = next(f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_external")
         hive = next(f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_hive")
         assert ext.progress == "3/5 required stages complete"
-        assert hive.progress == "1/12 required stages complete"
+        assert hive.progress == "1/11 required stages complete"
 
         # Notification arrives
         notif = self._notification_op(parent_id=trigger_gid)
