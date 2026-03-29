@@ -877,10 +877,7 @@ class Overwatch:
                 hive_cfg = InternalConfig().config.hive_config
                 # Include ALL server accounts (not just the first) plus
                 # treasury, funding, exchange and exchange alternate names.
-                internal = set(
-                    hive_cfg.extended_all_account_names
-                    + hive_cfg.server_account_names
-                )
+                internal = set(hive_cfg.extended_all_account_names + hive_cfg.server_account_names)
                 if internal and from_acc in internal:
                     logger.info(
                         f"{ICON} ⏭️ Skipping flow creation for outbound transfer "
@@ -1231,7 +1228,7 @@ class Overwatch:
             logger.info(
                 f"{ICON}   ↳ {flow.flow_definition.name} "
                 f"({flow.trigger_short_id}) {flow.progress} Started: {flow.started_at}",
-                extra={"notification": False},
+                extra={"notification": False, **flow.log_extra},
             )
         for flow in stalled:
             now = datetime.now(tz=timezone.utc)

@@ -231,6 +231,7 @@ KEEPSATS_TO_HIVE_FLOW = FlowDefinition(
             event_type="ledger",
             ledger_type=LedgerType.EXCHANGE_CONVERSION,
             group="primary",
+            required=False,  # Conversion may fail if exchange rate is unavailable or zero
         ),
         FlowStage(
             name="exchange_fees",
