@@ -4,7 +4,12 @@ include the account name/sub pair so that we can perform *selective invalidation
 when only a few accounts change.
 
 Cache keys are constructed as:
-    ledger:bal:v{generation}:{param_hash}
+    ledger:bal:v{generation}:{sub}:{name}:{account_type}:{contra}:{date_part}:{age_part}:cp{0|1}
+
+Where:
+    {date_part} = "live" for current queries, or "2026-02-28T2359Z" (minute-truncated UTC)
+    {age_part}  = "none" or "{n}s" (e.g. "86400s")
+    cp0 / cp1   = use_checkpoints=False / True
 
 Operations fall into two categories:
 
@@ -22,7 +27,6 @@ return ``None`` / silently skip, and the caller falls back to the database.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -58,30 +62,41 @@ def _make_cache_key(
     account: LedgerAccount,
     as_of_date: datetime | None,
     age: timedelta | None,
+    use_checkpoints: bool = True,
 ) -> str:
-    """Build a deterministic Redis key from the query parameters.
+    """Build a fully human-readable Redis key from the query parameters.
 
-    When ``as_of_date`` is ``None`` we treat the query as a "live" lookup and
-    omit any timestamp information from the hash.  This keeps keys stable
-    across minute boundaries when callers are repeatedly asking for the
-    current balance.
+    Key format:
+        ledger:bal:v{generation}:{sub}:{name}:{account_type}:{contra}:{date_part}:{age_part}:cp{0|1}
+
+    When ``as_of_date`` is ``None`` the query is treated as a "live" lookup.
+    Datetime values are truncated to the minute and formatted without colons in
+    the time portion so they don't conflict with the ``:`` segment separator.
     """
-    account_part = f"{account.name}:{account.account_type.value}:{account.sub}:{account.contra}"
-
     if as_of_date is None:
         date_part = "live"
     else:
-        # Truncate to the minute so near-simultaneous "now" requests share a key.
-        date_part = as_of_date.replace(second=0, microsecond=0).isoformat()
+        # Truncate to the minute; format as YYYYMMDDTHHMMz (no colons in time)
+        date_part = as_of_date.replace(second=0, microsecond=0).strftime("%Y-%m-%dT%H%MZ")
+
     if age is None or age.total_seconds() <= 0:
         age_part = "none"
     else:
-        # Round age to the nearest second for key stability.
-        age_part = str(int(age.total_seconds())) if age else "none"
+        age_part = f"{int(age.total_seconds())}s"
 
-    raw = f"{account_part}|{date_part}|{age_part}"
-    key_hash = hashlib.sha256(raw.encode()).hexdigest()[:16]
-    return f"ledger:bal:v{generation}:{account.sub}:{account.name}:{key_hash}"
+    cp_part = "cp1" if use_checkpoints else "cp0"
+    contra_part = str(account.contra).lower()
+
+    return (
+        f"ledger:bal:v{generation}"
+        f":{account.sub}"
+        f":{account.name}"
+        f":{account.account_type.value}"
+        f":{contra_part}"
+        f":{date_part}"
+        f":{age_part}"
+        f":{cp_part}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +207,7 @@ async def get_cached_balance(
     account: LedgerAccount,
     as_of_date: datetime | None,
     age: timedelta | None,
+    use_checkpoints: bool = True,
 ) -> LedgerAccountDetails | None:
     """Return a cached ``LedgerAccountDetails`` or ``None`` on miss / error.
 
@@ -203,7 +219,7 @@ async def get_cached_balance(
 
     try:
         gen = await get_cache_generation()
-        key = _make_cache_key(gen, account, as_of_date, age)
+        key = _make_cache_key(gen, account, as_of_date, age, use_checkpoints)
         data: str | None = await InternalConfig.redis_async.get(key)
         if data is not None:
             result = LedgerAccountDetails.model_validate_json(data)
@@ -220,6 +236,7 @@ async def set_cached_balance(
     age: timedelta | None,
     result: LedgerAccountDetails,
     ttl: int = DEFAULT_TTL_SECONDS,
+    use_checkpoints: bool = True,
 ) -> None:
     """Store a ``LedgerAccountDetails`` in the cache.
 
@@ -230,7 +247,7 @@ async def set_cached_balance(
     """
     try:
         gen = await get_cache_generation()
-        key = _make_cache_key(gen, account, as_of_date, age)
+        key = _make_cache_key(gen, account, as_of_date, age, use_checkpoints)
         data = result.model_dump_json()
         await InternalConfig.redis_async.setex(key, ttl, data)
         logger.info(f"SET: {key} (ttl={ttl}s)")

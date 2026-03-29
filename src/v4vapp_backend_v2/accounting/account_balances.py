@@ -379,7 +379,7 @@ async def one_account_balance(
 
     # --- Cache lookup ---
     if use_cache:
-        cached_result = await get_cached_balance(account, as_of_date, age)
+        cached_result = await get_cached_balance(account, as_of_date, age, use_checkpoints=use_checkpoints)
         if cached_result is not None:
             # Always refresh in_progress_msats (changes independently of ledger)
             if in_progress is None:
@@ -497,7 +497,7 @@ async def one_account_balance(
             )
             line = AccountBalanceLine(
                 timestamp=checkpoint.period_end,
-                description="Opening Balance",
+                description=f"Carried Forward (from {checkpoint.period_end.strftime('%Y-%m-%d')})",
                 unit=unit_str,
                 amount=abs(net_val),
                 amount_signed=net_val,
@@ -547,7 +547,7 @@ async def one_account_balance(
     try:
         ttl = LIVE_TTL_SECONDS if as_of_date is None else HISTORICAL_TTL_SECONDS
         # pass the original intent (None for live) so key doesn't drift
-        await set_cached_balance(account, as_of_date, age, ledger_details, ttl=ttl)
+        await set_cached_balance(account, as_of_date, age, ledger_details, ttl=ttl, use_checkpoints=use_checkpoints)
     except Exception as e:
         logger.warning(f"Failed to set cache for {account.name}:{account.sub}: {e}")
 
@@ -809,7 +809,7 @@ async def account_balance_printout(
                         use_ksats,
                         msats_nonks_format="one_decimal",
                     )
-                    ob_desc = truncate_text("Opening Balance", 50)
+                    ob_desc = truncate_text(f"Carried Forward (from {ob_date_str})", 50)
                     output.append(
                         f"{'':>{COL_TS}} "
                         f"{ob_desc:<{COL_DESC}} "
@@ -1057,7 +1057,7 @@ async def account_balance_printout_grouped_by_customer(
                     output.append(f"\n=== {ob_date_str} ===")
                     ob_display = ob_net / conversion_factor if unit.upper() == "MSATS" else ob_net
                     ob_fmt = f"{ob_display:>11,.3f}"
-                    ob_desc = truncate_text("Opening Balance", 50)
+                    ob_desc = truncate_text(f"Carried Forward (from {ob_date_str})", 50)
                     output.append(
                         f"{'':>{COL_TS}} "
                         f"{ob_desc:<{COL_DESC}} "
