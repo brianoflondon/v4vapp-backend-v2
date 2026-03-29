@@ -379,7 +379,9 @@ async def one_account_balance(
 
     # --- Cache lookup ---
     if use_cache:
-        cached_result = await get_cached_balance(account, as_of_date, age, use_checkpoints=use_checkpoints)
+        cached_result = await get_cached_balance(
+            account, as_of_date, age, use_checkpoints=use_checkpoints
+        )
         if cached_result is not None:
             # Always refresh in_progress_msats (changes independently of ledger)
             if in_progress is None:
@@ -547,7 +549,9 @@ async def one_account_balance(
     try:
         ttl = LIVE_TTL_SECONDS if as_of_date is None else HISTORICAL_TTL_SECONDS
         # pass the original intent (None for live) so key doesn't drift
-        await set_cached_balance(account, as_of_date, age, ledger_details, ttl=ttl, use_checkpoints=use_checkpoints)
+        await set_cached_balance(
+            account, as_of_date, age, ledger_details, ttl=ttl, use_checkpoints=use_checkpoints
+        )
     except Exception as e:
         logger.warning(f"Failed to set cache for {account.name}:{account.sub}: {e}")
 
@@ -1494,6 +1498,7 @@ async def keepsats_balance(
     This looks at the `credit` values because credits to a Liability account
     represent deposits, while debits represent withdrawals.
     Adds a net_balance field to the output summing up deposits and withdrawals
+    Does not use checkpoints (this may be changed later)
 
     Args:
         cust_id (str): The customer ID for which to retrieve the Keepsats balance.
@@ -1510,10 +1515,12 @@ async def keepsats_balance(
         sub=cust_id,
         contra=False,
     )
+    # NOTE: we set use_checkpoints=False here to ensure we get the full transaction history needed to compute the balance,
     account_balance = await one_account_balance(
         account=account,
         as_of_date=as_of_date,
         age=None,
+        use_checkpoints=False,
     )
 
     if notifications:

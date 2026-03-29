@@ -84,19 +84,15 @@ def _make_cache_key(
     else:
         age_part = f"{int(age.total_seconds())}s"
 
-    cp_part = "cp1" if use_checkpoints else "cp0"
-    contra_part = str(account.contra).lower()
+    cp_part = "cp" if use_checkpoints else "no_cp"
+    contra_part = "contra" if account.contra else "normal"
 
-    return (
-        f"ledger:bal:v{generation}"
-        f":{account.sub}"
-        f":{account.name}"
-        f":{account.account_type.value}"
-        f":{contra_part}"
-        f":{date_part}"
-        f":{age_part}"
-        f":{cp_part}"
-    )
+    start = f"ledger:bal:v{generation}"
+    name_account = f"{account.sub}:{account.name}:{account.account_type.value}-{contra_part}"
+    dates = f"date-{date_part}-age-{age_part}"
+
+    answer = f"{start}:{name_account}:{cp_part}:{dates}"
+    return answer
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +219,7 @@ async def get_cached_balance(
         data: str | None = await InternalConfig.redis_async.get(key)
         if data is not None:
             result = LedgerAccountDetails.model_validate_json(data)
-            logger.debug(f"{Fore.GREEN}HIT: {key}{Fore.RESET}")
+            logger.info(f"{Fore.GREEN}HIT: {key}{Fore.RESET}")
             return result
     except Exception as e:
         logger.info(f"{Fore.RED}miss/error: {e}{Fore.RESET}")

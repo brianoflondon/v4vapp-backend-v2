@@ -397,7 +397,7 @@ async def get_account_balance(
 
         # Flush the Redis cache for this account so the display always reflects
         # the latest ledger state (avoids stale data when navigating back to the page).
-        await invalidate_ledger_cache(account.name, account.sub)
+        # await invalidate_ledger_cache(account.name, account.sub)
 
         as_of_date = None
         if as_of_date_str:
