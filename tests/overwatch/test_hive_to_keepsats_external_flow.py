@@ -717,8 +717,9 @@ class TestInternalAccountFilter:
         assert len(ow.active_flows) == 2  # both candidates created
 
     @pytest.mark.asyncio
-    async def test_server_to_customer_not_skipped(self):
-        """Server → customer transfer MUST create flow candidates (withdrawal)."""
+    async def test_server_to_customer_skipped(self):
+        """Server → customer transfer must NOT create flow candidates.
+        These are payouts, refunds, or change returns — not new deposits."""
         Overwatch.reset()
         ow = Overwatch()
         Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
@@ -728,8 +729,27 @@ class TestInternalAccountFilter:
         trigger = _op_event("transfer", group_id="gid_cust", short_id="sid_cust")
         result = await ow._try_create_flow(trigger, op)
 
-        assert result is not None
-        assert len(ow.active_flows) == 1
+        assert result is None
+        assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_repayment_transfer_does_not_trigger_new_flows(self):
+        """A Hive repayment transfer from the service account to a customer
+        (e.g. keepsats_to_hive payout with § short_id) must NOT spawn new
+        hive_to_keepsats or hive_to_keepsats_external flows."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
+        Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        # Simulate a repayment transfer: devser.v4vapp → v4vapp-test
+        op = self._internal_op("devser.v4vapp", "v4vapp-test")
+        trigger = _op_event("transfer", group_id="gid_repay", short_id="sid_repay")
+        result = await ow._try_create_flow(trigger, op)
+
+        assert result is None
+        assert len(ow.active_flows) == 0
 
 
 # ---------------------------------------------------------------------------

@@ -866,17 +866,24 @@ class Overwatch:
             )
             return None
 
-        # Skip internal operational transfers between known system accounts
-        # (e.g. server↔treasury, server↔exchange).  These never produce
-        # customer-facing conversion events and would stall as false positives.
+        # Skip transfers originating from internal/system accounts.
+        # These are payouts, refunds, change returns, or internal moves —
+        # never customer-initiated deposit flows.  Customer flows are always
+        # triggered by an *external* account sending to the service account.
         from_acc = getattr(op, "from_account", "")
         to_acc = getattr(op, "to_account", "")
-        if from_acc and to_acc:
+        if from_acc:
             try:
-                internal = set(InternalConfig().config.hive_config.extended_all_account_names)
-                if internal and from_acc in internal and to_acc in internal:
+                hive_cfg = InternalConfig().config.hive_config
+                # Include ALL server accounts (not just the first) plus
+                # treasury, funding, exchange and exchange alternate names.
+                internal = set(
+                    hive_cfg.extended_all_account_names
+                    + hive_cfg.server_account_names
+                )
+                if internal and from_acc in internal:
                     logger.info(
-                        f"{ICON} ⏭️ Skipping flow creation for internal transfer "
+                        f"{ICON} ⏭️ Skipping flow creation for outbound transfer "
                         f"({from_acc} → {to_acc}, {event.short_id})",
                         extra={"notification": False},
                     )
