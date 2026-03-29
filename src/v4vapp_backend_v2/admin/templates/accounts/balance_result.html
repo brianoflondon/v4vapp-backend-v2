@@ -317,7 +317,7 @@
                 <input type="hidden" name="line_items" value="{{ 'true' if line_items else 'false' }}">
                 <input type="hidden" name="user_memos" value="{{ 'true' if user_memos else 'false' }}">
                 <input type="hidden" name="customer_grouping" value="{{ 'true' if customer_grouping else 'false' }}">
-                <input type="hidden" name="as_of_date_str" value="{{ as_of_date.isoformat() if as_of_date else '' }}">
+                <input type="hidden" id="quickSwitchAsOfDate" name="as_of_date_str" value="">
                 <input type="hidden" name="display_period" value="{{ display_period if display_period else 'all' }}">
 
                 <div class="row">
@@ -688,6 +688,12 @@
             const selectedAccount = accountSelector.value;
 
             if (selectedAccount) {
+                // Clear quick-switch as_of_date to force latest data (no explicit date)
+                const quickSwitchAsOfDate = document.getElementById('quickSwitchAsOfDate');
+                if (quickSwitchAsOfDate) {
+                    quickSwitchAsOfDate.value = '';
+                }
+
                 // Show loading indicator
                 const loadingIndicator = document.getElementById('loadingIndicator');
                 const balancePrintout = document.getElementById('balancePrintout');

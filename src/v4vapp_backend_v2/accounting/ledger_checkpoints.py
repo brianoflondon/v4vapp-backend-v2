@@ -41,7 +41,10 @@ from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.asynchronous.collection import AsyncCollection
 
-from v4vapp_backend_v2.accounting.account_balances import list_all_accounts, list_all_active_accounts, one_account_balance
+from v4vapp_backend_v2.accounting.account_balances import (
+    list_all_active_accounts,
+    one_account_balance,
+)
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig, logger

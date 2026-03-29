@@ -22,7 +22,11 @@ from v4vapp_backend_v2.accounting.account_balances import (
     one_account_balance,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import AccountBalances, LedgerAccountDetails
-from v4vapp_backend_v2.accounting.ledger_account_classes import AccountType, LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    AccountType,
+    LedgerAccount,
+    LiabilityAccount,
+)
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
