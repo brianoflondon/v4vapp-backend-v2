@@ -19,7 +19,6 @@ from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout_grouped_by_customer,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
 from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     PeriodType,
     build_checkpoints_for_period,
@@ -242,9 +241,9 @@ async def get_user_balance(
         account = LedgerAccount.from_string(account_string)
         exception_sub_accounts = InternalConfig().config.development.allowed_hive_accounts
 
-        # Flush the Redis cache for this account so the display always reflects
-        # the latest ledger state.
-        await invalidate_ledger_cache(account.name, account.sub, account.name, account.sub)
+        # # Flush the Redis cache for this account so the display always reflects
+        # # the latest ledger state.
+        # await invalidate_ledger_cache(account.name, account.sub, account.name, account.sub)
 
         # Parse the as_of_date if provided
         as_of_date = datetime.now(tz=timezone.utc)
@@ -268,9 +267,8 @@ async def get_user_balance(
                 from v4vapp_backend_v2.accounting.ledger_checkpoints import create_checkpoint
 
                 period_type = PeriodType(display_period)
-                now = datetime.now(tz=timezone.utc)
-                period_start = last_completed_period_end(period_type, now)
-                age = now - period_start
+                period_start = last_completed_period_end(period_type, as_of_date)
+                age = as_of_date - period_start
                 await create_checkpoint(account, period_type, period_start)
             except (ValueError, Exception):
                 pass
@@ -411,10 +409,10 @@ async def get_account_balance(
         # "since last month end", not a rolling 30-day window.
         age: timedelta | None = None
         period_start: datetime | None = None
+        now = datetime.now(tz=timezone.utc)
         if display_period and display_period != "all":
             try:
                 period_type = PeriodType(display_period)
-                now = datetime.now(tz=timezone.utc)
                 period_start = last_completed_period_end(period_type, now)
                 age = now - period_start
                 await create_checkpoint(account, period_type, period_start)
@@ -521,18 +519,18 @@ async def get_account_balance(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/balance/checkpoint", response_class=HTMLResponse)
+@router.post("/balance/checkpoint", response_class=RedirectResponse)
 async def create_account_checkpoint(
     request: Request,
     account_string: str = Form(...),
     period_type_str: str = Form("monthly"),
-):
+) -> RedirectResponse:
     """Create a balance checkpoint for the given account at the end of the last completed period."""
 
     try:
+        now = datetime.now(tz=timezone.utc)
         account = LedgerAccount.from_string(account_string)
         period_type = PeriodType(period_type_str)
-        now = datetime.now(tz=timezone.utc)
         period_end = last_completed_period_end(period_type, now)
         checkpoint, new_checkpoint = await create_checkpoint(account, period_type, period_end)
         logger.info(
@@ -543,7 +541,7 @@ async def create_account_checkpoint(
         flash_msg = f"checkpoint_created={period_type}:{checkpoint.period_end.date()}"
     except Exception as e:
         logger.exception(f"Failed to create checkpoint: {e}")
-        flash_msg = f"checkpoint_error={e}"
+        flash_msg = "checkpoint_error=Failed to create checkpoint"
 
     params = urlencode({"account_string": account_string, "flash": flash_msg})
     return RedirectResponse(url=f"/admin/accounts/balance/post?{params}", status_code=303)
@@ -574,7 +572,7 @@ async def build_all_checkpoints(
         flash_msg = f"checkpoint_created=Built {total} {period_type} checkpoints for all accounts in {elapsed:.2f} s."
     except Exception as e:
         logger.exception(f"Failed to build checkpoints: {e}")
-        flash_msg = f"checkpoint_error={e}"
+        flash_msg = "checkpoint_error=Failed to build checkpoints"
 
     params = urlencode({"flash": flash_msg})
     return RedirectResponse(url=f"/admin/accounts?{params}", status_code=303)

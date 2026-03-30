@@ -28,9 +28,9 @@ Stored in MongoDB collection **`ledger_checkpoints`**.
 | `account_type` | `str` | `AccountType` enum value |
 | `contra` | `bool` | Whether this is a contra account |
 | `period_type` | `PeriodType` | `"daily"` / `"weekly"` / `"monthly"` |
-| `period_end` | `datetime` | Exclusive upper-bound of the period |
-| `balances_net` | `Dict[str, Decimal]` | Net amount per currency at `period_end` |
-| `conv_totals` | `Dict[str, CheckpointConvSummary]` | Conversion running-total per currency |
+| `period_end` | `datetime` | Inclusive upper-bound of the period |
+| `balances_net` | `Dict[str, Decimal]` | Net amount per currency at `period_end` (inclusive) |
+| `conv_totals` | `Dict[str, CheckpointConvSummary]` | Conversion running-total per currency through `period_end` |
 | `last_transaction_date` | `datetime \| None` | Timestamp of last included transaction |
 | `created_at` | `datetime` | When this checkpoint document was written |
 

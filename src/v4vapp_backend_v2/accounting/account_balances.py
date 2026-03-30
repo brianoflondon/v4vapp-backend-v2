@@ -349,6 +349,7 @@ async def one_account_balance(
 ) -> LedgerAccountDetails:
     """
     Retrieve the balance details for a single ledger account as of a specified date.
+    If use_cache is False, the cache will be ignored but the result will be written to the cache.
 
     Args:
         account (LedgerAccount | str): The ledger account object or its string identifier.

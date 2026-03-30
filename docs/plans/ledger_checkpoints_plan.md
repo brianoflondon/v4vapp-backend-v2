@@ -89,8 +89,8 @@ instead of the normal `{"$lte": as_of_date}`.
 ## Work Plan
 
 - [x] Create this plan file
-- [ ] Implement `ledger_checkpoints.py` (model + CRUD + batch builder)
-- [ ] Add `from_date` to `all_account_balances_pipeline`
-- [ ] Modify `one_account_balance` to call checkpoint logic
-- [ ] Write `tests/accounting/test_ledger_checkpoints.py`
-- [ ] Run existing test suite to check for regressions
+- [x] Implement `ledger_checkpoints.py` (model + CRUD + batch builder)
+- [x] Add `from_date` to `all_account_balances_pipeline`
+- [x] Modify `one_account_balance` to call checkpoint logic
+- [x] Write `tests/accounting/test_ledger_checkpoints.py`
+- [x] Run existing test suite to check for regressions
