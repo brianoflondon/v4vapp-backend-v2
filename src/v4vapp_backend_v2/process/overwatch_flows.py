@@ -231,12 +231,14 @@ KEEPSATS_TO_HIVE_FLOW = FlowDefinition(
             event_type="ledger",
             ledger_type=LedgerType.EXCHANGE_CONVERSION,
             group="primary",
+            required=False,  # Conversion may fail if exchange rate is unavailable or zero
         ),
         FlowStage(
             name="exchange_fees",
             event_type="ledger",
             ledger_type=LedgerType.EXCHANGE_FEES,
             group="primary",
+            required=False,  # Zero-fee exchange conversions don't generate this entry
         ),
         # --- Notification stages (reply group) ---
         FlowStage(

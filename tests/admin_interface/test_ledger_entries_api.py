@@ -4,12 +4,12 @@ from datetime import datetime, timezone
 import pytest
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
-
-pytestmark = pytest.mark.integration
 from v4vapp_backend_v2.admin.routers.ledger_entries import (
     ledger_entries_data,
     ledger_entry_reverse,
 )
+
+pytestmark = pytest.mark.integration
 
 
 class DummyCursor:

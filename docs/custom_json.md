@@ -33,7 +33,7 @@ Use this when you simply want to move sats from one v4v user to another.
   "json": {
     "from_account": "alice",
     "to_account": "bob",
-    "sats": 500000,
+    "sats": "5000",
     "memo": "thanks for the coffee"
   }
 }
@@ -53,7 +53,7 @@ Example:
   "json": {
     "from_account": "brianoflondon",
     "to_account": "v4vapp",
-    "sats": 1234,
+    "sats": "1234",
     "memo": "Converting sats to #HIVE"
   }
 }
@@ -81,7 +81,7 @@ This lets an external user withdraw sats from their keepsats balance and push th
   "json": {
     "from_account": "alice",
     "memo": "bob@sats.v4v.app",
-    "sats": 200000,
+    "sats": "200000",
     "invoice_message": "coffee and conversation"
   }
 }
@@ -103,7 +103,7 @@ When the `memo` field contains a **BOLT‑11 invoice**, the system will try to s
   "json": {
     "from_account": "alice",
     "memo": "lnbc1...",
-    "sats": 100000            # optional limit, invoice must be <= this
+    "sats": "100000"            # optional limit, invoice must be <= this
   }
 }
 ```
@@ -147,7 +147,7 @@ Example of a failure notice returned when a user’s invoice payment could not b
     "from_account": "v4vapp",
     "to_account": "alice",
     "memo": "Insufficient Keepsats balance | § XYZ123",
-    "msats": 0,
+    "msats": "0",
     "parent_id": "XYZ123",
     "notification": true
   }

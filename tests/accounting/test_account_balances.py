@@ -7,7 +7,10 @@ from pprint import pprint
 import pytest
 from bson import json_util
 
-from v4vapp_backend_v2.accounting.account_balance_pipelines import all_account_balances_pipeline
+from v4vapp_backend_v2.accounting.account_balance_pipelines import (
+    all_account_balances_pipeline,
+    list_all_active_accounts_pipeline,
+)
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
     account_balance_printout_grouped_by_customer,
@@ -15,10 +18,15 @@ from v4vapp_backend_v2.accounting.account_balances import (
     all_account_balances_summary,
     keepsats_balance,
     list_all_accounts,
+    list_all_active_accounts,
     one_account_balance,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import AccountBalances, LedgerAccountDetails
-from v4vapp_backend_v2.accounting.ledger_account_classes import AccountType, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    AccountType,
+    LedgerAccount,
+    LiabilityAccount,
+)
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -96,6 +104,50 @@ async def test_list_all_accounts():
     assert isinstance(accounts, list)
     assert len(accounts) > 0
     pprint(accounts)
+
+
+async def test_list_all_active_accounts_pipeline():
+    """Test structure of the list_all_active_accounts_pipeline."""
+    pipeline = list_all_active_accounts_pipeline()
+    assert isinstance(pipeline, (list, tuple)) or hasattr(pipeline, "__len__")
+    stages = list(pipeline)
+    assert len(stages) == 6
+
+    # Stage 0: $project with accounts array containing debit + credit with contra field
+    project_stage = stages[0]
+    assert "$project" in project_stage
+    accounts_arr = project_stage["$project"]["accounts"]
+    assert len(accounts_arr) == 2
+    for entry in accounts_arr:
+        assert "contra" in entry
+
+    # Stage 2: $group with transaction_count and _id that includes contra
+    group_stage = stages[2]
+    assert "$group" in group_stage
+    assert group_stage["$group"]["transaction_count"] == {"$sum": 1}
+    assert "contra" in group_stage["$group"]["_id"]
+
+    # Stage 3: $match filtering by transaction_count >= 2
+    match_stage = stages[3]
+    assert "$match" in match_stage
+    assert match_stage["$match"] == {"transaction_count": {"$gte": 2}}
+
+    # Last stage: $sort
+    assert "$sort" in stages[-1]
+
+
+async def test_list_all_active_accounts():
+    """Test that list_all_active_accounts returns a non-empty list of LedgerAccount instances."""
+    active_accounts = await list_all_active_accounts()
+    assert isinstance(active_accounts, list)
+    assert len(active_accounts) > 0
+    for account in active_accounts:
+        assert isinstance(account, LedgerAccount)
+        assert account.name  # non-empty name
+
+    all_accounts = await list_all_accounts()
+    assert len(active_accounts) <= len(all_accounts)
+    print(f"Active accounts: {len(active_accounts)}, All accounts: {len(all_accounts)}")
 
 
 async def test_account_details_pipeline():

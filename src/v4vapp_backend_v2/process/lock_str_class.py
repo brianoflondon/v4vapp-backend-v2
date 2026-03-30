@@ -106,11 +106,12 @@ async def _log_outstanding_locks() -> None:
                 )
                 lines.append(f"- {key} ttl={ttl_str}")
             logger.info(
-                f"{ICON} {Fore.MAGENTA}Active Redis locks:\n"
-                + "\n".join(lines)
-                + f"{Style.RESET_ALL}",
+                f"{ICON} {Fore.MAGENTA}Active Redis locks:{Style.RESET_ALL}",
                 extra={"notification": False, "error_code_clear": "redis_locks"},
             )
+            for line in lines:
+                logger.info(line, extra={"notification": False})
+
         # else:
         #     logger.debug(f"{ICON} No active Redis locks.", extra={"notification": False})
     except Exception as e:

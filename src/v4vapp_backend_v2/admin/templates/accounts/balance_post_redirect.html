@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+
+    {% if checkpoint_message %}
+    <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-bookmark-check me-2"></i>
+        {{ checkpoint_message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    {% if checkpoint_error %}
+    <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        {{ checkpoint_error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="text-center text-muted py-4">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+        Returning to balance report…
+    </div>
+
+    <!-- Auto-submit POST back to balance page -->
+    <form id="autoPostForm" method="post" action="/admin/accounts/balance">
+        <input type="hidden" name="account_string" value="{{ account_string }}">
+        <input type="hidden" name="line_items" value="true">
+        <input type="hidden" name="user_memos" value="true">
+        <input type="hidden" name="customer_grouping" value="false">
+        <input type="hidden" name="display_period" value="{{ display_period or '0' }}">
+    </form>
+</div>
+
+<script>
+    // Submit automatically after a brief pause so the flash is visible
+    setTimeout(function () {
+        document.getElementById('autoPostForm').submit();
+    }, 1500);
+</script>
+{% endblock %}

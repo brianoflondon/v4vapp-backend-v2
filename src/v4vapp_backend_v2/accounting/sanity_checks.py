@@ -431,7 +431,7 @@ all_sanity_checks: List[Callable[[InProgressResults], Coroutine[Any, Any, Sanity
 # MARK: Runner for all sanity checks
 
 
-@async_time_decorator
+# @async_time_decorator
 async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as
@@ -464,7 +464,7 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
     if use_cache:
         cached_results = await _get_cached_sanity_check_results()
         if cached_results is not None:
-            logger.info("Using cached sanity check results", extra={"notification": False})
+            logger.debug("Using cached sanity check results", extra={"notification": False})
             return cached_results
 
     # Collect coroutines for checks so we can create TaskGroup tasks from coroutines

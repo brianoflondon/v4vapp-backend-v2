@@ -272,3 +272,56 @@ async def test_selective_invalidation_falls_back_to_full_on_error(
     # fallback should have bumped the generation
     assert gen_after == gen_before + 1
     assert await get_cached_balance(acc, as_of, None) is None
+
+
+async def test_checkpoint_flag_produces_distinct_cache_keys():
+    """use_checkpoints=True and use_checkpoints=False should use separate cache entries."""
+    from datetime import datetime, timezone
+
+    account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
+    as_of = datetime.now(tz=timezone.utc)
+
+    bal = await one_account_balance(account=account, use_cache=False)
+
+    # Store under cp1 (use_checkpoints=True)
+    await set_cached_balance(account, as_of, None, bal, ttl=30, use_checkpoints=True)
+
+    # cp0 key should not exist yet
+    assert await get_cached_balance(account, as_of, None, use_checkpoints=False) is None
+
+    # Store a different "balance" under cp0 — we reuse bal but the key is distinct
+    await set_cached_balance(account, as_of, None, bal, ttl=30, use_checkpoints=False)
+
+    # Both should now be independently retrievable
+    assert await get_cached_balance(account, as_of, None, use_checkpoints=True) is not None
+    assert await get_cached_balance(account, as_of, None, use_checkpoints=False) is not None
+
+
+async def test_cache_key_is_fully_human_readable():
+    """The Redis key must be fully human-readable — no opaque hex fragment."""
+    import re
+    from datetime import datetime, timezone
+
+    from v4vapp_backend_v2.accounting.ledger_cache import _make_cache_key, get_cache_generation
+
+    account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
+    as_of = datetime.now(tz=timezone.utc)
+
+    bal = await one_account_balance(account=account, use_cache=False)
+    await set_cached_balance(account, as_of, None, bal, ttl=30, use_checkpoints=True)
+
+    gen = await get_cache_generation()
+    key = _make_cache_key(gen, account, as_of, None, use_checkpoints=True)
+
+    # Key should exist in Redis
+    assert await InternalConfig.redis_async.exists(key), f"Expected key not found: {key}"
+
+    # Must NOT contain a 16-char hex fragment (old hash format)
+    assert not re.search(r":[0-9a-f]{16}$", key), f"Key still has hash suffix: {key}"
+    # Must contain the checkpoint flag
+    assert ":cp:" in key or ":nocp:" in key, f"Key missing cp flag: {key}"
+    # Must contain the account type
+    assert "Liability" in key, f"Key missing account_type: {key}"
+    # Must contain account name and sub
+    assert "VSC Liability" in key, f"Key missing account name: {key}"
+    assert "v4vapp-test" in key, f"Key missing sub: {key}"
