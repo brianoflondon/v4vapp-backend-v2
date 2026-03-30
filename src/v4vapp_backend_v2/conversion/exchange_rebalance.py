@@ -32,6 +32,8 @@ from v4vapp_backend_v2.conversion.exchange_protocol import (
 from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 
+ICON = "⚖️"
+
 
 class RebalanceDirection(StrEnum):
     """Direction of the rebalance trade."""
@@ -399,22 +401,29 @@ class RebalanceResult(BaseModel):
         if self.executed and self.order_result:
             base, quote = self.order_result._get_assets()
             qty_str = format_base_asset(self.order_result.executed_qty, base)
-            fee_str = format_quote_asset(
-                self.order_result.fee_original, self.order_result.fee_asset
+            if self.order_result.fee_msats < Decimal("1000"):
+                fee_str = ""
+            else:
+                fee_str = f" Fee: {format_quote_asset(self.order_result.fee_original, self.order_result.fee_asset)}"
+            avg_price_sats = (
+                self.order_result.avg_price * Decimal("100000000")
+                if self.order_result.avg_price
+                else Decimal("0")
             )
-            return (
-                f"Rebalance executed: {self.order_result.side} "
-                f"{qty_str} @ {self.order_result.avg_price:.8f}, fee: {fee_str}"
+            avg_price_str = (
+                f"{avg_price_sats:.0f} sats" if avg_price_sats > Decimal("0") else "N/A"
             )
+            quote_quantity_str = format_quote_asset(self.order_result.quote_qty, quote)
+            return f"{ICON} Rebalance: {self.order_result.side} {qty_str} @ {avg_price_str}{fee_str} for {quote_quantity_str}"
         elif self.error:
-            return f"Rebalance failed: {self.error}"
+            return f"{ICON} Rebalance failed: {self.error}"
         else:
             pending_notional_str = format_quote_asset(
                 self.pending_notional,
                 self.order_result.quote_asset if self.order_result else "BTC",
             )
             return (
-                f"Rebalance pending: {self.pending_qty:.3f} qty, "
+                f"{ICON} Rebalance pending: {self.pending_qty:.3f} qty, "
                 f"{pending_notional_str} notional - {self.reason}"
             )
 
@@ -541,7 +550,7 @@ async def add_pending_rebalance(
             pending.min_qty_threshold = minimums.min_qty
             pending.min_notional_threshold = minimums.min_notional
         except ExchangeConnectionError as e:
-            logger.warning(f"Could not update minimums from exchange: {e}")
+            logger.warning(f"{ICON} Could not update minimums from exchange: {e}")
 
         # Estimate quote value for the new quantity
         try:
@@ -551,7 +560,7 @@ async def add_pending_rebalance(
             # Use a rough estimate if we can't get current price
             quote_value = Decimal("0")
             logger.warning(
-                f"Could not get price for {base_asset}/{quote_asset}, "
+                f"{ICON} Could not get price for {base_asset}/{quote_asset}, "
                 f"pending quote value may be inaccurate {transaction_id}"
             )
 
@@ -595,21 +604,21 @@ async def add_pending_rebalance(
         return result
 
     except ExchangeBelowMinimumError as e:
-        logger.warning(f"Rebalance below minimum: {e}")
+        logger.warning(f"{ICON} Rebalance below minimum: {e}")
         return RebalanceResult(
             executed=False,
             reason=str(e),
             error=str(e),
         )
     except ExchangeConnectionError as e:
-        logger.error(f"Exchange connection error during rebalance: {e}")
+        logger.error(f"{ICON} Exchange connection error during rebalance: {e}")
         return RebalanceResult(
             executed=False,
             reason="Exchange connection error",
             error=str(e),
         )
     except Exception as e:
-        logger.error(f"Unexpected error during rebalance: {e}", exc_info=True)
+        logger.error(f"{ICON} Unexpected error during rebalance: {e}", exc_info=True)
         return RebalanceResult(
             executed=False,
             reason="Unexpected error",
@@ -774,7 +783,7 @@ async def get_net_position(
     except ExchangeConnectionError:
         min_qty = Decimal("0")
         min_notional = Decimal("0")
-        logger.warning(f"Could not get minimums for {base_asset}/{quote_asset}")
+        logger.warning(f"{ICON} Could not get minimums for {base_asset}/{quote_asset}")
 
     # Calculate net position
     # Positive net_qty = need to sell (more sells than buys)
@@ -790,6 +799,9 @@ async def get_net_position(
             net_notional = net_qty * price
         except ExchangeConnectionError:
             net_notional = sell_pending.pending_quote_value - buy_pending.pending_quote_value
+            logger.warning(
+                f"{ICON} Could not get price for {base_asset}/{quote_asset}, using pending quote values"
+            )
     elif net_qty < Decimal("0"):
         net_direction = RebalanceDirection.BUY_BASE_WITH_QUOTE
         net_qty_abs = abs(net_qty)
@@ -798,6 +810,9 @@ async def get_net_position(
             net_notional = net_qty_abs * price
         except ExchangeConnectionError:
             net_notional = buy_pending.pending_quote_value - sell_pending.pending_quote_value
+            logger.warning(
+                f"{ICON} Could not get price for {base_asset}/{quote_asset}, using pending quote values"
+            )
     else:
         net_direction = None
         net_notional = Decimal("0")
@@ -862,7 +877,7 @@ async def execute_net_rebalance(
     )
 
     logger.debug(
-        f"Net position: sell={net_position.sell_pending_qty} "
+        f"{ICON} Net position: sell={net_position.sell_pending_qty} "
         f"buy={net_position.buy_pending_qty} "
         f"net={net_position.net_qty} {base_asset} "
         f"direction={net_position.net_direction}"
@@ -928,7 +943,7 @@ async def execute_net_rebalance(
         return result
 
     except ExchangeBelowMinimumError as e:
-        logger.warning(f"Net rebalance below minimum: {e}")
+        logger.warning(f"{ICON} Net rebalance below minimum: {e}")
         return RebalanceResult(
             executed=False,
             reason=str(e),
@@ -936,7 +951,7 @@ async def execute_net_rebalance(
             pending_qty=net_position.abs_net_qty,
         )
     except ExchangeConnectionError as e:
-        logger.error(f"Exchange connection error during net rebalance: {e}")
+        logger.error(f"{ICON} Exchange connection error during net rebalance: {e}")
         return RebalanceResult(
             executed=False,
             reason="Exchange connection error",
@@ -944,7 +959,7 @@ async def execute_net_rebalance(
             pending_qty=net_position.abs_net_qty,
         )
     except Exception as e:
-        logger.error(f"Unexpected error during net rebalance: {e}", exc_info=True)
+        logger.error(f"{ICON} Unexpected error during net rebalance: {e}", exc_info=True)
         return RebalanceResult(
             executed=False,
             reason="Unexpected error",
