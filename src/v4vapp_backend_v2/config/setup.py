@@ -140,6 +140,7 @@ class LoggingConfig(BaseConfig):
     # configured log files. Default: False (keep rotated files next to the
     # active log file with the rotation number before the extension).
     rotation_folder: bool = False
+    notification_quiet_mode: bool = False
 
     def default_log_level_numeric(self) -> int:
         # Cache the numeric value after first parse so we don't re-parse on every call

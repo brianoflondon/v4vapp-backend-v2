@@ -752,7 +752,7 @@ async def combined_logging(
         None
     """
 
-    if NOTIFICATION_QUITE_MODE:
+    if InternalConfig().config.logging.notification_quiet_mode:
         notification = False
 
     if db_store:
@@ -762,6 +762,7 @@ async def combined_logging(
         message = f"{ICON} {op.log_str}"
         log_extras = {
             "notification": notification,
+            "silent": True,
             "notification_str": f"{ICON} {op.notification_str}",
             **op.log_extra,
         }
