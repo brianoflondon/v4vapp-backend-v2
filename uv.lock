@@ -1109,7 +1109,7 @@ wheels = [
 
 [[package]]
 name = "hive-nectar"
-version = "0.2.14"
+version = "0.2.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "appdirs" },
@@ -1126,9 +1126,9 @@ dependencies = [
     { name = "scrypt" },
     { name = "types-requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/af/89/1af93dbcc7d6c13533f3e14cc98f4eaf47500a80c781b78903c2b86ae282/hive_nectar-0.2.14.tar.gz", hash = "sha256:4f57b6029afd47263dfbe36ed2ce2c602b405140ff72c66c4959d89a2d547bd3", size = 746117, upload-time = "2026-01-21T09:27:41.384Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/04/ff/c1a102eb9bd97c63ff899648f2a29f5d499672a9674d2ee5ab5f4a26007a/hive_nectar-0.2.15.tar.gz", hash = "sha256:8617e4ede1d1aac7f22be12b5ea2f68579a5d20b84da042047b743ba0179e170", size = 743224, upload-time = "2026-04-05T08:51:37.901Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b4/51/abc5077242efef2759a773761642ed7dc2293b775db1d92ac238601e88a5/hive_nectar-0.2.14-py3-none-any.whl", hash = "sha256:ba0a0000341a787fe40bcc6fa29656e43e28f5aca82a03d82b267f7ac7f8d158", size = 458348, upload-time = "2026-01-21T09:27:43.377Z" },
+    { url = "https://files.pythonhosted.org/packages/78/a8/83b20b2c37d4bbbdafb8848affde8cf0936ee89314f02d805afefab175af/hive_nectar-0.2.15-py3-none-any.whl", hash = "sha256:6a89077a447f1c94d7b9db94ee31a7daea5378b5f14b510379e5d17ba049aae0", size = 458534, upload-time = "2026-04-05T08:51:34.749Z" },
 ]
 
 [[package]]
