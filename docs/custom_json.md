@@ -80,13 +80,14 @@ This lets an external user withdraw sats from their keepsats balance and push th
   "id": "v4vapp_transfer",
   "json": {
     "from_account": "alice",
+    "to_account": "v4vapp",
     "memo": "bob@sats.v4v.app",
     "sats": "200000",
     "invoice_message": "coffee and conversation"
   }
 }
 ```
-
+* `to_account` – must be the server account (e.g. `v4vapp`) to trigger this behaviour; the system will ignore any other value and reject the request if `to_account` is missing or different.
 * `memo` – a Lightning address (for example `user@sats.v4v.app`).
 * `sats` (or `msats`) – the amount to send. The system will attempt to route the payment for exactly this amount.
 * `invoice_message` – optional text included when resolving the address; delivered to the recipient if the address resolution results in an invoice.
@@ -102,12 +103,13 @@ When the `memo` field contains a **BOLT‑11 invoice**, the system will try to s
   "id": "v4vapp_transfer",
   "json": {
     "from_account": "alice",
+    "to_account": "v4vapp",
     "memo": "lnbc1...",
     "sats": "100000"            # optional limit, invoice must be <= this
   }
 }
 ```
-
+* `to_account` – must be the server account (e.g. `v4vapp`) to trigger this behaviour; the system will ignore any other value and reject the request if `to_account` is missing or different.
 * `memo` – full Lightning invoice string. The amount is fixed inside the invoice.
 * `sats`/`msats` – optional. If provided, the invoice amount cannot exceed this value; otherwise the request is rejected.
 
