@@ -1068,7 +1068,7 @@ class Binance(QuoteService):
         try:
             # raise Exception("debug")
             client = get_client()
-            ticker_info = client.book_ticker(symbols=["HIVEUSDT", "HIVEBTC", "BTCUSDT"])
+            ticker_info = client.book_ticker(symbols=["HIVEUSDT", "BTCUSDT"])
             medians = {}
             for ticker in ticker_info:
                 bid_price = float(ticker["bidPrice"])
