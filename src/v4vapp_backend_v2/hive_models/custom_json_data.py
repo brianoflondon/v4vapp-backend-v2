@@ -135,8 +135,10 @@ class KeepsatsTransfer(BaseModel):
         """
         if data["msats"] > Decimal(0) and data["memo"] != "":
             lightning_memo = LightningMemo(data["memo"])
+            from_account = data.get("from_account", data.get("hive_accname_from", ""))
+            to_account = data.get("to_account", data.get("hive_accname_to", ""))
             if lightning_memo.is_lightning_invoice:
-                if data.get("from_account", "") != InternalConfig().server_id:
+                if from_account != InternalConfig().server_id:
                     logger.warning(
                         f"KeepsatsTransfer Memo contains a lightning invoice, "
                         f"but msats is set to {data['msats']:,.0f}. and sender is not "
@@ -149,8 +151,8 @@ class KeepsatsTransfer(BaseModel):
                     data["sats"] = 0
             if lightning_memo.is_ln_address:
                 if (
-                    data.get("from_account", "") != InternalConfig().server_id
-                    and data.get("to_account", "") != InternalConfig().server_id
+                    from_account != InternalConfig().server_id
+                    and to_account != InternalConfig().server_id
                 ):
                     logger.warning(
                         "KeepsatsTransfer Memo contains a lightning address, "
