@@ -168,7 +168,7 @@ async def decode_any_lightning_string(
         if not response.comment_allowed:
             params = {"amount": int(zero_amount_invoice_send_msats)}
         else:
-            if len(comment) > response.comment_allowed:
+            if comment and len(comment) > response.comment_allowed:
                 comment = comment[: response.comment_allowed]
             params = {"amount": int(zero_amount_invoice_send_msats), "comment": comment}
 
