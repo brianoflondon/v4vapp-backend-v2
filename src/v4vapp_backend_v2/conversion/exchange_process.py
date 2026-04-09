@@ -6,7 +6,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, Ex
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransferKeepsatsToHive
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
 from v4vapp_backend_v2.conversion.exchange_rebalance import (
     RebalanceDirection,
@@ -29,6 +29,21 @@ async def rebalance_queue_task(
     # This runs in background and doesn't affect customer transaction
     # Note: Exchange selection is driven by config (default_exchange setting)
     try:
+        app_config = InternalConfig().config
+        provider_name = app_config.exchange_config.default_exchange
+        provider_config = app_config.exchange_config.get_provider(provider_name)
+        if provider_config.active_network.no_trade:
+            logger.info(
+                "Skipping exchange rebalance: active exchange network has no_trade enabled",
+                extra={
+                    "notification": False,
+                    "exchange_provider": provider_name,
+                    "direction": direction.value,
+                    "group_id": tracked_op.group_id,
+                },
+            )
+            return
+
         # Always use HIVE for exchange - Binance doesn't trade HBD
         # Get exchange adapter based on config (uses default_exchange)
         logger.info(

@@ -252,6 +252,28 @@ class KeepsatsTransfer(BaseModel):
             return Decimal(str(v))
         return v
 
+    def export_custom_json(self) -> Dict[str, Any]:
+        """
+        Exports the KeepsatsTransfer data to a format suitable for Hive custom JSON.
+        This method can be used to convert the internal representation of a KeepsatsTransfer
+        into a format that can be sent as a custom JSON operation on the Hive blockchain.
+
+        Args:
+            data (Dict[str, Any]): The data to be exported, typically an instance of KeepsatsTransfer.
+        Returns:
+            Dict[str, Any]: A dictionary formatted for Hive custom JSON operations.
+        """
+        answer = {
+            "from_account": self.from_account,
+            "to_account": self.to_account,
+            "msats": str(self.msats),
+        }
+        if self.memo:
+            answer["memo"] = self.memo
+        if self.invoice_message:
+            answer["invoice_message"] = self.invoice_message
+        return answer
+
 
 CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]
 

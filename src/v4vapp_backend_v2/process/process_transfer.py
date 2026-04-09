@@ -459,10 +459,9 @@ async def decode_incoming_and_checks(
     try:
         max_send_msats = tracked_op.max_send_amount_msats()
 
+        invoice_comment = ""
         if isinstance(tracked_op, CustomJson):
-            invoice_comment = getattr(tracked_op.json_data, "invoice_message", "")
-        else:
-            invoice_comment = ""
+            invoice_comment = str(getattr(tracked_op.json_data, "invoice_message", ""))
 
         pay_req = await decode_any_lightning_string(
             input=tracked_op.d_memo,

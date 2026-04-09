@@ -188,6 +188,9 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     cust_id = payment.cust_id or ""
 
     debit_cust_id = cust_id
+    # if this is a custom_json initiated payment we need to debit the server account instead of the customer, since the customer never actually had control of the funds
+    # if payment. == "custom_json":
+    #     debit_cust_id = InternalConfig().server_id
 
     ledger_type = LedgerType.WITHDRAW_LIGHTNING
     cost_of_payment_msat = Decimal(payment.value_msat) + Decimal(payment.fee_msat)
@@ -222,6 +225,17 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     )
     await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
+
+    if payment.custom_records and getattr(payment.custom_records, "v4vapp_group_id", None):
+        original_group_id = payment.custom_records.v4vapp_group_id
+        c_j_transfer_group_id = f"{original_group_id}_{LedgerType.CUSTOM_JSON_TRANSFER.value}"
+        previous_ledger_entry = await LedgerEntry.load(c_j_transfer_group_id)
+        # This reverses the ledger entry transfer to the server for a custom json payment of a lightning invoice,
+        # which is created when the invoice is paid and the custom json is processed.
+        # This makes it so that the ledger entries for a custom json initiated payment of a lightning invoice are
+        # cleaner and just show the payment to the node and not a transfer to the server and then a payment to the node.
+        if previous_ledger_entry:
+            await previous_ledger_entry.save(upsert=True, reverse=True)
 
     # Still unsure if this is how we want to do this.
     # Also need to set special characteristics for Expense payments based on destination or other
