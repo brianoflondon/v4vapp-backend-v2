@@ -453,33 +453,39 @@ async def test_get_all_quotes_global_timeout(mocker):
 
 
 @pytest.mark.asyncio
-async def test_per_service_timeout(mocker):
+async def test_per_service_timeout(mocker, monkeypatch: pytest.MonkeyPatch):
     """Individual services should time out independently and return a
     "Service timeout" message without waiting for the global timeout.
     """
 
-    # only CoinGecko will be slow; the rest can return a normal dummy quote
-    # to exercise the per-service timeout we give a very long sleep while using
-    # a global timeout that is bigger than the per-service limit (15s).  The
-    # constant PER_SERVICE_TIMEOUT in the implementation is min(timeout, 15),
-    # so calling with timeout=20 yields a 15s limit.
-    async def slow_quote(self, use_cache=True):
-        await asyncio.sleep(20.0)
-        return QuoteResponse(source="slow")
-
-    mocker.patch.object(CoinGecko, "get_quote", new=slow_quote)
-
-    # patch the other services with fast no-op responses so taskgroup runs
+    # Patch the timeout wrapper directly so we exercise the per-service timeout
+    # path without waiting for the real 15 second limit.
     async def fast_quote(self, use_cache=True):
         return QuoteResponse(source="fast")
 
+    mocker.patch.object(CoinGecko, "get_quote", new=fast_quote)
     mocker.patch.object(Binance, "get_quote", new=fast_quote)
     mocker.patch.object(CoinMarketCap, "get_quote", new=fast_quote)
     mocker.patch.object(HiveInternalMarket, "get_quote", new=fast_quote)
 
+    real_wait_for = asyncio.wait_for
+    wait_for_calls = {"count": 0}
+
+    async def fake_wait_for(awaitable, timeout):
+        wait_for_calls["count"] += 1
+        if wait_for_calls["count"] == 1:
+            close = getattr(awaitable, "close", None)
+            if callable(close):
+                close()
+            raise asyncio.TimeoutError
+        return await real_wait_for(awaitable, timeout)
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.helpers.crypto_prices.asyncio.wait_for",
+        fake_wait_for,
+    )
+
     all_quotes = AllQuotes()
-    # global timeout large enough that the outer block does not fire before
-    # the per-service limit; per-service cutoff is 15 seconds in our code
     await all_quotes.get_all_quotes(timeout=20, store_db=False)
 
     assert "service timeout" in all_quotes.quotes["CoinGecko"].error.lower()

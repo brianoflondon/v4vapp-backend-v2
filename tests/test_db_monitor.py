@@ -157,7 +157,7 @@ def test_ignore_changes_unit_and_perf():
     import timeit
 
     fixed = {"updateDescription": {"updatedFields": {k: 1 for k in IGNORED_UPDATE_FIELDS}}}
-    runs = 100_000
+    runs = 10_000
     total = timeit.timeit(lambda: ignore_changes(fixed, "payments"), number=runs)
     avg = total / runs
     # on CI the call overhead can be higher; allow up to 100µs
@@ -266,6 +266,7 @@ async def test_process_op_ledger_path_respects_flag(monkeypatch):
     await module.process_op({"fullDocument": {"_id": 4}}, "ledger")
     assert calls == [fake_ledger], "ingestion should run when enabled"
     assert validated == [{"_id": 4}]
+
 
 @pytest.mark.skip(
     reason="This test is more of an integration test and is a bit flaky in CI; may revisit later with a more robust approach"

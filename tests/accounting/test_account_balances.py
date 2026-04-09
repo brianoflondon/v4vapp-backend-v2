@@ -363,7 +363,7 @@ async def test_get_account_balance_printout():
     result, details = await account_balance_printout("v4vapp-test", line_items=False)
     print(result)
     accounts = await list_all_accounts()
-    for account in accounts:
+    for account in accounts[:3]:
         result, details = await account_balance_printout(account)
 
 

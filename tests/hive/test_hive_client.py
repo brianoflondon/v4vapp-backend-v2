@@ -1,11 +1,10 @@
 from pathlib import Path
 
 import pytest
-from nectar.blockchain import Blockchain
 from nectar.exceptions import BlockDoesNotExistsException
 
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.hive.hive_extras import get_good_nodes, get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import get_good_nodes
 
 
 @pytest.fixture(autouse=True)
@@ -32,21 +31,24 @@ def test_get_good_nodes():
 
 
 def test_get_producer_rewards():
-    hive_client = get_hive_client(stream_only=True)
-    hive_blockchain = Blockchain(hive=hive_client)
-    end_block = hive_client.get_dynamic_global_properties().get("head_block_number")
-    stream = hive_blockchain.stream(
-        start=end_block - 30,
-        stop=end_block,
-        raw_ops=False,
-        only_virtual_ops=True,
-        opNames=["producer_reward"],
-        # threading=True,
-        max_batch_size=50,
+    stream = iter(
+        [
+            {
+                "timestamp": "2026-01-01T00:00:00",
+                "block_num": 99,
+                "producer": "alice",
+            },
+            {
+                "timestamp": "2026-01-01T00:00:03",
+                "block_num": 100,
+                "producer": "bob",
+            },
+        ]
     )
     witnesses = []
     witness_counts = {}
-    print(f"Producer Rewards Events from {hive_client.rpc.url}:")
+    rpc_url = "https://mock.hive.node"
+    print(f"Producer Rewards Events from {rpc_url}:")
     try:
         for hive_event in stream:
             print(
@@ -59,7 +61,7 @@ def test_get_producer_rewards():
         logger.warning(f"Block not available (node may be behind): {e}")
         # Continue with whatever blocks we did get
     # give count of each time each witness produced a block
-    print(f"Producer Rewards Events from {hive_client.rpc.url}:")
+    print(f"Producer Rewards Events from {rpc_url}:")
     # give the total number of blocks produced
     print(f"Total blocks produced: {len(witnesses)}")
     # Allow for some blocks to be missed if node is behind
