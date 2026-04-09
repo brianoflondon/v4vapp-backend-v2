@@ -27,13 +27,13 @@ def test_ledger_entries_template_compiles_and_renders():
     from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 
     entry = LedgerEntry(group_id="g1", short_id="s1")
-    entry.reversed = datetime.datetime.utcnow()
+    entry.reversed = datetime.datetime.now(tz=datetime.timezone.utc)
 
     ctx = {
         "accounts_by_type": {},
         "account_string": "",
         "sub_filter": "",
-        "as_of_date": datetime.datetime.utcnow(),
+        "as_of_date": datetime.datetime.now(tz=datetime.timezone.utc),
         "age_hours": 0,
         "line_items": True,
         "user_memos": True,
@@ -65,7 +65,7 @@ def test_ledger_entries_template_compiles_and_renders():
     assert "Reverse" in rendered2
     # and when an entry is reversed the button should not appear (only badge)
     entry3 = LedgerEntry(group_id="g3", short_id="s3")
-    entry3.reversed = datetime.datetime.utcnow()
+    entry3.reversed = datetime.datetime.now(tz=datetime.timezone.utc)
     ctx["entries"] = [entry3]
     rendered3 = template.render(**ctx)
     # expect no reverse button element rendered for an already-reversed entry
