@@ -260,6 +260,12 @@ async def testnet_rebalance(hive_qty: Decimal, hive_target: Decimal):
         # Only do this on testnet
         if not binance_config.use_testnet:
             return
+        if binance_config.active_network.no_trade:
+            logger.info(
+                f"{ICON} Skipping testnet rebalance: no_trade is enabled for active network.",
+                extra={"notification": False},
+            )
+            return
     except Exception as e:
         logger.warning(
             f"{ICON} Error accessing Binance config: {e}",
