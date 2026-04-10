@@ -16,7 +16,9 @@ import pytest
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.process.overwatch_flows import (
     EXTERNAL_TO_HIVE_FLOW,
+    EXTERNAL_TO_HIVE_LOOPBACK_FLOW,
     EXTERNAL_TO_KEEPSATS_FLOW,
+    EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW,
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
     KEEPSATS_INTERNAL_TRANSFER_FLOW,
@@ -88,6 +90,8 @@ def _register_all() -> Overwatch:
     Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
     Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_FLOW)
     Overwatch.register_flow(EXTERNAL_TO_HIVE_FLOW)
+    Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW)
+    Overwatch.register_flow(EXTERNAL_TO_HIVE_LOOPBACK_FLOW)
     Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
     Overwatch._loaded_from_redis = True
     return ow
@@ -326,10 +330,13 @@ class TestLateEventTimeWindow:
         await ow._dispatch(
             _ledger_event(LedgerType.RECEIVE_LIGHTNING, group_id="gid_ks", short_id="ks_notif")
         )
-        assert len(ow.completed_flows) == 1
+        completed_names = {f.flow_definition.name for f in ow.completed_flows}
+        assert "external_to_keepsats" in completed_names
 
         # Force completed_at to "just now" so it's within the window
-        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc)
+        for f in ow.completed_flows:
+            if f.flow_definition.name == "external_to_keepsats":
+                f.completed_at = datetime.now(tz=timezone.utc)
 
         # Late HIVE notification — should be absorbed
         late_transfer = _op_event("transfer", group_id="gid_hive", short_id="hive_notif")
@@ -354,16 +361,18 @@ class TestLateEventTimeWindow:
         await ow._dispatch(
             _ledger_event(LedgerType.RECEIVE_LIGHTNING, group_id="gid_ks", short_id="ks_notif")
         )
-        assert len(ow.completed_flows) == 1
+        completed_names = {f.flow_definition.name for f in ow.completed_flows}
+        assert "external_to_keepsats" in completed_names
 
-        # Cancel the superset external_to_hive by expiring its grace period
+        # Cancel all superset flows by expiring their grace periods
         for f in ow.active_flows:
-            if f.flow_definition.name == "external_to_hive":
+            if f.superset_grace_expires is not None:
                 f.superset_grace_expires = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
         await ow.check_stalls()
 
         # Force completed_at to 5 minutes ago — outside the window
-        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
+        for f in ow.completed_flows:
+            f.completed_at = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
 
         # Unrelated custom_json arrives — should NOT be absorbed
         unrelated = _op_event("custom_json", group_id="gid_unrelated", short_id="3688_2320ec_1")
@@ -389,16 +398,18 @@ class TestLateEventTimeWindow:
         await ow._dispatch(
             _ledger_event(LedgerType.RECEIVE_LIGHTNING, group_id="gid_ks", short_id="ks_notif")
         )
-        assert len(ow.completed_flows) == 1
+        completed_names = {f.flow_definition.name for f in ow.completed_flows}
+        assert "external_to_keepsats" in completed_names
 
-        # Cancel the superset external_to_hive by expiring its grace period
+        # Cancel all superset flows by expiring their grace periods
         for f in ow.active_flows:
-            if f.flow_definition.name == "external_to_hive":
+            if f.superset_grace_expires is not None:
                 f.superset_grace_expires = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
         await ow.check_stalls()
 
-        # Age the completed flow past the window
-        ow.completed_flows[0].completed_at = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
+        # Age all completed flows past the window
+        for f in ow.completed_flows:
+            f.completed_at = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
 
         # New internal transfer arrives — should NOT be absorbed
         new_trigger = _op_event("custom_json", group_id="gid_new", short_id="3688_2320ec_1")
