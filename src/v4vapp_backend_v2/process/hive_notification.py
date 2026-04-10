@@ -345,7 +345,7 @@ async def send_transfer_custom_json(
         # ALWAYS SEND FROM THE SERVER ACCOUNT, because other accounts won't have the correct keys.
         send_from = InternalConfig().server_id
         # TODO: #169 add pending for custom_json
-        json_data = transfer.model_dump(exclude_none=True, exclude_unset=True)
+        json_data = transfer.export_custom_json()
         json_data_converted = convert_decimals_for_mongodb(json_data)
         id = InternalConfig().config.hive_config.custom_json_prefix + "_transfer"
         trx = await send_custom_json(
