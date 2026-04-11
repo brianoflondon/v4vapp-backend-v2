@@ -144,7 +144,12 @@ async def process_custom_json_func(
             if custom_json.to_account == server_id:
                 # Process this as if it were an inbound Hive transfer with a memo.
                 try:
+                    # This is where the lightning invoice is paid. But at this point we've already transferred the sats to THE SERVER.
                     await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)
+                    # After this is successful, we will have transferred the sats to the server AND from server to the external.
+                    # Need to reverse the c_j_tran transaction
+                    logger.info(f"Releasing keepsats after successful follow on transfer for {custom_json.short_id}")
+                    await release_keepsats(tracked_op=custom_json)
                 except CustomJsonToLightningError:
                     # here is where we reverse the original transfer to the server if we failed to pay a lightning invoice
                     # or process a lightning address.

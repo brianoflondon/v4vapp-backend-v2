@@ -8,6 +8,7 @@ Tests all endpoints, templates, navigation, and functionality.
 import os
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -94,8 +95,75 @@ def admin_client(monkeypatch):
 @pytest.fixture(autouse=True)
 def mock_db(mocker):
     """Mock DB calls to avoid event loop issues in tests."""
+    from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults
+
+    empty_sanity_results = SanityCheckResults()
+    dashboard_stub = SimpleNamespace(
+        hive_balances={},
+        pending_transactions=[],
+        sanity_results=empty_sanity_results,
+        server_balance_check={"status": "unknown", "icon": "?"},
+        lnd_info={
+            "node": None,
+            "node_balance": None,
+            "node_balance_fmt": "N/A",
+            "external_sats": None,
+            "external_sats_fmt": "N/A",
+            "treasury_sats": None,
+            "treasury_sats_fmt": "N/A",
+            "delta": None,
+            "delta_fmt": "N/A",
+        },
+        profit_loss_usd=None,
+        trading_pnl_usd=None,
+    )
+
     mocker.patch(
         "v4vapp_backend_v2.hive_models.pending_transaction_class.PendingTransaction.list_all_str",
+        return_value=[],
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.admin_app.admin_data_helper",
+        return_value=dashboard_stub,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.admin_app.run_all_sanity_checks",
+        return_value=empty_sanity_results,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.routers.accounts.run_all_sanity_checks",
+        return_value=empty_sanity_results,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.routers.ledger_entries.run_all_sanity_checks",
+        return_value=empty_sanity_results,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.routers.financial_reports.run_all_sanity_checks",
+        return_value=empty_sanity_results,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.routers.v4vconfig.run_all_sanity_checks",
+        return_value=empty_sanity_results,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.routers.users.get_limit_entries",
+        return_value=[],
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.accounting.account_balances.list_all_accounts",
+        return_value=[],
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.routers.helper_functions.list_all_accounts",
+        return_value=[],
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.routers.ledger_entries.get_accounts_by_type_for_selector",
+        return_value={},
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.admin.routers.ledger_entries.list_all_ledger_types",
         return_value=[],
     )
 
@@ -160,8 +228,12 @@ class TestAdminEndpoints:
         assert "VSC Liability Users" in content
         assert "User" in content
 
-    def test_user_balance_endpoint_invalid_user(self, admin_client):
+    def test_user_balance_endpoint_invalid_user(self, admin_client, mocker):
         """Test user balance endpoint with invalid user"""
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.accounts.account_balance_printout",
+            side_effect=RuntimeError("invalid user"),
+        )
         response = admin_client.get("/admin/accounts/balance/user/nonexistent_user")
         # Should still return 200 but with error content
         assert response.status_code == 200
@@ -358,8 +430,9 @@ class TestAdminNavigation:
             assert link in content, f"Navigation link '{link}' not found"
 
     def test_ledger_entries_page(self, admin_client, mocker):
-        """Test ledger entries page loads and shows entries"""
-        # Mock get_ledger_entries to return a small sample
+        """Test ledger entries page loads with the client-side entry container."""
+        # Mock get_ledger_entries to keep the AJAX path isolated if the page
+        # implementation switches back to server-side rendering.
         from decimal import Decimal
 
         from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
@@ -387,7 +460,7 @@ class TestAdminNavigation:
         assert response.status_code == 200
         content = response.text
         assert "Ledger Entries" in content
-        assert "short1" in content
+        assert 'id="entries-container"' in content
 
     def test_ledger_entries_search_by_short_id(self, admin_client, mocker):
         """Test that searching by short_id filters results"""
@@ -472,6 +545,7 @@ class TestAdminLedgerCache:
 
     def test_flush_endpoint_failure(self, admin_client, mocker):
         """Ensure failures result in 500 response."""
+        log_exc = mocker.patch("v4vapp_backend_v2.admin.admin_app.logger.exception")
         mocker.patch(
             "v4vapp_backend_v2.admin.admin_app.invalidate_all_ledger_cache",
             side_effect=Exception("boom"),
@@ -479,6 +553,7 @@ class TestAdminLedgerCache:
         response = admin_client.post("/admin/ledger-cache/flush")
         assert response.status_code == 500
         assert "Cache flush failed" in response.text
+        assert log_exc.called
 
 
 class TestAdminErrorHandling:

@@ -592,9 +592,10 @@ class TestGetSymbolInfo:
             return_value=mock_client,
         )
 
-        info = get_symbol_info("INVALIDBTC", testnet=True)
-
-        assert info == {}
+        with pytest.raises(
+            BinanceErrorBadConnection, match="Symbol INVALIDBTC not found in exchange info"
+        ):
+            get_symbol_info("INVALIDBTC", testnet=True)
 
 
 class TestGetMinOrderQuantity:

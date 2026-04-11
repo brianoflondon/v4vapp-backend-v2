@@ -232,19 +232,35 @@ async def test_check_quote_invalid_ids(invalid_id: str, expected_sats: int):
 
 
 @pytest.mark.asyncio
-async def test_quote_expiry_simulation():
-    """Test quote expiry by creating a quote with very short cache time."""
-    import asyncio
+async def test_quote_expiry_simulation(mocker):
+    """Test quote expiry without waiting on real wall-clock time."""
 
-    # Create quote with 1 second cache time
+    class FakeRedis:
+        def __init__(self):
+            self.store = {}
+
+        def setex(self, key, time, value):
+            self.store[key] = value
+            return True
+
+        def get(self, key):
+            return self.store.get(key)
+
+    fake_redis = FakeRedis()
+    mocker.patch(
+        "v4vapp_backend_v2.fixed_quote.fixed_quote_class.InternalConfig.redis_decoded",
+        fake_redis,
+        create=True,
+    )
+
     quote = await FixedHiveQuote.create_quote(hive=5.0, cache_time=1, store_db=False)
 
     # Should work immediately
     valid_quote = FixedHiveQuote.check_quote(quote.unique_id, quote.sats_send)
     assert valid_quote.unique_id == quote.unique_id
 
-    # Wait for expiry (add buffer for reliability)
-    await asyncio.sleep(2)
+    # Simulate expiry by evicting the cached key.
+    fake_redis.store.pop(f"fixed_quote:{quote.unique_id}", None)
 
     # Should fail after expiry
     with pytest.raises(ValueError, match="Invalid quote."):

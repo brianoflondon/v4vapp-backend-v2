@@ -45,6 +45,7 @@
         "paywithsats",
         "protos",
         "pycache",
+        "pymethod",
         "pyyaml",
         "recalc",
         "routerrpc",

@@ -278,13 +278,33 @@ def get_symbol_info(symbol: str, testnet: bool = False) -> dict:
         dict: Symbol info including filters for LOT_SIZE and MIN_NOTIONAL
     """
     client = get_client(testnet)
-    exchange_info = client.exchange_info(symbol=symbol)
+    try:
+        exchange_info = client.exchange_info(symbol=symbol)
+    except ClientError as error:
+        logger.debug(
+            f"Binance symbol info error. status: {error.status_code}, error code: {error.error_code}, "
+            f"error message: {error.error_message}, symbol: {symbol}",
+            extra={"notification": False},
+        )
+        raise BinanceErrorBadConnection(error.error_message)
+    except RequestException as error:
+        logger.debug(
+            f"Connection error getting symbol info for {symbol}: {error}",
+            extra={"notification": False},
+        )
+        raise BinanceErrorBadConnection(str(error))
+    except Exception as error:
+        logger.debug(
+            f"Unexpected error getting symbol info for {symbol}: {error}",
+            extra={"notification": False},
+        )
+        raise BinanceErrorBadConnection(str(error))
 
     for sym in exchange_info.get("symbols", []):
         if sym["symbol"] == symbol:
             return sym
 
-    return {}
+    raise BinanceErrorBadConnection(f"Symbol {symbol} not found in exchange info")
 
 
 def get_min_order_quantity(symbol: str, testnet: bool = False) -> tuple[Decimal, Decimal]:

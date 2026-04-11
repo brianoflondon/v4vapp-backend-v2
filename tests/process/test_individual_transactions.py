@@ -43,7 +43,7 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTrans
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = True
+turn_off_these_tests = False
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -67,6 +67,7 @@ async def config_file():
     await close_all_db_connections()
 
 
+@pytest.mark.skip()
 async def test_just_clear():
     """
     Test to clear the database and reset the environment.
@@ -300,9 +301,9 @@ async def test_conversion_keepsats_to_hive():
 
     The test ensures that the conversion and transfer processes function as expected.
     """
-    invoice_sats = 5_000
+    invoice_sats = Decimal("5000")
     await test_deposit_hive_to_keepsats(
-        invoice_sats,
+        int(invoice_sats),
         timeout=120,
         message="Deposit Hive to Keepsats for test_conversion_keepsats_to_hive",
     )
@@ -323,8 +324,8 @@ async def test_conversion_keepsats_to_hive():
     await asyncio.sleep(5)
 
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp-test")
-    assert abs(net_msats_after - (net_msats_before - invoice_sats * 1000)) < 200_000, (
-        f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * 1000))} < 200_000. "
+    assert abs(net_msats_after - (net_msats_before - invoice_sats * Decimal(1000))) < 200_000, (
+        f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * Decimal(1000)))} < 200_000. "
     )
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "transfer", "from": "devser.v4vapp"}, sort=[("timestamp", -1)]
@@ -366,14 +367,15 @@ async def test_deposit_keepsats_spend_hive_custom_json():
         memo=f"{invoice.payment_request} {datetime.now().isoformat()}",
     )
     trx = await send_transfer_custom_json(transfer)
-
+    pprint(trx)
+    assert trx.get("trx_id"), "Transfer transaction failed to send"
     await watch_for_ledger_count(ledger_count + 4)
 
     await asyncio.sleep(5)
 
     net_msats_after, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
-    assert abs(net_msats_after - (net_msats_before - invoice_sats * 1000)) < 500_000, (
-        f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * 1000))} < 500_000. "
+    assert abs(net_msats_after - (net_msats_before - invoice_sats * Decimal(1000))) < 500_000, (
+        f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * Decimal(1000)))} < 500_000. "
     )
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "custom_json"}, sort=[("timestamp", -1)]

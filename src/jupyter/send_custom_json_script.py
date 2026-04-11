@@ -120,7 +120,7 @@ async def main():
     # hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
 
     trx = await send_custom_json(
-        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        json_data=transfer.export_custom_json(),
         send_account=transfer.from_account,
         active=True,
         id=f"{custom_json_prefix}_transfer",
@@ -151,7 +151,7 @@ async def main():
     # hive_client = get_hive_client(keys=[active_key])
     # hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
     trx = await send_custom_json(
-        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        json_data=transfer.export_custom_json(),
         send_account=transfer.from_account,
         active=True,
         id=f"{custom_json_prefix}_transfer",
@@ -168,7 +168,7 @@ async def main():
         invoice_message="",
     )
     trx = await send_custom_json(
-        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        json_data=transfer.export_custom_json(),
         send_account=transfer.from_account,
         active=True,
         id=f"{custom_json_prefix}_transfer",

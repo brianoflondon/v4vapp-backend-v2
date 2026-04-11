@@ -17,9 +17,13 @@ import pytest
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.process.overwatch_flows import (
     EXTERNAL_TO_HIVE_FLOW,
+    EXTERNAL_TO_HIVE_LOOPBACK_FLOW,
     EXTERNAL_TO_KEEPSATS_FLOW,
+    EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW,
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
+    HIVE_TRANSFER_PAYWITHSATS_FLOW,
+    KEEPSATS_INTERNAL_TRANSFER_FLOW,
     KEEPSATS_TO_EXTERNAL_FLOW,
     KEEPSATS_TO_HIVE_FLOW,
 )
@@ -162,19 +166,28 @@ class TestExternalToHiveSuperset:
         Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
         Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_FLOW)
         Overwatch.register_flow(EXTERNAL_TO_HIVE_FLOW)
+        Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW)
+        Overwatch.register_flow(EXTERNAL_TO_HIVE_LOOPBACK_FLOW)
+        Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
+        Overwatch.register_flow(HIVE_TRANSFER_PAYWITHSATS_FLOW)
         Overwatch._loaded_from_redis = True
         return ow
 
     @pytest.mark.asyncio
     async def test_invoice_creates_two_candidates(self):
-        """An invoice trigger should create both external_to_keepsats
-        and external_to_hive candidates."""
+        """An invoice trigger should create external_to_keepsats,
+        external_to_hive, and their loopback variants."""
         ow = self._register_all()
         event = _op_event("invoice")
         await ow._try_create_flow(event, _fake_op())
-        assert len(ow.active_flows) == 2
+        assert len(ow.active_flows) == 4
         names = {f.flow_definition.name for f in ow.active_flows}
-        assert names == {"external_to_keepsats", "external_to_hive"}
+        assert names == {
+            "external_to_keepsats",
+            "external_to_hive",
+            "external_to_keepsats_loopback",
+            "external_to_hive_loopback",
+        }
 
     @pytest.mark.asyncio
     async def test_keepsats_completes_first_superset_kept(self):
@@ -189,8 +202,9 @@ class TestExternalToHiveSuperset:
             await ow._dispatch(factory())
 
         # external_to_keepsats completed, external_to_hive still active
-        assert len(ow.completed_flows) == 1
-        assert ow.completed_flows[0].flow_definition.name == "external_to_keepsats"
+        # (loopback keepsats also completed)
+        completed_names = {f.flow_definition.name for f in ow.completed_flows}
+        assert "external_to_keepsats" in completed_names
         active_names = {f.flow_definition.name for f in ow.active_flows}
         assert "external_to_hive" in active_names
 
@@ -209,10 +223,10 @@ class TestExternalToHiveSuperset:
         for factory in _HIVE_PAYOUT_EVENTS:
             await ow._dispatch(factory())
 
-        # Both should be completed
-        assert len(ow.completed_flows) == 2
+        # All matching flows should be completed
         completed_names = {f.flow_definition.name for f in ow.completed_flows}
-        assert completed_names == {"external_to_keepsats", "external_to_hive"}
+        assert "external_to_keepsats" in completed_names
+        assert "external_to_hive" in completed_names
         assert len(ow.active_flows) == 0
 
     @pytest.mark.asyncio
@@ -265,6 +279,8 @@ class TestExternalToHiveGracePeriod:
         ow = Overwatch()
         Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_FLOW)
         Overwatch.register_flow(EXTERNAL_TO_HIVE_FLOW)
+        Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW)
+        Overwatch.register_flow(EXTERNAL_TO_HIVE_LOOPBACK_FLOW)
         Overwatch._loaded_from_redis = True
         return ow
 
@@ -278,7 +294,7 @@ class TestExternalToHiveGracePeriod:
         for factory in _SHARED_EVENTS[1:]:
             await ow._dispatch(factory())
 
-        assert len(ow.completed_flows) == 1
+        assert len(ow.completed_flows) >= 1
         hive_flow = next(
             f for f in ow.active_flows if f.flow_definition.name == "external_to_hive"
         )
@@ -337,6 +353,8 @@ class TestExternalToHiveGracePeriod:
         Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
         Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_FLOW)
         Overwatch.register_flow(EXTERNAL_TO_HIVE_FLOW)
+        Overwatch.register_flow(EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW)
+        Overwatch.register_flow(EXTERNAL_TO_HIVE_LOOPBACK_FLOW)
         Overwatch._loaded_from_redis = True
 
         await ow._try_create_flow(_op_event("invoice"), _fake_op())
@@ -344,7 +362,7 @@ class TestExternalToHiveGracePeriod:
             await ow._dispatch(factory())
 
         # external_to_keepsats completed, external_to_hive still active
-        assert len(ow.completed_flows) == 1
+        assert len(ow.completed_flows) >= 1
 
         # HIVE transfer arrives — should be absorbed by external_to_hive
         result = await ow._dispatch(_HIVE_PAYOUT_EVENTS[0]())

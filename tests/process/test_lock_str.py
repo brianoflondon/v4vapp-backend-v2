@@ -119,8 +119,8 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     )  # Resetting InternalConfig instance
 
 
-TEST_BASE_TIME = 0.5
-TEST_RAND_TIME = 1
+TEST_BASE_TIME = 0.01
+TEST_RAND_TIME = 0.02
 
 
 # give me a string of 3 random english words:

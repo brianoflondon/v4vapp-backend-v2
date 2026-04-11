@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from google.protobuf.json_format import Parse
+from grpc import StatusCode
 from grpc.aio import AioRpcError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
@@ -187,9 +188,22 @@ async def test_node_get_info(set_base_config_path: None):
 
 @pytest.mark.asyncio
 async def test_node_get_info_fail(set_base_config_path: None):
-    lnd_client = LNDClient(connection_name="example")
-    with pytest.raises(LNDConnectionError):
-        _ = await lnd_client.node_get_info
+    mock_error = AioRpcError(
+        code=StatusCode.UNAVAILABLE,
+        initial_metadata=None,
+        trailing_metadata=None,
+        details="Mock node info failure",
+        debug_error_string="Mock node info failure",
+    )
+    mock_method = AsyncMock(side_effect=mock_error)
+    with patch.object(
+        lightningstub,
+        "LightningStub",
+        return_value=MagicMock(GetInfo=mock_method),
+    ):
+        lnd_client = LNDClient(connection_name="example")
+        with pytest.raises(LNDConnectionError):
+            _ = await lnd_client.node_get_info
 
 
 @pytest.mark.asyncio

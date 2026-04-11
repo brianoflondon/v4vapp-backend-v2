@@ -130,7 +130,9 @@ async def test_send_message_no_chat_id(notification_bot):
 
 # Test send_message raises TimedOut error twice
 @pytest.mark.asyncio
-async def test_send_message_timed_out(notification_bot):
+async def test_send_message_timed_out(notification_bot, mocker):
+    mocker.patch("v4vapp_backend_v2.helpers.notification_bot.asyncio.sleep", new=AsyncMock())
+    mocker.patch("v4vapp_backend_v2.helpers.notification_bot.random.random", return_value=0)
     notification_bot.bot.send_message.side_effect = [
         TimedOut("Timed out"),
         None,
