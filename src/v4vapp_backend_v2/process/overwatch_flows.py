@@ -844,6 +844,70 @@ EXTERNAL_TO_HIVE_LOOPBACK_FLOW = FlowDefinition(
 
 
 # ---------------------------------------------------------------------------
+# Hive-transfer-triggered keepsats transfer (#paywithsats instruction)
+# ---------------------------------------------------------------------------
+# Flow: User sends a small HIVE transfer (e.g. 0.001 HIVE) to the server
+# account with a memo like "recipient.name #paywithsats:NNNN".  The system
+# reads the instruction, broadcasts a KeepsatsTransfer custom_json to move
+# NNNN sats from the sender's keepsats balance to the recipient, and
+# optionally sends a notification to the recipient.
+#
+# Primary events (same short_id as trigger):
+#   1. transfer op (trigger) — the marker HIVE transfer
+#   2. cust_h_in ledger — Customer deposits HIVE (the marker amount)
+#
+# Reply events (different short_id — the KeepsatsTransfer custom_json):
+#   3. custom_json op — the broadcast KeepsatsTransfer
+#   4. c_j_trans ledger — keepsats movement recorded
+#
+# Optional notification (different short_id):
+#   5. custom_json op — notification to recipient
+# ---------------------------------------------------------------------------
+
+HIVE_TRANSFER_PAYWITHSATS_FLOW = FlowDefinition(
+    name="hive_transfer_paywithsats",
+    description="Internal keepsats transfer triggered by Hive transfer with #paywithsats memo",
+    trigger_op_type="transfer",
+    stages=[
+        # --- Primary stages (same short_id as trigger) ---
+        FlowStage(
+            name="trigger_transfer",
+            event_type="op",
+            op_type="transfer",
+            group="primary",
+        ),
+        FlowStage(
+            name="customer_hive_in",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOMER_HIVE_IN,
+            group="primary",
+        ),
+        # --- KeepsatsTransfer stages (reply group) ---
+        FlowStage(
+            name="keepsats_transfer_op",
+            event_type="op",
+            op_type="custom_json",
+            group="keepsats_transfer",
+        ),
+        FlowStage(
+            name="custom_json_transfer",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOM_JSON_TRANSFER,
+            group="keepsats_transfer",
+        ),
+        # --- Notification (optional) ---
+        FlowStage(
+            name="notification_custom_json_op",
+            event_type="op",
+            op_type="custom_json",
+            group="notification",
+            required=False,
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Registry of all known flow definitions
 # ---------------------------------------------------------------------------
 
@@ -857,4 +921,5 @@ FLOW_DEFINITIONS = {
     "external_to_keepsats_loopback": EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW,
     "external_to_hive_loopback": EXTERNAL_TO_HIVE_LOOPBACK_FLOW,
     "keepsats_internal_transfer": KEEPSATS_INTERNAL_TRANSFER_FLOW,
+    "hive_transfer_paywithsats": HIVE_TRANSFER_PAYWITHSATS_FLOW,
 }

@@ -238,6 +238,7 @@ async def follow_on_transfer(
                     memo=tracked_op.memo,
                 )
                 await send_transfer_custom_json(transfer, nobroadcast=nobroadcast)
+                release_hold = False  # No hold was created for this path
                 return
 
             # Deposit the full amount of Hive as sats
