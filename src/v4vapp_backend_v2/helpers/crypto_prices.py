@@ -789,7 +789,7 @@ class AllQuotes(BaseModel):
             < timedelta(seconds=DB_RATES_MIN_INTERVAL)
         ):
             delta = format_time_delta(datetime.now(tz=timezone.utc) - AllQuotes.db_store_timestamp)
-            logger.info(f"{ICON} Skipping database store, last store was {delta} ago")
+            logger.debug(f"{ICON} Skipping database store, last store was {delta} ago")
             return record
         try:
             AllQuotes.db_store_timestamp = self.fetch_date
