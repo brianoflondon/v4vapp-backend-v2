@@ -27,6 +27,7 @@ from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_cancelled import LimitOrderCancelled
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.process.balance_request import reply_with_balance_request
 from v4vapp_backend_v2.process.process_custom_json import process_custom_json_func
 from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError, HiveLightningError
 from v4vapp_backend_v2.process.process_orders import process_create_fill_order_op
@@ -352,11 +353,15 @@ async def process_transfer_op(
         ledger_entry.user_memo = lightning_memo(hive_transfer.user_memo)
         # Now we need to see if we can take action for this invoice
         # This will be handled in a separate task
-        follow_on_task = follow_on_transfer(tracked_op=hive_transfer, nobroadcast=nobroadcast)
+        if hive_transfer.balance_request:
+            follow_on_task = reply_with_balance_request(transfer=hive_transfer)
+        else:
+            follow_on_task = follow_on_transfer(tracked_op=hive_transfer, nobroadcast=nobroadcast)
 
     else:
         logger.info(
-            f"Transfer between two different accounts: {hive_transfer.from_account} -> {hive_transfer.to_account}"
+            f"Transfer between two different accounts: {hive_transfer.from_account} -> {hive_transfer.to_account} {hive_transfer.short_id}, no ledger entry created.",
+            extra={"notification": False, **hive_transfer.log_extra},
         )
         raise LedgerEntryCreationException("Transfer between untracked accounts.")
     try:
