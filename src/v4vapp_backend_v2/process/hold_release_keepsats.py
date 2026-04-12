@@ -82,11 +82,17 @@ async def release_keepsats(tracked_op: TrackedAny, fee: bool = False) -> LedgerE
         filter={"group_id": group_id},
     )
     if existing_entry_raw is None:
-        logger.warning(f"No ledger entry found for group_id: {group_id}")
+        logger.info(
+            f"No ledger entry found {tracked_op.short_id} group_id: {group_id}",
+            extra={"notification": False, **tracked_op.log_extra},
+        )
         return None
     existing_entry = LedgerEntry.model_validate(existing_entry_raw)
     if existing_entry is None:
-        logger.warning(f"Failed to validate ledger entry for group_id: {group_id}")
+        logger.warning(
+            f"Failed to validate ledger entry for group_id: {group_id}",
+            extra={"notification": True, **tracked_op.log_extra},
+        )
         return None
 
     timestamp = datetime.now(tz=timezone.utc)
@@ -146,4 +152,9 @@ async def get_held_keepsats_balance(cust_id: CustIDType) -> Decimal:
 
     # Net held = held - released
     net_held_msats = total_held - total_released
+    if net_held_msats != Decimal(0):
+        logger.warning(
+            f"net held keepsats for cust_id {cust_id}: {net_held_msats} msats. This indicates a data inconsistency.",
+            extra={"notification": True, "cust_id": cust_id},
+        )
     return max(net_held_msats, Decimal(0))  # Ensure non-negative
