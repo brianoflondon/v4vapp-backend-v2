@@ -21,6 +21,8 @@ For interacting with *Keepsats* via `custom_json` operations instead of transfer
 | `account #paywithsats:NNNN` | `"bob #paywithsats:4000"` | Transfer NNNN sats from sender's *Keepsats* to `account`'s *Keepsats* |
 | `#HBD` | `"lnbc5u1p...abc #HBD"` | Use the HBD exchange rate when calculating the conversion (can combine with other flags) |
 | `#v4vapp` | `"lnbc5u1p...abc #v4vapp"` | App identifier; stripped from public memos before broadcast |
+| `#balance_request` | `"#balance_request"` | Query your current *Keepsats* balance; the deposited Hive is returned with the balance in the memo |
+| `#balance_request private` | `"#balance_request private"` | Same as above but the reply memo is encrypted using Hive's encrypted memo system |
 | No recognised flag | `"hello world"` | Defaults to a *Keepsats* deposit (same as `#sats`) |
 
 Flags are **case‑insensitive** and can appear anywhere in the memo. Multiple flags can be combined (e.g. `"lnbc... #paywithsats:5000 #HBD #v4vapp"`).
@@ -188,6 +190,64 @@ When the transfer asset itself is already HBD (e.g. `5.000 HBD`), the flag is re
 
 ---
 
+## 7. Balance Request (`#balance_request`)
+
+Send a small transfer to the server account with `#balance_request` (or `balance_request`) in the memo to query your current *Keepsats* balance. The system looks up your balance and replies with a Hive transfer back to you containing the result in the memo.
+
+### Example
+
+```
+From:   v4vapp-test
+To:     v4vapp
+Amount: 0.001 HIVE
+Memo:   "#balance_request"
+```
+
+### What happens
+
+1. The transfer is recorded (`CUSTOMER_HIVE_IN` ledger entry for the small deposit).
+2. The system queries the sender's *Keepsats* balance.
+3. A Hive transfer is sent back to the sender with a JSON memo containing:
+   - `msats` — balance in millisatoshis
+   - `sats` — balance in satoshis
+   - `reply_to` — the short ID of the original transfer
+   - `original_memo` — the memo from the original transfer
+4. If the sender has any outstanding Hive balance owed by the system, the return amount is adjusted to include it; otherwise the original deposit amount is returned.
+
+### Reply memo example
+
+```json
+{
+  "return_details_str": "Current balance is 12,345 sats | timestamp 2026-04-12T10:00:00+00:00 | ...",
+  "msats": 12345000,
+  "sats": "12345.000",
+  "reply_to": "7856_799039_1",
+  "original_memo": "#balance_request"
+}
+```
+
+### Private balance requests
+
+If the word **`private`** appears anywhere in the memo alongside `#balance_request`, the reply transfer memo is **encrypted** using Hive's built‑in encrypted memo system. This means only the sender (who holds the corresponding memo key) can decrypt and read the balance. Useful when you don't want your balance visible on‑chain.
+
+```
+Memo: "#balance_request private"
+Memo: "private #balance_request"
+```
+
+Both forms work — the system checks for the presence of the word `private` anywhere in the memo.
+
+### Ledger entries
+
+| Type | Description |
+|---|---|
+| `CUSTOMER_HIVE_IN` | Initial deposit recorded |
+| `CUSTOMER_HIVE_OUT` | Return transfer to sender (with balance info) |
+
+The balance request is a **read‑only** query — no sats are moved, no conversion takes place, and no fees are charged.
+
+---
+
 ## Error Handling
 
 All error scenarios result in the deposited Hive being returned to the sender. The system never silently loses funds.
@@ -219,6 +279,10 @@ Transfer arrives at server account
 ├─ Does the operation already have replies?
 │  └─ YES → Skip (already processed)
 │
+├─ Is this a #balance_request?
+│  └─ YES → Look up balance, reply with Hive transfer
+│           (encrypt memo if "private" in memo)
+│
 ├─ Is this a #sats / #keepsats deposit?
 │  └─ YES → Convert full amount to Keepsats
 │
@@ -241,6 +305,7 @@ Hive transfers and custom JSON operations are two parallel ways to interact with
 
 | Action | Via Hive Transfer | Via Custom JSON |
 |---|---|---|
+| Query Keepsats balance | `0.001 HIVE` + `#balance_request` memo | N/A (transfers only) |
 | Deposit Hive/HBD as sats | `amount HIVE` + `#sats` memo | N/A (transfers only) |
 | Pay Lightning invoice | Invoice in memo | Invoice in `memo` field of `KeepsatsTransfer` |
 | Pay Lightning address | Address in memo | Address in `memo` field of `KeepsatsTransfer` |
