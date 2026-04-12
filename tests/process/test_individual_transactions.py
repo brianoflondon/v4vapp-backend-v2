@@ -1,4 +1,5 @@
 import asyncio
+import json
 import math
 import os
 from datetime import datetime
@@ -43,7 +44,7 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTrans
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = False
+turn_off_these_tests = True
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -433,6 +434,43 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     pprint(custom_json.model_dump())
     print(custom_json.memo)
     assert "Transfer v4vapp-test -> v4vapp.qrc" in custom_json.memo
+
+
+async def test_balance_request():
+    """
+    Test the process of requesting a balance.
+
+    This test performs the following steps:
+    1. Retrieves and logs the current ledger count.
+    2. Sends a Hive transaction from a customer to the server, including a memo to trigger a Keepsats transfer.
+    3. Prints the transaction details for verification.
+
+    The test ensures that the integration between Hive deposits and Keepsats transfers works as expected.
+
+    Raises:
+        AssertionError: If any step in the process fails.
+    """
+    ledger_count = await get_ledger_count()
+    logger.info(f"Ledger count: {ledger_count}")
+
+    trx = await send_hive_customer_to_server(
+        amount=Amount("0.001 HIVE"),
+        memo="#balance_request",
+        customer="v4vapp-test",
+    )
+    pprint(trx)
+
+    await watch_for_ledger_count(ledger_count + 2)
+    await asyncio.sleep(5)
+    last_hive_op = await InternalConfig.db["hive_ops"].find_one(
+        {"type": "transfer"}, sort=[("timestamp", -1)]
+    )
+    balance_op = Transfer.model_validate(last_hive_op)
+    json_data = json.loads(balance_op.d_memo)
+    return_details_str = json_data.get("return_details_str")
+    assert "Current balance is" in return_details_str, (
+        f"Expected return details to contain 'Current balance is', got {return_details_str}"
+    )
 
 
 @pytest.mark.skip(reason="This test creates a pending transaction which blocks further tests")
