@@ -603,7 +603,18 @@ class Overwatch:
                     loaded += 1
                     if normalized_rkey != rkey:
                         await r.hdel(_REDIS_ACTIVE_KEY, rkey)
-                        await r.hset(_REDIS_ACTIVE_KEY, normalized_rkey, flow.model_dump_json())
+                        if flow.status == FlowStatus.COMPLETED:
+                            await r.setex(
+                                f"{_REDIS_COMPLETED_PREFIX}{normalized_rkey}",
+                                _COMPLETED_TTL_SECONDS,
+                                flow.model_dump_json(),
+                            )
+                        else:
+                            await r.hset(
+                                _REDIS_ACTIVE_KEY,
+                                normalized_rkey,
+                                flow.model_dump_json(),
+                            )
                 except Exception as e:
                     logger.warning(
                         f"{ICON} Skipping corrupt active flow {rkey}: {e}",
@@ -1083,6 +1094,28 @@ class Overwatch:
                 f"'{winner.flow_definition.name}' completed",
                 extra={"notification": False, **candidate.log_extra},
             )
+
+    async def cancel_flows_for_trigger(self, trigger_group_id: str) -> int:
+        """Cancel all candidate flows for a trigger that produced no ledger entries.
+
+        Called by the processing pipeline when a trigger op (e.g. a transfer)
+        turns out to be irrelevant — for example a transfer between untracked
+        accounts.  Returns the number of flows cancelled.
+        """
+        cancelled = 0
+        for flow in list(self.active_flows):
+            if flow.trigger_group_id != trigger_group_id:
+                continue
+            flow.status = FlowStatus.FAILED
+            self.flow_instances.remove(flow)
+            await self._remove_active_flow(flow)
+            cancelled += 1
+            logger.info(
+                f"{ICON} 🗑️ Cancelled '{flow.flow_definition.name}' "
+                f"({flow.trigger_short_id}) — no ledger entries produced",
+                extra={"notification": False, **flow.log_extra},
+            )
+        return cancelled
 
     # ---- queries ----
 

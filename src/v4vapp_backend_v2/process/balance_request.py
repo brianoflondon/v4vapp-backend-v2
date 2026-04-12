@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from colorama import Fore, Style
@@ -31,28 +32,32 @@ async def reply_with_balance_request(transfer: TrackedTransfer, nobroadcast: boo
     """
 
     amount = Amount(str(transfer.amount))
-    net_msats, account_balance = await keepsats_balance(
+    net_msats, _ = await keepsats_balance(
         cust_id=transfer.cust_id, line_items=False, notifications=False
     )
 
     net_sats = net_msats / Decimal(1000)
 
     return_details_str = (
-        f"Balance request received for {transfer.cust_id}. Current balance is {net_sats:.3f} sats."
+        f"Current balance is {net_sats:,.0f} sats | timestamp {datetime.now(tz=timezone.utc).isoformat()} | "
+        f"{net_msats} msats | {net_sats:.3f} sats | § {transfer.short_id}"
     )
     return_details_dict = {
-        "balance_string": return_details_str,
+        "return_details_str": return_details_str,
         "msats": int(net_msats),
         "sats": f"{net_sats:.3f}",
         "reply_to": transfer.short_id,
         "original_memo": transfer.d_memo,
     }
-
-    transfer.change_memo = "#" + json.dumps(
-        return_details_dict,
-        separators=(",", ":"),
-        ensure_ascii=False,
+    logger.info(
+        f"{return_details_str}",
+        extra={
+            "notification": False,
+            "return_details_dict": return_details_dict,
+            **transfer.log_extra,
+        },
     )
+    transfer.change_memo = json.dumps(return_details_dict, ensure_ascii=False)
     adjusted_amount = await check_for_outstanding_hive_balance(
         cust_id=transfer.cust_id, amount=amount
     )
@@ -66,6 +71,7 @@ async def reply_with_balance_request(transfer: TrackedTransfer, nobroadcast: boo
             to_account=transfer.cust_id,  # Repay to the original sender
             amount=adjusted_amount,
             memo=transfer.change_memo,
+            is_private=transfer.balance_request_private,
         )
     except HiveTransferError as e:
         error_message = f"Failed to send Hive transfer: {e}"

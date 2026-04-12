@@ -282,6 +282,18 @@ class TransferBase(OpBase):
         return detect_balance_request(self.d_memo)
 
     @property
+    def balance_request_private(self) -> bool:
+        """
+        Checks if the transfer is a balance request that should be treated as private.
+
+        Returns:
+            bool: True if it's a balance request that should be private, False otherwise.
+        """
+        if self.balance_request and "private" in self.d_memo.lower():
+            return True
+        return False
+
+    @property
     def paywithsats_amount(self) -> Decimal:
         """
         Extracts and returns the 'paywithsats' amount from the memo if present.

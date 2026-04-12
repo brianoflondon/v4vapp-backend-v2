@@ -260,3 +260,82 @@ class TestBalanceRequestOverwatch:
         assert len(ow.completed_flows) == 1
         assert len(ow.active_flows) == 0
         assert ow.completed_flows[0].flow_definition.name == "balance_request"
+
+
+# ---------------------------------------------------------------------------
+# Tests: cancel_flows_for_trigger (untracked account scenario)
+# ---------------------------------------------------------------------------
+
+
+class TestCancelFlowsForTrigger:
+    @pytest.mark.asyncio
+    async def test_cancel_all_candidates_for_trigger(self):
+        """When processing produces no ledger entries (untracked accounts),
+        cancel_flows_for_trigger removes all candidate flows."""
+        ow = _register_transfer_flows()
+        trigger = _op_event("transfer")
+        await ow._try_create_flow(trigger, _fake_op())
+        assert len(ow.active_flows) == 4
+
+        cancelled = await ow.cancel_flows_for_trigger("gid_trigger")
+        assert cancelled == 4
+        assert len(ow.active_flows) == 0
+        assert len(ow.completed_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_cancel_does_not_affect_other_triggers(self):
+        """Only flows matching the cancelled trigger_group_id are removed."""
+        ow = _register_transfer_flows()
+
+        # Two separate triggers
+        await ow._try_create_flow(
+            _op_event("transfer", group_id="gid_a", short_id="aaaa_aaaaaa_1"),
+            _fake_op(group_id="gid_a", short_id="aaaa_aaaaaa_1"),
+        )
+        await ow._try_create_flow(
+            _op_event("transfer", group_id="gid_b", short_id="bbbb_bbbbbb_1"),
+            _fake_op(group_id="gid_b", short_id="bbbb_bbbbbb_1"),
+        )
+        assert len(ow.active_flows) == 8  # 4 per trigger
+
+        cancelled = await ow.cancel_flows_for_trigger("gid_a")
+        assert cancelled == 4
+        assert len(ow.active_flows) == 4
+        remaining_triggers = {f.trigger_group_id for f in ow.active_flows}
+        assert remaining_triggers == {"gid_b"}
+
+    @pytest.mark.asyncio
+    async def test_cancel_returns_zero_for_unknown_trigger(self):
+        """Cancelling a non-existent trigger is a no-op."""
+        ow = _register_transfer_flows()
+        cancelled = await ow.cancel_flows_for_trigger("gid_nonexistent")
+        assert cancelled == 0
+
+    @pytest.mark.asyncio
+    async def test_cancel_skips_completed_flows(self):
+        """Completed flows are not affected by cancel."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(BALANCE_REQUEST_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = _op_event("transfer")
+        await ow._try_create_flow(trigger, _fake_op())
+        assert len(ow.active_flows) == 1
+
+        # Complete the flow
+        await ow._dispatch(_ledger_event(LedgerType.CUSTOMER_HIVE_IN))
+        await ow._dispatch(_op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1"))
+        await ow._dispatch(
+            _ledger_event(
+                LedgerType.CUSTOMER_HIVE_OUT,
+                group_id="gid_reply",
+                short_id="3312_c5c697_1",
+            )
+        )
+        assert len(ow.completed_flows) == 1
+
+        # Cancel should not touch the completed flow
+        cancelled = await ow.cancel_flows_for_trigger("gid_trigger")
+        assert cancelled == 0
+        assert len(ow.completed_flows) == 1
