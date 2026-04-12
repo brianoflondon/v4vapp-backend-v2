@@ -366,14 +366,15 @@ def detect_paywithsats(memo: str) -> bool:
 
 def detect_balance_request(memo: str) -> bool:
     """
-    Detects if the given memo contains the phrase '#balance'.
+    Detects if the given memo contains '#balance_request' or 'balance_request'.
     This is used to detect if a user is requesting their balance.
 
     Args:
         memo (str): The memo to check.
 
     Returns:
-        bool: True if the memo contains '#balance', False otherwise.
+        bool: True if the memo contains '#balance_request' or 'balance_request',
+        False otherwise.
     """
     if not memo:
         return False
