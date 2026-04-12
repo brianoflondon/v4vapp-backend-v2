@@ -354,7 +354,9 @@ async def process_transfer_op(
         # Now we need to see if we can take action for this invoice
         # This will be handled in a separate task
         if hive_transfer.balance_request:
-            follow_on_task = reply_with_balance_request(transfer=hive_transfer)
+            follow_on_task = reply_with_balance_request(
+                transfer=hive_transfer, nobroadcast=nobroadcast
+            )
         else:
             follow_on_task = follow_on_transfer(tracked_op=hive_transfer, nobroadcast=nobroadcast)
 

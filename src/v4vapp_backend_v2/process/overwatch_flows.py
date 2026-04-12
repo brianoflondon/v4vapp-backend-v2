@@ -7,7 +7,12 @@ whether a transaction flow completed successfully.
 """
 
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
-from v4vapp_backend_v2.process.process_overwatch import FlowDefinition, FlowStage
+from v4vapp_backend_v2.process.process_overwatch import FlowDefinition, FlowEvent, FlowStage
+
+
+def check_balance_request(event: FlowEvent) -> bool:
+    """Return True only when the triggering op is a balance-request transfer."""
+    return getattr(event.op, "balance_request", False)
 
 # ---------------------------------------------------------------------------
 # Hive-to-Keepsats conversion flow
@@ -871,6 +876,7 @@ BALANCE_REQUEST_FLOW = FlowDefinition(
             event_type="op",
             op_type="transfer",
             group="primary",
+            event_filter=check_balance_request,
         ),
         FlowStage(
             name="customer_hive_in",

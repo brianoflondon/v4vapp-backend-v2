@@ -20,8 +20,9 @@ from v4vapp_backend_v2.process.overwatch_flows import (
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
     HIVE_TRANSFER_PAYWITHSATS_FLOW,
+    check_balance_request,
 )
-from v4vapp_backend_v2.process.process_overwatch import FlowEvent, FlowStatus, Overwatch
+from v4vapp_backend_v2.process.process_overwatch import FlowEvent, FlowStage, FlowStatus, Overwatch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -34,6 +35,7 @@ def _op_event(
     op_type: str,
     group_id: str = "gid_trigger",
     short_id: str = "3306_06d160_1",
+    op: object | None = None,
 ) -> FlowEvent:
     return FlowEvent(
         event_type="op",
@@ -41,6 +43,7 @@ def _op_event(
         group_id=group_id,
         short_id=short_id,
         op_type=op_type,
+        op=op,
         group="primary",
     )
 
@@ -64,6 +67,7 @@ def _fake_op(
     op_type: str = "transfer",
     group_id: str = "gid_trigger",
     short_id: str = "3306_06d160_1",
+    balance_request: bool = False,
 ) -> object:
     return type(
         "FakeOp",
@@ -73,6 +77,7 @@ def _fake_op(
             "short_id": short_id,
             "op_type": op_type,
             "from_account": "v4vapp-test",
+            "balance_request": balance_request,
         },
     )()
 
@@ -141,10 +146,11 @@ class TestBalanceRequestDefinition:
 class TestBalanceRequestOverwatch:
     @pytest.mark.asyncio
     async def test_transfer_creates_four_candidates(self):
-        """A transfer trigger should create all four transfer-triggered flows."""
+        """A balance-request transfer trigger creates all four transfer-triggered flows."""
         ow = _register_transfer_flows()
-        event = _op_event("transfer")
-        await ow._try_create_flow(event, _fake_op())
+        fake = _fake_op(balance_request=True)
+        event = _op_event("transfer", op=fake)
+        await ow._try_create_flow(event, fake)
         assert len(ow.active_flows) == 4
         names = {f.flow_definition.name for f in ow.active_flows}
         assert names == {
@@ -159,8 +165,9 @@ class TestBalanceRequestOverwatch:
         """Balance request flow completes when the reply transfer and
         cust_h_out arrive."""
         ow = _register_transfer_flows()
-        trigger = _op_event("transfer")
-        await ow._try_create_flow(trigger, _fake_op())
+        fake = _fake_op(balance_request=True)
+        trigger = _op_event("transfer", op=fake)
+        await ow._try_create_flow(trigger, fake)
 
         # cust_h_in (primary)
         await ow._dispatch(_ledger_event(LedgerType.CUSTOMER_HIVE_IN))
@@ -184,8 +191,9 @@ class TestBalanceRequestOverwatch:
         hive_to_keepsats_external should be kept as superset candidates
         (their stages are a superset of balance_request's stages)."""
         ow = _register_transfer_flows()
-        trigger = _op_event("transfer")
-        await ow._try_create_flow(trigger, _fake_op())
+        fake = _fake_op(balance_request=True)
+        trigger = _op_event("transfer", op=fake)
+        await ow._try_create_flow(trigger, fake)
 
         await ow._dispatch(_ledger_event(LedgerType.CUSTOMER_HIVE_IN))
         await ow._dispatch(_op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1"))
@@ -212,8 +220,9 @@ class TestBalanceRequestOverwatch:
         Overwatch.register_flow(BALANCE_REQUEST_FLOW)
         Overwatch._loaded_from_redis = True
 
-        trigger = _op_event("transfer")
-        await ow._try_create_flow(trigger, _fake_op())
+        fake = _fake_op(balance_request=True)
+        trigger = _op_event("transfer", op=fake)
+        await ow._try_create_flow(trigger, fake)
 
         flow = ow.active_flows[0]
         assert flow.progress == "1/4 required stages complete"
@@ -243,8 +252,9 @@ class TestBalanceRequestOverwatch:
         Overwatch.register_flow(BALANCE_REQUEST_FLOW)
         Overwatch._loaded_from_redis = True
 
-        trigger = _op_event("transfer")
-        await ow._try_create_flow(trigger, _fake_op())
+        fake = _fake_op(balance_request=True)
+        trigger = _op_event("transfer", op=fake)
+        await ow._try_create_flow(trigger, fake)
         assert len(ow.active_flows) == 1
 
         await ow._dispatch(_ledger_event(LedgerType.CUSTOMER_HIVE_IN))
@@ -273,8 +283,9 @@ class TestCancelFlowsForTrigger:
         """When processing produces no ledger entries (untracked accounts),
         cancel_flows_for_trigger removes all candidate flows."""
         ow = _register_transfer_flows()
-        trigger = _op_event("transfer")
-        await ow._try_create_flow(trigger, _fake_op())
+        fake = _fake_op(balance_request=True)
+        trigger = _op_event("transfer", op=fake)
+        await ow._try_create_flow(trigger, fake)
         assert len(ow.active_flows) == 4
 
         cancelled = await ow.cancel_flows_for_trigger("gid_trigger")
@@ -287,14 +298,16 @@ class TestCancelFlowsForTrigger:
         """Only flows matching the cancelled trigger_group_id are removed."""
         ow = _register_transfer_flows()
 
-        # Two separate triggers
+        # Two separate triggers (both balance_request=True so all 4 defs match)
+        fake_a = _fake_op(group_id="gid_a", short_id="aaaa_aaaaaa_1", balance_request=True)
         await ow._try_create_flow(
-            _op_event("transfer", group_id="gid_a", short_id="aaaa_aaaaaa_1"),
-            _fake_op(group_id="gid_a", short_id="aaaa_aaaaaa_1"),
+            _op_event("transfer", group_id="gid_a", short_id="aaaa_aaaaaa_1", op=fake_a),
+            fake_a,
         )
+        fake_b = _fake_op(group_id="gid_b", short_id="bbbb_bbbbbb_1", balance_request=True)
         await ow._try_create_flow(
-            _op_event("transfer", group_id="gid_b", short_id="bbbb_bbbbbb_1"),
-            _fake_op(group_id="gid_b", short_id="bbbb_bbbbbb_1"),
+            _op_event("transfer", group_id="gid_b", short_id="bbbb_bbbbbb_1", op=fake_b),
+            fake_b,
         )
         assert len(ow.active_flows) == 8  # 4 per trigger
 
@@ -319,8 +332,9 @@ class TestCancelFlowsForTrigger:
         Overwatch.register_flow(BALANCE_REQUEST_FLOW)
         Overwatch._loaded_from_redis = True
 
-        trigger = _op_event("transfer")
-        await ow._try_create_flow(trigger, _fake_op())
+        fake = _fake_op(balance_request=True)
+        trigger = _op_event("transfer", op=fake)
+        await ow._try_create_flow(trigger, fake)
         assert len(ow.active_flows) == 1
 
         # Complete the flow
@@ -339,3 +353,89 @@ class TestCancelFlowsForTrigger:
         cancelled = await ow.cancel_flows_for_trigger("gid_trigger")
         assert cancelled == 0
         assert len(ow.completed_flows) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: event_filter on FlowStage
+# ---------------------------------------------------------------------------
+
+
+class TestEventFilter:
+    def test_trigger_stage_has_event_filter(self):
+        """The trigger_transfer stage of BALANCE_REQUEST_FLOW should have
+        the check_balance_request event_filter."""
+        trigger_stage = BALANCE_REQUEST_FLOW.stages[0]
+        assert trigger_stage.name == "trigger_transfer"
+        assert trigger_stage.event_filter is check_balance_request
+
+    def test_other_stages_have_no_filter(self):
+        """Non-trigger stages should not have an event_filter."""
+        for stage in BALANCE_REQUEST_FLOW.stages[1:]:
+            assert stage.event_filter is None
+
+    def test_check_balance_request_true(self):
+        """check_balance_request returns True when op.balance_request is True."""
+        fake = _fake_op(balance_request=True)
+        event = _op_event("transfer", op=fake)
+        assert check_balance_request(event) is True
+
+    def test_check_balance_request_false(self):
+        """check_balance_request returns False when op.balance_request is False."""
+        fake = _fake_op(balance_request=False)
+        event = _op_event("transfer", op=fake)
+        assert check_balance_request(event) is False
+
+    def test_check_balance_request_no_op(self):
+        """check_balance_request returns False when event.op is None."""
+        event = _op_event("transfer")  # op defaults to None
+        assert check_balance_request(event) is False
+
+    def test_stage_matches_with_filter_pass(self):
+        """FlowStage.matches returns True when structural + filter both pass."""
+        stage = BALANCE_REQUEST_FLOW.stages[0]
+        fake = _fake_op(balance_request=True)
+        event = _op_event("transfer", op=fake)
+        assert stage.matches(event) is True
+
+    def test_stage_matches_with_filter_reject(self):
+        """FlowStage.matches returns False when structural passes but filter rejects."""
+        stage = BALANCE_REQUEST_FLOW.stages[0]
+        fake = _fake_op(balance_request=False)
+        event = _op_event("transfer", op=fake)
+        assert stage.matches(event) is False
+
+    def test_stage_without_filter_still_matches(self):
+        """A FlowStage with no event_filter matches on structural criteria alone."""
+        stage = FlowStage(name="plain", event_type="op", op_type="transfer")
+        event = _op_event("transfer")
+        assert stage.matches(event) is True
+
+    def test_event_filter_exception_returns_false(self):
+        """If event_filter raises, matches() returns False."""
+
+        def _bad_filter(event: FlowEvent) -> bool:
+            raise ValueError("boom")
+
+        stage = FlowStage(
+            name="bad", event_type="op", op_type="transfer", event_filter=_bad_filter
+        )
+        event = _op_event("transfer")
+        assert stage.matches(event) is False
+
+    @pytest.mark.asyncio
+    async def test_non_balance_request_creates_three_candidates(self):
+        """A non-balance-request transfer only creates 3 candidates
+        (balance_request flow is filtered out)."""
+        ow = _register_transfer_flows()
+        fake = _fake_op(balance_request=False)
+        event = _op_event("transfer", op=fake)
+        await ow._try_create_flow(event, fake)
+        assert len(ow.active_flows) == 3
+        names = {f.flow_definition.name for f in ow.active_flows}
+        assert "balance_request" not in names
+
+    def test_event_filter_excluded_from_serialization(self):
+        """event_filter should not appear in model_dump (excluded from Redis)."""
+        stage = BALANCE_REQUEST_FLOW.stages[0]
+        dumped = stage.model_dump()
+        assert "event_filter" not in dumped

@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from collections.abc import Callable
 from typing import Any, ClassVar, Dict, List, Literal
 
 from colorama import Fore
@@ -95,6 +96,18 @@ class FlowStage(BaseModel):
             "or a descriptive name for reply-linked events"
         ),
     )
+    event_filter: Callable[[FlowEvent], bool] | None = Field(
+        None,
+        description=(
+            "Optional callable that receives the FlowEvent and returns True "
+            "if the event genuinely matches this stage.  Used to prevent "
+            "false-positive matches when the structural criteria (event_type + "
+            "op_type/ledger_type) are ambiguous."
+        ),
+        exclude=True,  # not serialised to Redis — restored from registered definition
+    )
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(
         self,
@@ -104,6 +117,7 @@ class FlowStage(BaseModel):
         op_type: str | None = None,
         required: bool = True,
         group: str = "primary",
+        event_filter: Callable[[FlowEvent], bool] | None = None,
         **data: Any,
     ) -> None:
         """Explicit initializer helps type checkers.
@@ -120,6 +134,7 @@ class FlowStage(BaseModel):
             op_type=op_type,
             required=required,
             group=group,
+            event_filter=event_filter,
             **data,
         )
 
@@ -136,9 +151,16 @@ class FlowStage(BaseModel):
         if self.event_type != event.event_type:
             return False
         if self.event_type == "ledger":
-            return self.ledger_type is not None and self.ledger_type == event.ledger_type
-        # op event: match by op_type only (group-agnostic)
-        return self.op_type is not None and self.op_type == event.op_type
+            matched = self.ledger_type is not None and self.ledger_type == event.ledger_type
+        else:
+            # op event: match by op_type only (group-agnostic)
+            matched = self.op_type is not None and self.op_type == event.op_type
+        if matched and self.event_filter is not None:
+            try:
+                return self.event_filter(event)
+            except Exception:
+                return False
+        return matched
 
 
 class FlowDefinition(BaseModel):
@@ -925,6 +947,12 @@ class Overwatch:
         candidates: list[str] = []
         for defn in self._flow_definitions.values():
             if event.op_type == defn.trigger_op_type and event.group == "primary":
+                # If the first (trigger) stage has an event_filter, check it
+                # before creating an instance.  Without this guard a rejected
+                # trigger can accidentally match a later same-type stage and
+                # create a permanently stalled candidate.
+                if defn.stages and not defn.stages[0].matches(event):
+                    continue
                 instance = FlowInstance(
                     flow_definition=defn,
                     trigger_group_id=event.group_id,
