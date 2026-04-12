@@ -109,6 +109,7 @@ async def process_payment_success(
     # At this point we can record the payment using Keepsats
     payment_ledger_entries = await record_payment(payment=payment, quote=quote)
     ledger_entries_list.extend(payment_ledger_entries)
+    logger.info(f"Releasing keepsats hold for {initiating_op.short_id}")
     await release_keepsats(tracked_op=initiating_op)
 
     if isinstance(initiating_op, CustomJson):

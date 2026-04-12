@@ -365,6 +365,7 @@ async def follow_on_transfer(
 
     finally:
         if tracked_op.paywithsats and release_hold:
+            logger.info(f"Releasing keepsats hold for {tracked_op.short_id}")
             await release_keepsats(tracked_op=tracked_op)
 
         if return_details.reason_str:

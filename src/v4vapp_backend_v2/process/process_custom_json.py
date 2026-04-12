@@ -148,7 +148,9 @@ async def process_custom_json_func(
                     await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)
                     # After this is successful, we will have transferred the sats to the server AND from server to the external.
                     # Need to reverse the c_j_tran transaction
-                    logger.info(f"Releasing keepsats after successful follow on transfer for {custom_json.short_id}")
+                    logger.info(
+                        f"Releasing keepsats after successful follow on transfer for {custom_json.short_id}"
+                    )
                     await release_keepsats(tracked_op=custom_json)
                 except CustomJsonToLightningError:
                     # here is where we reverse the original transfer to the server if we failed to pay a lightning invoice
@@ -433,6 +435,7 @@ async def custom_json_internal_transfer(
         if keepsats_transfer.parent_id:
             parent_op = await load_tracked_object(tracked_obj=keepsats_transfer.parent_id)
             if parent_op:
+                logger.info(f"Releasing keepsats hold for {parent_op.short_id}")
                 await release_keepsats(tracked_op=parent_op, fee=True)
 
     if return_details:
