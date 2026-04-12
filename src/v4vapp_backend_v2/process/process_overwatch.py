@@ -33,7 +33,7 @@ from enum import StrEnum
 from typing import Any, ClassVar, Dict, List, Literal
 
 from colorama import Fore
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
@@ -259,6 +259,8 @@ class FlowInstance(BaseModel):
     This is the primary object for both real-time tracking and test assertions.
     """
 
+    model_config = ConfigDict(extra="ignore")
+
     flow_definition: FlowDefinition = Field(
         ..., description="The flow definition this instance tracks"
     )
@@ -266,6 +268,14 @@ class FlowInstance(BaseModel):
     trigger_short_id: str = Field("", description="Short ID of the triggering event")
     cust_id: str = Field("", description="Customer ID associated with this flow")
     status: FlowStatus = Field(FlowStatus.PENDING, description="Current status of the flow")
+
+    @field_validator("cust_id", mode="before")
+    @classmethod
+    def _normalize_cust_id(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        return str(value)
+
     started_at: datetime = Field(
         default_factory=lambda: datetime.now(tz=timezone.utc),
         description="When the flow was initiated",
@@ -576,6 +586,7 @@ class Overwatch:
                     continue
                 try:
                     flow = FlowInstance.model_validate_json(raw)
+                    normalized_rkey = self._redis_flow_key(flow)
                     # update definition to the currently registered one (if any)
                     if flow.flow_definition.name in self._flow_definitions:
                         flow.flow_definition = self._flow_definitions[flow.flow_definition.name]
@@ -588,8 +599,11 @@ class Overwatch:
                         # also persist updated status immediately
                         await self._persist_flow(flow)
                     self.flow_instances.append(flow)
-                    existing_ids.add(rkey)
+                    existing_ids.add(normalized_rkey)
                     loaded += 1
+                    if normalized_rkey != rkey:
+                        await r.hdel(_REDIS_ACTIVE_KEY, rkey)
+                        await r.hset(_REDIS_ACTIVE_KEY, normalized_rkey, flow.model_dump_json())
                 except Exception as e:
                     logger.warning(
                         f"{ICON} Skipping corrupt active flow {rkey}: {e}",
@@ -616,9 +630,17 @@ class Overwatch:
                         continue
                     try:
                         flow = FlowInstance.model_validate_json(raw_val)
+                        normalized_rkey = self._redis_flow_key(flow)
                         self.flow_instances.append(flow)
-                        existing_ids.add(rkey)
+                        existing_ids.add(normalized_rkey)
                         loaded += 1
+                        if normalized_rkey != rkey:
+                            await r.delete(key)
+                            await r.setex(
+                                f"{_REDIS_COMPLETED_PREFIX}{normalized_rkey}",
+                                _COMPLETED_TTL_SECONDS,
+                                flow.model_dump_json(),
+                            )
                     except Exception as e:
                         logger.warning(
                             f"{ICON} Skipping corrupt completed flow {rkey}: {e}",

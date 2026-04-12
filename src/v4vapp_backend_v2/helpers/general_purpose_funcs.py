@@ -377,7 +377,7 @@ def detect_balance_request(memo: str) -> bool:
     """
     if not memo:
         return False
-    if "#balance" in memo.lower():
+    if "#balance_request" in memo.lower() or "balance_request" in memo.lower():
         return True
     return False
 

@@ -1044,7 +1044,7 @@ async def send_transfer(
             trx = account.transfer(
                 to=to_account.lower(),
                 amount=amount.amount,
-                asset=str(amount.asset),
+                asset=amount.asset,
                 account=from_account,
                 memo=memo,
             )
