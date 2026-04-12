@@ -364,6 +364,25 @@ def detect_paywithsats(memo: str) -> bool:
     return False
 
 
+def detect_balance_request(memo: str) -> bool:
+    """
+    Detects if the given memo contains '#balance_request' or 'balance_request'.
+    This is used to detect if a user is requesting their balance.
+
+    Args:
+        memo (str): The memo to check.
+
+    Returns:
+        bool: True if the memo contains '#balance_request' or 'balance_request',
+        False otherwise.
+    """
+    if not memo:
+        return False
+    if "#balance_request" in memo.lower() or "balance_request" in memo.lower():
+        return True
+    return False
+
+
 def paywithsats_amount(memo: str) -> Decimal:
     """
     Extracts the amount specified in a memo string formatted as "paywithsats:amount".

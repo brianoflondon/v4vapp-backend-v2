@@ -30,10 +30,11 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from collections.abc import Callable
 from typing import Any, ClassVar, Dict, List, Literal
 
 from colorama import Fore
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
@@ -95,6 +96,18 @@ class FlowStage(BaseModel):
             "or a descriptive name for reply-linked events"
         ),
     )
+    event_filter: Callable[[FlowEvent], bool] | None = Field(
+        None,
+        description=(
+            "Optional callable that receives the FlowEvent and returns True "
+            "if the event genuinely matches this stage.  Used to prevent "
+            "false-positive matches when the structural criteria (event_type + "
+            "op_type/ledger_type) are ambiguous."
+        ),
+        exclude=True,  # not serialised to Redis — restored from registered definition
+    )
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(
         self,
@@ -104,6 +117,7 @@ class FlowStage(BaseModel):
         op_type: str | None = None,
         required: bool = True,
         group: str = "primary",
+        event_filter: Callable[[FlowEvent], bool] | None = None,
         **data: Any,
     ) -> None:
         """Explicit initializer helps type checkers.
@@ -120,6 +134,7 @@ class FlowStage(BaseModel):
             op_type=op_type,
             required=required,
             group=group,
+            event_filter=event_filter,
             **data,
         )
 
@@ -136,9 +151,16 @@ class FlowStage(BaseModel):
         if self.event_type != event.event_type:
             return False
         if self.event_type == "ledger":
-            return self.ledger_type is not None and self.ledger_type == event.ledger_type
-        # op event: match by op_type only (group-agnostic)
-        return self.op_type is not None and self.op_type == event.op_type
+            matched = self.ledger_type is not None and self.ledger_type == event.ledger_type
+        else:
+            # op event: match by op_type only (group-agnostic)
+            matched = self.op_type is not None and self.op_type == event.op_type
+        if matched and self.event_filter is not None:
+            try:
+                return self.event_filter(event)
+            except Exception:
+                return False
+        return matched
 
 
 class FlowDefinition(BaseModel):
@@ -259,6 +281,8 @@ class FlowInstance(BaseModel):
     This is the primary object for both real-time tracking and test assertions.
     """
 
+    model_config = ConfigDict(extra="ignore")
+
     flow_definition: FlowDefinition = Field(
         ..., description="The flow definition this instance tracks"
     )
@@ -266,6 +290,14 @@ class FlowInstance(BaseModel):
     trigger_short_id: str = Field("", description="Short ID of the triggering event")
     cust_id: str = Field("", description="Customer ID associated with this flow")
     status: FlowStatus = Field(FlowStatus.PENDING, description="Current status of the flow")
+
+    @field_validator("cust_id", mode="before")
+    @classmethod
+    def _normalize_cust_id(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        return str(value)
+
     started_at: datetime = Field(
         default_factory=lambda: datetime.now(tz=timezone.utc),
         description="When the flow was initiated",
@@ -576,6 +608,7 @@ class Overwatch:
                     continue
                 try:
                     flow = FlowInstance.model_validate_json(raw)
+                    normalized_rkey = self._redis_flow_key(flow)
                     # update definition to the currently registered one (if any)
                     if flow.flow_definition.name in self._flow_definitions:
                         flow.flow_definition = self._flow_definitions[flow.flow_definition.name]
@@ -588,8 +621,22 @@ class Overwatch:
                         # also persist updated status immediately
                         await self._persist_flow(flow)
                     self.flow_instances.append(flow)
-                    existing_ids.add(rkey)
+                    existing_ids.add(normalized_rkey)
                     loaded += 1
+                    if normalized_rkey != rkey:
+                        await r.hdel(_REDIS_ACTIVE_KEY, rkey)
+                        if flow.status == FlowStatus.COMPLETED:
+                            await r.setex(
+                                f"{_REDIS_COMPLETED_PREFIX}{normalized_rkey}",
+                                _COMPLETED_TTL_SECONDS,
+                                flow.model_dump_json(),
+                            )
+                        else:
+                            await r.hset(
+                                _REDIS_ACTIVE_KEY,
+                                normalized_rkey,
+                                flow.model_dump_json(),
+                            )
                 except Exception as e:
                     logger.warning(
                         f"{ICON} Skipping corrupt active flow {rkey}: {e}",
@@ -616,9 +663,17 @@ class Overwatch:
                         continue
                     try:
                         flow = FlowInstance.model_validate_json(raw_val)
+                        normalized_rkey = self._redis_flow_key(flow)
                         self.flow_instances.append(flow)
-                        existing_ids.add(rkey)
+                        existing_ids.add(normalized_rkey)
                         loaded += 1
+                        if normalized_rkey != rkey:
+                            await r.delete(key)
+                            await r.setex(
+                                f"{_REDIS_COMPLETED_PREFIX}{normalized_rkey}",
+                                _COMPLETED_TTL_SECONDS,
+                                flow.model_dump_json(),
+                            )
                     except Exception as e:
                         logger.warning(
                             f"{ICON} Skipping corrupt completed flow {rkey}: {e}",
@@ -892,6 +947,12 @@ class Overwatch:
         candidates: list[str] = []
         for defn in self._flow_definitions.values():
             if event.op_type == defn.trigger_op_type and event.group == "primary":
+                # If the first (trigger) stage has an event_filter, check it
+                # before creating an instance.  Without this guard a rejected
+                # trigger can accidentally match a later same-type stage and
+                # create a permanently stalled candidate.
+                if defn.stages and not defn.stages[0].matches(event):
+                    continue
                 instance = FlowInstance(
                     flow_definition=defn,
                     trigger_group_id=event.group_id,
@@ -1061,6 +1122,28 @@ class Overwatch:
                 f"'{winner.flow_definition.name}' completed",
                 extra={"notification": False, **candidate.log_extra},
             )
+
+    async def cancel_flows_for_trigger(self, trigger_group_id: str) -> int:
+        """Cancel all candidate flows for a trigger that produced no ledger entries.
+
+        Called by the processing pipeline when a trigger op (e.g. a transfer)
+        turns out to be irrelevant — for example a transfer between untracked
+        accounts.  Returns the number of flows cancelled.
+        """
+        cancelled = 0
+        for flow in list(self.active_flows):
+            if flow.trigger_group_id != trigger_group_id:
+                continue
+            flow.status = FlowStatus.FAILED
+            self.flow_instances.remove(flow)
+            await self._remove_active_flow(flow)
+            cancelled += 1
+            logger.info(
+                f"{ICON} 🗑️ Cancelled '{flow.flow_definition.name}' "
+                f"({flow.trigger_short_id}) — no ledger entries produced",
+                extra={"notification": False, **flow.log_extra},
+            )
+        return cancelled
 
     # ---- queries ----
 

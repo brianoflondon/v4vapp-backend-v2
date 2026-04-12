@@ -7,7 +7,12 @@ whether a transaction flow completed successfully.
 """
 
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
-from v4vapp_backend_v2.process.process_overwatch import FlowDefinition, FlowStage
+from v4vapp_backend_v2.process.process_overwatch import FlowDefinition, FlowEvent, FlowStage
+
+
+def check_balance_request(event: FlowEvent) -> bool:
+    """Return True only when the triggering op is a balance-request transfer."""
+    return getattr(event.op, "balance_request", False)
 
 # ---------------------------------------------------------------------------
 # Hive-to-Keepsats conversion flow
@@ -844,6 +849,59 @@ EXTERNAL_TO_HIVE_LOOPBACK_FLOW = FlowDefinition(
 
 
 # ---------------------------------------------------------------------------
+# Balance request flow
+# ---------------------------------------------------------------------------
+# Flow: User sends a small HIVE transfer (e.g. 0.001 HIVE) to the server
+# account with memo "balance_request".  The system looks up the user's
+# keepsats balance and replies with a HIVE transfer containing the result
+# in an encrypted memo JSON (including the balance string and sats amount).
+#
+# Primary events (same short_id as trigger):
+#   1. transfer op (trigger) — the balance-request HIVE transfer
+#   2. cust_h_in ledger — Customer deposits HIVE (the marker amount)
+#
+# Reply events (different short_id — the balance reply transfer):
+#   3. transfer op — server reply containing the balance JSON
+#   4. cust_h_out ledger — Customer hive out (the reply amount)
+# ---------------------------------------------------------------------------
+
+BALANCE_REQUEST_FLOW = FlowDefinition(
+    name="balance_request",
+    description="Balance request: customer sends HIVE, server replies with balance",
+    trigger_op_type="transfer",
+    stages=[
+        # --- Primary stages (same short_id as trigger) ---
+        FlowStage(
+            name="trigger_transfer",
+            event_type="op",
+            op_type="transfer",
+            group="primary",
+            event_filter=check_balance_request,
+        ),
+        FlowStage(
+            name="customer_hive_in",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOMER_HIVE_IN,
+            group="primary",
+        ),
+        # --- Balance reply stages (reply group) ---
+        FlowStage(
+            name="balance_reply_transfer_op",
+            event_type="op",
+            op_type="transfer",
+            group="balance_reply",
+        ),
+        FlowStage(
+            name="customer_hive_out",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOMER_HIVE_OUT,
+            group="balance_reply",
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Hive-transfer-triggered keepsats transfer (#paywithsats instruction)
 # ---------------------------------------------------------------------------
 # Flow: User sends a small HIVE transfer (e.g. 0.001 HIVE) to the server
@@ -922,4 +980,5 @@ FLOW_DEFINITIONS = {
     "external_to_hive_loopback": EXTERNAL_TO_HIVE_LOOPBACK_FLOW,
     "keepsats_internal_transfer": KEEPSATS_INTERNAL_TRANSFER_FLOW,
     "hive_transfer_paywithsats": HIVE_TRANSFER_PAYWITHSATS_FLOW,
+    "balance_request": BALANCE_REQUEST_FLOW,
 }

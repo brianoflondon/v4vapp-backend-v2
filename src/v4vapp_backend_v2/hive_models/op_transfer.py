@@ -1,4 +1,3 @@
-import re
 from decimal import Decimal
 from typing import Any, override
 
@@ -11,6 +10,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    detect_balance_request,
     detect_hbd,
     detect_keepsats,
     detect_paywithsats,
@@ -268,6 +268,30 @@ class TransferBase(OpBase):
             bool: True if the memo indicates a paywithsats operation, False otherwise.
         """
         return detect_paywithsats(self.d_memo)
+
+    @property
+    def balance_request(self) -> bool:
+        """
+        Checks if the transfer memo indicates a balance request operation.
+
+        Returns:
+            bool: True if the memo indicates a balance request operation, False otherwise.
+        """
+        if not self.d_memo:
+            return False
+        return detect_balance_request(self.d_memo)
+
+    @property
+    def balance_request_private(self) -> bool:
+        """
+        Checks if the transfer is a balance request that should be treated as private.
+
+        Returns:
+            bool: True if it's a balance request that should be private, False otherwise.
+        """
+        if self.balance_request and "private" in self.d_memo.lower():
+            return True
+        return False
 
     @property
     def paywithsats_amount(self) -> Decimal:

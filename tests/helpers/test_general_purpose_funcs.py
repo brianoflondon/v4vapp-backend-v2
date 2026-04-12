@@ -8,6 +8,7 @@ import pytest
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     cap_camel_case,
     check_time_diff,
+    detect_balance_request,
     detect_convert_keepsats,
     detect_hbd,
     detect_keepsats,
@@ -180,6 +181,25 @@ def test_detect_hbd(memo, expected):
 )
 def test_detect_convert_keepsats(memo, expected):
     assert detect_convert_keepsats(memo) == expected
+
+
+@pytest.mark.parametrize(
+    "memo, expected",
+    [
+        ("#balance_request", True),
+        ("balance_request", True),
+        ("#BALANCE_REQUEST", True),
+        ("BALANCE_REQUEST", True),
+        ("please #balance_request now", True),
+        ("please balance_request now", True),
+        ("#balance", False),
+        ("balance", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_detect_balance_request(memo, expected):
+    assert detect_balance_request(memo) == expected
 
 
 def test_is_markdown():

@@ -203,6 +203,9 @@ async def test_process_op_overwatch_flag(monkeypatch):
         async def ingest_op(self, op):
             events.append(op)
 
+        async def cancel_flows_for_trigger(self, trigger_group_id):
+            return 0
+
     async def fake_process_tracked_event(op):
         processed.append(op)
         return []
