@@ -165,9 +165,7 @@ class TestBalanceRequestOverwatch:
         # cust_h_in (primary)
         await ow._dispatch(_ledger_event(LedgerType.CUSTOMER_HIVE_IN))
         # Reply transfer op (different short_id)
-        await ow._dispatch(
-            _op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1")
-        )
+        await ow._dispatch(_op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1"))
         # cust_h_out ledger (reply)
         await ow._dispatch(
             _ledger_event(
@@ -190,9 +188,7 @@ class TestBalanceRequestOverwatch:
         await ow._try_create_flow(trigger, _fake_op())
 
         await ow._dispatch(_ledger_event(LedgerType.CUSTOMER_HIVE_IN))
-        await ow._dispatch(
-            _op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1")
-        )
+        await ow._dispatch(_op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1"))
         await ow._dispatch(
             _ledger_event(
                 LedgerType.CUSTOMER_HIVE_OUT,
@@ -202,11 +198,7 @@ class TestBalanceRequestOverwatch:
         )
 
         # balance_request completed; superset candidates have grace period
-        superset_flows = [
-            f
-            for f in ow.active_flows
-            if f.superset_grace_expires is not None
-        ]
+        superset_flows = [f for f in ow.active_flows if f.superset_grace_expires is not None]
         superset_names = {f.flow_definition.name for f in superset_flows}
         # hive_to_keepsats and hive_to_keepsats_external are proper supersets
         assert "hive_to_keepsats" in superset_names
@@ -229,9 +221,7 @@ class TestBalanceRequestOverwatch:
         await ow._dispatch(_ledger_event(LedgerType.CUSTOMER_HIVE_IN))
         assert flow.progress == "2/4 required stages complete"
 
-        await ow._dispatch(
-            _op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1")
-        )
+        await ow._dispatch(_op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1"))
         assert flow.progress == "3/4 required stages complete"
 
         await ow._dispatch(
@@ -258,9 +248,7 @@ class TestBalanceRequestOverwatch:
         assert len(ow.active_flows) == 1
 
         await ow._dispatch(_ledger_event(LedgerType.CUSTOMER_HIVE_IN))
-        await ow._dispatch(
-            _op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1")
-        )
+        await ow._dispatch(_op_event("transfer", group_id="gid_reply", short_id="3312_c5c697_1"))
         await ow._dispatch(
             _ledger_event(
                 LedgerType.CUSTOMER_HIVE_OUT,
