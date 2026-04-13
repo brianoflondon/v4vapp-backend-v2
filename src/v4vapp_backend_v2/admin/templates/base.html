@@ -28,7 +28,11 @@
             /* keep the Jinja expression on one line so formatters don’t
            split the braces and break template parsing */
             /* prettier-ignore */
-            background: linear-gradient(180deg, {{ sidebar_color }}) !important;
+            background: linear-gradient(180deg, {
+                    {
+                    sidebar_color
+                }
+            }) !important;
         }
     </style>
     <!-- prettier-ignore-end -->
@@ -119,6 +123,13 @@
                                 title="Invalidate ledger balance cache">
                                 <span class="me-2">🗑️</span>
                                 Flush Ledger Cache
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link w-100 text-start" onclick="archiveOldLedgerEntries()"
+                                title="Start archiving old HOLD_KEEPSATS and RELEASE_KEEPSATS entries older than 8 days">
+                                <span class="me-2">🗄️</span>
+                                Archive Old Ledger Entries
                             </button>
                         </li>
                     </ul>
@@ -404,6 +415,22 @@
                 })
                 .catch(function (err) {
                     showAlert('Cache flush error: ' + err, 'danger');
+                });
+        }
+
+        // Archive old hold/release ledger entries via admin endpoint
+        function archiveOldLedgerEntries() {
+            fetch('/admin/ledger-entries/archive-old-hold-release', { method: 'POST' })
+                .then(function (resp) { return resp.json(); })
+                .then(function (data) {
+                    if (data.success) {
+                        showAlert('Archive process started: ' + (data.message || 'Started'));
+                    } else {
+                        showAlert('Archive start failed', 'danger');
+                    }
+                })
+                .catch(function (err) {
+                    showAlert('Archive start error: ' + err, 'danger');
                 });
         }
 

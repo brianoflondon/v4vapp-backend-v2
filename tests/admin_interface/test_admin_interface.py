@@ -208,6 +208,7 @@ class TestAdminEndpoints:
 
         # new flush ledger cache button should appear in sidebar
         assert "Flush Ledger Cache" in content
+        assert "Archive Old Ledger Entries" in content
         # Dashboard now uses progressive loading; dynamic data sections
         # (sanity checks, hive/LND balances, financial summary) are fetched
         # asynchronously via /admin/api/dashboard/* endpoints.
@@ -553,6 +554,20 @@ class TestAdminLedgerCache:
         assert response.status_code == 500
         assert "Cache flush failed" in response.text
         assert log_exc.called
+
+    def test_archive_endpoint_runs_synchronously(self, admin_client, mocker):
+        """POSTing to the archive endpoint should run the archive process synchronously."""
+        mocked_archive = mocker.patch(
+            "v4vapp_backend_v2.admin.admin_app.archive_old_hold_release_keepsats_entries",
+            return_value=5,
+        )
+
+        response = admin_client.post("/admin/ledger-entries/archive-old-hold-release")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "Archive process completed" in data["message"]
+        mocked_archive.assert_called_once_with(older_than_days=8)
 
 
 class TestAdminErrorHandling:
