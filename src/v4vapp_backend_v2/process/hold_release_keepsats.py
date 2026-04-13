@@ -242,8 +242,9 @@ async def archive_old_hold_release_keepsats_entries(
         )
         return 0
     try:
-        cursor = from_collection.aggregate(pipeline=pipeline)
-        cursor.close()
+        cursor = await from_collection.aggregate(pipeline=pipeline)
+        await cursor.to_list(length=None)
+        await cursor.close()
     except Exception as e:
         logger.error(
             f"Error during archiving process: {e}",
