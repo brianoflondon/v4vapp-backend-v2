@@ -170,14 +170,17 @@ async def archive_old_hold_release_keepsats_entries(
     """
     Archives old Reversed, HOLD_KEEPSATS and RELEASE_KEEPSATS ledger entries that are older than a specified number of days.
 
-    This function identifies ledger entries of type HOLD_KEEPSATS and RELEASE_KEEPSATS that have a timestamp older than the specified threshold.
-    It then updates these entries to mark them as archived, which can help improve query performance and manage storage.
+    When ``reverse_archive`` is False, matching entries are moved from the main ledger collection to the archived collection.
+    When ``reverse_archive`` is True, matching entries are restored from the archived collection back into the main ledger collection.
+    The restore path is non-destructive: entries are copied/merged back into the main collection and are not deleted from
+    the archived collection.
 
     Args:
-        older_than_days (int, optional): The age in days beyond which entries should be archived. Defaults to 30.
-        reverse_archive (bool, optional): If True, reverses the archiving process. Defaults to False.
+        older_than_days (int, optional): The age in days beyond which entries should be archived or restored. Defaults to 30.
+        reverse_archive (bool, optional): If True, restore matching entries from the archived collection back into the main
+            collection without removing them from the archive. Defaults to False.
     Returns:
-        int: The number of entries archived.
+        int: The number of matching entries processed (archived when ``reverse_archive`` is False, restored when it is True).
     """
     threshold_date = datetime.now(tz=timezone.utc) - timedelta(days=older_than_days)
     match_filter = {
@@ -187,7 +190,7 @@ async def archive_old_hold_release_keepsats_entries(
                     "$in": [LedgerType.HOLD_KEEPSATS.value, LedgerType.RELEASE_KEEPSATS.value]
                 }
             },
-            {"reversed": True},
+            {"reversed": {"$exists": True}},
         ],
         "timestamp": {"$lt": threshold_date},
     }
@@ -240,7 +243,8 @@ async def archive_old_hold_release_keepsats_entries(
         )
         return 0
     try:
-        await from_collection.aggregate(pipeline=pipeline)
+        cursor = from_collection.aggregate(pipeline=pipeline)
+        cursor.close()
     except Exception as e:
         logger.error(
             f"Error during archiving process: {e}",

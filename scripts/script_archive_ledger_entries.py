@@ -5,7 +5,7 @@ from v4vapp_backend_v2.process.hold_release_keepsats import (
 )
 
 
-async def main(days: int = 1):
+async def main(days: int = 10):
     db_conn = DBConn()
     await db_conn.setup_database()
 
