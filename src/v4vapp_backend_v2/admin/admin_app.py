@@ -21,13 +21,10 @@ from v4vapp_backend_v2 import __version__ as project_version
 from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin import __version__
-from v4vapp_backend_v2.admin.data_helpers import admin_data_helper
 from v4vapp_backend_v2.admin.navigation import NavigationManager
-from v4vapp_backend_v2.admin.routers import v4vconfig
+from v4vapp_backend_v2.admin.routers import dashboard_api, v4vconfig
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-
-# LND and accounting helpers used on dashboard
 
 
 @asynccontextmanager
@@ -129,6 +126,13 @@ class AdminApp:
             v4vconfig.router, prefix="/admin/v4vconfig", tags=["V4V Configuration"]
         )
 
+        # Dashboard API router (progressive loading endpoints)
+        self.app.include_router(
+            dashboard_api.router,
+            prefix="/admin/api/dashboard",
+            tags=["Dashboard API"],
+        )
+
         # Accounts router
         from v4vapp_backend_v2.admin.routers import accounts
 
@@ -220,11 +224,11 @@ class AdminApp:
                 `self.templates.TemplateResponse`).
 
             """
-            start = timer()
             nav_items = self.nav_manager.get_navigation_items()
-            admin_data = await admin_data_helper()
             server_id = InternalConfig().server_id
 
+            # Return the page shell immediately; dynamic data is
+            # fetched by the browser via /admin/api/dashboard/* endpoints.
             return self.templates.TemplateResponse(
                 request,
                 "dashboard.html",
@@ -232,22 +236,13 @@ class AdminApp:
                     "request": request,
                     "title": "Admin Dashboard",
                     "nav_items": nav_items,
-                    "hive_balances": admin_data.hive_balances,
-                    "pending_transactions": admin_data.pending_transactions,
-                    "sanity_results": admin_data.sanity_results,
                     "admin_info": {
                         "admin_version": __version__,
                         "project_version": project_version,
                         "config_file": self.config.config_filename,
                         "server_account": server_id,
-                        "server_balance_check": admin_data.server_balance_check,
                         "local_machine_name": InternalConfig().local_machine_name,
                     },
-                    "lnd_info": admin_data.lnd_info,
-                    # summary values for dashboard cards
-                    "profit_loss_usd": admin_data.profit_loss_usd,
-                    "trading_pnl_usd": admin_data.trading_pnl_usd,
-                    "load_time": timer() - start,
                 },
             )
 
