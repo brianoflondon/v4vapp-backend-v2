@@ -23,9 +23,16 @@ if __name__ == "__main__":
         "--config",
         default=None,
         help=(
-            "Config file1name (relative to config/ folder). "
+            "Config filename (relative to config/ folder). "
             "If omitted, you'll be prompted to choose (default: dev server)."
         ),
+    )
+    parser.add_argument(
+        "-d",
+        "--days",
+        type=int,
+        default=10,
+        help="Archive entries older than this many days (default: 10).",
     )
     args = parser.parse_args()
 
@@ -91,4 +98,4 @@ if __name__ == "__main__":
     # to be the first call.
     InternalConfig(config_filename=args.config)
 
-    asyncio.run(main(days=20))
+    asyncio.run(main(days=args.days))
