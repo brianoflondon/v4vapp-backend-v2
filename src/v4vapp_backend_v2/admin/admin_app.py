@@ -25,6 +25,9 @@ from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import dashboard_api, v4vconfig
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.process.hold_release_keepsats import (
+    archive_old_hold_release_keepsats_entries,
+)
 
 
 @asynccontextmanager
@@ -294,6 +297,32 @@ class AdminApp:
                 )
                 # propagate an error to the client
                 raise HTTPException(status_code=500, detail=f"Cache flush failed: {e}")
+
+        @self.app.post("/admin/ledger-entries/archive-old-hold-release")
+        async def archive_old_hold_release_entries() -> JSONResponse:
+            """Archive old HOLD_KEEPSATS and RELEASE_KEEPSATS entries.
+
+            This endpoint performs the archive process synchronously for entries
+            older than 8 days and returns the result after completion.
+            """
+            try:
+                count = await archive_old_hold_release_keepsats_entries(older_than_days=8)
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "message": f"Archive process completed, deleted {count} entries",
+                    }
+                )
+            except Exception as e:
+                logger.exception(
+                    "Error running archive endpoint: %s",
+                    e,
+                    extra={"notification": True},
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Archive process failed: {e}",
+                )
 
         @self.app.get("/dev_accounts")
         async def get_dev_accounts() -> List[str]:
