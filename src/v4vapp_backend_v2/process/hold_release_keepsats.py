@@ -259,11 +259,12 @@ async def archive_old_hold_release_keepsats_entries(
     # Now delete the original entries after archiving
     if not reverse_archive:
         try:
-            delete_result = await from_collection.delete_many(match_filter)
-            logger.info(
-                f"Deleted {delete_result.deleted_count} original Reversed, HOLD_KEEPSATS or RELEASE_KEEPSATS entries after archiving.",
-                extra={"notification": False},
-            )
+            logger.warning("Not Deleting anything.")
+            # delete_result = await from_collection.delete_many(match_filter)
+            # logger.info(
+            #     f"NOT Deleted {delete_result.deleted_count} original Reversed, HOLD_KEEPSATS or RELEASE_KEEPSATS entries after archiving.",
+            #     extra={"notification": False},
+            # )
         except Exception as e:
             logger.error(
                 f"Error during deletion of original entries after archiving: {e}",
