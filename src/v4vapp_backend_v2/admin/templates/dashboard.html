@@ -253,10 +253,12 @@
             let html = '<h6 class="text-white">Sanity Checks</h6>'
                 + '<div class="bg-white text-dark p-2 rounded" style="font-size:0.75rem; max-height:200px; overflow-y:auto;">';
             for (const r of data.sanity_results) {
-                const parts = r.details.split('\n', 2);
-                html += '<div class="mb-1"><strong>' + escHtml(parts[0]) + '</strong>';
-                if (parts.length > 1) {
-                    html += '<pre class="mb-0" style="white-space:pre-wrap;">' + escHtml(parts[1]) + '</pre>';
+                const firstNewlineIndex = r.details.indexOf('\n');
+                const summaryLine = firstNewlineIndex === -1 ? r.details : r.details.slice(0, firstNewlineIndex);
+                const detailText = firstNewlineIndex === -1 ? '' : r.details.slice(firstNewlineIndex + 1);
+                html += '<div class="mb-1"><strong>' + escHtml(summaryLine) + '</strong>';
+                if (firstNewlineIndex !== -1) {
+                    html += '<pre class="mb-0" style="white-space:pre-wrap;">' + escHtml(detailText) + '</pre>';
                 }
                 html += '</div>';
             }
