@@ -1,16 +1,16 @@
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.process.hold_release_keepsats import (
     archive_old_hold_release_keepsats_entries,
 )
 
 
-async def main():
+async def main(days: int = 1):
     db_conn = DBConn()
     await db_conn.setup_database()
 
     # await archive_old_hold_release_keepsats_entries(older_than_days=0, reverse_archive=True)
-    await archive_old_hold_release_keepsats_entries(older_than_days=1)
+    await archive_old_hold_release_keepsats_entries(older_than_days=days)
 
 
 if __name__ == "__main__":
@@ -91,4 +91,4 @@ if __name__ == "__main__":
     # to be the first call.
     InternalConfig(config_filename=args.config)
 
-    asyncio.run(main())
+    asyncio.run(main(days=20))
