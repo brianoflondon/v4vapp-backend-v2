@@ -1,5 +1,7 @@
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any, Mapping, Sequence
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
@@ -121,6 +123,8 @@ async def release_keepsats(tracked_op: TrackedAny, fee: bool = False) -> LedgerE
         credit_conv=existing_entry.credit_conv,
     )
     await release_ledger_entry.save()
+    asyncio.create_task(archive_old_hold_release_keepsats_entries(older_than_days=10))
+
     return release_ledger_entry
 
 
@@ -158,3 +162,109 @@ async def get_held_keepsats_balance(cust_id: CustIDType) -> Decimal:
             extra={"notification": True, "cust_id": cust_id},
         )
     return max(net_held_msats, Decimal(0))  # Ensure non-negative
+
+
+async def archive_old_hold_release_keepsats_entries(
+    older_than_days: int = 30, reverse_archive: bool = False
+) -> int:
+    """
+    Archives old Reversed, HOLD_KEEPSATS and RELEASE_KEEPSATS ledger entries that are older than a specified number of days.
+
+    This function identifies ledger entries of type HOLD_KEEPSATS and RELEASE_KEEPSATS that have a timestamp older than the specified threshold.
+    It then updates these entries to mark them as archived, which can help improve query performance and manage storage.
+
+    Args:
+        older_than_days (int, optional): The age in days beyond which entries should be archived. Defaults to 30.
+        reverse_archive (bool, optional): If True, reverses the archiving process. Defaults to False.
+    Returns:
+        int: The number of entries archived.
+    """
+    threshold_date = datetime.now(tz=timezone.utc) - timedelta(days=older_than_days)
+    match_filter = {
+        "$or": [
+            {
+                "ledger_type": {
+                    "$in": [LedgerType.HOLD_KEEPSATS.value, LedgerType.RELEASE_KEEPSATS.value]
+                }
+            },
+            {"reversed": True},
+        ],
+        "timestamp": {"$lt": threshold_date},
+    }
+    logger.info(
+        f"Archiving old Reversed, HOLD_KEEPSATS and RELEASE_KEEPSATS "
+        f"entries older than {older_than_days} days. {threshold_date}",
+        extra={"notification": False, "threshold_date": threshold_date.isoformat()},
+    )
+
+    to_collection_name = (
+        LedgerEntry.archived_collection_name()
+        if not reverse_archive
+        else LedgerEntry.collection_name()
+    )
+    pipeline: Sequence[Mapping[str, Any]] = [
+        {"$match": match_filter},
+        {
+            "$merge": {
+                "into": to_collection_name,
+                "whenMatched": "keepExisting",
+                "whenNotMatched": "insert",
+            }
+        },
+    ]
+
+    from_collection = (
+        LedgerEntry.collection() if not reverse_archive else LedgerEntry.archived_collection()
+    )
+
+    count = await from_collection.count_documents(match_filter)
+    ledger_type_count = await from_collection.count_documents(
+        {
+            "ledger_type": {
+                "$in": [LedgerType.HOLD_KEEPSATS.value, LedgerType.RELEASE_KEEPSATS.value]
+            },
+            "timestamp": {"$lt": threshold_date},
+        }
+    )
+    if count == 0:
+        logger.info(
+            f"No Reversed, HOLD_KEEPSATS or RELEASE_KEEPSATS entries found older than {older_than_days} days.",
+            extra={"notification": False},
+        )
+        return 0
+    # if the ledger-type count is not even, abort to avoid partial archiving
+    if ledger_type_count % 2 != 0:
+        logger.warning(
+            f"Expected an even number of HOLD_KEEPSATS and RELEASE_KEEPSATS entries to archive, but found {ledger_type_count}. Aborting to avoid partial archiving.",
+            extra={"notification": True},
+        )
+        return 0
+    try:
+        await from_collection.aggregate(pipeline=pipeline)
+    except Exception as e:
+        logger.error(
+            f"Error during archiving process: {e}",
+            extra={"notification": True, "pipeline": pipeline},
+        )
+        return 0
+
+    logger.info(
+        f"Archived {count} Reversed, HOLD_KEEPSATS or RELEASE_KEEPSATS entries to archived_ledger.",
+        extra={"notification": False},
+    )
+    # Now delete the original entries after archiving
+    if not reverse_archive:
+        try:
+            delete_result = await from_collection.delete_many(match_filter)
+            logger.info(
+                f"Deleted {delete_result.deleted_count} original Reversed, HOLD_KEEPSATS or RELEASE_KEEPSATS entries after archiving.",
+                extra={"notification": False},
+            )
+        except Exception as e:
+            logger.error(
+                f"Error during deletion of original entries after archiving: {e}",
+                extra={"notification": True, "match_filter": match_filter},
+            )
+            return 0
+
+    return count

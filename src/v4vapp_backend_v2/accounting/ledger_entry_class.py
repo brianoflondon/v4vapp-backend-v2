@@ -528,6 +528,32 @@ class LedgerEntry(BaseModel):
         return InternalConfig.db["ledger"]
 
     @classmethod
+    def archived_collection_name(cls) -> str:
+        """
+        Returns the name of the archive collection associated with this model.
+
+        This method is used to determine where old ledger entries will be archived
+        in the database.
+
+        Returns:
+            str: The name of the archive collection.
+        """
+        return "archived_ledger"
+
+    @classmethod
+    def archived_collection(cls) -> AsyncCollection:
+        """
+        Returns the archive collection associated with this model.
+
+        This method is used to get the archive collection from the database client,
+        which is necessary for performing database operations related to archiving old entries.
+
+        Returns:
+            AsyncCollection: The archive collection associated with this model.
+        """
+        return InternalConfig.db["archived_ledger"]
+
+    @classmethod
     async def load(cls, group_id: str) -> "LedgerEntry | None":
         """
         Load a single LedgerEntry by group_id or return None if not found.
