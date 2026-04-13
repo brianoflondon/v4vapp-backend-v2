@@ -123,7 +123,7 @@ async def release_keepsats(tracked_op: TrackedAny, fee: bool = False) -> LedgerE
         credit_conv=existing_entry.credit_conv,
     )
     await release_ledger_entry.save()
-    asyncio.create_task(archive_old_hold_release_keepsats_entries(older_than_days=10))
+    asyncio.create_task(archive_old_hold_release_keepsats_entries(older_than_days=8))
 
     return release_ledger_entry
 

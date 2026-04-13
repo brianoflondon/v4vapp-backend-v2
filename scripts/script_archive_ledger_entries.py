@@ -9,8 +9,8 @@ async def main():
     db_conn = DBConn()
     await db_conn.setup_database()
 
-    await archive_old_hold_release_keepsats_entries(older_than_days=0, reverse_archive=True)
-    # await archive_old_hold_release_keepsats_entries(older_than_days=0)
+    # await archive_old_hold_release_keepsats_entries(older_than_days=0, reverse_archive=True)
+    await archive_old_hold_release_keepsats_entries(older_than_days=1)
 
 
 if __name__ == "__main__":
