@@ -30,7 +30,7 @@
     <div class="col-md-4 mb-4">
         <div class="card">
             <div class="card-body text-center">
-                <div class="h1 text-info mb-2">�</div>
+                <div class="h1 text-info mb-2">📊</div>
                 <h5 class="card-title">Financial Reports</h5>
                 <p class="card-text text-muted">Generate and view financial reports</p>
                 <a href="/admin/financial-reports" class="btn btn-info btn-sm" target="_blank">View Reports</a>
@@ -66,63 +66,24 @@
                             <li><strong>Project Version:</strong> {{ admin_info.project_version }}</li>
                             <li><strong>Local Machine Name:</strong> {{ admin_info.local_machine_name }}</li>
                             <li><strong>Config File:</strong> <code>{{ admin_info.config_file }}</code></li>
-                            <li><strong>Server Account:</strong> <code>{{ admin_info.server_account }}</code> {{
-                                admin_info.server_balance_check.icon }}</li>
-                            <li><strong>Load Time:</strong> {% if load_time is defined %}{{ "%.3f" % load_time }} s{%
-                                else %}N/A{% endif %}</li>
+                            <li><strong>Server Account:</strong> <code>{{ admin_info.server_account }}</code>
+                                <span id="server-balance-check">⏳</span>
+                            </li>
+                            <li><strong>Load Time:</strong> <span id="load-time">loading&hellip;</span></li>
                         </ul>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-4" id="hive-balances-section">
                         <h6 class="text-muted">Hive Balances</h6>
-                        {% if hive_balances %}
-                        <div class="table-responsive">
-                            <table class="table table-borderless table-sm mb-0">
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Account</th>
-                                        <th scope="col" class="text-end">HIVE</th>
-                                        <th scope="col" class="text-end">HBD</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for acc, balances in hive_balances.items() %}
-                                    <tr>
-                                        <td><strong>{{ acc }}</strong></td>
-                                        {% if balances.error %}
-                                        <td colspan="2" class="text-danger small">Error: {{ balances.error }}</td>
-                                        {% else %}
-                                        <td class="text-end">{{ balances.get('HIVE_fmt') or balances.get('hive_fmt') or
-                                            '0.000' }}</td>
-                                        <td class="text-end">{{ balances.get('HBD_fmt') or balances.get('hbd_fmt') or
-                                            '0.000' }}</td>
-                                        {% endif %}
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                        <div class="d-flex align-items-center text-muted small">
+                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                            Loading Hive balances&hellip;
                         </div>
-                        {% else %}
-                        <div class="small text-muted">No hive accounts configured.</div>
-                        {% endif %}
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-4" id="lnd-info-section">
                         <h6 class="text-muted">LND Balances</h6>
-                        <div class="d-flex flex-column align-items-start">
-                            <div>
-                                <div class="small text-muted">Node Balance (sats)</div>
-                                <div class="fs-5">{{ lnd_info.node_balance_fmt or 'N/A' }} sats</div>
-                            </div>
-                            <div class="mt-3">
-                                <div class="small text-muted">External Lightning Payments (sats)</div>
-                                <div class="fs-5">{{ lnd_info.external_sats_fmt or 'N/A' }} sats</div>
-                            </div>
-                            <div class="mt-3">
-                                <div class="small text-muted">Treasury Lightning (sats)</div>
-                                <div class="fs-5">{{ lnd_info.treasury_sats_fmt or 'N/A' }} sats</div>
-                            </div>
-                            <div class="mt-3">
-                                <strong>Delta:</strong> {{ lnd_info.delta_fmt or 'N/A' }} sats
-                            </div>
+                        <div class="d-flex align-items-center text-muted small">
+                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                            Loading LND balances&hellip;
                         </div>
                     </div>
                 </div>
@@ -131,40 +92,34 @@
     </div>
 </div>
 
-<!-- Financial Summary Cards -->
-<div class="row mb-4">
-    {% if profit_loss_usd is defined %}
+<!-- Financial Summary Cards (loaded async) -->
+<div class="row mb-4" id="financial-summary-section">
     <div class="col-md-6 mb-4">
-        {% set pl = profit_loss_usd or 0 %}
-        <div class="card {{ 'bg-primary text-white' if pl >= 0 else 'bg-warning text-dark' }}">
+        <div class="card">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
                     <h6 class="card-title mb-0">Net Income (P&amp;L)</h6>
-                    <div class="fs-4">{{ "%.2f"|format(pl) }} USD</div>
-                </div>
-                <div>
-                    <i class="fas {{ 'fa-thumbs-up' if pl >= 0 else 'fa-thumbs-down' }} fa-2x"></i>
+                    <div class="fs-4 text-muted">
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        Loading&hellip;
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-    {% endif %}
-    {% if trading_pnl_usd is defined %}
     <div class="col-md-6 mb-4">
-        {% set tp = trading_pnl_usd or 0 %}
-        <div class="card {{ 'bg-secondary text-white' if tp >= 0 else 'bg-danger text-white' }}">
+        <div class="card">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
                     <h6 class="card-title mb-0">Trading P&amp;L</h6>
-                    <div class="fs-4">{{ "%.2f"|format(tp) }} USD</div>
-                </div>
-                <div>
-                    <i class="fas {{ 'fa-chart-line' if tp >= 0 else 'fa-chart-bar' }} fa-2x"></i>
+                    <div class="fs-4 text-muted">
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        Loading&hellip;
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-    {% endif %}
 </div>
 
 <!-- Getting Started -->
@@ -206,4 +161,220 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Track load start time
+    const _dashLoadStart = performance.now();
+
+    // Helper: escape HTML to prevent XSS
+    function escHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+
+    // --- Render helpers ---
+
+    function renderHiveBalances(data) {
+        const section = document.getElementById('hive-balances-section');
+        const balances = data.balances || {};
+        const keys = Object.keys(balances);
+        if (keys.length === 0) {
+            section.innerHTML = '<h6 class="text-muted">Hive Balances</h6>'
+                + '<div class="small text-muted">No hive accounts configured.</div>';
+            return;
+        }
+        let html = '<h6 class="text-muted">Hive Balances</h6>'
+            + '<div class="table-responsive"><table class="table table-borderless table-sm mb-0">'
+            + '<thead><tr><th>Account</th><th class="text-end">HIVE</th><th class="text-end">HBD</th></tr></thead><tbody>';
+        for (const acc of keys) {
+            const b = balances[acc];
+            if (b.error) {
+                html += '<tr><td><strong>' + escHtml(acc) + '</strong></td>'
+                    + '<td colspan="2" class="text-danger small">Error: ' + escHtml(b.error) + '</td></tr>';
+            } else {
+                html += '<tr><td><strong>' + escHtml(acc) + '</strong></td>'
+                    + '<td class="text-end">' + escHtml(b.HIVE_fmt || '0.000') + '</td>'
+                    + '<td class="text-end">' + escHtml(b.HBD_fmt || '0.000') + '</td></tr>';
+            }
+        }
+        html += '</tbody></table></div>';
+        section.innerHTML = html;
+    }
+
+    function renderLndInfo(data) {
+        const info = data.lnd_info || {};
+        document.getElementById('lnd-info-section').innerHTML =
+            '<h6 class="text-muted">LND Balances</h6>'
+            + '<div class="d-flex flex-column align-items-start">'
+            + '<div><div class="small text-muted">Node Balance (sats)</div>'
+            + '<div class="fs-5">' + escHtml(info.node_balance_fmt || 'N/A') + ' sats</div></div>'
+            + '<div class="mt-3"><div class="small text-muted">External Lightning Payments (sats)</div>'
+            + '<div class="fs-5">' + escHtml(info.external_sats_fmt || 'N/A') + ' sats</div></div>'
+            + '<div class="mt-3"><div class="small text-muted">Treasury Lightning (sats)</div>'
+            + '<div class="fs-5">' + escHtml(info.treasury_sats_fmt || 'N/A') + ' sats</div></div>'
+            + '<div class="mt-3"><strong>Delta:</strong> ' + escHtml(info.delta_fmt || 'N/A') + ' sats</div>'
+            + '</div>';
+    }
+
+    function renderFinancialSummary(data) {
+        const section = document.getElementById('financial-summary-section');
+        const pl = data.profit_loss_usd != null ? data.profit_loss_usd : 0;
+        const tp = data.trading_pnl_usd != null ? data.trading_pnl_usd : 0;
+        const plClass = pl >= 0 ? 'bg-primary text-white' : 'bg-warning text-dark';
+        const plIcon = pl >= 0 ? 'fa-thumbs-up' : 'fa-thumbs-down';
+        const tpClass = tp >= 0 ? 'bg-secondary text-white' : 'bg-danger text-white';
+        const tpIcon = tp >= 0 ? 'fa-chart-line' : 'fa-chart-bar';
+        section.innerHTML =
+            '<div class="col-md-6 mb-4"><div class="card ' + plClass + '">'
+            + '<div class="card-body d-flex justify-content-between align-items-center">'
+            + '<div><h6 class="card-title mb-0">Net Income (P&amp;L)</h6>'
+            + '<div class="fs-4">' + escHtml(pl.toFixed(2)) + ' USD</div></div>'
+            + '<div><i class="fas ' + plIcon + ' fa-2x"></i></div></div></div></div>'
+            + '<div class="col-md-6 mb-4"><div class="card ' + tpClass + '">'
+            + '<div class="card-body d-flex justify-content-between align-items-center">'
+            + '<div><h6 class="card-title mb-0">Trading P&amp;L</h6>'
+            + '<div class="fs-4">' + escHtml(tp.toFixed(2)) + ' USD</div></div>'
+            + '<div><i class="fas ' + tpIcon + ' fa-2x"></i></div></div></div></div>';
+    }
+
+    function renderSanity(data) {
+        // Update server balance check icon
+        const checkEl = document.getElementById('server-balance-check');
+        if (checkEl && data.server_balance_check) {
+            checkEl.textContent = data.server_balance_check.icon || '❓';
+        }
+
+        // Update sidebar sanity results
+        const sidebarEl = document.getElementById('sanity-sidebar-placeholder');
+        if (sidebarEl && data.sanity_results && data.sanity_results.length > 0) {
+            let html = '<h6 class="text-white">Sanity Checks</h6>'
+                + '<div class="bg-white text-dark p-2 rounded" style="font-size:0.75rem; max-height:200px; overflow-y:auto;">';
+            for (const r of data.sanity_results) {
+                const firstNewlineIndex = r.details.indexOf('\n');
+                const summaryLine = firstNewlineIndex === -1 ? r.details : r.details.slice(0, firstNewlineIndex);
+                const detailText = firstNewlineIndex === -1 ? '' : r.details.slice(firstNewlineIndex + 1);
+                html += '<div class="mb-1"><strong>' + escHtml(summaryLine) + '</strong>';
+                if (firstNewlineIndex !== -1) {
+                    html += '<pre class="mb-0" style="white-space:pre-wrap;">' + escHtml(detailText) + '</pre>';
+                }
+                html += '</div>';
+            }
+            html += '</div>';
+            sidebarEl.innerHTML = html;
+        }
+
+        const alertArea = document.getElementById('async-alerts-area');
+
+        // Show sanity failure alert + modal
+        if (data.sanity_failed && data.sanity_failed.length > 0 && alertArea) {
+            alertArea.insertAdjacentHTML('beforeend',
+                '<div class="alert alert-warning alert-dismissible no-auto-dismiss fade show" role="alert">'
+                + '<strong>⚠️ Failed Sanity Checks</strong>'
+                + ' <button type="button" class="btn btn-sm btn-outline-warning ms-2" data-bs-toggle="modal" data-bs-target="#sanityChecksModal">'
+                + 'View Details (' + data.sanity_failed.length + ')</button>'
+                + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>');
+            let modalHtml = '<div class="modal fade" id="sanityChecksModal" tabindex="-1" aria-hidden="true">'
+                + '<div class="modal-dialog modal-lg"><div class="modal-content">'
+                + '<div class="modal-header"><h5 class="modal-title">'
+                + '<i class="bi bi-exclamation-triangle text-warning me-2"></i>'
+                + 'Sanity Check Results (' + data.sanity_failed.length + ')</h5>'
+                + '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>'
+                + '<div class="modal-body"><p class="text-muted mb-3">The following sanity checks have reported issues:</p>'
+                + '<div class="list-group">';
+            for (const f of data.sanity_failed) {
+                modalHtml += '<div class="list-group-item"><div class="d-flex align-items-start">'
+                    + '<div class="flex-grow-1"><strong>' + escHtml(f.name) + '</strong>'
+                    + '<p class="mb-0">' + escHtml(f.details) + '</p></div>'
+                    + '<div><span class="badge bg-danger">Failed</span></div></div></div>';
+            }
+            modalHtml += '</div></div><div class="modal-footer">'
+                + '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>'
+                + '</div></div></div></div>';
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        // Show pending transactions alert + modal
+        if (data.pending_transactions && data.pending_transactions.length > 0 && alertArea) {
+            const count = data.pending_transactions.length;
+            alertArea.insertAdjacentHTML('beforeend',
+                '<div class="alert alert-warning alert-dismissible no-auto-dismiss fade show" role="alert">'
+                + '<strong>⚠️ Pending Transactions</strong>'
+                + ' <button type="button" class="btn btn-sm btn-outline-warning ms-2" data-bs-toggle="modal" data-bs-target="#pendingTransactionsModal">'
+                + 'View Details (' + count + ')</button>'
+                + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>');
+            let modalHtml = '<div class="modal fade" id="pendingTransactionsModal" tabindex="-1" aria-hidden="true">'
+                + '<div class="modal-dialog modal-lg"><div class="modal-content">'
+                + '<div class="modal-header"><h5 class="modal-title">'
+                + '<i class="bi bi-exclamation-triangle text-warning me-2"></i>'
+                + 'Pending Transactions (' + count + ')</h5>'
+                + '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>'
+                + '<div class="modal-body"><p class="text-muted mb-3">The following transactions are pending and require attention:</p>'
+                + '<div class="list-group">';
+            for (const t of data.pending_transactions) {
+                modalHtml += '<div class="list-group-item"><div class="d-flex align-items-start">'
+                    + '<div class="flex-grow-1"><code class="text-break">' + escHtml(t) + '</code></div></div></div>';
+            }
+            modalHtml += '</div></div><div class="modal-footer">'
+                + '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>'
+                + '</div></div></div></div>';
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        // Update load time (sanity is the slowest, so this marks "fully loaded")
+        const elapsed = ((performance.now() - _dashLoadStart) / 1000).toFixed(3);
+        const loadEl = document.getElementById('load-time');
+        if (loadEl) loadEl.textContent = elapsed + ' s';
+    }
+
+    // --- Staggered fetch: wave 1 (fast) then wave 2 (heavy) ---
+    //
+    // Wave 1: hive-balances, lnd-info, financial-summary
+    //   These are relatively fast and warm the ledger cache.
+    // Wave 2: sanity (heaviest, benefits from warm cache)
+    //   Starts after lnd-info completes so its ledger queries can
+    //   hit cached results instead of competing for cold DB reads.
+
+    const hivePromise = fetch('/admin/api/dashboard/hive-balances')
+        .then(r => r.json())
+        .then(renderHiveBalances)
+        .catch(err => {
+            document.getElementById('hive-balances-section').innerHTML =
+                '<h6 class="text-muted">Hive Balances</h6>'
+                + '<div class="text-danger small">Failed to load: ' + escHtml(String(err)) + '</div>';
+        });
+
+    const lndPromise = fetch('/admin/api/dashboard/lnd-info')
+        .then(r => r.json())
+        .then(renderLndInfo)
+        .catch(err => {
+            document.getElementById('lnd-info-section').innerHTML =
+                '<h6 class="text-muted">LND Balances</h6>'
+                + '<div class="text-danger small">Failed to load: ' + escHtml(String(err)) + '</div>';
+        });
+
+    const finPromise = fetch('/admin/api/dashboard/financial-summary')
+        .then(r => r.json())
+        .then(renderFinancialSummary)
+        .catch(err => {
+            document.getElementById('financial-summary-section').innerHTML =
+                '<div class="col-12 text-danger small">Failed to load financial summary: '
+                + escHtml(String(err)) + '</div>';
+        });
+
+    // Wave 2: start sanity only after lnd-info finishes (ledger cache warm)
+    lndPromise.finally(() => {
+        fetch('/admin/api/dashboard/sanity')
+            .then(r => r.json())
+            .then(renderSanity)
+            .catch(err => {
+                const checkEl = document.getElementById('server-balance-check');
+                if (checkEl) checkEl.textContent = '⚠️';
+                const loadEl = document.getElementById('load-time');
+                if (loadEl) loadEl.textContent = 'error';
+            });
+    });
+</script>
 {% endblock %}

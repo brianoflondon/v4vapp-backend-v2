@@ -28,7 +28,7 @@
             /* keep the Jinja expression on one line so formatters don’t
            split the braces and break template parsing */
             /* prettier-ignore */
-            background: linear-gradient(180deg, {{ sidebar_color }} ) !important;
+            background: linear-gradient(180deg, {{ sidebar_color }}) !important;
         }
     </style>
     <!-- prettier-ignore-end -->
@@ -51,7 +51,7 @@
                     that holds both passed and failed checks. we wrap in a fixed
                     height box so the sidebar doesn't grow unbounded when a lot
                     of checks are added in the future. #}
-                    {% if sanity_results and sanity_results.results %}
+                    {% if sanity_results is defined and sanity_results and sanity_results.results %}
                     <div class="px-3 mb-4">
                         <h6 class="text-white">Sanity Checks</h6>
                         <div class="bg-white text-dark p-2 rounded"
@@ -72,6 +72,8 @@
                         </div>
                     </div>
                     {% endif %}
+                    {# placeholder for async-loaded sanity results on dashboard #}
+                    <div class="px-3 mb-4" id="sanity-sidebar-placeholder"></div>
 
                     <ul class="nav flex-column px-3">
                         {% for item in nav_items %}
@@ -177,7 +179,7 @@
                 {% endif %}
 
                 <!-- Pending Transactions Warning -->
-                {% if pending_transactions %}
+                {% if pending_transactions is defined and pending_transactions %}
                 <div class="alert alert-warning alert-dismissible no-auto-dismiss fade show" role="alert">
                     <strong>⚠️ Pending Transactions</strong>
                     <button type="button" class="btn btn-sm btn-outline-warning ms-2" data-bs-toggle="modal"
@@ -189,7 +191,7 @@
                 {% endif %}
 
                 <!-- Sanity Checks Warning  -->
-                {% if sanity_results.failed %}
+                {% if sanity_results is defined and sanity_results and sanity_results.failed %}
                 <div class="alert alert-warning alert-dismissible no-auto-dismiss fade show" role="alert">
                     <strong>⚠️ Failed Sanity Checks</strong>
                     <button type="button" class="btn btn-sm btn-outline-warning ms-2" data-bs-toggle="modal"
@@ -200,6 +202,9 @@
                 </div>
                 {% endif %}
 
+                {# area for async-loaded alerts (sanity, pending transactions) #}
+                <div id="async-alerts-area"></div>
+
                 <!-- Main content area -->
                 {% block content %}{% endblock %}
             </main>
@@ -207,7 +212,7 @@
     </div>
 
     <!-- Pending Transactions Modal -->
-    {% if pending_transactions %}
+    {% if pending_transactions is defined and pending_transactions %}
     <div class="modal fade" id="pendingTransactionsModal" tabindex="-1" aria-labelledby="pendingTransactionsModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -242,7 +247,7 @@
     {% endif %}
 
     <!-- Sanity Checks Modal -->
-    {% if sanity_results %}
+    {% if sanity_results is defined and sanity_results %}
     <div class="modal fade" id="sanityChecksModal" tabindex="-1" aria-labelledby="sanityChecksModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-lg">

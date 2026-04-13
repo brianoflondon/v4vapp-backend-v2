@@ -123,10 +123,6 @@ def mock_db(mocker):
         return_value=[],
     )
     mocker.patch(
-        "v4vapp_backend_v2.admin.admin_app.admin_data_helper",
-        return_value=dashboard_stub,
-    )
-    mocker.patch(
         "v4vapp_backend_v2.admin.admin_app.run_all_sanity_checks",
         return_value=empty_sanity_results,
     )
@@ -212,11 +208,14 @@ class TestAdminEndpoints:
 
         # new flush ledger cache button should appear in sidebar
         assert "Flush Ledger Cache" in content
-        # sanity check summary should be visible even if empty (header text)
-        assert "Sanity Checks" in content
-        # the sanity checks subsystem may or may not return individual entries
-        # depending on how the test config is set up; we simply verify the
-        # summary header exists above.
+        # Dashboard now uses progressive loading; dynamic data sections
+        # (sanity checks, hive/LND balances, financial summary) are fetched
+        # asynchronously via /admin/api/dashboard/* endpoints.
+        # Verify the async loading placeholders are present:
+        assert "hive-balances-section" in content
+        assert "lnd-info-section" in content
+        assert "financial-summary-section" in content
+        assert "server-balance-check" in content
 
     def test_users_page(self, admin_client):
         """Test users page loads and displays data"""
