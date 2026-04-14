@@ -1,6 +1,6 @@
 [project]
 name = "v4vapp-backend-v2"
-version = "2.7.8"
+version = "2.7.9"
 description = "Back End for the V4V.app bridge from Hive to Lightning"
 authors = [{name = "Brian of London (home imac)", email = "brian@v4v.app"}]
 license = {text = "MIT"}
@@ -27,7 +27,7 @@ dependencies = [
     "packaging>=25.0",
     "bech32>=1.2.0",
     "tabulate>=0.9.0",
-    "fastapi[standard]>=0.116.1",
+    "fastapi[standard]>=0.135.3",
     "uvicorn>=0.35.0",
     "types-tabulate>=0.9.0.20241207",
     "aiocache>=0.12.3",
