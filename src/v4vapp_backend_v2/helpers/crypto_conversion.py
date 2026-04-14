@@ -431,6 +431,22 @@ class CryptoConv(BaseModel):
 
         return f"{self.hive:.3f} HIVE"
 
+    def hive_sats_formatted_amount(self) -> str:
+        """
+        Returns a formatted string showing the conversion in both HIVE and SATS.
+
+        Returns:
+            str: A string in the format "<HIVE amount> HIVE / <SATS amount> sats", where:
+                 - <HIVE amount> is the conversion value in HIVE, formatted to three decimal places.
+                 - <SATS amount> is the conversion value in Sats, formatted with commas as thousand separators.
+        """
+        if self.conv_from == Currency.HIVE:
+            return f"{self.hive:,.3f} HIVE / {self.sats:,.0f} sats ({self.sats_hive:,.0f})"
+        elif self.conv_from == Currency.HBD:
+            return f"{self.hbd:,.3f} HBD / {self.sats:,.0f} sats ({self.sats_hive:,.0f})"
+        else:
+            return f"{self.hive:,.3f} HIVE / {self.sats:,.0f} sats ({self.sats_hive:,.0f})"
+
     def v1(self) -> CryptoConvV1:
         """
         Converts the current instance to a CryptoConvV1 instance.

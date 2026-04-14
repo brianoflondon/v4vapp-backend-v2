@@ -28,9 +28,9 @@ Usage from db_monitor::
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from collections.abc import Callable
 from typing import Any, ClassVar, Dict, List, Literal
 
 from colorama import Fore
@@ -247,7 +247,7 @@ class FlowEvent(BaseModel):
         if isinstance(op, TrackedForwardEvent):
             event_value = f"{op.amount:,.0f} sats"
         elif op.conv:
-            event_value = op.conv.formatted_amount(sats_only=True)
+            event_value = op.conv.hive_sats_formatted_amount()
         else:
             event_value = ""  # ensure amount_str is populated for logging
 
