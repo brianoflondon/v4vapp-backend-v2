@@ -310,7 +310,7 @@ class AdminApp:
                 return JSONResponse(
                     {
                         "success": True,
-                        "message": f"Archive process completed, deleted {count} entries",
+                        "message": f"Archive process completed, moved {count} entries",
                     }
                 )
             except Exception as e:

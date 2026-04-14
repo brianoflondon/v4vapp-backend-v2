@@ -1,4 +1,4 @@
-import asyncio
+import inspect
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Mapping, Sequence
@@ -204,6 +204,7 @@ async def archive_old_hold_release_keepsats_entries(
         if not reverse_archive
         else LedgerEntry.collection_name()
     )
+
     pipeline: Sequence[Mapping[str, Any]] = [
         {"$match": match_filter},
         {
@@ -242,8 +243,13 @@ async def archive_old_hold_release_keepsats_entries(
         )
         return 0
     try:
-        cursor = from_collection.aggregate(pipeline=pipeline)
-        cursor.close()
+        agg = from_collection.aggregate(pipeline=pipeline)
+        cursor = await agg if inspect.isawaitable(agg) else agg
+        await cursor.to_list(length=None)
+        if hasattr(cursor, "close"):
+            close_result = cursor.close()
+            if inspect.isawaitable(close_result):
+                await close_result
     except Exception as e:
         logger.error(
             f"Error during archiving process: {e}",
@@ -260,7 +266,7 @@ async def archive_old_hold_release_keepsats_entries(
         try:
             delete_result = await from_collection.delete_many(match_filter)
             logger.info(
-                f"Deleted {delete_result.deleted_count} original Reversed, HOLD_KEEPSATS or RELEASE_KEEPSATS entries after archiving.",
+                f"Moved {delete_result.deleted_count} original Reversed, HOLD_KEEPSATS or RELEASE_KEEPSATS entries after archiving.",
                 extra={"notification": False},
             )
         except Exception as e:
