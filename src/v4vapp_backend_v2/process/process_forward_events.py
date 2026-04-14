@@ -94,5 +94,5 @@ async def add_forward_to_ledger(
         credit_conv=fee_conv,
         extra_data=[forward_event.group_id],
     )
-    await ledger_entry.save()
+    await ledger_entry.save(upsert=True)
     return ledger_entry

@@ -682,7 +682,7 @@ class LedgerEntry(BaseModel):
 
         # If this is an exchange fee, ensure msats/netting holds
         if LedgerType is not None and self.ledger_type == LedgerType.EXCHANGE_FEES:
-            conv = self.conv_signed
+            conv = self.conv_signed_p
 
             debit_conv = conv.get("debit", None)  # pyright: ignore[reportAttributeAccessIssue]
             credit_conv = conv.get("credit", None)  # pyright: ignore[reportAttributeAccessIssue]
@@ -764,10 +764,10 @@ class LedgerEntry(BaseModel):
                     upsert=True,
                 )
                 logger.info(
-                    f"Ledger Entry upserted: {self.group_id}",
+                    f"Ledger Entry upserted: {self.short_id} {self.group_id}",
                     extra={"notification": False, "db_ans": ans},
                 )
-            logger.debug(f"Ledger Entry saved: {self.group_id}")
+            logger.debug(f"Ledger Entry saved: {self.short_id} {self.group_id}")
             logger.debug(
                 f"\n{self}",
                 extra={"notification": False, "db_ans": ans, **self.log_extra},
@@ -776,12 +776,14 @@ class LedgerEntry(BaseModel):
         except DuplicateKeyError as e:
             if not ignore_duplicates:
                 logger.warning(
-                    f"Duplicate ledger entry detected: {e}",
+                    f"Duplicate ledger entry detected: {e} {self.short_id}",
                     extra={"notification": False, **self.log_extra},
                 )
-                raise LedgerEntryDuplicateException(f"Duplicate ledger entry detected: {e}")
+                raise LedgerEntryDuplicateException(
+                    f"Duplicate ledger entry detected: {e} {self.short_id}"
+                )
             else:
-                logger.debug("Duplicate ledger entry ignored.")
+                logger.debug(f"Duplicate ledger entry ignored: {self.short_id}")
                 return None
 
         except Exception as e:
