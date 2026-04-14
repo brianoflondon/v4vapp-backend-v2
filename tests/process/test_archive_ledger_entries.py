@@ -53,6 +53,7 @@ def _make_mock_collection(total_count: int = 0, ledger_type_count: int = 0) -> M
     # aggregate returns a cursor-like object; close() is synchronous in the current
     # implementation (called without await).
     cursor = MagicMock()
+    cursor.to_list = AsyncMock(return_value=[])
     cursor.close = MagicMock()
     col.aggregate = MagicMock(return_value=cursor)
 
@@ -142,9 +143,7 @@ async def test_reverse_archive_no_delete():
     # Verify aggregate was called once and the pipeline targets the main ledger
     mock_archived_col.aggregate.assert_called_once()
     call_kwargs = mock_archived_col.aggregate.call_args.kwargs
-    pipeline_arg = (
-        call_kwargs.get("pipeline") or mock_archived_col.aggregate.call_args.args[0]
-    )
+    pipeline_arg = call_kwargs.get("pipeline") or mock_archived_col.aggregate.call_args.args[0]
     merge_stages = [stage for stage in pipeline_arg if "$merge" in stage]
     assert len(merge_stages) == 1
     assert merge_stages[0]["$merge"]["into"] == LedgerEntry.collection_name()
