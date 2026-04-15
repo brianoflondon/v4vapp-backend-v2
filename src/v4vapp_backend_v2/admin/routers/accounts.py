@@ -24,6 +24,7 @@ from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     build_checkpoints_for_period,
     create_checkpoint,
     last_completed_period_end,
+    latest_period_create_checkpoint,
 )
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
@@ -409,13 +410,11 @@ async def get_account_balance(
         # "since last month end", not a rolling 30-day window.
         age: timedelta | None = None
         period_start: datetime | None = None
-        now = datetime.now(tz=timezone.utc)
         if display_period and display_period != "all":
             try:
-                period_type = PeriodType(display_period)
-                period_start = last_completed_period_end(period_type, now)
-                age = now - period_start
-                await create_checkpoint(account, period_type, period_start)
+                checkpoint, created, age, period_start = await latest_period_create_checkpoint(
+                    account, PeriodType(display_period)
+                )
             except (ValueError, Exception):
                 pass
 

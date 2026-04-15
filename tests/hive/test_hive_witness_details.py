@@ -7,7 +7,7 @@ import httpx  # Add this import for HTTPStatusError
 import pytest
 
 from v4vapp_backend_v2.hive.witness_details import (
-    API_ENDPOINTS,
+    HIVE_API_ENDPOINTS,
     fix_witness_at_root,
     get_hive_witness_details,
 )
@@ -219,11 +219,11 @@ async def test_get_hive_witness_details_mock_error(mocker):
     assert witness_details is None
 
     # Ensure httpx.get was called for each API endpoint (since it retries on failure)
-    assert mock_httpx_get.call_count == len(API_ENDPOINTS)
+    assert mock_httpx_get.call_count == len(HIVE_API_ENDPOINTS)
     assert witness_details is None
 
     # Ensure httpx.get was called for each API endpoint (since it retries on failure)
-    assert mock_httpx_get.call_count == len(API_ENDPOINTS)
+    assert mock_httpx_get.call_count == len(HIVE_API_ENDPOINTS)
 
 
 async def test_check_witness_vote_no_cache(mocker):

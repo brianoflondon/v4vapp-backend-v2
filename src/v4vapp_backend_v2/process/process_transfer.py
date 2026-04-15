@@ -21,7 +21,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     HiveConversionLimits,
     HiveNotEnoughHiveInAccount,
     HiveTransferError,
-    account_hive_balances,
+    account_hive_balances_async,
     perform_transfer_checks,
 )
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -291,7 +291,7 @@ async def follow_on_transfer(
             return
 
     except HiveNotEnoughHiveInAccount as e:
-        server_balance = account_hive_balances()
+        server_balance = await account_hive_balances_async()
         sending_amount = e.sending_amount
         server_has = server_balance[sending_amount.symbol]
         shortfall = sending_amount - server_has
@@ -384,7 +384,7 @@ async def follow_on_transfer(
             # MARK: Server Balance
             # This is where we handle not enough Hive in the server account
             except HiveNotEnoughHiveInAccount as e:
-                server_balance = account_hive_balances()
+                server_balance = await account_hive_balances_async()
                 if return_details.amount:
                     return_amount = Amount(return_details.amount.amount)
                     server_has = server_balance[return_amount.symbol]
