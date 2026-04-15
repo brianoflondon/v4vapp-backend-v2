@@ -21,7 +21,6 @@ from v4vapp_backend_v2.hive.hive_extras import (
     HiveConversionLimits,
     HiveNotEnoughHiveInAccount,
     HiveTransferError,
-    account_hive_balances,
     account_hive_balances_async,
     perform_transfer_checks,
 )

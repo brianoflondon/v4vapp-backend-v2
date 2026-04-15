@@ -1,8 +1,8 @@
+import asyncio
 import json
 import random
 import struct
 from decimal import Decimal
-from timeit import default_timer as timer
 from typing import Any, Dict, List, Tuple
 from uuid import uuid4
 
@@ -594,7 +594,8 @@ async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amoun
             f"Balance API unavailable, falling back to Hive RPC: {e}",
             extra={"hive_accname": hive_accname, "notification": False},
         )
-    return account_hive_balances(hive_accname)
+    balance = await asyncio.to_thread(account_hive_balances, hive_accname)
+    return balance
 
 
 @time_decorator
