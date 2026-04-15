@@ -3,15 +3,8 @@ from random import shuffle
 
 import httpx
 
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import HIVE_API_ENDPOINTS, InternalConfig, logger
 from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
-
-API_ENDPOINTS = [
-    "https://hiveapi.actifit.io/hafbe-api/",
-    "https://api.dev.openhive.network/hafbe-api/",
-    "https://api.syncad.com/hafbe-api/",
-    "https://techcoderx.com/hafbe-api/",
-]
 
 ICON = "🔍"
 
@@ -74,10 +67,14 @@ async def get_hive_witness_details(
     failure = False
     url: str = "not set"
     try:
-        shuffled_endpoints = API_ENDPOINTS[:]
+        shuffled_endpoints = HIVE_API_ENDPOINTS[:]
         shuffle(shuffled_endpoints)
         for api_url in shuffled_endpoints:
-            url = f"{api_url}witnesses/{hive_accname}" if hive_accname else f"{api_url}witnesses/"
+            url = (
+                f"{api_url}hafbe-api/witnesses/{hive_accname}"
+                if hive_accname
+                else f"{api_url}hafbe-api/witnesses/"
+            )
             try:
                 timeout = httpx.Timeout(5.0, connect=5.0)
                 async with httpx.AsyncClient(timeout=timeout) as client:
@@ -177,10 +174,10 @@ async def check_witness_vote(hive_accname: str, witness_name: str) -> bool:
     if cache_result is not None and cache_result in ["True", "False"]:
         return cache_result == "True"
 
-    shuffled_endpoints = API_ENDPOINTS[:]
+    shuffled_endpoints = HIVE_API_ENDPOINTS[:]
     shuffle(shuffled_endpoints)
     for api_url in shuffled_endpoints:
-        url = f"{api_url}accounts/{hive_accname}"
+        url = f"{api_url}hafbe-api/accounts/{hive_accname}"
         try:
             timeout = httpx.Timeout(5.0, connect=5.0)
             async with httpx.AsyncClient(timeout=timeout) as client:

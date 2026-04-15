@@ -6,6 +6,7 @@ import pytest
 from v4vapp_backend_v2.hive.hive_extras import (
     CustomJsonSendError,
     account_hive_balances,
+    account_hive_balances_async,
     call_hive_internal_market,
     decode_memo,
     get_blockchain_instance,
@@ -287,6 +288,13 @@ async def test_send_custom_json_failures(
 
 def test_account_hive_balances():
     balances = account_hive_balances("v4vapp-test")
+    assert isinstance(balances, dict)
+    assert "HIVE" in balances
+    assert "HBD" in balances
+
+
+async def test_account_hive_balances_async():
+    balances = await account_hive_balances_async("v4vapp-test")
     assert isinstance(balances, dict)
     assert "HIVE" in balances
     assert "HBD" in balances

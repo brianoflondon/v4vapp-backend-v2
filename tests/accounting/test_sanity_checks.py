@@ -57,7 +57,7 @@ async def load_ledger_events(data_file: str = "tests/accounting/test_data/v4vapp
 
 
 async def patch_account_hive_balances_from_ledger(module_monkeypatch):
-    """Patch sanity_checks.account_hive_balances to return Amounts derived from the
+    """Patch sanity_checks.account_hive_balances_async to return Amounts derived from the
     ledger's 'Customer Deposits Hive' balances.
 
     Assumes the ledger has already been loaded by the caller.
@@ -76,15 +76,15 @@ async def patch_account_hive_balances_from_ledger(module_monkeypatch):
     hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
     hbd_deposits = deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
 
-    def fake_account_hive_balances(hive_accname: str = ""):
+    async def fake_account_hive_balances_async(hive_accname: str = ""):
         return {
             "HIVE": Amount(f"{hive_deposits} HIVE"),
             "HBD": Amount(f"{hbd_deposits} HBD"),
         }
 
     module_monkeypatch.setattr(
-        "v4vapp_backend_v2.accounting.sanity_checks.account_hive_balances",
-        fake_account_hive_balances,
+        "v4vapp_backend_v2.accounting.sanity_checks.account_hive_balances_async",
+        fake_account_hive_balances_async,
     )
 
 
@@ -223,7 +223,7 @@ async def test_server_account_hive_balances_formatting_handles_amount(module_mon
     hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
     hbd_deposits = deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
 
-    def fake_account_hive_balances(hive_accname: str = ""):
+    async def fake_account_hive_balances_async(hive_accname: str = ""):
         # Create an intentional mismatch so the code formats Amount values in the failure string
         return {
             "HIVE": Amount(f"{hive_deposits + Decimal('1.0')} HIVE"),
@@ -234,8 +234,8 @@ async def test_server_account_hive_balances_formatting_handles_amount(module_mon
         return []
 
     module_monkeypatch.setattr(
-        "v4vapp_backend_v2.accounting.sanity_checks.account_hive_balances",
-        fake_account_hive_balances,
+        "v4vapp_backend_v2.accounting.sanity_checks.account_hive_balances_async",
+        fake_account_hive_balances_async,
     )
     module_monkeypatch.setattr(
         "v4vapp_backend_v2.accounting.sanity_checks.LimitOrderCreate.get_hive_open_orders",

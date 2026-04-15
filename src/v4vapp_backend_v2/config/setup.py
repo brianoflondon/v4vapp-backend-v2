@@ -35,6 +35,13 @@ DEFAULT_CONFIG_FILENAME = "config.yaml"
 
 BASE_DISPLAY_LOG_LEVEL = logging.INFO  # Default log level for stdout
 
+HIVE_API_ENDPOINTS = [
+    # "https://hiveapi.actifit.io/",
+    "https://api.dev.openhive.network/",
+    "https://api.syncad.com/",
+    "https://techcoderx.com/",
+]
+
 
 def _parse_log_level(level: str | int | None, fallback: int) -> int:
     """Parse a logging level into its numeric value without using logging.getLevelName.

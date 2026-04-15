@@ -2,8 +2,6 @@ from asyncio import TaskGroup
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
-from fastapi.concurrency import run_in_threadpool
-
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.accounting_classes import LedgerAccountDetails
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
@@ -12,7 +10,7 @@ from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, log_a
 from v4vapp_backend_v2.accounting.trading_pnl import generate_trading_pnl_report
 from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
+from v4vapp_backend_v2.hive.hive_extras import account_hive_balances_async
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 # LND and accounting helpers used on dashboard
@@ -100,7 +98,8 @@ async def admin_data_helper() -> AdminDataHelper:
 
     async def _safe_account_balance(acc: str):
         try:
-            return await run_in_threadpool(account_hive_balances, acc)
+            balances = await account_hive_balances_async(acc)
+            return balances
         except Exception as e:
             logger.warning(
                 f"Safe account balance for {acc} failed: {e}", extra={"notification": False}

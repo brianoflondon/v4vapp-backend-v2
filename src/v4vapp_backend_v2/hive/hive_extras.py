@@ -1,6 +1,8 @@
 import json
 import random
 import struct
+from decimal import Decimal
+from timeit import default_timer as timer
 from typing import Any, Dict, List, Tuple
 from uuid import uuid4
 
@@ -21,8 +23,8 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.decorators import time_decorator
-from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
+from v4vapp_backend_v2.config.decorators import async_time_decorator, time_decorator
+from v4vapp_backend_v2.config.setup import HIVE_API_ENDPOINTS, HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_not_development_accounts,
     get_bad_hive_accounts,
@@ -558,6 +560,43 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         return HiveInternalQuote(error=message)
 
 
+@async_time_decorator
+async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amount | str]:
+    """
+    Asynchronously retrieves the current HIVE and HBD balances for the given account.
+    """
+    # get a random api endpoint
+    if not hive_accname:
+        hive_accname = InternalConfig().server_id
+    url = random.choice(HIVE_API_ENDPOINTS) + f"balance-api/accounts/{hive_accname}/balances"
+    try:
+        timeout = httpx.Timeout(1.0, connect=1.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url)
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict):
+            hive_balance = data.get("hive_balance")
+            hbd_balance = data.get("hbd_balance")
+            if hive_balance is not None and hbd_balance is not None:
+                balances = [
+                    Amount(f"{Decimal(hive_balance) / Decimal(1000):.3f} HIVE"),
+                    Amount(f"{Decimal(hbd_balance) / Decimal(1000):.3f} HBD"),
+                ]
+                return {
+                    "HIVE": balances[0],
+                    "HBD": balances[1],
+                    "HIVE_fmt": f"{balances[0].amount:,.3f}",
+                    "HBD_fmt": f"{balances[1].amount:,.3f}",
+                }
+    except Exception as e:
+        logger.warning(
+            f"Balance API unavailable, falling back to Hive RPC: {e}",
+            extra={"hive_accname": hive_accname, "notification": False},
+        )
+    return account_hive_balances(hive_accname)
+
+
 @time_decorator
 def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     """
@@ -569,10 +608,10 @@ def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     """
     hive = None
     balances = None
+    if not hive_accname:
+        hive_accname = InternalConfig().server_id
     try:
         hive = get_hive_client()
-        if not hive_accname:
-            hive_accname = InternalConfig().server_id
         hive_account = Account(hive_accname, blockchain_instance=hive)
         balances: List[Amount] | None = hive_account.balances.get("available", None)
     except Exception as e:
@@ -585,7 +624,12 @@ def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
         pass
     try:
         if not balances or len(balances) < 2:
-            return {"HIVE": Amount("0.000 HIVE"), "HBD": Amount("0.000 HBD")}
+            return {
+                "HIVE": Amount("0.000 HIVE"),
+                "HBD": Amount("0.000 HBD"),
+                "HIVE_fmt": "0.000",
+                "HBD_fmt": "0.000",
+            }
         return {
             "HIVE": balances[0],
             "HBD": balances[1],

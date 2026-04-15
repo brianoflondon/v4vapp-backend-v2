@@ -20,7 +20,7 @@ from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
+from v4vapp_backend_v2.hive.hive_extras import account_hive_balances_async
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 ICON = "🧪"  # Test Tube
@@ -270,7 +270,8 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
             try:
                 # give the hive client its own generous timeout but still bounded
                 async with asyncio.timeout(SANITY_CHECK_TIMEOUT_SECONDS - 5):
-                    return await asyncio.to_thread(account_hive_balances, hive_accname=server_id)
+                    balances = await account_hive_balances_async(server_id)
+                    return balances
             except Exception as exc:
                 # this will include CancelledError/TimeoutError when the outer
                 # group is torn down due to our per-check timeout or a shutdown

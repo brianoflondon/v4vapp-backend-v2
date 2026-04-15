@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import asyncio
+
 import pytest
 
 from v4vapp_backend_v2.accounting import sanity_checks
@@ -15,18 +17,15 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 async def test_hive_task_failure_logged(caplog, monkeypatch):
     """Ensure our new inner timeout/warning around the hive call is exercised.
 
-    We patch `account_hive_balances` to sleep a short time, then force the
+    We patch `account_hive_balances_async` to sleep a short time, then force the
     overall runner to use very small timeouts so the inner wrapper around the
-    to_thread call raises.  The test asserts that both the explicit "hive
-    balance fetch failed" log and the cancellation warning from the check are
-    emitted.
+    task is cancelled. The test asserts that the explicit "hive balance fetch
+    failed" warning is emitted.
     """
 
-    # fake hive call that would normally run in a thread; must be synchronous
-    def fake_hive(*args, **kwargs):
-        import time
-
-        time.sleep(0.1)
+    # fake async hive call that takes a small amount of time
+    async def fake_hive(*args, **kwargs):
+        await asyncio.sleep(0.1)
         return {"HIVE": 0, "HBD": 0}
 
     # minimal account balance result so the other tasks complete quickly
@@ -36,7 +35,7 @@ async def test_hive_task_failure_logged(caplog, monkeypatch):
 
         return Dummy()
 
-    monkeypatch.setattr(sanity_checks, "account_hive_balances", fake_hive)
+    monkeypatch.setattr(sanity_checks, "account_hive_balances_async", fake_hive)
     monkeypatch.setattr(sanity_checks, "one_account_balance", fake_account_balance)
 
     # avoid loading real config; we just need a server_id attribute
@@ -73,9 +72,8 @@ async def test_hive_task_failure_logged(caplog, monkeypatch):
 
     # check that the hive-specific warning appeared
     assert any("hive balance fetch failed" in rec.message for rec in caplog.records)
-    # the wrapper won't see the error because the check itself catches
-    # exceptions and returns a failure result – our interest is the hive log above.
-    # result should indicate failure (timeout bubbled out)
+    # the check catches the exception and reports failure, while the inner
+    # hive fetch warning is still logged.
     assert results.failed
 
 
@@ -177,7 +175,7 @@ async def test_server_account_hive_balances_open_orders_show_info(monkeypatch):
             result.balances_net = {Currency.HIVE: Decimal("0.000"), Currency.HBD: Decimal("0.000")}
         return result
 
-    def fake_account_hive_balances(hive_accname):
+    async def fake_account_hive_balances_async(hive_accname):
         return {"HIVE": Decimal("5697.668"), "HBD": Decimal("1000.0")}
 
     class DummyConfig:
@@ -192,7 +190,7 @@ async def test_server_account_hive_balances_open_orders_show_info(monkeypatch):
 
     monkeypatch.setattr(sanity_checks, "Amount", FakeAmount)
     monkeypatch.setattr(sanity_checks, "one_account_balance", fake_one_account_balance)
-    monkeypatch.setattr(sanity_checks, "account_hive_balances", fake_account_hive_balances)
+    monkeypatch.setattr(sanity_checks, "account_hive_balances_async", fake_account_hive_balances_async)
     monkeypatch.setattr(sanity_checks, "InternalConfig", lambda *args, **kwargs: DummyConfig())
     monkeypatch.setattr(
         sanity_checks,

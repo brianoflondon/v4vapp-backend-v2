@@ -65,9 +65,12 @@ async def test_admin_data_helper_includes_pnl(monkeypatch):
         fake_one_balance,
     )
 
+    async def fake_account_hive_balances_async(acc):
+        return {}
+
     monkeypatch.setattr(
-        "v4vapp_backend_v2.admin.data_helpers.account_hive_balances",
-        lambda acc: {},
+        "v4vapp_backend_v2.admin.data_helpers.account_hive_balances_async",
+        fake_account_hive_balances_async,
     )
 
     helper = await admin_data_helper()
