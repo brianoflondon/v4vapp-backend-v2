@@ -1,6 +1,5 @@
-from decimal import Decimal
-
 import asyncio
+from decimal import Decimal
 
 import pytest
 
@@ -190,7 +189,9 @@ async def test_server_account_hive_balances_open_orders_show_info(monkeypatch):
 
     monkeypatch.setattr(sanity_checks, "Amount", FakeAmount)
     monkeypatch.setattr(sanity_checks, "one_account_balance", fake_one_account_balance)
-    monkeypatch.setattr(sanity_checks, "account_hive_balances_async", fake_account_hive_balances_async)
+    monkeypatch.setattr(
+        sanity_checks, "account_hive_balances_async", fake_account_hive_balances_async
+    )
     monkeypatch.setattr(sanity_checks, "InternalConfig", lambda *args, **kwargs: DummyConfig())
     monkeypatch.setattr(
         sanity_checks,
