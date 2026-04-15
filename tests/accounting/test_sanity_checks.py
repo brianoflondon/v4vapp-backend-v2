@@ -82,9 +82,16 @@ async def patch_account_hive_balances_from_ledger(module_monkeypatch):
             "HBD": Amount(f"{hbd_deposits} HBD"),
         }
 
+    async def fake_latest_period_create_checkpoint(*args, **kwargs):
+        return None
+
     module_monkeypatch.setattr(
         "v4vapp_backend_v2.accounting.sanity_checks.account_hive_balances_async",
         fake_account_hive_balances_async,
+    )
+    module_monkeypatch.setattr(
+        "v4vapp_backend_v2.accounting.sanity_checks.latest_period_create_checkpoint",
+        fake_latest_period_create_checkpoint,
     )
 
 

@@ -401,13 +401,13 @@ async def one_account_balance(
             checkpoint = await get_latest_checkpoint_before(account, as_of_date)
             if checkpoint is not None:
                 from_date = checkpoint.period_end
-                logger.debug(
+                logger.info(
                     f"📌 Using checkpoint for {account.name}:{account.sub} "
                     f"@ {checkpoint.period_end.date()} → delta from {from_date.date()} to {as_of_date.date()}",
                     extra={"notification": False},
                 )
         except Exception as e:
-            logger.debug(
+            logger.info(
                 f"Checkpoint lookup failed for {account.name}:{account.sub}: {e}",
                 extra={"notification": False},
             )

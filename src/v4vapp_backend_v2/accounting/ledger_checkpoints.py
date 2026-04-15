@@ -45,7 +45,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     list_all_active_accounts,
     one_account_balance,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -409,6 +409,32 @@ async def get_checkpoint_by_id(
             extra={"notification": False},
         )
         return None
+
+
+async def latest_period_create_checkpoint(
+    account: LedgerAccount, period_type: PeriodType = PeriodType.DAILY
+) -> Tuple[LedgerCheckpoint, bool, timedelta, datetime]:
+    """
+    Create a checkpoint for the most recently completed period if it does not already exist.
+
+    This is a convenience wrapper around :func:`create_checkpoint` that automatically determines the appropriate period_end for the latest completed period of the specified type, and creates a checkpoint for
+    that period if one does not already exist.  If a checkpoint for that period already exists, it is returned without modification.
+
+    Arguments:
+    - *account*: identifies the account by name, sub, and type
+    - *period_type*: granularity of the checkpoint (daily/weekly/monthly)
+
+    Returns:
+    - The checkpoint instance (newly created or existing)
+    - A boolean flag indicating whether a new checkpoint was created (True) or an existing one was returned (False)
+
+    """
+    period_start: datetime | None = None
+    now = datetime.now(tz=timezone.utc)
+    period_start = last_completed_period_end(period_type, now)
+    age = now - period_start
+    checkpoint, created = await create_checkpoint(account, period_type, period_start)
+    return checkpoint, created, age, period_start
 
 
 async def create_checkpoint(

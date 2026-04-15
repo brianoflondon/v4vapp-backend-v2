@@ -7,6 +7,7 @@ browser to fetch them in parallel and render as they arrive.
 """
 
 from asyncio import TaskGroup
+from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 
@@ -15,6 +16,10 @@ from fastapi.responses import JSONResponse
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+    PeriodType,
+    latest_period_create_checkpoint,
+)
 from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, log_all_sanity_checks
 from v4vapp_backend_v2.accounting.trading_pnl import generate_trading_pnl_report
@@ -96,9 +101,11 @@ async def dashboard_lnd_info() -> JSONResponse:
             logger.warning(f"LND fetch failed: {e}", extra={"notification": False})
         return nb_obj
 
-    async def _safe_ledger(asset):
+    @async_time_decorator
+    async def _safe_ledger(asset: AssetAccount):
         try:
-            return await one_account_balance(account=asset)
+            await latest_period_create_checkpoint(account=asset, period_type=PeriodType.DAILY)
+            return await one_account_balance(account=asset, as_of_date=datetime.now(timezone.utc))
         except Exception as e:
             logger.warning(f"Ledger lookup failed: {e}", extra={"notification": False})
             return None

@@ -15,7 +15,11 @@ from v4vapp_backend_v2.accounting.in_progress_results_class import (
     InProgressResults,
     all_held_msats,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+    PeriodType,
+    latest_period_create_checkpoint,
+)
 from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -163,6 +167,22 @@ async def _set_cached_sanity_check_results(results: "SanityCheckResults") -> Non
 # MARK: Individual sanity check tests
 
 
+async def _safe_one_account_balance(account_name: str, in_progress: InProgressResults):
+    try:
+        # age = timedelta(days=1)
+        account = LiabilityAccount(
+            name="VSC Liability",
+            sub=account_name,
+        )
+        await latest_period_create_checkpoint(account=account, period_type=PeriodType.DAILY)
+        return await one_account_balance(
+            account=account, as_of_date=datetime.now(timezone.utc), in_progress=in_progress
+        )
+    except Exception as e:
+        logger.error(e, extra={"notification": False})
+        return e
+
+
 @async_time_decorator
 async def server_account_balances(in_progress: InProgressResults) -> SanityCheckResult:
     """Asynchronously verify that server-related accounts have near-zero balances.
@@ -197,13 +217,6 @@ async def server_account_balances(in_progress: InProgressResults) -> SanityCheck
     accounts_to_check = ["keepsats", server_id]
 
     results: List[str] = []
-
-    async def _safe_one_account_balance(account_name: str, in_progress: InProgressResults):
-        try:
-            return await one_account_balance(account=account_name, in_progress=in_progress)
-        except Exception as e:
-            logger.error(e, extra={"notification": False})
-            return e
 
     tasks: dict[str, asyncio.Task] = {}
     async with asyncio.TaskGroup() as tg:
@@ -282,12 +295,33 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 raise
 
         try:
+            as_of_date = datetime.now(tz=timezone.utc)
+            async with asyncio.TaskGroup() as tg:
+                tasks["deposits_checkpoint"] = tg.create_task(
+                    latest_period_create_checkpoint(
+                        account=customer_deposits_account, period_type=PeriodType.DAILY
+                    )
+                )
+                tasks["traded_deposits_checkpoint"] = tg.create_task(
+                    latest_period_create_checkpoint(
+                        account=traded_deposits_account, period_type=PeriodType.DAILY
+                    )
+                )
+
             async with asyncio.TaskGroup() as tg:
                 tasks["deposits_details"] = tg.create_task(
-                    one_account_balance(account=customer_deposits_account, in_progress=in_progress)
+                    one_account_balance(
+                        account=customer_deposits_account,
+                        as_of_date=as_of_date,
+                        in_progress=in_progress,
+                    )
                 )
                 tasks["traded_deposits_details"] = tg.create_task(
-                    one_account_balance(account=traded_deposits_account, in_progress=in_progress)
+                    one_account_balance(
+                        account=traded_deposits_account,
+                        as_of_date=as_of_date,
+                        in_progress=in_progress,
+                    )
                 )
                 tasks["balances"] = tg.create_task(_fetch_balances())
         except asyncio.CancelledError:

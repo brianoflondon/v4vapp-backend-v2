@@ -34,8 +34,16 @@ async def test_hive_task_failure_logged(caplog, monkeypatch):
 
         return Dummy()
 
+    async def fake_latest_period_create_checkpoint(*args, **kwargs):
+        return None
+
     monkeypatch.setattr(sanity_checks, "account_hive_balances_async", fake_hive)
     monkeypatch.setattr(sanity_checks, "one_account_balance", fake_account_balance)
+    monkeypatch.setattr(
+        sanity_checks,
+        "latest_period_create_checkpoint",
+        fake_latest_period_create_checkpoint,
+    )
 
     # avoid loading real config; we just need a server_id attribute
     class DummyConfig:
@@ -177,6 +185,9 @@ async def test_server_account_hive_balances_open_orders_show_info(monkeypatch):
     async def fake_account_hive_balances_async(hive_accname):
         return {"HIVE": Decimal("5697.668"), "HBD": Decimal("1000.0")}
 
+    async def fake_latest_period_create_checkpoint(*args, **kwargs):
+        return None
+
     class DummyConfig:
         server_id = "v4vapp"
 
@@ -191,6 +202,11 @@ async def test_server_account_hive_balances_open_orders_show_info(monkeypatch):
     monkeypatch.setattr(sanity_checks, "one_account_balance", fake_one_account_balance)
     monkeypatch.setattr(
         sanity_checks, "account_hive_balances_async", fake_account_hive_balances_async
+    )
+    monkeypatch.setattr(
+        sanity_checks,
+        "latest_period_create_checkpoint",
+        fake_latest_period_create_checkpoint,
     )
     monkeypatch.setattr(sanity_checks, "InternalConfig", lambda *args, **kwargs: DummyConfig())
     monkeypatch.setattr(
