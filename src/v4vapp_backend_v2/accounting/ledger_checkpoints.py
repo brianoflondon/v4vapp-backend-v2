@@ -45,7 +45,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     list_all_active_accounts,
     one_account_balance,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -233,6 +233,43 @@ class LedgerCheckpoint(BaseModel):
                 extra={"notification": False},
             )
             raise
+
+
+async def delete_all_ledger_checkpoints(
+    account_name: str, account_sub: str, account_type: str, period_type: PeriodType
+) -> None:
+    """
+    Delete all the checkpoint documents for a given account and period type from MongoDB.
+    This is necessary after reversing a transaction or making a backdated correction (such as for the
+    Customer Deposits Hive (Asset) account for the server when reversing Limit Order Create transactions).
+
+    Args:
+        - *account_name*: Name of the ledger account (e.g. "VSC Liability")
+        - *account_sub*: Sub-account identifier (e.g. "alice")
+        - *account_type*: AccountType enum value as a string (e.g. "Liability")
+        - *period_type*: Granularity of the checkpoints to delete (daily/weekly/monthly)
+
+
+    """
+    try:
+        await LedgerCheckpoint.collection().delete_many(
+            filter={
+                "account_name": account_name,
+                "account_sub": account_sub,
+                "account_type": account_type,
+                "period_type": str(period_type.value),
+            }
+        )
+        logger.debug(
+            f"📌 Checkpoint deleted: {account_name}:{account_sub} {period_type}",
+            extra={"notification": False},
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to delete checkpoint: {e}",
+            extra={"notification": False},
+        )
+        raise
 
 
 # ---------------------------------------------------------------------------
