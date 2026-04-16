@@ -1,5 +1,5 @@
 import textwrap
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from math import isclose
 from typing import Any, Dict, List, Mapping, Self, Sequence
@@ -747,30 +747,19 @@ class LedgerEntry(BaseModel):
         await (
             self._invalidate_cache()
         )  # Invalidate cache before saving to ensure any reads during save are consistent
+        from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+            invalidate_checkpoints_for_accounts_by_date,
+        )
+        await invalidate_checkpoints_for_accounts_by_date(
+            accounts=[self.debit, self.credit], timestamp=self.timestamp
+        )
+
         if reverse:
             self.set_reversed()
-            # This is necessary when reversing because it will invalidate earlier cached items
-            if self.timestamp < datetime.now(tz=timezone.utc) - timedelta(minutes=5):
-                logger.info(
-                    f"Ledger entry is being reversed {self.short_id} {self.group_id} but is older than 5 minutes",
-                    extra={"notification": True, **self.log_extra},
-                )
-                from v4vapp_backend_v2.accounting.ledger_checkpoints import (
-                    PeriodType,
-                    delete_all_ledger_checkpoints,
-                )
-                await delete_all_ledger_checkpoints(
-                    account_name=self.debit.name,
-                    account_sub=self.debit.sub,
-                    account_type=self.debit.account_type,
-                    period_type=PeriodType.DAILY,
-                )
-                await delete_all_ledger_checkpoints(
-                    account_name=self.credit.name,
-                    account_sub=self.credit.sub,
-                    account_type=self.credit.account_type,
-                    period_type=PeriodType.DAILY,
-                )
+            logger.info(
+                f"Ledger entry is being reversed {self.short_id} {self.group_id}",
+                extra={"notification": True, **self.log_extra},
+            )
         try:
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
             document: Any = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)

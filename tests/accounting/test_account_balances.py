@@ -7,6 +7,8 @@ from pprint import pprint
 import pytest
 from bson import json_util
 
+from unittest.mock import AsyncMock
+
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
     list_all_active_accounts_pipeline,
@@ -56,6 +58,13 @@ async def set_base_config_path_combined(module_monkeypatch):
         test_config_logging_path,
     )
     module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    
+    # Patch delete_checkpoints_for_accounts_and_period_type to do nothing
+    module_monkeypatch.setattr(
+        "v4vapp_backend_v2.accounting.ledger_checkpoints.delete_checkpoints_for_accounts_and_period_type",
+        AsyncMock(),
+    )
+    
     i_c = InternalConfig()
     print("InternalConfig initialized:", i_c)
     db_conn = DBConn()
