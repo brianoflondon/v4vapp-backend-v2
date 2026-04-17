@@ -744,11 +744,12 @@ class LedgerEntry(BaseModel):
 
         """
         self.db_checks()
-        await (
-            self._invalidate_cache()
-        )  # Invalidate cache before saving to ensure any reads during save are consistent
         if reverse:
             self.set_reversed()
+            logger.info(
+                f"Ledger entry is being reversed {self.short_id} {self.group_id}",
+                extra={"notification": True, **self.log_extra},
+            )
         try:
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
             document: Any = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
@@ -771,6 +772,18 @@ class LedgerEntry(BaseModel):
             logger.debug(
                 f"\n{self}",
                 extra={"notification": False, "db_ans": ans, **self.log_extra},
+            )
+            # Invalidate cache AFTER the DB write so any subsequent cache miss
+            # re-reads the DB with the new entry already committed. Invalidating
+            # before the write creates a race: another coroutine can repopulate
+            # the cache from DB (missing the new entry) before insert_one completes.
+            await self._invalidate_cache()
+            from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+                invalidate_checkpoints_for_accounts_by_date,
+            )
+
+            await invalidate_checkpoints_for_accounts_by_date(
+                accounts=[self.debit, self.credit], timestamp=self.timestamp
             )
             return ans
         except DuplicateKeyError as e:

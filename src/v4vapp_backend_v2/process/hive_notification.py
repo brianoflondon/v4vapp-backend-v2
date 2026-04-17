@@ -166,9 +166,17 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     ):
         reply_type = ReplyType.TRANSFER
         trx = {}
-        adjusted_amount = await check_for_outstanding_hive_balance(
-            cust_id=details.pay_to_cust_id, amount=amount
-        )
+        # For CONVERSION actions the CONV_CUSTOMER ledger entry has already been
+        # written with the exact amount owed. Applying the outstanding-balance
+        # check can incorrectly truncate the payout if the VSC Liability HIVE
+        # balance is stale (cache timing) or has accumulated a discrepancy from
+        # prior truncated payouts.  Skip it for conversions.
+        if details.action == ReturnAction.CONVERSION:
+            adjusted_amount = amount
+        else:
+            adjusted_amount = await check_for_outstanding_hive_balance(
+                cust_id=details.pay_to_cust_id, amount=amount
+            )
         try:
             trx = await send_transfer(
                 hive_client=hive_client,

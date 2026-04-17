@@ -24,17 +24,20 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     CheckpointConvSummary,
     LedgerCheckpoint,
-    PeriodType,
     build_checkpoints_for_period,
-    completed_period_ends_since,
     create_checkpoint,
+    delete_all_ledger_checkpoints,
     get_latest_checkpoint_before,
-    last_completed_period_end,
-    period_end_for_date,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.period_end_type import (
+    PeriodType,
+    completed_period_ends_since,
+    last_completed_period_end,
+    period_end_for_date,
+)
 
 # ---------------------------------------------------------------------------
 # Module-scoped fixtures (DB + test data)
@@ -356,3 +359,245 @@ async def test_build_checkpoints_for_period():
     # At least one checkpoint per account (there may be 0 if test data precedes this range)
     docs_count = await InternalConfig.db["ledger_checkpoints"].count_documents({})
     assert docs_count == count
+
+
+# ---------------------------------------------------------------------------
+# Tests for delete_all function
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_all_removes_checkpoints_for_period():
+    """delete_all should remove all checkpoints for a specific account and period type."""
+    # Create multiple checkpoints for different periods
+    period_end_daily = datetime(2025, 1, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+    period_end_weekly = datetime(2025, 2, 2, 23, 59, 59, 999999, tzinfo=timezone.utc)
+    period_end_monthly = datetime(2025, 3, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    # Create checkpoints for the same account with different period types
+    cp_daily = LedgerCheckpoint(
+        account_name="Test Account",
+        account_sub="user123",
+        account_type="Liability",
+        contra=False,
+        period_type=PeriodType.DAILY,
+        period_end=period_end_daily,
+        balances_net={"MSATS": Decimal("10000")},
+    )
+    await cp_daily.save()
+
+    cp_weekly = LedgerCheckpoint(
+        account_name="Test Account",
+        account_sub="user123",
+        account_type="Liability",
+        contra=False,
+        period_type=PeriodType.WEEKLY,
+        period_end=period_end_weekly,
+        balances_net={"MSATS": Decimal("20000")},
+    )
+    await cp_weekly.save()
+
+    cp_monthly = LedgerCheckpoint(
+        account_name="Test Account",
+        account_sub="user123",
+        account_type="Liability",
+        contra=False,
+        period_type=PeriodType.MONTHLY,
+        period_end=period_end_monthly,
+        balances_net={"MSATS": Decimal("30000")},
+    )
+    await cp_monthly.save()
+
+    # Verify checkpoints exist
+    count_before = await LedgerCheckpoint.collection().count_documents(
+        {
+            "account_name": "Test Account",
+            "account_sub": "user123",
+            "account_type": "Liability",
+        }
+    )
+    assert count_before == 3, "Should have created 3 checkpoints"
+
+    # Delete only daily checkpoints
+    await delete_all_ledger_checkpoints("Test Account", "user123", "Liability", PeriodType.DAILY)
+
+    # Verify only daily checkpoints are deleted
+    count_after = await LedgerCheckpoint.collection().count_documents(
+        {
+            "account_name": "Test Account",
+            "account_sub": "user123",
+            "account_type": "Liability",
+        }
+    )
+    assert count_after == 2, "Should have 2 remaining checkpoints after deleting daily ones"
+
+    # Verify weekly and monthly checkpoints still exist
+    remaining = (
+        await LedgerCheckpoint.collection()
+        .find(
+            {
+                "account_name": "Test Account",
+                "account_sub": "user123",
+                "account_type": "Liability",
+            }
+        )
+        .to_list(length=None)
+    )
+
+    period_types = [doc["period_type"] for doc in remaining]
+    assert "weekly" in period_types, "Weekly checkpoint should still exist"
+    assert "monthly" in period_types, "Monthly checkpoint should still exist"
+    assert "daily" not in period_types, "Daily checkpoint should be deleted"
+
+
+@pytest.mark.asyncio
+async def test_delete_all_does_not_affect_other_accounts():
+    """delete_all should only delete checkpoints for the specified account."""
+    period_end = datetime(2025, 1, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    # Create checkpoints for two different accounts
+    cp1 = LedgerCheckpoint(
+        account_name="Account A",
+        account_sub="user1",
+        account_type="Liability",
+        contra=False,
+        period_type=PeriodType.DAILY,
+        period_end=period_end,
+        balances_net={"MSATS": Decimal("10000")},
+    )
+    await cp1.save()
+
+    cp2 = LedgerCheckpoint(
+        account_name="Account B",
+        account_sub="user1",
+        account_type="Liability",
+        contra=False,
+        period_type=PeriodType.DAILY,
+        period_end=period_end,
+        balances_net={"MSATS": Decimal("20000")},
+    )
+    await cp2.save()
+
+    # Delete checkpoints for Account A
+    await delete_all_ledger_checkpoints("Account A", "user1", "Liability", PeriodType.DAILY)
+
+    # Verify Account A checkpoints are deleted
+    count_a = await LedgerCheckpoint.collection().count_documents(
+        {"account_name": "Account A", "account_sub": "user1"}
+    )
+    assert count_a == 0, "Account A checkpoints should be deleted"
+
+    # Verify Account B checkpoints still exist
+    count_b = await LedgerCheckpoint.collection().count_documents(
+        {"account_name": "Account B", "account_sub": "user1"}
+    )
+    assert count_b == 1, "Account B checkpoints should still exist"
+
+
+@pytest.mark.asyncio
+async def test_delete_all_does_not_affect_different_subs():
+    """delete_all should only delete checkpoints for the specified sub-account."""
+    period_end = datetime(2025, 1, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    # Create checkpoints for the same account but different subs
+    cp1 = LedgerCheckpoint(
+        account_name="Shared Account",
+        account_sub="user_a",
+        account_type="Liability",
+        contra=False,
+        period_type=PeriodType.DAILY,
+        period_end=period_end,
+        balances_net={"MSATS": Decimal("10000")},
+    )
+    await cp1.save()
+
+    cp2 = LedgerCheckpoint(
+        account_name="Shared Account",
+        account_sub="user_b",
+        account_type="Liability",
+        contra=False,
+        period_type=PeriodType.DAILY,
+        period_end=period_end,
+        balances_net={"MSATS": Decimal("20000")},
+    )
+    await cp2.save()
+
+    # Delete checkpoints for user_a
+    await delete_all_ledger_checkpoints("Shared Account", "user_a", "Liability", PeriodType.DAILY)
+
+    # Verify user_a checkpoints are deleted
+    count_a = await LedgerCheckpoint.collection().count_documents(
+        {"account_name": "Shared Account", "account_sub": "user_a"}
+    )
+    assert count_a == 0, "user_a checkpoints should be deleted"
+
+    # Verify user_b checkpoints still exist
+    count_b = await LedgerCheckpoint.collection().count_documents(
+        {"account_name": "Shared Account", "account_sub": "user_b"}
+    )
+    assert count_b == 1, "user_b checkpoints should still exist"
+
+
+@pytest.mark.asyncio
+async def test_delete_all_with_no_matching_checkpoints():
+    """delete_all should handle gracefully when no matching checkpoints exist."""
+    # Call delete_all for a non-existent account
+    await delete_all_ledger_checkpoints(
+        "NonExistent Account", "nonexistent_sub", "Liability", PeriodType.DAILY
+    )
+
+    # This should not raise an error; just complete successfully
+    count = await LedgerCheckpoint.collection().count_documents(
+        {
+            "account_name": "NonExistent Account",
+            "account_sub": "nonexistent_sub",
+        }
+    )
+    assert count == 0, "No checkpoints should exist for non-existent account"
+
+
+@pytest.mark.asyncio
+async def test_delete_all_deletes_all_matching_checkpoints():
+    """delete_all should delete all checkpoints matching the filter criteria."""
+    # Create multiple checkpoints with different period_ends for the same account/period
+    account_name = "Deletion Test Account"
+    account_sub = "delete_test_sub"
+    account_type = "Asset"
+
+    for i in range(5):
+        period_end = datetime(2025, 1, i + 1, 23, 59, 59, 999999, tzinfo=timezone.utc)
+        cp = LedgerCheckpoint(
+            account_name=account_name,
+            account_sub=account_sub,
+            account_type=account_type,
+            contra=False,
+            period_type=PeriodType.DAILY,
+            period_end=period_end,
+            balances_net={"MSATS": Decimal(str(10000 * (i + 1)))},
+        )
+        await cp.save()
+
+    # Verify all checkpoint exist
+    count_before = await LedgerCheckpoint.collection().count_documents(
+        {
+            "account_name": account_name,
+            "account_sub": account_sub,
+            "account_type": account_type,
+            "period_type": "daily",
+        }
+    )
+    assert count_before == 5, "Should have created 5 checkpoints"
+
+    # Delete all checkpoints for this account/period combination
+    await delete_all_ledger_checkpoints(account_name, account_sub, account_type, PeriodType.DAILY)
+
+    # Verify all checkpoints are deleted
+    count_after = await LedgerCheckpoint.collection().count_documents(
+        {
+            "account_name": account_name,
+            "account_sub": account_sub,
+            "account_type": account_type,
+            "period_type": "daily",
+        }
+    )
+    assert count_after == 0, "All checkpoints should be deleted"
