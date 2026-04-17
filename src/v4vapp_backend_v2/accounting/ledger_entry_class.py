@@ -744,9 +744,6 @@ class LedgerEntry(BaseModel):
 
         """
         self.db_checks()
-        await (
-            self._invalidate_cache()
-        )  # Invalidate cache before saving to ensure any reads during save are consistent
         if reverse:
             self.set_reversed()
         try:
@@ -772,6 +769,11 @@ class LedgerEntry(BaseModel):
                 f"\n{self}",
                 extra={"notification": False, "db_ans": ans, **self.log_extra},
             )
+            # Invalidate cache AFTER the DB write so any subsequent cache miss
+            # re-reads the DB with the new entry already committed. Invalidating
+            # before the write creates a race: another coroutine can repopulate
+            # the cache from DB (missing the new entry) before insert_one completes.
+            await self._invalidate_cache()
             return ans
         except DuplicateKeyError as e:
             if not ignore_duplicates:
