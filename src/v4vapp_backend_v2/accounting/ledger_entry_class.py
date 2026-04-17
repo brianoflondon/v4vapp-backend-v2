@@ -744,12 +744,10 @@ class LedgerEntry(BaseModel):
 
         """
         self.db_checks()
-        await (
-            self._invalidate_cache()
-        )  # Invalidate cache before saving to ensure any reads during save are consistent
         from v4vapp_backend_v2.accounting.ledger_checkpoints import (
             invalidate_checkpoints_for_accounts_by_date,
         )
+
         await invalidate_checkpoints_for_accounts_by_date(
             accounts=[self.debit, self.credit], timestamp=self.timestamp
         )
