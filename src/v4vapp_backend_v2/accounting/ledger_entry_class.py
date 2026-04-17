@@ -744,14 +744,6 @@ class LedgerEntry(BaseModel):
 
         """
         self.db_checks()
-        from v4vapp_backend_v2.accounting.ledger_checkpoints import (
-            invalidate_checkpoints_for_accounts_by_date,
-        )
-
-        await invalidate_checkpoints_for_accounts_by_date(
-            accounts=[self.debit, self.credit], timestamp=self.timestamp
-        )
-
         if reverse:
             self.set_reversed()
             logger.info(
@@ -786,6 +778,13 @@ class LedgerEntry(BaseModel):
             # before the write creates a race: another coroutine can repopulate
             # the cache from DB (missing the new entry) before insert_one completes.
             await self._invalidate_cache()
+            from v4vapp_backend_v2.accounting.ledger_checkpoints import (
+                invalidate_checkpoints_for_accounts_by_date,
+            )
+
+            await invalidate_checkpoints_for_accounts_by_date(
+                accounts=[self.debit, self.credit], timestamp=self.timestamp
+            )
             return ans
         except DuplicateKeyError as e:
             if not ignore_duplicates:
