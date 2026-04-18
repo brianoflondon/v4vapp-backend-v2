@@ -406,6 +406,8 @@ async def one_account_balance(
                     f"@ {checkpoint.period_end.date()} → delta from {from_date.date()} to {as_of_date.date()}",
                     extra={"notification": False},
                 )
+            else:
+                from_date = None
         except Exception as e:
             logger.info(
                 f"Checkpoint lookup failed for {account.name}:{account.sub}: {e}",
@@ -456,6 +458,50 @@ async def one_account_balance(
                 running_conv = running_conv + ConvertedSummary.from_crypto_conv(row.conv_signed)
                 row.conv_running_total = running_conv
 
+        # Add synthetic checkpoint-only balances for units that have no delta rows.
+        # This happens when a checkpoint carries a non-zero balance in a currency
+        # but the delta query after the checkpoint does not return any rows for
+        # that currency.
+        if checkpoint is not None:
+            for unit_str, cp_net in checkpoint.balances_net.items():
+                if cp_net == Decimal(0):
+                    continue
+                try:
+                    currency = Currency(unit_str)
+                except ValueError:
+                    continue
+                if currency in merged_balances:
+                    continue
+                cp_conv_raw = checkpoint.conv_totals.get(unit_str)
+                cp_conv = (
+                    cp_conv_raw.to_converted_summary()
+                    if cp_conv_raw is not None
+                    else ConvertedSummary()
+                )
+                from v4vapp_backend_v2.accounting.accounting_classes import AccountBalanceLine
+
+                merged_balances[currency] = [
+                    AccountBalanceLine(
+                        timestamp=checkpoint.period_end,
+                        description=f"Carried Forward (from {checkpoint.period_end.strftime('%Y-%m-%d')})",
+                        unit=unit_str,
+                        amount=abs(cp_net),
+                        amount_signed=cp_net,
+                        amount_running_total=Decimal(0),
+                        conv_signed={
+                            "hive": Decimal(0),
+                            "hbd": Decimal(0),
+                            "usd": Decimal(0),
+                            "sats": Decimal(0),
+                            "msats": Decimal(0),
+                        },
+                        account_type=str(account.account_type),
+                        name=account.name,
+                        sub=account.sub,
+                        contra=account.contra,
+                    )
+                ]
+
         # --- Apply checkpoint offsets to running totals ---
         if checkpoint is not None:
             for unit, rows in merged_balances.items():
@@ -486,7 +532,6 @@ async def one_account_balance(
         for unit_str, net_val in checkpoint.balances_net.items():
             if net_val == Decimal(0):
                 continue
-            from v4vapp_backend_v2.helpers.currency_class import Currency
 
             try:
                 currency = Currency(unit_str)
@@ -734,6 +779,31 @@ async def account_balance_printout(
                 row.conv_running_total = row.conv_running_total + opening_conv
         ledger_account_details._recompute_summaries()
 
+        # Add synthetic opening balance rows for units that have no current-period rows.
+        for unit, opening_net in opening_details.balances_net.items():
+            if opening_net == Decimal(0) or unit in ledger_account_details.balances:
+                continue
+            opening_conv = opening_details.balances_totals.get(unit, ConvertedSummary())
+            ob_desc = f"Carried Forward (from {period_start.strftime('%Y-%m-%d')})"
+            synthetic_row = AccountBalanceLine(
+                timestamp=period_start,
+                description=ob_desc,
+                unit=str(unit),
+                amount=abs(opening_net),
+                amount_signed=opening_net,
+                amount_running_total=opening_net,
+                conv_signed=CryptoConv(),
+                account_type=str(account.account_type),
+                name=account.name,
+                sub=account.sub,
+                contra=account.contra,
+                side="",
+                ledger_type="ob",
+            )
+            synthetic_row.conv_running_total = opening_conv
+            ledger_account_details.balances[unit] = [synthetic_row]
+        ledger_account_details._recompute_summaries()
+
     units = set(ledger_account_details.balances.keys())
     if not quote:
         quote = await TrackedBaseModel.update_quote()
@@ -745,7 +815,7 @@ async def account_balance_printout(
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
     if opening_balance_carried_forward:
         output.append(
-            f"No new transactions since {period_start.date()} — opening balance carried forward:"
+            f"No new transactions since {period_start} — opening balance carried forward:"
         )
     output.append("-" * max_width)
 
@@ -802,7 +872,11 @@ async def account_balance_printout(
                 and opening_details.balances_net
             ):
                 ob_net = opening_details.balances_net.get(unit, Decimal(0))
-                if ob_net != Decimal(0):
+                if (
+                    ob_net != Decimal(0)
+                    and not (len(all_rows) == 1 and all_rows[0].ledger_type == "ob")
+                    and not (len(all_rows) == 1 and all_rows[0].ledger_type == "ob")
+                ):
                     ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
                     output.append(f"\n=== {ob_date_str} ===")
                     _, _, ob_bal_fmt = _format_amounts_for_display(
@@ -983,7 +1057,38 @@ async def account_balance_printout_grouped_by_customer(
                 row.conv_running_total = row.conv_running_total + opening_conv
         ledger_account_details._recompute_summaries()
 
+        # Add synthetic opening balance rows for units that have no current-period rows.
+        for unit, opening_net in opening_details.balances_net.items():
+            if opening_net == Decimal(0) or unit in ledger_account_details.balances:
+                continue
+            opening_conv = opening_details.balances_totals.get(unit, ConvertedSummary())
+            ob_desc = f"Carried Forward (from {period_start.strftime('%Y-%m-%d')})"
+            synthetic_row = AccountBalanceLine(
+                timestamp=period_start,
+                description=ob_desc,
+                unit=str(unit),
+                amount=abs(opening_net),
+                amount_signed=opening_net,
+                amount_running_total=opening_net,
+                conv_signed=CryptoConv(),
+                account_type=str(account.account_type),
+                name=account.name,
+                sub=account.sub,
+                contra=account.contra,
+                side="",
+                ledger_type="ob",
+            )
+            synthetic_row.conv_running_total = opening_conv
+            ledger_account_details.balances[unit] = [synthetic_row]
+        ledger_account_details._recompute_summaries()
+
     units = set(ledger_account_details.balances.keys())
+    if opening_details is not None and opening_details.balances_net:
+        units.update(
+            unit
+            for unit, opening_net in opening_details.balances_net.items()
+            if opening_net != Decimal(0)
+        )
     quote = await TrackedBaseModel.update_quote()
 
     as_of_date_printout = as_of_date if as_of_date else datetime.now(tz=timezone.utc)
@@ -1057,7 +1162,9 @@ async def account_balance_printout_grouped_by_customer(
                 and opening_details.balances_net
             ):
                 ob_net = opening_details.balances_net.get(unit, Decimal(0))
-                if ob_net != Decimal(0):
+                if ob_net != Decimal(0) and not (
+                    len(all_rows) == 1 and all_rows[0].ledger_type == "ob"
+                ):
                     ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
                     output.append(f"\n=== {ob_date_str} ===")
                     ob_display = ob_net / conversion_factor if unit.upper() == "MSATS" else ob_net

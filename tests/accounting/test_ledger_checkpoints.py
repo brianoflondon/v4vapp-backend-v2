@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 from bson import json_util
 
-from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+from v4vapp_backend_v2.accounting.account_balances import InProgressResults, one_account_balance
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     CheckpointConvSummary,
@@ -32,6 +32,7 @@ from v4vapp_backend_v2.accounting.ledger_checkpoints import (
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.period_end_type import (
     PeriodType,
     completed_period_ends_since,
@@ -343,6 +344,114 @@ async def test_one_account_balance_checkpoint_matches_full_history():
     assert abs(result_with_cp.hive - result_without_cp.hive) <= Decimal("0.001"), (
         f"HIVE mismatch: with_cp={result_with_cp.hive} without={result_without_cp.hive}"
     )
+
+
+@pytest.mark.asyncio
+async def test_one_account_balance_checkpoint_carried_forward_missing_currency(monkeypatch):
+    """one_account_balance must carry forward checkpoint-only currencies when no delta rows exist."""
+    account = LiabilityAccount(name="VSC Liability", sub="testuser")
+    checkpoint = LedgerCheckpoint(
+        account_name=account.name,
+        account_sub=account.sub,
+        account_type=str(account.account_type),
+        contra=account.contra,
+        period_type=PeriodType.DAILY,
+        period_end=datetime(2026, 4, 17, 23, 59, 59, 999999, tzinfo=timezone.utc),
+        balances_net={"hbd": Decimal("1.745")},
+        conv_totals={
+            "hbd": CheckpointConvSummary(
+                hive=Decimal(0),
+                hbd=Decimal("1.745"),
+                usd=Decimal(0),
+                sats=Decimal(0),
+                msats=Decimal(0),
+            )
+        },
+    )
+
+    async def fake_get_latest_checkpoint_before(acc, as_of):
+        assert acc == account
+        return checkpoint
+
+    class FakeCursor:
+        def __init__(self, docs):
+            self.docs = docs
+
+        async def to_list(self, length=None):
+            return self.docs
+
+    class FakeCollection:
+        async def aggregate(self, pipeline):
+            return FakeCursor(
+                [
+                    {
+                        "account_type": "Asset",
+                        "name": "Customer Deposits Hive",
+                        "sub": "devser.v4vapp",
+                        "contra": False,
+                        "balances": {
+                            "hive": [
+                                {
+                                    "group_id": "test",
+                                    "short_id": "test",
+                                    "ledger_type": "cust_h_in",
+                                    "timestamp": datetime(
+                                        2026, 4, 18, 8, 38, 2, tzinfo=timezone.utc
+                                    ),
+                                    "description": "HIVE delta row",
+                                    "user_memo": "",
+                                    "cust_id": "",
+                                    "cust_id_from": "",
+                                    "cust_id_to": "",
+                                    "amount": Decimal("280.684"),
+                                    "amount_signed": Decimal("280.684"),
+                                    "unit": "hive",
+                                    "conv": {
+                                        "hive": Decimal("280.684"),
+                                        "hbd": Decimal(0),
+                                        "usd": Decimal(0),
+                                        "sats": Decimal(0),
+                                        "msats": Decimal(0),
+                                    },
+                                    "conv_signed": {
+                                        "hive": Decimal("280.684"),
+                                        "hbd": Decimal(0),
+                                        "usd": Decimal(0),
+                                        "sats": Decimal(0),
+                                        "msats": Decimal(0),
+                                    },
+                                    "op_type": "",
+                                    "link": "",
+                                    "side": "debit",
+                                    "account_type": "Asset",
+                                    "name": "Customer Deposits Hive",
+                                    "sub": "devser.v4vapp",
+                                    "contra": False,
+                                }
+                            ]
+                        },
+                    }
+                ]
+            )
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.accounting.ledger_checkpoints.get_latest_checkpoint_before",
+        fake_get_latest_checkpoint_before,
+    )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.accounting.account_balances.LedgerEntry.collection",
+        classmethod(lambda cls: FakeCollection()),
+    )
+
+    result = await one_account_balance(
+        account,
+        as_of_date=datetime(2026, 4, 18, 8, 38, 2, tzinfo=timezone.utc),
+        in_progress=InProgressResults(results=[]),
+        use_cache=False,
+        use_checkpoints=True,
+    )
+
+    assert result.balances_net[Currency.HBD] == Decimal("1.745")
 
 
 @pytest.mark.asyncio
