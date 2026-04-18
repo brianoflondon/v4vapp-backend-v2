@@ -21,6 +21,7 @@ from v4vapp_backend_v2.process.overwatch_flows import (
     EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW,
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
+    HIVE_TRANSFER_FAILURE_FLOW,
     HIVE_TRANSFER_PAYWITHSATS_FLOW,
     KEEPSATS_INTERNAL_TRANSFER_FLOW,
     KEEPSATS_TO_EXTERNAL_FLOW,
@@ -95,6 +96,7 @@ def _register_all() -> Overwatch:
     Overwatch.register_flow(EXTERNAL_TO_HIVE_LOOPBACK_FLOW)
     Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
     Overwatch.register_flow(HIVE_TRANSFER_PAYWITHSATS_FLOW)
+    Overwatch.register_flow(HIVE_TRANSFER_FAILURE_FLOW)
     Overwatch._loaded_from_redis = True
     return ow
 

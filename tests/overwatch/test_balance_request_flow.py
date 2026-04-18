@@ -19,6 +19,7 @@ from v4vapp_backend_v2.process.overwatch_flows import (
     BALANCE_REQUEST_FLOW,
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
+    HIVE_TRANSFER_FAILURE_FLOW,
     HIVE_TRANSFER_PAYWITHSATS_FLOW,
     check_balance_request,
 )
@@ -83,12 +84,13 @@ def _fake_op(
 
 
 def _register_transfer_flows() -> Overwatch:
-    """Register all four transfer-triggered flow definitions."""
+    """Register all transfer-triggered flow definitions."""
     Overwatch.reset()
     ow = Overwatch()
     Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
     Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
     Overwatch.register_flow(HIVE_TRANSFER_PAYWITHSATS_FLOW)
+    Overwatch.register_flow(HIVE_TRANSFER_FAILURE_FLOW)
     Overwatch.register_flow(BALANCE_REQUEST_FLOW)
     Overwatch._loaded_from_redis = True
     return ow
@@ -145,18 +147,19 @@ class TestBalanceRequestDefinition:
 
 class TestBalanceRequestOverwatch:
     @pytest.mark.asyncio
-    async def test_transfer_creates_four_candidates(self):
-        """A balance-request transfer trigger creates all four transfer-triggered flows."""
+    async def test_transfer_creates_five_candidates(self):
+        """A balance-request transfer trigger creates all five transfer-triggered flows."""
         ow = _register_transfer_flows()
         fake = _fake_op(balance_request=True)
         event = _op_event("transfer", op=fake)
         await ow._try_create_flow(event, fake)
-        assert len(ow.active_flows) == 4
+        assert len(ow.active_flows) == 5
         names = {f.flow_definition.name for f in ow.active_flows}
         assert names == {
             "hive_to_keepsats",
             "hive_to_keepsats_external",
             "hive_transfer_paywithsats",
+            "hive_transfer_failure",
             "balance_request",
         }
 
@@ -286,10 +289,10 @@ class TestCancelFlowsForTrigger:
         fake = _fake_op(balance_request=True)
         trigger = _op_event("transfer", op=fake)
         await ow._try_create_flow(trigger, fake)
-        assert len(ow.active_flows) == 4
+        assert len(ow.active_flows) == 5
 
         cancelled = await ow.cancel_flows_for_trigger("gid_trigger")
-        assert cancelled == 4
+        assert cancelled == 5
         assert len(ow.active_flows) == 0
         assert len(ow.completed_flows) == 0
 
@@ -309,11 +312,11 @@ class TestCancelFlowsForTrigger:
             _op_event("transfer", group_id="gid_b", short_id="bbbb_bbbbbb_1", op=fake_b),
             fake_b,
         )
-        assert len(ow.active_flows) == 8  # 4 per trigger
+        assert len(ow.active_flows) == 10  # 5 per trigger
 
         cancelled = await ow.cancel_flows_for_trigger("gid_a")
-        assert cancelled == 4
-        assert len(ow.active_flows) == 4
+        assert cancelled == 5
+        assert len(ow.active_flows) == 5
         remaining_triggers = {f.trigger_group_id for f in ow.active_flows}
         assert remaining_triggers == {"gid_b"}
 
@@ -423,16 +426,17 @@ class TestEventFilter:
         assert stage.matches(event) is False
 
     @pytest.mark.asyncio
-    async def test_non_balance_request_creates_three_candidates(self):
-        """A non-balance-request transfer only creates 3 candidates
-        (balance_request flow is filtered out)."""
+    async def test_non_balance_request_creates_four_candidates(self):
+        """A non-balance-request transfer creates 4 candidates
+        (balance_request flow is filtered out, but failure flow is not)."""
         ow = _register_transfer_flows()
         fake = _fake_op(balance_request=False)
         event = _op_event("transfer", op=fake)
         await ow._try_create_flow(event, fake)
-        assert len(ow.active_flows) == 3
+        assert len(ow.active_flows) == 4
         names = {f.flow_definition.name for f in ow.active_flows}
         assert "balance_request" not in names
+        assert "hive_transfer_failure" in names
 
     def test_event_filter_excluded_from_serialization(self):
         """event_filter should not appear in model_dump (excluded from Redis)."""
