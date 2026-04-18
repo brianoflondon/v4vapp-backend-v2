@@ -642,6 +642,67 @@ class TestFlowInstanceMatching:
 
 
 # ---------------------------------------------------------------------------
+# Tests: op_log_str population
+# ---------------------------------------------------------------------------
+
+
+class TestOpLogStr:
+    """Tests that FlowStage.op_log_str is populated from FlowEvent.log_str."""
+
+    def test_op_log_str_set_on_match(
+        self,
+        flow_instance: FlowInstance,
+        primary_ledger_entries: dict[str, LedgerEntry],
+    ):
+        le = primary_ledger_entries["cust_h_in"]
+        event = FlowEvent.from_ledger_entry(le)
+        flow_instance.add_event(event)
+        stage = next(
+            s for s in flow_instance.flow_definition.stages if s.name == "customer_hive_in"
+        )
+        assert stage.op_log_str == event.log_str
+        assert stage.op_log_str != ""
+
+    def test_op_log_str_empty_before_match(
+        self,
+        flow_instance: FlowInstance,
+    ):
+        for stage in flow_instance.flow_definition.stages:
+            assert stage.op_log_str == ""
+
+    def test_all_stages_have_log_str_after_complete(
+        self,
+        flow_instance: FlowInstance,
+        all_flow_events: list[FlowEvent],
+    ):
+        for event in all_flow_events:
+            flow_instance.add_event(event)
+        assert flow_instance.is_complete
+        for stage in flow_instance.flow_definition.stages:
+            assert stage.op_log_str != "", f"Stage '{stage.name}' has no op_log_str"
+
+    def test_op_log_str_isolated_between_instances(self):
+        """Each FlowInstance gets its own deep-copied stages."""
+        defn = FlowDefinition(
+            name="test",
+            trigger_op_type="transfer",
+            stages=[
+                FlowStage(name="trigger", event_type="op", op_type="transfer"),
+            ],
+        )
+        inst_a = FlowInstance(flow_definition=defn)
+        inst_b = FlowInstance(flow_definition=defn)
+
+        event = FlowEvent(event_type="op", op_type="transfer")
+        inst_a.add_event(event)
+
+        assert inst_a.flow_definition.stages[0].op_log_str != ""
+        assert inst_b.flow_definition.stages[0].op_log_str == ""
+        # Template definition is also unchanged
+        assert defn.stages[0].op_log_str == ""
+
+
+# ---------------------------------------------------------------------------
 # Tests: Overwatch singleton
 # ---------------------------------------------------------------------------
 

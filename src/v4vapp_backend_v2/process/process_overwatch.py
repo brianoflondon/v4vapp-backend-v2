@@ -106,6 +106,7 @@ class FlowStage(BaseModel):
         ),
         exclude=True,  # not serialised to Redis — restored from registered definition
     )
+    op_log_str: str = Field("", description="The log string for the operation in this flow stage)")
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -118,6 +119,7 @@ class FlowStage(BaseModel):
         required: bool = True,
         group: str = "primary",
         event_filter: Callable[[FlowEvent], bool] | None = None,
+        op_log_str: str = "",
         **data: Any,
     ) -> None:
         """Explicit initializer helps type checkers.
@@ -135,6 +137,7 @@ class FlowStage(BaseModel):
             required=required,
             group=group,
             event_filter=event_filter,
+            op_log_str=op_log_str,
             **data,
         )
 
@@ -270,8 +273,23 @@ class FlowEvent(BaseModel):
         if self.event_type == "ledger" and self.ledger_entry:
             return self.ledger_entry.log_str
         if self.event_type == "op" and self.op:
-            return self.op.log_str
-        return "UnknownEvent"
+            try:
+                val = getattr(self.op, "log_str", None)
+                if val:
+                    return val
+            except Exception:
+                pass
+        # Fallback: construct a useful string from the event's own fields
+        parts: list[str] = []
+        if self.op_type:
+            parts.append(self.op_type)
+        if self.ledger_type:
+            parts.append(self.ledger_type.value)
+        if self.short_id:
+            parts.append(self.short_id)
+        if self.event_value:
+            parts.append(self.event_value)
+        return " ".join(parts) if parts else "UnknownEvent"
 
 
 class FlowInstance(BaseModel):
@@ -339,6 +357,13 @@ class FlowInstance(BaseModel):
         this signature with defaults makes static analysis happy while still
         delegating to the BaseModel machinery.
         """
+        # Deep-copy the definition so each instance has independent stages
+        # whose op_log_str can be set without mutating the shared template.
+        # When deserialising from Redis (model_validate_json), flow_definition
+        # arrives as a plain dict — Pydantic will create a fresh object from
+        # it, so no copy is needed.
+        if isinstance(flow_definition, FlowDefinition):
+            flow_definition = flow_definition.model_copy(deep=True)
         super().__init__(
             flow_definition=flow_definition,
             trigger_group_id=trigger_group_id,
@@ -367,6 +392,7 @@ class FlowInstance(BaseModel):
         for stage in self.flow_definition.stages:
             if stage.name not in previously_matched and stage.matches(event):
                 # Event matched — record it
+                stage.op_log_str = event.log_str
                 self.events.append(event)
                 if self.status == FlowStatus.PENDING:
                     self.status = FlowStatus.IN_PROGRESS
@@ -609,9 +635,15 @@ class Overwatch:
                 try:
                     flow = FlowInstance.model_validate_json(raw)
                     normalized_rkey = self._redis_flow_key(flow)
-                    # update definition to the currently registered one (if any)
+                    # Restore event_filter callbacks from the registered
+                    # definition (they are not serialised to Redis) while
+                    # preserving per-instance op_log_str values.
                     if flow.flow_definition.name in self._flow_definitions:
-                        flow.flow_definition = self._flow_definitions[flow.flow_definition.name]
+                        registered = self._flow_definitions[flow.flow_definition.name]
+                        for inst_stage, reg_stage in zip(
+                            flow.flow_definition.stages, registered.stages
+                        ):
+                            inst_stage.event_filter = reg_stage.event_filter
                     # if definition change means the flow is now complete, fix status
                     if flow.is_complete and flow.status != FlowStatus.COMPLETED:
                         flow.status = FlowStatus.COMPLETED
