@@ -14,6 +14,7 @@ def check_balance_request(event: FlowEvent) -> bool:
     """Return True only when the triggering op is a balance-request transfer."""
     return getattr(event.op, "balance_request", False)
 
+
 # ---------------------------------------------------------------------------
 # Hive-to-Keepsats conversion flow
 # ---------------------------------------------------------------------------
@@ -966,6 +967,63 @@ HIVE_TRANSFER_PAYWITHSATS_FLOW = FlowDefinition(
 
 
 # ---------------------------------------------------------------------------
+# Hive transfer failure (refund) flow
+# ---------------------------------------------------------------------------
+# Flow: User sends HIVE/HBD to the server account, but the system cannot
+# process the request (conversion limits exceeded, amount below minimum,
+# Lightning decode failure, LND payment failure, etc.).  The system returns
+# the full amount to the sender.
+#
+# This flow has the same stage signatures as balance_request, but without
+# the event_filter — it acts as a catch-all for any transfer that ends in
+# an immediate refund.  When balance_request completes first (it has an
+# event_filter), this candidate is resolved via superset/subset logic.
+#
+# Primary events (same short_id as trigger):
+#   1. transfer op (trigger) — customer sends HIVE to server
+#   2. cust_h_in ledger — Customer deposits HIVE
+#
+# Reply events (different short_id — the refund transfer):
+#   3. transfer op — server returns the HIVE
+#   4. cust_h_out ledger — Refund recorded
+# ---------------------------------------------------------------------------
+
+HIVE_TRANSFER_FAILURE_FLOW = FlowDefinition(
+    name="hive_transfer_failure",
+    description="Failed Hive transfer: amount returned to sender (conversion limits, decode failure, etc.)",
+    trigger_op_type="transfer",
+    stages=[
+        # --- Primary stages (same short_id as trigger) ---
+        FlowStage(
+            name="trigger_transfer",
+            event_type="op",
+            op_type="transfer",
+            group="primary",
+        ),
+        FlowStage(
+            name="customer_hive_in",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOMER_HIVE_IN,
+            group="primary",
+        ),
+        # --- Refund stages (reply group) ---
+        FlowStage(
+            name="refund_transfer_op",
+            event_type="op",
+            op_type="transfer",
+            group="refund",
+        ),
+        FlowStage(
+            name="customer_hive_out",
+            event_type="ledger",
+            ledger_type=LedgerType.CUSTOMER_HIVE_OUT,
+            group="refund",
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Registry of all known flow definitions
 # ---------------------------------------------------------------------------
 
@@ -981,4 +1039,5 @@ FLOW_DEFINITIONS = {
     "keepsats_internal_transfer": KEEPSATS_INTERNAL_TRANSFER_FLOW,
     "hive_transfer_paywithsats": HIVE_TRANSFER_PAYWITHSATS_FLOW,
     "balance_request": BALANCE_REQUEST_FLOW,
+    "hive_transfer_failure": HIVE_TRANSFER_FAILURE_FLOW,
 }

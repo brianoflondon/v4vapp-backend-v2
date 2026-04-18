@@ -17,6 +17,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.process.overwatch_flows import (
     HIVE_TO_KEEPSATS_EXTERNAL_FLOW,
     HIVE_TO_KEEPSATS_FLOW,
+    HIVE_TRANSFER_FAILURE_FLOW,
     HIVE_TRANSFER_PAYWITHSATS_FLOW,
 )
 from v4vapp_backend_v2.process.process_overwatch import FlowEvent, FlowStatus, Overwatch
@@ -76,12 +77,13 @@ def _fake_op(
 
 
 def _register_transfer_flows() -> Overwatch:
-    """Register the three transfer-triggered flow definitions."""
+    """Register the transfer-triggered flow definitions."""
     Overwatch.reset()
     ow = Overwatch()
     Overwatch.register_flow(HIVE_TO_KEEPSATS_FLOW)
     Overwatch.register_flow(HIVE_TO_KEEPSATS_EXTERNAL_FLOW)
     Overwatch.register_flow(HIVE_TRANSFER_PAYWITHSATS_FLOW)
+    Overwatch.register_flow(HIVE_TRANSFER_FAILURE_FLOW)
     Overwatch._loaded_from_redis = True
     return ow
 
@@ -133,18 +135,20 @@ class TestHiveTransferPaywithsatsDefinition:
 
 class TestHiveTransferPaywithsatsOverwatch:
     @pytest.mark.asyncio
-    async def test_transfer_creates_three_candidates(self):
+    async def test_transfer_creates_four_candidates(self):
         """A transfer trigger should create hive_to_keepsats,
-        hive_to_keepsats_external, and hive_transfer_paywithsats."""
+        hive_to_keepsats_external, hive_transfer_paywithsats, and
+        hive_transfer_failure."""
         ow = _register_transfer_flows()
         event = _op_event("transfer")
         await ow._try_create_flow(event, _fake_op())
-        assert len(ow.active_flows) == 3
+        assert len(ow.active_flows) == 4
         names = {f.flow_definition.name for f in ow.active_flows}
         assert names == {
             "hive_to_keepsats",
             "hive_to_keepsats_external",
             "hive_transfer_paywithsats",
+            "hive_transfer_failure",
         }
 
     @pytest.mark.asyncio
