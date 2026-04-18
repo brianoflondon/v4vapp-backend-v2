@@ -464,11 +464,13 @@ async def one_account_balance(
         # that currency.
         if checkpoint is not None:
             for unit_str, cp_net in checkpoint.balances_net.items():
-                if unit_str in merged_balances or cp_net == Decimal(0):
+                if cp_net == Decimal(0):
                     continue
                 try:
                     currency = Currency(unit_str)
                 except ValueError:
+                    continue
+                if currency in merged_balances:
                     continue
                 cp_conv_raw = checkpoint.conv_totals.get(unit_str)
                 cp_conv = (
@@ -813,7 +815,7 @@ async def account_balance_printout(
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
     if opening_balance_carried_forward:
         output.append(
-            f"No new transactions since {period_start.date()} — opening balance carried forward:"
+            f"No new transactions since {period_start} — opening balance carried forward:"
         )
     output.append("-" * max_width)
 
@@ -870,7 +872,11 @@ async def account_balance_printout(
                 and opening_details.balances_net
             ):
                 ob_net = opening_details.balances_net.get(unit, Decimal(0))
-                if ob_net != Decimal(0):
+                if (
+                    ob_net != Decimal(0)
+                    and not (len(all_rows) == 1 and all_rows[0].ledger_type == "ob")
+                    and not (len(all_rows) == 1 and all_rows[0].ledger_type == "ob")
+                ):
                     ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
                     output.append(f"\n=== {ob_date_str} ===")
                     _, _, ob_bal_fmt = _format_amounts_for_display(
@@ -1077,6 +1083,12 @@ async def account_balance_printout_grouped_by_customer(
         ledger_account_details._recompute_summaries()
 
     units = set(ledger_account_details.balances.keys())
+    if opening_details is not None and opening_details.balances_net:
+        units.update(
+            unit
+            for unit, opening_net in opening_details.balances_net.items()
+            if opening_net != Decimal(0)
+        )
     quote = await TrackedBaseModel.update_quote()
 
     as_of_date_printout = as_of_date if as_of_date else datetime.now(tz=timezone.utc)
@@ -1150,7 +1162,9 @@ async def account_balance_printout_grouped_by_customer(
                 and opening_details.balances_net
             ):
                 ob_net = opening_details.balances_net.get(unit, Decimal(0))
-                if ob_net != Decimal(0):
+                if ob_net != Decimal(0) and not (
+                    len(all_rows) == 1 and all_rows[0].ledger_type == "ob"
+                ):
                     ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
                     output.append(f"\n=== {ob_date_str} ===")
                     ob_display = ob_net / conversion_factor if unit.upper() == "MSATS" else ob_net
