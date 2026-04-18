@@ -406,6 +406,8 @@ async def one_account_balance(
                     f"@ {checkpoint.period_end.date()} → delta from {from_date.date()} to {as_of_date.date()}",
                     extra={"notification": False},
                 )
+            else:
+                from_date = None
         except Exception as e:
             logger.info(
                 f"Checkpoint lookup failed for {account.name}:{account.sub}: {e}",
@@ -456,6 +458,48 @@ async def one_account_balance(
                 running_conv = running_conv + ConvertedSummary.from_crypto_conv(row.conv_signed)
                 row.conv_running_total = running_conv
 
+        # Add synthetic checkpoint-only balances for units that have no delta rows.
+        # This happens when a checkpoint carries a non-zero balance in a currency
+        # but the delta query after the checkpoint does not return any rows for
+        # that currency.
+        if checkpoint is not None:
+            for unit_str, cp_net in checkpoint.balances_net.items():
+                if unit_str in merged_balances or cp_net == Decimal(0):
+                    continue
+                try:
+                    currency = Currency(unit_str)
+                except ValueError:
+                    continue
+                cp_conv_raw = checkpoint.conv_totals.get(unit_str)
+                cp_conv = (
+                    cp_conv_raw.to_converted_summary()
+                    if cp_conv_raw is not None
+                    else ConvertedSummary()
+                )
+                from v4vapp_backend_v2.accounting.accounting_classes import AccountBalanceLine
+
+                merged_balances[currency] = [
+                    AccountBalanceLine(
+                        timestamp=checkpoint.period_end,
+                        description=f"Carried Forward (from {checkpoint.period_end.strftime('%Y-%m-%d')})",
+                        unit=unit_str,
+                        amount=abs(cp_net),
+                        amount_signed=cp_net,
+                        amount_running_total=Decimal(0),
+                        conv_signed={
+                            "hive": Decimal(0),
+                            "hbd": Decimal(0),
+                            "usd": Decimal(0),
+                            "sats": Decimal(0),
+                            "msats": Decimal(0),
+                        },
+                        account_type=str(account.account_type),
+                        name=account.name,
+                        sub=account.sub,
+                        contra=account.contra,
+                    )
+                ]
+
         # --- Apply checkpoint offsets to running totals ---
         if checkpoint is not None:
             for unit, rows in merged_balances.items():
@@ -486,7 +530,6 @@ async def one_account_balance(
         for unit_str, net_val in checkpoint.balances_net.items():
             if net_val == Decimal(0):
                 continue
-            from v4vapp_backend_v2.helpers.currency_class import Currency
 
             try:
                 currency = Currency(unit_str)
@@ -732,6 +775,31 @@ async def account_balance_printout(
             for row in rows:
                 row.amount_running_total += opening_net
                 row.conv_running_total = row.conv_running_total + opening_conv
+        ledger_account_details._recompute_summaries()
+
+        # Add synthetic opening balance rows for units that have no current-period rows.
+        for unit, opening_net in opening_details.balances_net.items():
+            if opening_net == Decimal(0) or unit in ledger_account_details.balances:
+                continue
+            opening_conv = opening_details.balances_totals.get(unit, ConvertedSummary())
+            ob_desc = f"Carried Forward (from {period_start.strftime('%Y-%m-%d')})"
+            synthetic_row = AccountBalanceLine(
+                timestamp=period_start,
+                description=ob_desc,
+                unit=str(unit),
+                amount=abs(opening_net),
+                amount_signed=opening_net,
+                amount_running_total=opening_net,
+                conv_signed=CryptoConv(),
+                account_type=str(account.account_type),
+                name=account.name,
+                sub=account.sub,
+                contra=account.contra,
+                side="",
+                ledger_type="ob",
+            )
+            synthetic_row.conv_running_total = opening_conv
+            ledger_account_details.balances[unit] = [synthetic_row]
         ledger_account_details._recompute_summaries()
 
     units = set(ledger_account_details.balances.keys())
@@ -981,6 +1049,31 @@ async def account_balance_printout_grouped_by_customer(
             for row in rows:
                 row.amount_running_total += opening_net
                 row.conv_running_total = row.conv_running_total + opening_conv
+        ledger_account_details._recompute_summaries()
+
+        # Add synthetic opening balance rows for units that have no current-period rows.
+        for unit, opening_net in opening_details.balances_net.items():
+            if opening_net == Decimal(0) or unit in ledger_account_details.balances:
+                continue
+            opening_conv = opening_details.balances_totals.get(unit, ConvertedSummary())
+            ob_desc = f"Carried Forward (from {period_start.strftime('%Y-%m-%d')})"
+            synthetic_row = AccountBalanceLine(
+                timestamp=period_start,
+                description=ob_desc,
+                unit=str(unit),
+                amount=abs(opening_net),
+                amount_signed=opening_net,
+                amount_running_total=opening_net,
+                conv_signed=CryptoConv(),
+                account_type=str(account.account_type),
+                name=account.name,
+                sub=account.sub,
+                contra=account.contra,
+                side="",
+                ledger_type="ob",
+            )
+            synthetic_row.conv_running_total = opening_conv
+            ledger_account_details.balances[unit] = [synthetic_row]
         ledger_account_details._recompute_summaries()
 
     units = set(ledger_account_details.balances.keys())

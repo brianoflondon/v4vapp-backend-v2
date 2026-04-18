@@ -206,7 +206,7 @@ async def users_page(request: Request):
     nav_items = nav_manager.get_navigation_items("/admin/users")
 
     # Return page with empty data - actual data will be loaded via JavaScript
-    return templates.TemplateResponse(request, 
+    return templates.TemplateResponse(request,
         "users/users.html",
         {
             "request": request,

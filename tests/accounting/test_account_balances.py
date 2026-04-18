@@ -3,11 +3,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from pprint import pprint
+from unittest.mock import AsyncMock
 
 import pytest
 from bson import json_util
-
-from unittest.mock import AsyncMock
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
@@ -58,13 +57,13 @@ async def set_base_config_path_combined(module_monkeypatch):
         test_config_logging_path,
     )
     module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
-    
+
     # Patch delete_checkpoints_for_accounts_and_period_type to do nothing
     module_monkeypatch.setattr(
         "v4vapp_backend_v2.accounting.ledger_checkpoints.delete_checkpoints_for_accounts_and_period_type",
         AsyncMock(),
     )
-    
+
     i_c = InternalConfig()
     print("InternalConfig initialized:", i_c)
     db_conn = DBConn()
@@ -374,6 +373,86 @@ async def test_get_account_balance_printout():
     accounts = await list_all_accounts()
     for account in accounts[:3]:
         result, details = await account_balance_printout(account)
+
+
+async def test_account_balance_printout_includes_opening_only_currency_rows(monkeypatch):
+    from v4vapp_backend_v2.accounting.accounting_classes import AccountBalanceLine
+    from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
+    from v4vapp_backend_v2.helpers.currency_class import Currency
+
+    period_start = datetime(2026, 4, 17, 23, 59, 59, tzinfo=timezone.utc)
+    account = LiabilityAccount(name="VSC Liability", sub="custA")
+
+    current_hive_row = AccountBalanceLine(
+        short_id="hive-current",
+        ledger_type="cust_h_in",
+        timestamp=datetime(2026, 4, 18, 8, 0, 0, tzinfo=timezone.utc),
+        description="HIVE deposit",
+        cust_id="custA",
+        amount=Decimal("100.000"),
+        amount_signed=Decimal("100.000"),
+        unit=Currency.HIVE,
+        side="debit",
+        amount_running_total=Decimal("100.000"),
+    )
+    ledger_account_details = LedgerAccountDetails(
+        name="VSC Liability",
+        account_type=AccountType.LIABILITY,
+        sub="custA",
+        balances={Currency.HIVE: [current_hive_row]},
+    )
+
+    opening_hbd_row = AccountBalanceLine(
+        short_id="hbd-open",
+        ledger_type="ob",
+        timestamp=period_start,
+        description="Opening HBD balance",
+        cust_id="custA",
+        amount=Decimal("1.745"),
+        amount_signed=Decimal("1.745"),
+        unit=Currency.HBD,
+        side="debit",
+        amount_running_total=Decimal("1.745"),
+    )
+    opening_details = LedgerAccountDetails(
+        name="VSC Liability",
+        account_type=AccountType.LIABILITY,
+        sub="custA",
+        balances={Currency.HBD: [opening_hbd_row]},
+    )
+
+    async def fake_one_account_balance(*args, **kwargs):
+        account_arg = kwargs.get("account", args[0] if args else None)
+        as_of_date = kwargs.get("as_of_date")
+        use_cache = kwargs.get("use_cache")
+        assert account_arg == account
+        assert as_of_date == period_start
+        assert use_cache is False
+        return opening_details
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.accounting.account_balances.one_account_balance",
+        fake_one_account_balance,
+    )
+
+    result, _ = await account_balance_printout(
+        account,
+        line_items=False,
+        ledger_account_details=ledger_account_details,
+        quote=QuoteResponse(),
+        period_start=period_start,
+    )
+    assert "Unit: HBD" in result
+    assert "Carried Forward (from 2026-04-17)" in result
+
+    result_grouped, _ = await account_balance_printout_grouped_by_customer(
+        account,
+        line_items=False,
+        ledger_account_details=ledger_account_details,
+        period_start=period_start,
+    )
+    assert "Unit: HBD" in result_grouped
+    assert "Carried Forward (from 2026-04-17)" in result_grouped
 
 
 async def test_get_keepsats_balance():

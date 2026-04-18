@@ -333,6 +333,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
             )
             raise
 
+
         deposits_details = tasks["deposits_details"].result()
         traded_deposits_details = tasks["traded_deposits_details"].result()
         balances = tasks["balances"].result()
