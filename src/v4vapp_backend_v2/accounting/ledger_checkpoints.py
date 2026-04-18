@@ -398,7 +398,7 @@ async def get_checkpoint_by_id(
 
 async def latest_period_create_checkpoint(
     account: LedgerAccount, period_type: PeriodType = PeriodType.DAILY
-) -> Tuple[LedgerCheckpoint, bool, timedelta, datetime]:
+) -> Tuple[LedgerCheckpoint | None, bool, timedelta, datetime]:
     """
     Create a checkpoint for the most recently completed period if it does not already exist.
 
@@ -418,7 +418,14 @@ async def latest_period_create_checkpoint(
     now = datetime.now(tz=timezone.utc)
     period_start = last_completed_period_end(period_type, now)
     age = now - period_start
-    checkpoint, created = await create_checkpoint(account, period_type, period_start)
+    try:
+        checkpoint, created = await create_checkpoint(account, period_type, period_start)
+    except ValueError as e:
+        logger.warning(
+            f"⚠️  Could not create checkpoint for latest completed {period_type} period: {e}",
+            extra={"notification": False},
+        )
+        return None, False, age, period_start
     return checkpoint, created, age, period_start
 
 
@@ -428,7 +435,7 @@ async def create_checkpoint(
     period_end: datetime,
     use_cache: bool = True,
     force: bool = False,
-) -> Tuple[LedgerCheckpoint, bool]:
+) -> Tuple[LedgerCheckpoint | None, bool]:
     """
     Compute and persist a checkpoint for *account* at *period_end*.
 
@@ -451,6 +458,10 @@ async def create_checkpoint(
 
     """
     start = timer()
+    all_accounts = await list_all_active_accounts()
+    if account not in all_accounts:
+        raise ValueError(f"Account {account} is not active; cannot create checkpoint.")
+
     if not force:
         existing_checkpoint = await get_checkpoint_by_id(account, period_type, period_end)
         if existing_checkpoint is not None:
