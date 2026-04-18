@@ -106,7 +106,9 @@ class FlowStage(BaseModel):
         ),
         exclude=True,  # not serialised to Redis — restored from registered definition
     )
-    op_log_str: str = Field("", description="The log string for the operation in this flow stage)")
+    event_log_str: str = Field(
+        "", description="The log string captured for this flow stage's matched event"
+    )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -119,7 +121,7 @@ class FlowStage(BaseModel):
         required: bool = True,
         group: str = "primary",
         event_filter: Callable[[FlowEvent], bool] | None = None,
-        op_log_str: str = "",
+        event_log_str: str = "",
         **data: Any,
     ) -> None:
         """Explicit initializer helps type checkers.
@@ -137,7 +139,7 @@ class FlowStage(BaseModel):
             required=required,
             group=group,
             event_filter=event_filter,
-            op_log_str=op_log_str,
+            event_log_str=event_log_str,
             **data,
         )
 
@@ -358,7 +360,7 @@ class FlowInstance(BaseModel):
         delegating to the BaseModel machinery.
         """
         # Deep-copy the definition so each instance has independent stages
-        # whose op_log_str can be set without mutating the shared template.
+        # whose event_log_str can be set without mutating the shared template.
         # When deserialising from Redis (model_validate_json), flow_definition
         # arrives as a plain dict — Pydantic will create a fresh object from
         # it, so no copy is needed.
@@ -392,7 +394,7 @@ class FlowInstance(BaseModel):
         for stage in self.flow_definition.stages:
             if stage.name not in previously_matched and stage.matches(event):
                 # Event matched — record it
-                stage.op_log_str = event.log_str
+                stage.event_log_str = event.log_str
                 self.events.append(event)
                 if self.status == FlowStatus.PENDING:
                     self.status = FlowStatus.IN_PROGRESS
@@ -637,7 +639,7 @@ class Overwatch:
                     normalized_rkey = self._redis_flow_key(flow)
                     # Restore event_filter callbacks from the registered
                     # definition (they are not serialised to Redis) while
-                    # preserving per-instance op_log_str values.
+                    # preserving per-instance event_log_str values.
                     if flow.flow_definition.name in self._flow_definitions:
                         registered = self._flow_definitions[flow.flow_definition.name]
                         for inst_stage, reg_stage in zip(
