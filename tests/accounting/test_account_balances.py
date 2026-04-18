@@ -437,22 +437,22 @@ async def test_account_balance_printout_includes_opening_only_currency_rows(monk
 
     result, _ = await account_balance_printout(
         account,
-        line_items=False,
+        line_items=True,
         ledger_account_details=ledger_account_details,
         quote=QuoteResponse(),
         period_start=period_start,
     )
     assert "Unit: HBD" in result
-    assert "Carried Forward (from 2026-04-17)" in result
+    assert result.count("Carried Forward (from 2026-04-17)") == 1
 
     result_grouped, _ = await account_balance_printout_grouped_by_customer(
         account,
-        line_items=False,
+        line_items=True,
         ledger_account_details=ledger_account_details,
         period_start=period_start,
     )
     assert "Unit: HBD" in result_grouped
-    assert "Carried Forward (from 2026-04-17)" in result_grouped
+    assert result_grouped.count("Carried Forward (from 2026-04-17)") == 1
 
 
 async def test_get_keepsats_balance():

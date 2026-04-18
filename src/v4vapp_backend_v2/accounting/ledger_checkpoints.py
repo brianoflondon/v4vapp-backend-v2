@@ -435,7 +435,7 @@ async def create_checkpoint(
     period_end: datetime,
     use_cache: bool = True,
     force: bool = False,
-) -> Tuple[LedgerCheckpoint | None, bool]:
+) -> Tuple[LedgerCheckpoint, bool]:
     """
     Compute and persist a checkpoint for *account* at *period_end*.
 
@@ -458,9 +458,9 @@ async def create_checkpoint(
 
     """
     start = timer()
-    all_accounts = await list_all_active_accounts()
-    if account not in all_accounts:
-        raise ValueError(f"Account {account} is not active; cannot create checkpoint.")
+    # all_accounts = await list_all_active_accounts()
+    # if account not in all_accounts:
+    #     raise ValueError(f"Account {account} is not active; cannot create checkpoint.")
 
     if not force:
         existing_checkpoint = await get_checkpoint_by_id(account, period_type, period_end)
