@@ -637,15 +637,19 @@ class Overwatch:
                 try:
                     flow = FlowInstance.model_validate_json(raw)
                     normalized_rkey = self._redis_flow_key(flow)
-                    # Restore event_filter callbacks from the registered
-                    # definition (they are not serialised to Redis) while
-                    # preserving per-instance event_log_str values.
+                    # Rebuild the flow definition from the current registered
+                    # version (deep copy) so stage additions/reordering are
+                    # picked up.  Per-instance fields (event_log_str) are
+                    # transferred by matching stage name.
                     if flow.flow_definition.name in self._flow_definitions:
                         registered = self._flow_definitions[flow.flow_definition.name]
-                        for inst_stage, reg_stage in zip(
-                            flow.flow_definition.stages, registered.stages
-                        ):
-                            inst_stage.event_filter = reg_stage.event_filter
+                        persisted_by_name = {s.name: s for s in flow.flow_definition.stages}
+                        fresh_def = registered.model_copy(deep=True)
+                        for stage in fresh_def.stages:
+                            persisted = persisted_by_name.get(stage.name)
+                            if persisted is not None:
+                                stage.event_log_str = persisted.event_log_str
+                        flow.flow_definition = fresh_def
                     # if definition change means the flow is now complete, fix status
                     if flow.is_complete and flow.status != FlowStatus.COMPLETED:
                         flow.status = FlowStatus.COMPLETED
