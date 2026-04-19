@@ -21,6 +21,41 @@ class AccName(str):
         # Implement your validation logic here
         return check_hive_name(self) == AccountNameDetail.VALID_HIVE
 
+    @property
+    def is_evm(self) -> bool:
+        # Implement your validation logic here
+        if self.startswith("0x") and len(self) == 42:
+            try:
+                int(self[2:], 16)
+                return True
+            except ValueError:
+                return False
+        return False
+
+    @property
+    def magi_prefix(self) -> str:
+        if isinstance(self, AccName):
+            raw_account = str(self)
+        else:
+            raw_account = self
+
+        if not raw_account:
+            raise ValueError("account is required")
+
+        if raw_account.startswith("hive:"):
+            return raw_account
+
+        if raw_account.startswith("did:pkh:eip155:1:"):
+            return raw_account
+
+        if AccName(raw_account).is_hive:
+            return f"hive:{raw_account.lower()}"
+
+        if AccName(raw_account).is_evm:
+            return f"did:pkh:eip155:1:{raw_account.lower()}"
+
+        raise ValueError("Invalid account format, expected a Hive account name or EVM address")
+
 
 # Annotated type with validator to cast to HiveAccName
 AccNameType = Annotated[str, AfterValidator(lambda x: AccName(x))]
