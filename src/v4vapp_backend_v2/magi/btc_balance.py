@@ -1,5 +1,6 @@
 from decimal import Decimal
 from pprint import pprint
+from time import perf_counter
 
 import httpx
 from pydantic import BaseModel
@@ -15,7 +16,8 @@ BTC_BALANCE_QUERY = """query BtcBalanceByAccount($account: String!) {
 }"""
 
 MAGI_ENDPOINTS = [
-    "http://legion-witness:8081/v1/graphql", 
+    "http://legion-witness:8081/v1/graphql",
+    "https://magi.v4v.app/hasura/v1/graphql",
     "https://vsc.techcoderx.com/hasura/v1/graphql",
 ]
 
@@ -91,18 +93,57 @@ async def main_test():
         "v4vapp.vsc",
         "0x3Bb63EDd3Ff0F285997C52D8ee362dd40d3B2AAd",
     ]
-    tasks = [get_btc_balance_by_account(account) for account in test_accounts]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    for test_account, result in zip(test_accounts, results):
-        if isinstance(result, Exception):
-            print(f"Error fetching BTC balance for account {test_account}: {result}")
+    endpoint_stats: dict[str, dict[str, list[float] | int]] = {
+        endpoint: {"durations": [], "errors": 0} for endpoint in MAGI_ENDPOINTS
+    }
+
+    for account in test_accounts:
+        print(f"\nQuerying account {account} across {len(MAGI_ENDPOINTS)} endpoints")
+
+        account_results: dict[str, MagiBTCBalance | None | Exception] = {}
+
+        for endpoint in MAGI_ENDPOINTS:
+            start = perf_counter()
+            try:
+                result = await get_btc_balance_by_account(account, endpoint=endpoint)
+                elapsed = perf_counter() - start
+                endpoint_stats[endpoint]["durations"].append(elapsed)
+                account_results[endpoint] = result
+                print(f"{endpoint}: {elapsed:.3f}s -> {result}")
+            except Exception as exc:
+                elapsed = perf_counter() - start
+                endpoint_stats[endpoint]["errors"] += 1
+                account_results[endpoint] = exc
+                print(f"{endpoint}: {elapsed:.3f}s -> ERROR: {exc}")
+
+        successful_results = {
+            endpoint: value
+            for endpoint, value in account_results.items()
+            if not isinstance(value, Exception)
+        }
+
+        if len(successful_results) < len(MAGI_ENDPOINTS):
+            print("One or more endpoints failed for this account; skipping comparison.")
+            continue
+
+        unique_results = {repr(result): endpoint for endpoint, result in successful_results.items()}
+        if len(unique_results) == 1:
+            print("All endpoints returned the same answer.")
         else:
-            balance_info = result
-            if balance_info:
-                print(f"BTC Balance for {balance_info.account}: {balance_info.balance_sats} sats")
-            else:
-                print(f"No BTC balance found for account {test_account}")
+            print("Mismatch detected between endpoints:")
+            for endpoint, result in successful_results.items():
+                print(f"  {endpoint}: {result}")
+
+    print("\nEndpoint performance summary:")
+    for endpoint, stats in endpoint_stats.items():
+        durations = stats["durations"]
+        errors = stats["errors"]
+        avg = sum(durations) / len(durations) if durations else 0.0
+        print(
+            f"{endpoint}: average={avg:.3f}s over {len(durations)} successful runs, "
+            f"errors={errors}"
+        )
 
 
 if __name__ == "__main__":
