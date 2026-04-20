@@ -502,7 +502,10 @@ async def create_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
 
         # Build the group_id
         group_id = payload.get("group_id", "")
-        if not group_id:
+        if group_id:
+            # User provided a base group_id — append _manual_{ledger_type}
+            group_id = f"{group_id}_manual_{ledger_type.value}"
+        else:
             # Generate a unique group_id for manual entries
             group_id = f"manual_{datetime.now(tz=timezone.utc).strftime('%Y%m%d_%H%M%S')}_{ledger_type.value}"
 
