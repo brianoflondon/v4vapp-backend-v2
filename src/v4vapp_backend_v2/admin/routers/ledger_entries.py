@@ -544,7 +544,7 @@ async def ledger_entries_page(
     logger.info(f"Completed sanity checks in {t6 - t5:.3f} s")
     return templates.TemplateResponse(
         request,
-        "ledger_entries/entries.html",
+        "ledger_entries/entries.html.jinja",
         {
             "request": request,
             "title": "Ledger Entries",

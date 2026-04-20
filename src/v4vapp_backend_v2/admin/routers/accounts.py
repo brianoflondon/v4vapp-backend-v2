@@ -70,7 +70,7 @@ async def accounts_page(request: Request, flash: str = ""):
 
     return templates.TemplateResponse(
         request,
-        "accounts/accounts.html",
+        "accounts/accounts.html.jinja",
         {
             "request": request,
             "title": "Account Balances",
@@ -161,7 +161,7 @@ async def get_user_balance_get(
         sanity_results = await sanity_results_task
         return templates.TemplateResponse(
             request,
-            "accounts/balance_result.html",
+            "accounts/balance_result.html.jinja",
             {
                 "request": request,
                 "title": f"Balance: VSC Liability (Liability) - Sub: {acc_name}",
@@ -190,7 +190,7 @@ async def get_user_balance_get(
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
         return templates.TemplateResponse(
             request,
-            "accounts/balance_error.html",
+            "accounts/balance_error.html.jinja",
             {
                 "request": request,
                 "title": "Balance Error",
@@ -316,7 +316,7 @@ async def get_user_balance(
         sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(
             request,
-            "accounts/balance_result.html",
+            "accounts/balance_result.html.jinja",
             {
                 "request": request,
                 "title": f"Balance: VSC Liability (Liability) - Sub: {acc_name}",
@@ -346,7 +346,7 @@ async def get_user_balance(
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
         return templates.TemplateResponse(
             request,
-            "accounts/balance_error.html",
+            "accounts/balance_error.html.jinja",
             {
                 "request": request,
                 "title": "Balance Error",
@@ -463,7 +463,7 @@ async def get_account_balance(
         exception_sub_accounts = InternalConfig().config.development.allowed_hive_accounts
         return templates.TemplateResponse(
             request,
-            "accounts/balance_result.html",
+            "accounts/balance_result.html.jinja",
             {
                 "request": request,
                 "title": f"Balance: {account}",
@@ -495,7 +495,7 @@ async def get_account_balance(
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
         return templates.TemplateResponse(
             request,
-            "accounts/balance_error.html",
+            "accounts/balance_error.html.jinja",
             {
                 "request": request,
                 "title": "Balance Error",
@@ -596,7 +596,7 @@ async def balance_after_redirect(
 
     return templates.TemplateResponse(
         request,
-        "accounts/balance_post_redirect.html",
+        "accounts/balance_post_redirect.html.jinja",
         {
             "request": request,
             "title": "Balance",

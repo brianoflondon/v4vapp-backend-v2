@@ -226,7 +226,7 @@ async def ledger_editor_page(
 
     return templates.TemplateResponse(
         request,
-        "ledger_editor/editor.html",
+        "ledger_editor/editor.html.jinja",
         {
             "request": request,
             "title": "Ledger Editor",

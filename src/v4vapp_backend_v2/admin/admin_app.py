@@ -187,7 +187,7 @@ class AdminApp:
             Render the Admin Dashboard page.
 
             Asynchronous request handler that composes the context required to render the
-            "dashboard.html" template. The handler performs the following high-level steps:
+            "dashboard.html.jinja" template. The handler performs the following high-level steps:
 
             - Runs sanity checks (via `log_all_sanity_checks`) and includes results in the
                 context (failures are logged; notifications suppressed).
@@ -242,7 +242,7 @@ class AdminApp:
             # fetched by the browser via /admin/api/dashboard/* endpoints.
             return self.templates.TemplateResponse(
                 request,
-                "dashboard.html",
+                "dashboard.html.jinja",
                 {
                     "request": request,
                     "title": "Admin Dashboard",
