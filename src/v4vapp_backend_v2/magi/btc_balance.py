@@ -21,9 +21,14 @@ MAGI_ENDPOINTS = [
 ]
 
 
+class MagiBTCBalanceError(Exception):
+    """Custom exception for errors related to fetching Magi BTC balance."""
+
+
 class MagiBTCBalance(BaseModel):
     account: str
     balance_sats: Decimal
+    error: str | None = None
 
     @property
     def balance_msats(self) -> Decimal:
@@ -82,10 +87,8 @@ async def get_magi_btc_balance_by_account(
             endpoint_errors.append(f"{attempt_endpoint}: {exc}")
             continue
 
-    raise RuntimeError(
-        f"Failed to fetch BTC balance for account {account} from endpoints {endpoints}. "
-        f"Last error: {endpoint_errors[-1] if endpoint_errors else 'unknown error'}"
-    )
+    error_message = "; ".join(endpoint_errors) if endpoint_errors else "Unknown error"
+    return MagiBTCBalance(account=account_str, balance_sats=Decimal(0), error=error_message)
 
 
 async def main_test():

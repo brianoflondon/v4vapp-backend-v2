@@ -53,8 +53,11 @@ async def test_get_btc_balance_by_account_graphql_error(mocker):
 
     mocker.patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_response)
 
-    with pytest.raises(RuntimeError, match="GraphQL errors"):
-        await get_magi_btc_balance_by_account("hive:devser.v4vapp")
+    magi_balance = await get_magi_btc_balance_by_account("hive:devser.v4vapp")
+    assert isinstance(magi_balance, MagiBTCBalance)
+    assert magi_balance.account == "hive:devser.v4vapp"
+    assert magi_balance.balance_sats == Decimal(0)
+    assert magi_balance.error
 
 
 @pytest.mark.asyncio
