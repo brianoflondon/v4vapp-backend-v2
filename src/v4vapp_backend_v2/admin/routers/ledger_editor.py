@@ -103,6 +103,7 @@ def _build_editor_presets() -> List[Dict[str, Any]]:
                     "credit_name": "Exchange Holdings",
                     "credit_sub": exchange_sub,
                     "currency": "sats",
+                    "cust_id": node_name,
                 },
                 {
                     "ledger_type": LedgerType.EXCHANGE_FEES.value,
@@ -114,6 +115,7 @@ def _build_editor_presets() -> List[Dict[str, Any]]:
                     "credit_name": "Exchange Holdings",
                     "credit_sub": exchange_sub,
                     "currency": "sats",
+                    "cust_id": exchange_sub,
                 },
             ],
         },
@@ -133,6 +135,7 @@ def _build_editor_presets() -> List[Dict[str, Any]]:
                     "credit_name": "Exchange Holdings",
                     "credit_sub": exchange_sub,
                     "currency": "sats",
+                    "cust_id": exchange_sub,
                 },
             ],
         },

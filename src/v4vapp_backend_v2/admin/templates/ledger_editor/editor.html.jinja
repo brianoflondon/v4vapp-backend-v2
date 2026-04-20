@@ -508,7 +508,8 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label fw-bold">Timestamp</label>
-                    <input type="datetime-local" class="form-control" id="create_timestamp_${idx}">
+                    <input type="datetime-local" class="form-control" id="create_timestamp_${idx}"
+                           value="${defaults.timestamp || new Date().toISOString().slice(0, 16)}">
                 </div>
             </div>
 
@@ -525,7 +526,8 @@
                 </div>
                 <div class=\"col-md-3\">
                     <label class=\"form-label fw-bold\">Customer ID</label>
-                    <input type=\"text\" class=\"form-control\" id=\"create_cust_id_${idx}\" placeholder=\"Optional\">
+                    <input type=\"text\" class=\"form-control\" id=\"create_cust_id_${idx}\"
+                           placeholder=\"Optional\" value=\"${defaults.cust_id || ''}\">
                 </div>
             </div>
 
@@ -598,6 +600,7 @@
             currency: document.getElementById(`create_currency_${idx}`).value,
             ledger_type: document.getElementById(`create_ledger_type_${idx}`).value,
             description: document.getElementById(`create_description_${idx}`).value,
+            cust_id: document.getElementById(`create_cust_id_${idx}`).value,
         };
         addEntryPanel(defaults);
         showStatus(`Entry #${idx} duplicated as Entry #${entryCounter}`, 'info');
