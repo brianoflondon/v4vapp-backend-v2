@@ -40,8 +40,7 @@ from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers.helper_functions import get_accounts_by_type_for_selector
 from v4vapp_backend_v2.admin.routers.ledger_edit_presets import _build_editor_presets
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
@@ -57,27 +56,6 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
     global templates, nav_manager
     templates = tmpl
     nav_manager = nav
-
-
-# ---------------------------------------------------------------------------
-# Quick-action presets (built dynamically from config)
-# ---------------------------------------------------------------------------
-
-
-def _get_exchange_sub() -> str:
-    """Resolve the exchange sub-account name from config."""
-    try:
-        return get_exchange_adapter().exchange_name
-    except Exception:
-        return "binance_convert"  # safe fallback
-
-
-def _get_node_name() -> str:
-    """Resolve the Lightning node name from config."""
-    try:
-        return InternalConfig().node_name
-    except Exception:
-        return "voltage"  # safe fallback
 
 
 def _account_class_for_type(account_type: str) -> type[LedgerAccountAny]:
