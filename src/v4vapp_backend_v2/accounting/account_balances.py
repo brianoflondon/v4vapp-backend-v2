@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from timeit import default_timer as timer
@@ -44,6 +45,7 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.magi.btc_balance import get_magi_btc_balance_by_account
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
@@ -1624,12 +1626,21 @@ async def keepsats_balance(
         contra=False,
     )
     # NOTE: we set use_checkpoints=False here to ensure we get the full transaction history needed to compute the balance,
-    account_balance = await one_account_balance(
-        account=account,
-        as_of_date=as_of_date,
-        age=None,
-        use_checkpoints=False,
-    )
+    async with asyncio.TaskGroup() as task_group:
+        magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
+        account_balance_task = task_group.create_task(
+            one_account_balance(
+                account=account,
+                as_of_date=as_of_date,
+                age=None,
+                use_checkpoints=False,
+            )
+        )
+
+    magi_balance = magi_balance_task.result()
+    account_balance = account_balance_task.result()
+    account_balance.magi_btc_sats = magi_balance.balance_sats
+    account_balance.magi_btc_msats = magi_balance.balance_msats
 
     if notifications:
         # Add non-financial notifications from hive_ops to the transaction history
