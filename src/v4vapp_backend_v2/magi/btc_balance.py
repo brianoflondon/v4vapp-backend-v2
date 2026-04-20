@@ -1,5 +1,4 @@
 from decimal import Decimal
-from pprint import pprint
 from time import perf_counter
 
 import httpx
@@ -26,11 +25,15 @@ class MagiBTCBalance(BaseModel):
     account: str
     balance_sats: Decimal
 
+    @property
+    def balance_msats(self) -> Decimal:
+        return self.balance_sats * Decimal(1000)
 
-async def get_btc_balance_by_account(
+
+async def get_magi_btc_balance_by_account(
     account: str | AccName,
     endpoint: str | None = None,
-) -> MagiBTCBalance | None:
+) -> MagiBTCBalance:
     """Fetch BTC balance data for a Hive account from the Hasura GraphQL endpoint."""
     account_str = AccName(account).magi_prefix
 
@@ -60,7 +63,6 @@ async def get_btc_balance_by_account(
                 response = await client.post(attempt_endpoint, json=payload, headers=headers)
                 response.raise_for_status()
                 result = response.json()
-                pprint(result)
 
             response_errors = result.get("errors")
             if response_errors:
@@ -68,7 +70,7 @@ async def get_btc_balance_by_account(
 
             balances = result.get("data", {}).get("btc_mapping_balances", [])
             if not balances:
-                return None
+                return MagiBTCBalance(account=account_str, balance_sats=Decimal(0))
             balance_record = balances[0]
 
             return MagiBTCBalance(
@@ -106,7 +108,7 @@ async def main_test():
         for endpoint in MAGI_ENDPOINTS:
             start = perf_counter()
             try:
-                result = await get_btc_balance_by_account(account, endpoint=endpoint)
+                result = await get_magi_btc_balance_by_account(account, endpoint=endpoint)
                 elapsed = perf_counter() - start
                 endpoint_stats[endpoint]["durations"].append(elapsed)
                 account_results[endpoint] = result
@@ -127,7 +129,9 @@ async def main_test():
             print("One or more endpoints failed for this account; skipping comparison.")
             continue
 
-        unique_results = {repr(result): endpoint for endpoint, result in successful_results.items()}
+        unique_results = {
+            repr(result): endpoint for endpoint, result in successful_results.items()
+        }
         if len(unique_results) == 1:
             print("All endpoints returned the same answer.")
         else:

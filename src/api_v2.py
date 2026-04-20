@@ -2,14 +2,19 @@ import argparse
 import socket
 import sys
 from decimal import Decimal
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, status
 from fastapi.concurrency import asynccontextmanager
+from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance
+from v4vapp_backend_v2.accounting.accounting_classes import (
+    AccountBalanceLine,
+    LedgerAccountDetails,
+)
 from v4vapp_backend_v2.api.v1_legacy.api_classes import (
     KeepsatsConvertExternal,
     KeepsatsInvoice,
@@ -236,6 +241,26 @@ async def sats_to_hive(
 # MARK: /lightning
 
 
+class KeepsatsApiResponse(BaseModel):
+    """Represents the keepsats API response payload."""
+
+    hive_accname: str = Field(..., description="Hive account name")
+    net_msats: float = Field(..., description="Net balance in millisatoshis")
+    net_hive: float = Field(..., description="Net balance of HIVE")
+    net_usd: float = Field(..., description="Net balance of USD")
+    net_hbd: float = Field(..., description="Net balance of HBD")
+    net_sats: float = Field(..., description="Net balance of SATS")
+    net_magi_sats: float = Field(0.0, description="Net balance of MAGI BTC in SATS")
+    net_magi_msats: float = Field(0.0, description="Net balance of MAGI BTC in millisatoshis")
+    in_progress_sats: float = Field(
+        ..., description="Keepsats currently held in progress (rounded sats)"
+    )
+    all_transactions: List[AccountBalanceLine] | LedgerAccountDetails = Field(
+        default_factory=List,
+        description=("Full account balance object when line_items=True, otherwise an empty list"),
+    )
+
+
 @lightning_v1_router.get("/keepsats")
 async def keepsats(
     hive_accname: str = Query(..., description="Hive account name to check for keepsats"),
@@ -246,7 +271,7 @@ async def keepsats(
         True,
         description="Whether to include non-financial notifications in the transaction history",
     ),
-) -> Dict[str, Any]:
+) -> KeepsatsApiResponse:
     """
     Retrieves the keepsats balance and related information for a specified Hive account.
     This is the main information end point which fetches all transactions and balances for a Hive account.
@@ -256,7 +281,7 @@ async def keepsats(
         transactions (bool): Whether to include transaction history. Defaults to False.
         admin (bool): Whether the user is an admin. Defaults to False.
     Returns:
-        Dict[str, Any]: A dictionary containing the Hive account name, net balances in various currencies,
+        KeepsatsApiResponse: A response model containing the Hive account name, net balances in various currencies,
         in-progress sats, and transaction history.
     Raises:
         Any exceptions raised by get_keepsats_balance.
@@ -272,9 +297,12 @@ async def keepsats(
         else:
             account_balance = account_balance.remove_balances()
 
-    return account_balance.to_api_response(
-        hive_accname=hive_accname, line_items=line_items, admin=admin
+    api_response = KeepsatsApiResponse.model_validate(
+        account_balance.to_api_response(
+            hive_accname=hive_accname, line_items=line_items, admin=admin
+        )
     )
+    return api_response
 
 
 @lightning_v1_router.post("/keepsats/transfer")
