@@ -142,18 +142,20 @@ def _build_editor_presets() -> List[Dict[str, Any]]:
     ]
 
 
-def _account_class_for_type(account_type: str) -> type:
-    mapping: dict[str, type] = {
+def _account_class_for_type(account_type: str) -> type[LedgerAccountAny]:
+    try:
+        normalized_account_type = AccountType(account_type)
+    except ValueError as exc:
+        raise ValueError(f"Unknown account type: {account_type}") from exc
+
+    mapping: dict[AccountType, type[LedgerAccountAny]] = {
         AccountType.ASSET: AssetAccount,
         AccountType.LIABILITY: LiabilityAccount,
         AccountType.EQUITY: EquityAccount,
         AccountType.REVENUE: RevenueAccount,
         AccountType.EXPENSE: ExpenseAccount,
     }
-    cls = mapping.get(account_type)
-    if cls is None:
-        raise ValueError(f"Unknown account type: {account_type}")
-    return cls
+    return mapping[normalized_account_type]
 
 
 def _build_account(account_type: str, name: str, sub: str = "") -> LedgerAccountAny:
@@ -375,7 +377,12 @@ async def update_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
             changes["reversed"] = datetime.now(tz=timezone.utc)
         else:
             try:
-                changes["reversed"] = datetime.fromisoformat(str(rev))
+                parsed_reversed = datetime.fromisoformat(str(rev))
+                if parsed_reversed.tzinfo is None:
+                    parsed_reversed = parsed_reversed.replace(tzinfo=timezone.utc)
+                else:
+                    parsed_reversed = parsed_reversed.astimezone(timezone.utc)
+                changes["reversed"] = parsed_reversed
             except Exception:
                 return JSONResponse({"error": f"Invalid reversed value: {rev}"}, status_code=400)
 
@@ -486,6 +493,8 @@ async def create_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
         if ts:
             try:
                 timestamp = datetime.fromisoformat(str(ts))
+                if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
             except Exception:
                 timestamp = datetime.now(tz=timezone.utc)
         else:
