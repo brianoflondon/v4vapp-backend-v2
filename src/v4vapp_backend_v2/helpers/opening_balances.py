@@ -13,7 +13,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.models.lnd_balance_models import fetch_balances
 
 
-async def reset_lightning_opening_balance():
+async def reset_lightning_opening_balance() -> None:
     """
     Reset the Lightning node's opening balance for testing purposes.
 
@@ -112,15 +112,14 @@ async def reset_lightning_opening_balance():
     # Diagnostic check: confirm the opening balance was saved and is visible for the node
     try:
         found = (
-            await LedgerEntry.collection()
-            .find(
-                {
-                    "$or": [
-                        {"debit.name": "External Lightning Payments", "debit.sub": node},
-                        {"credit.name": "External Lightning Payments", "credit.sub": node},
-                    ]
-                }
-            )
+            await LedgerEntry
+            .collection()
+            .find({
+                "$or": [
+                    {"debit.name": "External Lightning Payments", "debit.sub": node},
+                    {"credit.name": "External Lightning Payments", "credit.sub": node},
+                ]
+            })
             .to_list()
         )
         logger.info(
@@ -284,15 +283,14 @@ async def reset_exchange_opening_balance(
         # Diagnostic check
         try:
             found = (
-                await LedgerEntry.collection()
-                .find(
-                    {
-                        "$or": [
-                            {"debit.name": "Exchange Holdings", "debit.sub": exchange_sub},
-                            {"credit.name": "Exchange Holdings", "credit.sub": exchange_sub},
-                        ]
-                    }
-                )
+                await LedgerEntry
+                .collection()
+                .find({
+                    "$or": [
+                        {"debit.name": "Exchange Holdings", "debit.sub": exchange_sub},
+                        {"credit.name": "Exchange Holdings", "credit.sub": exchange_sub},
+                    ]
+                })
                 .to_list()
             )
             logger.info(

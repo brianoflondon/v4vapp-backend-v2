@@ -207,7 +207,7 @@ async def users_page(request: Request):
 
     # Return page with empty data - actual data will be loaded via JavaScript
     return templates.TemplateResponse(request,
-        "users/users.html",
+        "users/users.html.jinja",
         {
             "request": request,
             "title": "Users",

@@ -66,6 +66,7 @@ class LedgerType(StrEnum):
     TREASURY_TO_EXCHANGE = "t_to_exc"  # Treasury to Exchange transfer
     SERVER_TO_EXCHANGE = "s_to_exc"  # Server to Exchange transfer
     EXCHANGE_TO_TREASURY = "exc_to_t"  # Exchange to Treasury transfer
+    EXCHANGE_TO_NODE = "exc_to_n"  # Exchange to Node transfer
     LIMIT_ORDER_CREATE = "limit_or"
     FILL_ORDER_SELL = "fill_or_s"
     FILL_ORDER_BUY = "fill_or_b"
@@ -107,6 +108,7 @@ class LedgerHierarchy:
         LedgerType.SERVER_TO_EXCHANGE,
         LedgerType.EXCHANGE_TO_TREASURY,
         LedgerType.TREASURY_TO_EXCHANGE,
+        LedgerType.EXCHANGE_TO_NODE,
     ]
     customer = [
         LedgerType.CUSTOMER_HIVE_IN,

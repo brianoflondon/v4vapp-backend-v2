@@ -61,7 +61,7 @@ async def v4vconfig_dashboard(request: Request):
         breadcrumbs = nav_manager.get_breadcrumbs(str(request.url.path))
         sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(request, 
-            "v4vconfig/dashboard.html",
+            "v4vconfig/dashboard.html.jinja",
             {
                 "request": request,
                 "title": "V4V Configuration",
@@ -213,7 +213,7 @@ async def update_v4vconfig_form(
         logger.error(f"{ICON} V4V config form validation error: {e}")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
         return templates.TemplateResponse(request, 
-            "error.html",
+            "error.html.jinja",
             {
                 "request": request,
                 "title": "Configuration Error",
@@ -228,7 +228,7 @@ async def update_v4vconfig_form(
         logger.error(f"{ICON} V4V config form update error: {e}")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
         return templates.TemplateResponse(request, 
-            "error.html",
+            "error.html.jinja",
             {
                 "request": request,
                 "title": "Configuration Error",

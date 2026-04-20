@@ -166,6 +166,14 @@ class AdminApp:
             ledger_entries.router, prefix="/admin/ledger-entries", tags=["Ledger Entries"]
         )
 
+        # Ledger Editor router
+        from v4vapp_backend_v2.admin.routers import ledger_editor
+
+        ledger_editor.set_templates_and_nav(self.templates, self.nav_manager)
+        self.app.include_router(
+            ledger_editor.router, prefix="/admin/ledger-editor", tags=["Ledger Editor"]
+        )
+
         # Add more routers here as needed
         # self.app.include_router(other_router, prefix="/admin/other", tags=["Other"])
 
@@ -179,7 +187,7 @@ class AdminApp:
             Render the Admin Dashboard page.
 
             Asynchronous request handler that composes the context required to render the
-            "dashboard.html" template. The handler performs the following high-level steps:
+            "dashboard.html.jinja" template. The handler performs the following high-level steps:
 
             - Runs sanity checks (via `log_all_sanity_checks`) and includes results in the
                 context (failures are logged; notifications suppressed).
@@ -234,7 +242,7 @@ class AdminApp:
             # fetched by the browser via /admin/api/dashboard/* endpoints.
             return self.templates.TemplateResponse(
                 request,
-                "dashboard.html",
+                "dashboard.html.jinja",
                 {
                     "request": request,
                     "title": "Admin Dashboard",
@@ -307,12 +315,10 @@ class AdminApp:
             """
             try:
                 count = await archive_old_hold_release_keepsats_entries(older_than_days=8)
-                return JSONResponse(
-                    {
-                        "success": True,
-                        "message": f"Archive process completed, moved {count} entries",
-                    }
-                )
+                return JSONResponse({
+                    "success": True,
+                    "message": f"Archive process completed, moved {count} entries",
+                })
             except Exception as e:
                 logger.exception(
                     "Error running archive endpoint: %s",

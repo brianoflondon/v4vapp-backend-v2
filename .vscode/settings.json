@@ -94,12 +94,6 @@
     "[html]": {
         "editor.formatOnSave": true
     },
-    "files.associations": {
-        "src/v4vapp_backend_v2/admin/templates/**/*.html": "jinja"
-    },
-    "[jinja]": {
-        "editor.formatOnSave": false
-    },
     "chat.tools.terminal.autoApprove": {
         "uv": true
     }

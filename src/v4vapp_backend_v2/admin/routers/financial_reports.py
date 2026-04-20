@@ -56,7 +56,7 @@ async def financial_reports_page(request: Request):
     nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
     sanity_results = await run_all_sanity_checks()
     return templates.TemplateResponse(request, 
-        "financial_reports/index.html",
+        "financial_reports/index.html.jinja",
         {
             "request": request,
             "title": "Financial Reports",
@@ -93,7 +93,7 @@ async def balance_sheet_page(request: Request):
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(request, 
-            "financial_reports/balance_sheet.html",
+            "financial_reports/balance_sheet.html.jinja",
             {
                 "request": request,
                 "title": "Balance Sheet",
@@ -112,7 +112,7 @@ async def balance_sheet_page(request: Request):
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         return templates.TemplateResponse(request, 
-            "financial_reports/error.html",
+            "financial_reports/error.html.jinja",
             {
                 "request": request,
                 "title": "Balance Sheet Error",
@@ -145,7 +145,7 @@ async def profit_loss_page(request: Request):
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(request, 
-            "financial_reports/profit_loss.html",
+            "financial_reports/profit_loss.html.jinja",
             {
                 "request": request,
                 "title": "Profit & Loss",
@@ -164,7 +164,7 @@ async def profit_loss_page(request: Request):
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         return templates.TemplateResponse(request, 
-            "financial_reports/error.html",
+            "financial_reports/error.html.jinja",
             {
                 "request": request,
                 "title": "Profit & Loss Error",
@@ -198,7 +198,7 @@ async def trading_pnl_page(request: Request, sub: Optional[str] = None):
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(request, 
-            "financial_reports/trading_pnl.html",
+            "financial_reports/trading_pnl.html.jinja",
             {
                 "request": request,
                 "title": "Trading P&L (Exchange Holdings)",
@@ -217,7 +217,7 @@ async def trading_pnl_page(request: Request, sub: Optional[str] = None):
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         return templates.TemplateResponse(request, 
-            "financial_reports/error.html",
+            "financial_reports/error.html.jinja",
             {
                 "request": request,
                 "title": "Trading P&L Error",
@@ -295,7 +295,7 @@ async def complete_report_page(
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(request, 
-            "financial_reports/complete_report.html",
+            "financial_reports/complete_report.html.jinja",
             {
                 "request": request,
                 "title": "Complete Financial Report",
@@ -317,7 +317,7 @@ async def complete_report_page(
     except Exception as e:
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
         return templates.TemplateResponse(request, 
-            "financial_reports/error.html",
+            "financial_reports/error.html.jinja",
             {
                 "request": request,
                 "title": "Complete Report Error",
