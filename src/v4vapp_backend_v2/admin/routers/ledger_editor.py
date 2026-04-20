@@ -483,10 +483,23 @@ async def create_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
         conv = conversion.conversion
 
         # Parse ledger type
-        try:
-            ledger_type = LedgerType(payload.get("ledger_type", LedgerType.UNSET.value))
-        except Exception:
+        raw_ledger_type = payload.get("ledger_type")
+        if raw_ledger_type is None:
             ledger_type = LedgerType.UNSET
+        else:
+            try:
+                ledger_type = LedgerType(raw_ledger_type)
+            except Exception:
+                valid_ledger_types = [ledger_type.value for ledger_type in LedgerType]
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"Unknown ledger_type: {raw_ledger_type}. "
+                            f"Valid values are: {valid_ledger_types}"
+                        )
+                    },
+                    status_code=400,
+                )
 
         # Parse timestamp
         ts = payload.get("timestamp")
