@@ -69,6 +69,14 @@ class NavigationManager:
                 badge="Ledger",
                 badge_color="secondary",
             ),
+            NavigationItem(
+                name="Ledger Editor",
+                url="/admin/ledger-editor",
+                icon="✏️",
+                description="Edit and create ledger entries with quick-action presets",
+                badge="Editor",
+                badge_color="warning",
+            ),
             # Add more items here as you expand the admin interface
             # NavigationItem(
             #     name="User Management",

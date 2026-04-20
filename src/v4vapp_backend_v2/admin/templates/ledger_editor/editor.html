@@ -1,0 +1,749 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    .editor-form {
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .preset-btn {
+        margin: 0.25rem;
+    }
+
+    .entry-panel {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        background: var(--card-bg);
+    }
+
+    .entry-panel h5 {
+        margin-bottom: 1rem;
+    }
+
+    .account-selector {
+        min-width: 200px;
+    }
+
+    .conv-preview {
+        font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+        font-size: 0.85rem;
+        background: var(--bs-tertiary-bg);
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    #status-bar {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+
+    .form-select {
+        font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Status bar for feedback -->
+<div id="status-bar"></div>
+
+<!-- ======== LOAD EXISTING ENTRY ======== -->
+<div class="editor-form">
+    <h3 class="mb-3"><i class="bi bi-pencil-square me-2"></i>Load &amp; Edit Existing Entry</h3>
+    <div class="row align-items-end">
+        <div class="col-md-8">
+            <label for="load_group_id" class="form-label">Group ID</label>
+            <input type="text" class="form-control" id="load_group_id" placeholder="Enter group_id to load…"
+                value="{{ load_group_id }}">
+        </div>
+        <div class="col-md-4">
+            <button class="btn btn-primary w-100" onclick="loadEntry()">
+                <i class="bi bi-download me-1"></i> Load Entry
+            </button>
+        </div>
+    </div>
+
+    <!-- Loaded entry edit form (hidden until loaded) -->
+    <div id="edit-panel" class="mt-4" style="display:none;">
+        <hr>
+        <h4>Editing: <code id="edit-group-id"></code></h4>
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label class="form-label fw-bold">Debit Account</label>
+                <select class="form-select mb-1" id="edit_debit_type" onchange="updateEditNameOptions('debit')">
+                    {% for atype in allowed_names.keys() %}
+                    <option value="{{ atype }}">{{ atype }}</option>
+                    {% endfor %}
+                </select>
+                <select class="form-select mb-1" id="edit_debit_name">
+                    <option value="">Select name…</option>
+                </select>
+                <input type="text" class="form-control" id="edit_debit_sub" placeholder="Sub account">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-bold">Credit Account</label>
+                <select class="form-select mb-1" id="edit_credit_type" onchange="updateEditNameOptions('credit')">
+                    {% for atype in allowed_names.keys() %}
+                    <option value="{{ atype }}">{{ atype }}</option>
+                    {% endfor %}
+                </select>
+                <select class="form-select mb-1" id="edit_credit_name">
+                    <option value="">Select name…</option>
+                </select>
+                <input type="text" class="form-control" id="edit_credit_sub" placeholder="Sub account">
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Ledger Type</label>
+                <select class="form-select" id="edit_ledger_type">
+                    {% for opt in ledger_type_options %}
+                    <option value="{{ opt.value }}">
+                        {{ opt.icon }} {{ opt.full }}{% if opt.label %} ({{ opt.label }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Reversed</label>
+                <select class="form-select" id="edit_reversed">
+                    <option value="">Not reversed</option>
+                    <option value="now">Mark reversed NOW</option>
+                    <option value="keep">Keep existing timestamp</option>
+                </select>
+                <small class="text-muted" id="edit_reversed_info"></small>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Description</label>
+                <input type="text" class="form-control" id="edit_description">
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label class="form-label fw-bold">User Memo</label>
+                <input type="text" class="form-control" id="edit_user_memo">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-bold">Extra Data (JSON)</label>
+                <textarea class="form-control" id="edit_extra_data" rows="2"></textarea>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-warning" onclick="saveEdit()">
+                <i class="bi bi-save me-1"></i> Save Changes
+            </button>
+            <button class="btn btn-outline-info" onclick="swapEditAccounts()" title="Swap debit and credit accounts">
+                <i class="bi bi-arrow-left-right me-1"></i> Swap Debit/Credit
+            </button>
+            <button class="btn btn-outline-primary" onclick="duplicateEditEntry()"
+                title="Duplicate this entry as a new entry with _dup suffix">
+                <i class="bi bi-copy me-1"></i> Duplicate
+            </button>
+            <button class="btn btn-outline-secondary" onclick="cancelEdit()">Cancel</button>
+        </div>
+
+        <!-- Read-only info about amounts -->
+        <div class="conv-preview mt-3" id="edit-amounts-info"></div>
+    </div>
+</div>
+
+<!-- ======== QUICK-ACTION PRESETS ======== -->
+<div class="editor-form">
+    <h3 class="mb-3"><i class="bi bi-lightning-charge me-2"></i>Quick-Action Presets</h3>
+    <p class="text-muted">Pre-configured accounting operations. Click to populate the Create form below.</p>
+    <div id="preset-buttons">
+        {% for preset in presets %}
+        <button class="btn btn-outline-primary preset-btn" onclick='applyPreset({{ preset | tojson }})'
+            title="{{ preset.description }}">
+            {{ preset.icon }} {{ preset.label }}
+        </button>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ======== CREATE NEW ENTRY ======== -->
+<div class="editor-form">
+    <h3 class="mb-3"><i class="bi bi-plus-circle me-2"></i>Create New Entry</h3>
+
+    <div id="create-entries">
+        <!-- Entry panels will be added here dynamically -->
+    </div>
+
+    <button class="btn btn-outline-secondary mb-3" onclick="addEntryPanel()">
+        <i class="bi bi-plus me-1"></i> Add Entry
+    </button>
+
+    <hr>
+    <button class="btn btn-success btn-lg" onclick="createAllEntries()">
+        <i class="bi bi-check-circle me-1"></i> Create All Entries
+    </button>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Data from server
+    const ALLOWED_NAMES = {{ allowed_names | tojson }};
+    const LEDGER_TYPE_OPTIONS = {{ ledger_type_options | tojson }};
+    const CURRENCY_OPTIONS = {{ currency_options | tojson }};
+    const ACCOUNTS_BY_TYPE = {};
+
+    // Build a flat lookup of existing accounts from accounts_by_type
+    {% for atype, accs in accounts_by_type.items() %}
+    ACCOUNTS_BY_TYPE["{{ atype }}"] = [
+        {% for acc in accs %}
+    { name: "{{ acc.name }}", sub: "{{ acc.sub }}", contra: {% if acc.contra %} true{% else %} false{% endif %} },
+    {% endfor %}
+    ];
+    {% endfor %}
+
+    let entryCounter = 0;
+
+    // ---- Status helpers ----
+    function showStatus(msg, type) {
+        const bar = document.getElementById('status-bar');
+        bar.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${msg}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`;
+        if (type === 'success') setTimeout(() => { bar.innerHTML = ''; }, 5000);
+    }
+
+    // ---- Edit: populate name dropdowns ----
+    function updateEditNameOptions(side) {
+        const typeVal = document.getElementById(`edit_${side}_type`).value;
+        const nameSelect = document.getElementById(`edit_${side}_name`);
+        const names = ALLOWED_NAMES[typeVal] || [];
+        nameSelect.innerHTML = '<option value="">Select name…</option>';
+        names.forEach(n => {
+            nameSelect.innerHTML += `<option value="${n}">${n}</option>`;
+        });
+    }
+
+    // ---- Load entry ----
+    async function loadEntry() {
+        const gid = document.getElementById('load_group_id').value.trim();
+        if (!gid) { showStatus('Please enter a group_id', 'warning'); return; }
+        try {
+            const resp = await fetch(`/admin/ledger-editor/api/load?group_id=${encodeURIComponent(gid)}`);
+            const data = await resp.json();
+            if (data.error) { showStatus(data.error, 'danger'); return; }
+            populateEditForm(data);
+            document.getElementById('edit-panel').style.display = 'block';
+            showStatus('Entry loaded successfully', 'success');
+        } catch (e) {
+            showStatus('Failed to load entry: ' + e.message, 'danger');
+        }
+    }
+
+    function populateEditForm(data) {
+        document.getElementById('edit-group-id').textContent = data.group_id;
+
+        // Debit
+        if (data.debit) {
+            document.getElementById('edit_debit_type').value = data.debit.account_type || 'Asset';
+            updateEditNameOptions('debit');
+            document.getElementById('edit_debit_name').value = data.debit.name || '';
+            document.getElementById('edit_debit_sub').value = data.debit.sub || '';
+        }
+        // Credit
+        if (data.credit) {
+            document.getElementById('edit_credit_type').value = data.credit.account_type || 'Asset';
+            updateEditNameOptions('credit');
+            document.getElementById('edit_credit_name').value = data.credit.name || '';
+            document.getElementById('edit_credit_sub').value = data.credit.sub || '';
+        }
+
+        document.getElementById('edit_ledger_type').value = data.ledger_type || '';
+        document.getElementById('edit_description').value = data.description || '';
+        document.getElementById('edit_user_memo').value = data.user_memo || '';
+        document.getElementById('edit_extra_data').value = JSON.stringify(data.extra_data || [], null, 2);
+
+        // Reversed
+        const revSel = document.getElementById('edit_reversed');
+        const revInfo = document.getElementById('edit_reversed_info');
+        if (data.reversed) {
+            revSel.value = 'keep';
+            revInfo.textContent = `Currently reversed: ${data.reversed}`;
+        } else {
+            revSel.value = '';
+            revInfo.textContent = '';
+        }
+
+        // Show amounts info (read-only)
+        const info = document.getElementById('edit-amounts-info');
+        const d = data.debit || {};
+        const c = data.credit || {};
+        info.innerHTML = `
+            <strong>Debit:</strong> ${d.amount || '?'} ${d.unit || '?'}
+            &nbsp;|&nbsp;
+            <strong>Credit:</strong> ${c.amount || '?'} ${c.unit || '?'}
+            &nbsp;|&nbsp;
+            <strong>Short ID:</strong> ${data.short_id || '?'}
+            &nbsp;|&nbsp;
+            <strong>Timestamp:</strong> ${data.timestamp || '?'}
+        `;
+    }
+
+    // ---- Save edit ----
+    async function saveEdit() {
+        const gid = document.getElementById('edit-group-id').textContent;
+        const reversedVal = document.getElementById('edit_reversed').value;
+
+        let extraData;
+        try {
+            extraData = JSON.parse(document.getElementById('edit_extra_data').value || '[]');
+        } catch {
+            showStatus('Invalid JSON in Extra Data', 'danger');
+            return;
+        }
+
+        const payload = {
+            group_id: gid,
+            debit: {
+                account_type: document.getElementById('edit_debit_type').value,
+                name: document.getElementById('edit_debit_name').value,
+                sub: document.getElementById('edit_debit_sub').value,
+            },
+            credit: {
+                account_type: document.getElementById('edit_credit_type').value,
+                name: document.getElementById('edit_credit_name').value,
+                sub: document.getElementById('edit_credit_sub').value,
+            },
+            ledger_type: document.getElementById('edit_ledger_type').value,
+            description: document.getElementById('edit_description').value,
+            user_memo: document.getElementById('edit_user_memo').value,
+            extra_data: extraData,
+        };
+
+        if (reversedVal === 'now') {
+            payload.reversed = 'now';
+        } else if (reversedVal === '') {
+            payload.reversed = null;
+        }
+        // 'keep' means don't send the field at all
+
+        if (!confirm(`Save changes to entry ${gid}?`)) return;
+
+        try {
+            const resp = await fetch('/admin/ledger-editor/api/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (data.error) { showStatus('Error: ' + data.error, 'danger'); return; }
+            showStatus(`Entry ${gid} updated successfully`, 'success');
+        } catch (e) {
+            showStatus('Failed to save: ' + e.message, 'danger');
+        }
+    }
+
+    function cancelEdit() {
+        document.getElementById('edit-panel').style.display = 'none';
+    }
+
+    // ---- Swap debit/credit in the edit panel ----
+    function swapEditAccounts() {
+        // Capture current values before any changes
+        const dType = document.getElementById('edit_debit_type').value;
+        const dName = document.getElementById('edit_debit_name').value;
+        const dSub = document.getElementById('edit_debit_sub').value;
+        const cType = document.getElementById('edit_credit_type').value;
+        const cName = document.getElementById('edit_credit_name').value;
+        const cSub = document.getElementById('edit_credit_sub').value;
+
+        // Set debit to old credit values
+        document.getElementById('edit_debit_type').value = cType;
+        updateEditNameOptions('debit');
+        document.getElementById('edit_debit_name').value = cName;
+        document.getElementById('edit_debit_sub').value = cSub;
+
+        // Set credit to old debit values
+        document.getElementById('edit_credit_type').value = dType;
+        updateEditNameOptions('credit');
+        document.getElementById('edit_credit_name').value = dName;
+        document.getElementById('edit_credit_sub').value = dSub;
+
+        showStatus('Debit and Credit accounts swapped', 'info');
+    }
+
+    // ---- Duplicate edit entry into a new create panel ----
+    function duplicateEditEntry() {
+        const gid = document.getElementById('edit-group-id').textContent;
+        const dupGid = gid.endsWith('_dup') ? gid : gid + '_dup';
+
+        // Read current edit form values into defaults
+        const defaults = {
+            debit_account_type: document.getElementById('edit_debit_type').value,
+            debit_name: document.getElementById('edit_debit_name').value,
+            debit_sub: document.getElementById('edit_debit_sub').value,
+            credit_account_type: document.getElementById('edit_credit_type').value,
+            credit_name: document.getElementById('edit_credit_name').value,
+            credit_sub: document.getElementById('edit_credit_sub').value,
+            ledger_type: document.getElementById('edit_ledger_type').value,
+            description: document.getElementById('edit_description').value,
+            group_id: dupGid,
+        };
+
+        // Read the amount info from the preview text
+        const info = document.getElementById('edit-amounts-info').textContent;
+        const debitMatch = info.match(/Debit:\s*([\d.]+)\s*(\w+)/);
+        if (debitMatch) {
+            defaults.amount = debitMatch[1];
+            defaults.currency = debitMatch[2].toLowerCase();
+        }
+
+        addEntryPanel(defaults);
+
+        // Set group_id in the new panel after it's created
+        const idx = entryCounter;
+        setTimeout(() => {
+            const gidInput = document.getElementById(`create_group_id_${idx}`);
+            if (gidInput) gidInput.value = dupGid;
+        }, 100);
+
+        showStatus(`Duplicated entry as "${dupGid}" in Create section below`, 'info');
+        // Scroll to the create section
+        document.getElementById('create-entries').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ---- Create: entry panel management ----
+    function addEntryPanel(defaults) {
+        defaults = defaults || {};
+        entryCounter++;
+        const idx = entryCounter;
+        const container = document.getElementById('create-entries');
+
+        const typeOptions = Object.keys(ALLOWED_NAMES).map(t =>
+            `<option value="${t}" ${t === (defaults.debit_account_type || '') ? 'selected' : ''}>${t}</option>`
+        ).join('');
+        const creditTypeOptions = Object.keys(ALLOWED_NAMES).map(t =>
+            `<option value="${t}" ${t === (defaults.credit_account_type || '') ? 'selected' : ''}>${t}</option>`
+        ).join('');
+
+        const ledgerOpts = LEDGER_TYPE_OPTIONS.map(o =>
+            `<option value="${o.value}" ${o.value === (defaults.ledger_type || '') ? 'selected' : ''}>` +
+            `${o.icon} ${o.full}${o.label ? ' (' + o.label + ')' : ''}</option>`
+        ).join('');
+
+        const currOpts = CURRENCY_OPTIONS.map(c =>
+            `<option value="${c}" ${c === (defaults.currency || 'sats') ? 'selected' : ''}>${c.toUpperCase()}</option>`
+        ).join('');
+
+        const panel = document.createElement('div');
+        panel.className = 'entry-panel';
+        panel.id = `entry-panel-${idx}`;
+        panel.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">Entry #${idx}</h5>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-info" onclick="swapCreateAccounts(${idx})" title="Swap debit and credit">
+                        <i class="bi bi-arrow-left-right"></i> Swap
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="duplicateCreatePanel(${idx})" title="Duplicate this entry">
+                        <i class="bi bi-copy"></i> Dup
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeEntryPanel(${idx})">
+                        <i class="bi bi-trash"></i> Remove
+                    </button>
+                </div>
+            </div>
+
+            <div class="row mb-2">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Debit Account</label>
+                    <select class="form-select mb-1" id="create_debit_type_${idx}" onchange="updateCreateNameOptions(${idx}, 'debit')">
+                        ${typeOptions}
+                    </select>
+                    <select class="form-select mb-1" id="create_debit_name_${idx}">
+                        <option value="">Select name…</option>
+                    </select>
+                    <input type="text" class="form-control" id="create_debit_sub_${idx}"
+                           placeholder="Sub account" value="${defaults.debit_sub || ''}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Credit Account</label>
+                    <select class="form-select mb-1" id="create_credit_type_${idx}" onchange="updateCreateNameOptions(${idx}, 'credit')">
+                        ${creditTypeOptions}
+                    </select>
+                    <select class="form-select mb-1" id="create_credit_name_${idx}">
+                        <option value="">Select name…</option>
+                    </select>
+                    <input type="text" class="form-control" id="create_credit_sub_${idx}"
+                           placeholder="Sub account" value="${defaults.credit_sub || ''}">
+                </div>
+            </div>
+
+            <div class="row mb-2">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">Amount</label>
+                    <input type="number" step="any" class="form-control" id="create_amount_${idx}"
+                           value="${defaults.amount || ''}" placeholder="0">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold">Currency</label>
+                    <select class="form-select" id="create_currency_${idx}">
+                        ${currOpts}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Ledger Type</label>
+                    <select class="form-select" id="create_ledger_type_${idx}">
+                        ${ledgerOpts}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">Timestamp</label>
+                    <input type="datetime-local" class="form-control" id="create_timestamp_${idx}">
+                </div>
+            </div>
+
+            <div class="row mb-2">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Description</label>
+                    <input type="text" class="form-control" id="create_description_${idx}"
+                           value="${defaults.description || ''}">
+                </div>
+                <div class="col-md-3">
+                    <label class=\"form-label fw-bold\">Group ID <small class=\"text-muted\">(optional)</small></label>
+                    <input type=\"text\" class=\"form-control\" id=\"create_group_id_${idx}\"
+                           placeholder=\"Auto-generated\" value=\"${defaults.group_id || ''}\">
+                </div>
+                <div class=\"col-md-3\">
+                    <label class=\"form-label fw-bold\">Customer ID</label>
+                    <input type=\"text\" class=\"form-control\" id=\"create_cust_id_${idx}\" placeholder=\"Optional\">
+                </div>
+            </div>
+
+            <div class=\"d-flex align-items-end mb-2\">
+                <button class=\"btn btn-outline-info\" onclick=\"computeConversion(${idx})\">
+                    <i class=\"bi bi-calculator me-1\"></i> Compute Conversion
+                </button>
+            </div>
+
+            <div class="conv-preview" id="create_conv_preview_${idx}" style="display:none;"></div>
+        `;
+        container.appendChild(panel);
+
+        // Populate name dropdowns after panel is in DOM
+        updateCreateNameOptions(idx, 'debit');
+        updateCreateNameOptions(idx, 'credit');
+
+        // Pre-select names from defaults
+        if (defaults.debit_name) {
+            setTimeout(() => {
+                const sel = document.getElementById(`create_debit_name_${idx}`);
+                if (sel) sel.value = defaults.debit_name;
+            }, 50);
+        }
+        if (defaults.credit_name) {
+            setTimeout(() => {
+                const sel = document.getElementById(`create_credit_name_${idx}`);
+                if (sel) sel.value = defaults.credit_name;
+            }, 50);
+        }
+    }
+
+    function removeEntryPanel(idx) {
+        const panel = document.getElementById(`entry-panel-${idx}`);
+        if (panel) panel.remove();
+    }
+
+    // ---- Swap debit/credit in a create panel ----
+    function swapCreateAccounts(idx) {
+        const dType = document.getElementById(`create_debit_type_${idx}`).value;
+        const dName = document.getElementById(`create_debit_name_${idx}`).value;
+        const dSub = document.getElementById(`create_debit_sub_${idx}`).value;
+        const cType = document.getElementById(`create_credit_type_${idx}`).value;
+        const cName = document.getElementById(`create_credit_name_${idx}`).value;
+        const cSub = document.getElementById(`create_credit_sub_${idx}`).value;
+
+        document.getElementById(`create_debit_type_${idx}`).value = cType;
+        updateCreateNameOptions(idx, 'debit');
+        document.getElementById(`create_debit_name_${idx}`).value = cName;
+        document.getElementById(`create_debit_sub_${idx}`).value = cSub;
+
+        document.getElementById(`create_credit_type_${idx}`).value = dType;
+        updateCreateNameOptions(idx, 'credit');
+        document.getElementById(`create_credit_name_${idx}`).value = dName;
+        document.getElementById(`create_credit_sub_${idx}`).value = dSub;
+
+        showStatus(`Entry #${idx}: Debit and Credit swapped`, 'info');
+    }
+
+    // ---- Duplicate a create panel ----
+    function duplicateCreatePanel(idx) {
+        const defaults = {
+            debit_account_type: document.getElementById(`create_debit_type_${idx}`).value,
+            debit_name: document.getElementById(`create_debit_name_${idx}`).value,
+            debit_sub: document.getElementById(`create_debit_sub_${idx}`).value,
+            credit_account_type: document.getElementById(`create_credit_type_${idx}`).value,
+            credit_name: document.getElementById(`create_credit_name_${idx}`).value,
+            credit_sub: document.getElementById(`create_credit_sub_${idx}`).value,
+            amount: document.getElementById(`create_amount_${idx}`).value,
+            currency: document.getElementById(`create_currency_${idx}`).value,
+            ledger_type: document.getElementById(`create_ledger_type_${idx}`).value,
+            description: document.getElementById(`create_description_${idx}`).value,
+        };
+        addEntryPanel(defaults);
+        showStatus(`Entry #${idx} duplicated as Entry #${entryCounter}`, 'info');
+    }
+
+    function updateCreateNameOptions(idx, side) {
+        const typeVal = document.getElementById(`create_${side}_type_${idx}`).value;
+        const nameSelect = document.getElementById(`create_${side}_name_${idx}`);
+        const names = ALLOWED_NAMES[typeVal] || [];
+        const currentVal = nameSelect.value;
+        nameSelect.innerHTML = '<option value="">Select name…</option>';
+        names.forEach(n => {
+            nameSelect.innerHTML += `<option value="${n}">${n}</option>`;
+        });
+        // Restore selection if still valid
+        if (names.includes(currentVal)) {
+            nameSelect.value = currentVal;
+        }
+    }
+
+    // ---- Compute conversion preview ----
+    async function computeConversion(idx) {
+        const amount = parseFloat(document.getElementById(`create_amount_${idx}`).value);
+        const currency = document.getElementById(`create_currency_${idx}`).value;
+        if (!amount || isNaN(amount)) {
+            showStatus('Please enter an amount first', 'warning');
+            return;
+        }
+        try {
+            const resp = await fetch('/admin/ledger-editor/api/compute-conversion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount, currency }),
+            });
+            const data = await resp.json();
+            if (data.error) { showStatus('Conversion error: ' + data.error, 'danger'); return; }
+            const preview = document.getElementById(`create_conv_preview_${idx}`);
+            preview.style.display = 'block';
+            preview.innerHTML = `
+                <strong>Conversion Preview:</strong><br>
+                HIVE: ${parseFloat(data.hive || 0).toFixed(3)} |
+                HBD: ${parseFloat(data.hbd || 0).toFixed(3)} |
+                USD: ${parseFloat(data.usd || 0).toFixed(4)} |
+                Sats: ${Math.round(parseFloat(data.sats || 0))} |
+                BTC: ${parseFloat(data.btc || 0).toFixed(8)} |
+                Source: ${data.source || '?'} |
+                Date: ${data.fetch_date || '?'}
+            `;
+        } catch (e) {
+            showStatus('Conversion failed: ' + e.message, 'danger');
+        }
+    }
+
+    // ---- Apply preset ----
+    function applyPreset(preset) {
+        // Clear existing panels
+        document.getElementById('create-entries').innerHTML = '';
+        entryCounter = 0;
+        // Add panels from preset
+        (preset.entries || []).forEach(e => addEntryPanel(e));
+        showStatus(`Preset "${preset.label}" applied — fill in amounts and create`, 'info');
+    }
+
+    // ---- Create all entries ----
+    async function createAllEntries() {
+        const panels = document.querySelectorAll('[id^="entry-panel-"]');
+        if (panels.length === 0) {
+            showStatus('No entries to create. Add at least one entry panel.', 'warning');
+            return;
+        }
+
+        if (!confirm(`Create ${panels.length} ledger entry/entries?`)) return;
+
+        let successCount = 0;
+        let errors = [];
+
+        for (const panel of panels) {
+            const idx = panel.id.replace('entry-panel-', '');
+            const payload = {
+                debit: {
+                    account_type: document.getElementById(`create_debit_type_${idx}`).value,
+                    name: document.getElementById(`create_debit_name_${idx}`).value,
+                    sub: document.getElementById(`create_debit_sub_${idx}`).value,
+                },
+                credit: {
+                    account_type: document.getElementById(`create_credit_type_${idx}`).value,
+                    name: document.getElementById(`create_credit_name_${idx}`).value,
+                    sub: document.getElementById(`create_credit_sub_${idx}`).value,
+                },
+                amount: parseFloat(document.getElementById(`create_amount_${idx}`).value) || 0,
+                currency: document.getElementById(`create_currency_${idx}`).value,
+                ledger_type: document.getElementById(`create_ledger_type_${idx}`).value,
+                description: document.getElementById(`create_description_${idx}`).value,
+                group_id: document.getElementById(`create_group_id_${idx}`).value.trim() || '',
+                cust_id: document.getElementById(`create_cust_id_${idx}`).value,
+                timestamp: document.getElementById(`create_timestamp_${idx}`).value || null,
+            };
+
+            if (!payload.debit.name || !payload.credit.name) {
+                errors.push(`Entry #${idx}: debit and credit account names are required`);
+                continue;
+            }
+            if (!payload.amount || payload.amount <= 0) {
+                errors.push(`Entry #${idx}: amount must be greater than 0`);
+                continue;
+            }
+
+            try {
+                const resp = await fetch('/admin/ledger-editor/api/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    errors.push(`Entry #${idx}: ${data.error}`);
+                } else {
+                    successCount++;
+                }
+            } catch (e) {
+                errors.push(`Entry #${idx}: ${e.message}`);
+            }
+        }
+
+        if (errors.length > 0) {
+            showStatus(
+                `Created ${successCount} entries. Errors:<br>` + errors.map(e => `• ${e}`).join('<br>'),
+                successCount > 0 ? 'warning' : 'danger'
+            );
+        } else {
+            showStatus(`Successfully created ${successCount} entries!`, 'success');
+            // Clear panels on full success
+            document.getElementById('create-entries').innerHTML = '';
+            entryCounter = 0;
+        }
+    }
+
+    // ---- Initialise ----
+    document.addEventListener('DOMContentLoaded', function () {
+        // Auto-load if group_id was passed in URL
+        const loadGid = '{{ load_group_id }}';
+        if (loadGid) {
+            loadEntry();
+        }
+        // Start with one blank entry panel
+        addEntryPanel();
+    });
+</script>
+{% endblock %}

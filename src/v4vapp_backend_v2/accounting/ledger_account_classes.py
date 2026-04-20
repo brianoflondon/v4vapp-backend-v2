@@ -255,6 +255,7 @@ ExpenseAccounts = Literal[
     "Fee Expenses Lightning",
     "Fee Expenses Hive",
     "Exchange Fees Paid",
+    "Withdrawal Fees Paid",
     "Testing Expenses",
     "Testing Expenses LND Payment",
     "Hosting",
