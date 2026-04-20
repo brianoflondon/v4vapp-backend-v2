@@ -17,7 +17,7 @@ def test_ledger_entries_template_compiles_and_renders():
     env.globals["sanity_results"] = (SanityCheckResults(),)
 
     # Ensure the template parses and renders with a minimal context
-    template = env.get_template("ledger_entries/entries.html")
+    template = env.get_template("ledger_entries/entries.html.jinja")
 
     class DummyRequest:
         def __init__(self):

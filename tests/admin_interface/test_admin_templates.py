@@ -34,7 +34,7 @@ class TestTemplateCompilation:
 
     def test_base_template_compilation(self, template_env):
         """Test base template compiles without errors"""
-        template = template_env.get_template("base.html")
+        template = template_env.get_template("base.html.jinja")
         assert template is not None
 
         # Skip full rendering test due to FastAPI dependencies
@@ -58,26 +58,26 @@ class TestTemplateCompilation:
 
     def test_users_template_compilation(self, template_env):
         """Test users template compiles without errors"""
-        template = template_env.get_template("users/users.html")
+        template = template_env.get_template("users/users.html.jinja")
         assert template is not None
 
         # Test template structure without full rendering
         with open(template.filename, "r") as f:
             content = f.read()
-            assert '{% extends "base.html" %}' in content
+            assert '{% extends "base.html.jinja" %}' in content
             assert "VSC Liability Users" in content
             assert "User" in content
             assert "Balance" in content
 
     def test_dashboard_template_compilation(self, template_env):
         """Test dashboard template compiles without errors"""
-        template = template_env.get_template("dashboard.html")
+        template = template_env.get_template("dashboard.html.jinja")
         assert template is not None
 
         # Test template structure without full rendering
         with open(template.filename, "r") as f:
             content = f.read()
-            assert '{% extends "base.html" %}' in content
+            assert '{% extends "base.html.jinja" %}' in content
             assert "Account Balances" in content  # Check for dashboard-specific content
             assert "LND Balances" in content
             assert "Delta:" in content
@@ -91,14 +91,14 @@ class TestTemplateCompilation:
     def test_template_inheritance(self, template_env):
         """Test template inheritance works correctly"""
         # Load a child template that extends base
-        users_template = template_env.get_template("users/users.html")
+        users_template = template_env.get_template("users/users.html.jinja")
 
-        # The template should contain {% extends "base.html" %}
+        # The template should contain {% extends "base.html.jinja" %}
         template_source = users_template.filename
         with open(template_source, "r") as f:
             content = f.read()
 
-        assert '{% extends "base.html" %}' in content
+        assert '{% extends "base.html.jinja" %}' in content
         assert "{% block content %}" in content
         assert "{% endblock %}" in content
 
@@ -106,8 +106,8 @@ class TestTemplateCompilation:
         """Test all templates have valid Jinja2 syntax"""
         templates_dir = Path(template_env.loader.searchpath[0])
 
-        # Find all .html files
-        html_files = list(templates_dir.rglob("*.html"))
+        # Find all .html.jinja files
+        html_files = list(templates_dir.rglob("*.html.jinja"))
 
         for html_file in html_files:
             relative_path = html_file.relative_to(templates_dir)
@@ -165,7 +165,7 @@ class TestTemplateRendering:
         """Test users template handles empty data gracefully"""
         # Skip full rendering due to complex FastAPI dependencies
         # Just test template structure
-        template = template_env.get_template("users/users.html")
+        template = template_env.get_template("users/users.html.jinja")
         assert template is not None
 
         # Verify template has empty state handling
@@ -183,7 +183,7 @@ class TestTemplateRendering:
         template_env.globals["favicon_manifest"] = "/admin/static/favicon/test.webmanifest"
         # sanity_results was already added by the fixture but we can override
         template_env.globals["sanity_results"] = type("S", (), {"failed": [], "results": []})()
-        template = template_env.get_template("base.html")
+        template = template_env.get_template("base.html.jinja")
         rendered = template.render()
         # the override style should include the colour we passed; don't
         # rely on exact spacing since the linter may break the CSS across
@@ -210,7 +210,7 @@ class TestTemplateRendering:
         """Base template should include the favicon_path global."""
         template_env.globals["favicon_path"] = "/admin/static/favicon/foo.ico"
         template_env.globals["favicon_manifest"] = "/admin/static/favicon/foo.webmanifest"
-        template = template_env.get_template("base.html")
+        template = template_env.get_template("base.html.jinja")
         rendered = template.render()
         assert "/admin/static/favicon/foo.ico" in rendered
         assert "/admin/static/favicon/foo.webmanifest" in rendered
@@ -228,7 +228,7 @@ class TestTemplateRendering:
             (),
             {"failed": [], "results": [("check_one", SimpleNamespace(details=details_text))]},
         )()
-        template = template_env.get_template("base.html")
+        template = template_env.get_template("base.html.jinja")
         rendered = template.render()
         # first line appears bolded
         assert "<strong>Title Line</strong>" in rendered
@@ -243,7 +243,7 @@ class TestTemplateRendering:
         """Test users template handles error states"""
         # Skip full rendering due to complex FastAPI dependencies
         # Just test template structure
-        template = template_env.get_template("users/users.html")
+        template = template_env.get_template("users/users.html.jinja")
         assert template is not None
 
         # Verify template has error handling
@@ -256,7 +256,7 @@ class TestTemplateRendering:
         """Test balance formatting in various scenarios"""
         # Skip full rendering due to complex FastAPI dependencies
         # Just test template structure
-        template = template_env.get_template("users/users.html")
+        template = template_env.get_template("users/users.html.jinja")
         assert template is not None
 
         # Verify template has balance formatting logic
