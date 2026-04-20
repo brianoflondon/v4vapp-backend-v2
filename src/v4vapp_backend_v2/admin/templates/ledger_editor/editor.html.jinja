@@ -177,6 +177,15 @@
 <div class="editor-form">
     <h3 class="mb-3"><i class="bi bi-plus-circle me-2"></i>Create New Entry</h3>
 
+    <!-- Shared Group ID for all entries in this batch -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label class="form-label fw-bold">Group ID <small class="text-muted">(shared across all entries — optional)</small></label>
+            <input type="text" class="form-control" id="create_shared_group_id"
+                   placeholder="Auto-generated if blank">
+        </div>
+    </div>
+
     <div id="create-entries">
         <!-- Entry panels will be added here dynamically -->
     </div>
@@ -396,6 +405,7 @@
             credit_sub: document.getElementById('edit_credit_sub').value,
             ledger_type: document.getElementById('edit_ledger_type').value,
             description: document.getElementById('edit_description').value,
+            user_memo: document.getElementById('edit_user_memo').value,
             group_id: dupGid,
         };
 
@@ -409,11 +419,10 @@
 
         addEntryPanel(defaults);
 
-        // Set group_id in the new panel after it's created
-        const idx = entryCounter;
+        // Set the shared group_id field
         setTimeout(() => {
-            const gidInput = document.getElementById(`create_group_id_${idx}`);
-            if (gidInput) gidInput.value = dupGid;
+            const gidInput = document.getElementById('create_shared_group_id');
+            if (gidInput && !gidInput.value) gidInput.value = dupGid;
         }, 100);
 
         showStatus(`Duplicated entry as "${dupGid}" in Create section below`, 'info');
@@ -514,20 +523,23 @@
             </div>
 
             <div class="row mb-2">
-                <div class="col-md-6">
+                <div class="col-md-8">
                     <label class="form-label fw-bold">Description</label>
                     <input type="text" class="form-control" id="create_description_${idx}"
                            value="${defaults.description || ''}">
                 </div>
-                <div class="col-md-3">
-                    <label class=\"form-label fw-bold\">Group ID <small class=\"text-muted\">(optional)</small></label>
-                    <input type=\"text\" class=\"form-control\" id=\"create_group_id_${idx}\"
-                           placeholder=\"Auto-generated\" value=\"${defaults.group_id || ''}\">
-                </div>
-                <div class=\"col-md-3\">
+                <div class=\"col-md-4\">
                     <label class=\"form-label fw-bold\">Customer ID</label>
                     <input type=\"text\" class=\"form-control\" id=\"create_cust_id_${idx}\"
                            placeholder=\"Optional\" value=\"${defaults.cust_id || ''}\">
+                </div>
+            </div>
+
+            <div class="row mb-2">
+                <div class="col-md-12">
+                    <label class="form-label fw-bold">User Memo</label>
+                    <input type="text" class="form-control" id="create_user_memo_${idx}"
+                           placeholder="Optional memo visible to users" value="${defaults.user_memo || ''}">
                 </div>
             </div>
 
@@ -600,6 +612,7 @@
             currency: document.getElementById(`create_currency_${idx}`).value,
             ledger_type: document.getElementById(`create_ledger_type_${idx}`).value,
             description: document.getElementById(`create_description_${idx}`).value,
+            user_memo: document.getElementById(`create_user_memo_${idx}`).value,
             cust_id: document.getElementById(`create_cust_id_${idx}`).value,
         };
         addEntryPanel(defaults);
@@ -672,10 +685,10 @@
             return;
         }
 
-        if (!confirm(`Create ${panels.length} ledger entry/entries?`)) return;
-
-        let successCount = 0;
-        let errors = [];
+        // Phase 1: collect and validate all payloads client-side
+        const payloads = [];
+        const validationErrors = [];
+        const sharedGroupId = document.getElementById('create_shared_group_id').value.trim();
 
         for (const panel of panels) {
             const idx = panel.id.replace('entry-panel-', '');
@@ -694,47 +707,63 @@
                 currency: document.getElementById(`create_currency_${idx}`).value,
                 ledger_type: document.getElementById(`create_ledger_type_${idx}`).value,
                 description: document.getElementById(`create_description_${idx}`).value,
-                group_id: document.getElementById(`create_group_id_${idx}`).value.trim() || '',
+                user_memo: document.getElementById(`create_user_memo_${idx}`).value,
+                group_id: sharedGroupId,
                 cust_id: document.getElementById(`create_cust_id_${idx}`).value,
                 timestamp: document.getElementById(`create_timestamp_${idx}`).value || null,
             };
 
             if (!payload.debit.name || !payload.credit.name) {
-                errors.push(`Entry #${idx}: debit and credit account names are required`);
-                continue;
+                validationErrors.push(`Entry #${idx}: debit and credit account names are required`);
             }
             if (!payload.amount || payload.amount <= 0) {
-                errors.push(`Entry #${idx}: amount must be greater than 0`);
-                continue;
+                validationErrors.push(`Entry #${idx}: amount must be greater than 0`);
             }
 
-            try {
-                const resp = await fetch('/admin/ledger-editor/api/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                const data = await resp.json();
-                if (data.error) {
-                    errors.push(`Entry #${idx}: ${data.error}`);
-                } else {
-                    successCount++;
-                }
-            } catch (e) {
-                errors.push(`Entry #${idx}: ${e.message}`);
-            }
+            payloads.push(payload);
         }
 
-        if (errors.length > 0) {
+        // Stop if any client-side validation failed
+        if (validationErrors.length > 0) {
             showStatus(
-                `Created ${successCount} entries. Errors:<br>` + errors.map(e => `• ${e}`).join('<br>'),
-                successCount > 0 ? 'warning' : 'danger'
+                'Validation failed — no entries were saved:<br>' + validationErrors.map(e => `• ${e}`).join('<br>'),
+                'danger'
             );
-        } else {
-            showStatus(`Successfully created ${successCount} entries!`, 'success');
-            // Clear panels on full success
-            document.getElementById('create-entries').innerHTML = '';
-            entryCounter = 0;
+            return;
+        }
+
+        if (!confirm(`Create ${payloads.length} ledger entry/entries?`)) return;
+
+        // Phase 2: send all entries to batch endpoint for server-side validation + save
+        try {
+            const resp = await fetch('/admin/ledger-editor/api/create-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payloads),
+            });
+            const data = await resp.json();
+
+            if (data.error) {
+                let msg = data.error;
+                if (data.details) {
+                    msg += '<br>' + data.details.map(e => `• ${e}`).join('<br>');
+                }
+                if (data.saved && data.saved.length > 0) {
+                    msg += `<br>Saved entries: ${data.saved.join(', ')}`;
+                }
+                showStatus(msg, 'danger');
+            } else {
+                showStatus(
+                    `Successfully created ${data.group_ids.length} entries!<br>` +
+                    data.group_ids.map(id => `• ${id}`).join('<br>'),
+                    'success'
+                );
+                // Clear panels on full success
+                document.getElementById('create-entries').innerHTML = '';
+                entryCounter = 0;
+            }
+        } catch (e) {
+            showStatus(`Request failed: ${e.message}`, 'danger');
         }
     }
 

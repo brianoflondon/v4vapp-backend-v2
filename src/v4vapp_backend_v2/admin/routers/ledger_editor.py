@@ -11,6 +11,7 @@ adjustments (e.g. exchange rebalance with fee) are one-click operations.
 """
 
 import asyncio
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -89,7 +90,7 @@ def _build_editor_presets() -> List[Dict[str, Any]]:
             "icon": "⚡",
             "description": (
                 f"Move sats from Exchange Holdings ({exchange_sub}) "
-                f"to External Lightning Payments ({node_name}). "
+                f"to Treasury Lightning ({node_name}). "
                 f"Records withdrawal fee paid to {exchange_sub}."
             ),
             "entries": [
@@ -97,7 +98,7 @@ def _build_editor_presets() -> List[Dict[str, Any]]:
                     "ledger_type": LedgerType.EXCHANGE_TO_NODE.value,
                     "description": f"Transfer sats from {exchange_sub} to {node_name} node",
                     "debit_account_type": "Asset",
-                    "debit_name": "External Lightning Payments",
+                    "debit_name": "Treasury Lightning",
                     "debit_sub": node_name,
                     "credit_account_type": "Asset",
                     "credit_name": "Exchange Holdings",
@@ -223,8 +224,14 @@ async def ledger_editor_page(
     # Allowed account names keyed by type (for JS dropdowns)
     allowed_names = _all_allowed_account_names()
 
-    # Currency options
-    currency_options = [c.value for c in Currency]
+    # Currency options – user-facing input currencies
+    # sats input is automatically converted to msats on save
+    currency_options = [
+        Currency.SATS.value,
+        Currency.MSATS.value,
+        Currency.HIVE.value,
+        Currency.HBD.value,
+    ]
 
     nav_items = nav_manager.get_navigation_items("/admin/ledger-editor")
     sanity_results = await sanity_task
@@ -408,45 +415,22 @@ async def update_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
         return JSONResponse({"error": "No changes provided"}, status_code=400)
 
     try:
-        from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
+        # Merge changes into the loaded entry's data, then re-validate via
+        # Pydantic to catch any invalid combinations.  save(upsert=True)
+        # handles the DB write and all cache/checkpoint invalidation.
+        entry_data = entry.model_dump()
+        entry_data.update(changes)
+        updated_entry = LedgerEntry.model_validate(entry_data)
 
-        result = await LedgerEntry.collection().update_one(
-            {"group_id": group_id},
-            {"$set": convert_decimals_for_mongodb(changes)},
-        )
-        if result.modified_count == 0 and result.matched_count == 0:
-            return JSONResponse({"error": "Entry not found in DB"}, status_code=404)
-
-        # Invalidate cache for affected accounts
-        from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
-
-        await invalidate_ledger_cache(
-            debit_name=entry.debit.name,
-            debit_sub=entry.debit.sub,
-            credit_name=entry.credit.name,
-            credit_sub=entry.credit.sub,
-        )
-        # Also invalidate for new accounts if changed
-        if "debit" in payload:
-            await invalidate_ledger_cache(
-                debit_name=payload["debit"]["name"],
-                debit_sub=payload["debit"].get("sub", ""),
-                credit_name=entry.credit.name,
-                credit_sub=entry.credit.sub,
-            )
-        if "credit" in payload:
-            await invalidate_ledger_cache(
-                debit_name=entry.debit.name,
-                debit_sub=entry.debit.sub,
-                credit_name=payload["credit"]["name"],
-                credit_sub=payload["credit"].get("sub", ""),
-            )
+        await updated_entry.save(upsert=True)
 
         logger.info(
             f"Ledger entry updated via editor: {group_id}",
-            extra={"notification": True, "changes": changes},
+            extra={"notification": True, "changes": list(changes.keys())},
         )
-        return JSONResponse({"status": "ok", "modified": result.modified_count})
+        return JSONResponse({"status": "ok", "modified": 1})
+    except ValueError as e:
+        return JSONResponse({"error": f"Validation error: {e}"}, status_code=400)
     except Exception as e:
         logger.exception("Error updating ledger entry: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -457,12 +441,23 @@ async def update_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/api/create")
-async def create_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
+async def _validate_and_build_entry(
+    payload: Dict[str, Any],
+) -> tuple[LedgerEntry, None] | tuple[None, str]:
+    """Validate a single entry payload and build a LedgerEntry.
+
+    Returns (entry, None) on success or (None, error_message) on failure.
+    Does NOT save the entry — caller is responsible for persisting.
+    """
     try:
-        # Build accounts
         debit_data = payload.get("debit", {})
         credit_data = payload.get("credit", {})
+
+        if not debit_data.get("name"):
+            return None, "Debit account name is required"
+        if not credit_data.get("name"):
+            return None, "Credit account name is required"
+
         debit_acc = _build_account(
             debit_data["account_type"], debit_data["name"], debit_data.get("sub", "")
         )
@@ -471,13 +466,26 @@ async def create_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
         )
 
         amount = Decimal(str(payload.get("amount", 0)))
+        if amount <= 0:
+            return None, "Amount must be greater than 0"
+
         currency_str = payload.get("currency", "sats")
         try:
             currency = Currency(currency_str)
         except Exception:
-            return JSONResponse({"error": f"Unknown currency: {currency_str}"}, status_code=400)
+            return None, f"Unknown currency: {currency_str}"
 
-        # Compute conversion
+        # Normalise to storage units: only msats, hive, hbd are stored.
+        # If the user entered sats, convert to msats (×1000).
+        if currency == Currency.SATS:
+            amount = amount * 1000
+            currency = Currency.MSATS
+        elif currency not in (Currency.HIVE, Currency.HBD, Currency.MSATS):
+            return None, (
+                f"Currency {currency.value} cannot be stored directly. Use sats, hive, or hbd."
+            )
+
+        # Compute conversion using the storage currency/amount
         conversion = CryptoConversion(conv_from=currency, value=amount)
         await conversion.get_quote()
         conv = conversion.conversion
@@ -490,15 +498,10 @@ async def create_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
             try:
                 ledger_type = LedgerType(raw_ledger_type)
             except Exception:
-                valid_ledger_types = [ledger_type.value for ledger_type in LedgerType]
-                return JSONResponse(
-                    {
-                        "error": (
-                            f"Unknown ledger_type: {raw_ledger_type}. "
-                            f"Valid values are: {valid_ledger_types}"
-                        )
-                    },
-                    status_code=400,
+                valid_ledger_types = [lt.value for lt in LedgerType]
+                return None, (
+                    f"Unknown ledger_type: {raw_ledger_type}. "
+                    f"Valid values are: {valid_ledger_types}"
                 )
 
         # Parse timestamp
@@ -514,17 +517,17 @@ async def create_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
             timestamp = datetime.now(tz=timezone.utc)
 
         # Build the group_id
-        group_id = payload.get("group_id", "")
+        group_id = payload.get("group_id", "").strip()
         if group_id:
-            # User provided a base group_id — append _manual_{ledger_type}
             group_id = f"{group_id}_manual_{ledger_type.value}"
         else:
-            # Generate a unique group_id for manual entries
-            group_id = f"manual_{datetime.now(tz=timezone.utc).strftime('%Y%m%d_%H%M%S')}_{ledger_type.value}"
+            group_id = f"{uuid.uuid4().hex[:10]}_manual_{ledger_type.value}"
+
+        short_id = group_id[:10]
 
         entry = LedgerEntry(
             group_id=group_id,
-            short_id=payload.get("short_id", group_id[:16]),
+            short_id=short_id,
             ledger_type=ledger_type,
             timestamp=timestamp,
             description=payload.get("description", "Manual entry via admin editor"),
@@ -541,17 +544,87 @@ async def create_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
             extra_data=payload.get("extra_data", [{"source": "admin_editor"}]),
             link=payload.get("link", ""),
         )
+        return entry, None
 
-        result = await entry.save()
+    except Exception as e:
+        return None, str(e)
+
+
+@router.post("/api/create")
+async def create_entry(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
+    entry, error = await _validate_and_build_entry(payload)
+    if error:
+        return JSONResponse({"error": error}, status_code=400)
+    assert entry is not None
+
+    try:
+        await entry.save()
         logger.info(
             f"Ledger entry created via editor: {entry.group_id}",
             extra={"notification": True, **entry.log_extra},
         )
         return JSONResponse({"status": "ok", "group_id": entry.group_id})
-
     except Exception as e:
         logger.exception("Error creating ledger entry: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# API: Create multiple entries atomically (validate all before saving any)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/create-batch")
+async def create_batch(entries: List[Dict[str, Any]] = Body(...)) -> JSONResponse:
+    """Validate all entries first. Only save if every entry passes validation."""
+    if not entries:
+        return JSONResponse({"error": "No entries provided"}, status_code=400)
+
+    # Generate a shared auto group_id prefix for entries that don't supply one
+    shared_auto_prefix = uuid.uuid4().hex[:10]
+
+    # Phase 1: validate and build all entries
+    built: List[LedgerEntry] = []
+    errors: List[str] = []
+
+    for i, payload in enumerate(entries, start=1):
+        # If no group_id supplied, inject the shared auto prefix
+        if not payload.get("group_id", "").strip():
+            payload = {**payload, "group_id": shared_auto_prefix}
+        entry, error = await _validate_and_build_entry(payload)
+        if error:
+            errors.append(f"Entry #{i}: {error}")
+        else:
+            assert entry is not None
+            built.append(entry)
+
+    if errors:
+        return JSONResponse(
+            {"error": "Validation failed — no entries were saved", "details": errors},
+            status_code=400,
+        )
+
+    # Phase 2: all valid — save them
+    saved_ids: List[str] = []
+    try:
+        for entry in built:
+            await entry.save()
+            saved_ids.append(entry.group_id)
+            logger.info(
+                f"Ledger entry created via editor (batch): {entry.group_id}",
+                extra={"notification": True, **entry.log_extra},
+            )
+    except Exception as e:
+        logger.exception("Error saving batch entry: %s", e)
+        return JSONResponse(
+            {
+                "error": f"Saved {len(saved_ids)} of {len(built)} entries before failure: {e}",
+                "saved": saved_ids,
+            },
+            status_code=500,
+        )
+
+    return JSONResponse({"status": "ok", "group_ids": saved_ids})
 
 
 # ---------------------------------------------------------------------------

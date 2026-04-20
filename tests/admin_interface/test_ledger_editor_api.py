@@ -19,13 +19,16 @@ from v4vapp_backend_v2.admin.routers.ledger_editor import (
     _account_class_for_type,
     _build_account,
     _build_editor_presets,
+    _validate_and_build_entry,
     compute_conversion,
+    create_batch,
     create_entry,
     get_presets,
     load_entry,
     update_entry,
 )
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.currency_class import Currency
 
 pytestmark = pytest.mark.integration
 
@@ -36,7 +39,7 @@ pytestmark = pytest.mark.integration
 
 
 def _make_dummy_entry(**overrides):
-    """Build a minimal LedgerEntry-like object for mocking."""
+    """Build a minimal LedgerEntry for mocking."""
     defaults = dict(
         group_id="test_g1",
         short_id="test_g1",
@@ -45,28 +48,20 @@ def _make_dummy_entry(**overrides):
         description="Test entry",
         user_memo="memo",
         cust_id="voltage",
-        cust_id_from="",
-        cust_id_to="",
         debit=AssetAccount(name="External Lightning Payments", sub="voltage"),
         credit=AssetAccount(name="Exchange Holdings", sub="binance_convert"),
         debit_amount=Decimal("1000"),
-        debit_unit=MagicMock(value="sats"),
+        debit_unit=Currency.MSATS,
         debit_conv=CryptoConv(),
         credit_amount=Decimal("1000"),
-        credit_unit=MagicMock(value="sats"),
+        credit_unit=Currency.MSATS,
         credit_conv=CryptoConv(),
         reversed=None,
         extra_data=[{"source": "test"}],
         link="",
-        op_type="ledger_entry",
     )
     defaults.update(overrides)
-
-    entry = MagicMock()
-    for k, v in defaults.items():
-        setattr(entry, k, v)
-    entry.log_extra = {"group_id": defaults["group_id"]}
-    return entry
+    return LedgerEntry(**defaults)
 
 
 # ===================================================================
@@ -218,61 +213,37 @@ class TestUpdateEntry:
     async def test_update_description_success(self, monkeypatch):
         entry = _make_dummy_entry()
         monkeypatch.setattr(LedgerEntry, "load", AsyncMock(return_value=entry))
-
-        mock_result = MagicMock(modified_count=1, matched_count=1)
-        mock_collection = MagicMock()
-        mock_collection.update_one = AsyncMock(return_value=mock_result)
-        monkeypatch.setattr(LedgerEntry, "collection", lambda: mock_collection)
-
-        # Patch cache invalidation at its source module (lazy-imported inside update_entry)
-        monkeypatch.setattr(
-            "v4vapp_backend_v2.accounting.ledger_cache.invalidate_ledger_cache",
-            AsyncMock(),
-        )
+        mock_save = AsyncMock(return_value=MagicMock())
+        monkeypatch.setattr(LedgerEntry, "save", mock_save)
 
         resp = await update_entry(payload={"group_id": "test_g1", "description": "Updated desc"})
         assert resp.status_code == 200
         body = json.loads(resp.body)
         assert body["status"] == "ok"
         assert body["modified"] == 1
+        mock_save.assert_awaited_once_with(upsert=True)
 
     @pytest.mark.asyncio
     async def test_update_reversed_now(self, monkeypatch):
         entry = _make_dummy_entry()
         monkeypatch.setattr(LedgerEntry, "load", AsyncMock(return_value=entry))
-
-        mock_result = MagicMock(modified_count=1, matched_count=1)
-        mock_collection = MagicMock()
-        mock_collection.update_one = AsyncMock(return_value=mock_result)
-        monkeypatch.setattr(LedgerEntry, "collection", lambda: mock_collection)
-        monkeypatch.setattr(
-            "v4vapp_backend_v2.accounting.ledger_cache.invalidate_ledger_cache",
-            AsyncMock(),
-        )
+        mock_save = AsyncMock(return_value=MagicMock())
+        monkeypatch.setattr(LedgerEntry, "save", mock_save)
 
         resp = await update_entry(payload={"group_id": "test_g1", "reversed": "now"})
         assert resp.status_code == 200
-        # Verify the update_one was called with a datetime in $set
-        call_args = mock_collection.update_one.call_args
-        set_dict = call_args[0][1]["$set"]
-        assert isinstance(set_dict["reversed"], datetime)
+        mock_save.assert_awaited_once_with(upsert=True)
 
     @pytest.mark.asyncio
     async def test_update_reversed_clear(self, monkeypatch):
         entry = _make_dummy_entry(reversed=datetime.now(tz=timezone.utc))
         monkeypatch.setattr(LedgerEntry, "load", AsyncMock(return_value=entry))
-
-        mock_result = MagicMock(modified_count=1, matched_count=1)
-        mock_collection = MagicMock()
-        mock_collection.update_one = AsyncMock(return_value=mock_result)
-        monkeypatch.setattr(LedgerEntry, "collection", lambda: mock_collection)
-        monkeypatch.setattr(
-            "v4vapp_backend_v2.accounting.ledger_cache.invalidate_ledger_cache",
-            AsyncMock(),
-        )
+        mock_save = AsyncMock(return_value=MagicMock())
+        monkeypatch.setattr(LedgerEntry, "save", mock_save)
 
         resp = await update_entry(payload={"group_id": "test_g1", "reversed": None})
         assert resp.status_code == 200
+        mock_save.assert_awaited_once_with(upsert=True)
 
     @pytest.mark.asyncio
     async def test_update_reversed_invalid(self, monkeypatch):
@@ -346,8 +317,8 @@ class TestCreateEntry:
 
         resp = await create_entry(payload=self._valid_payload())
         body = json.loads(resp.body)
-        # Auto-generated group_id starts with "manual_"
-        assert body["group_id"].startswith("manual_")
+        # Auto-generated group_id contains _manual_ and ledger_type suffix
+        assert "_manual_" in body["group_id"]
         assert LedgerType.EXCHANGE_TO_NODE.value in body["group_id"]
 
     @pytest.mark.asyncio
@@ -417,7 +388,7 @@ class TestCreateEntry:
         payload = self._valid_payload()
         payload["debit"]["account_type"] = "NotReal"
         resp = await create_entry(payload=payload)
-        assert resp.status_code == 500  # caught by outer try/except
+        assert resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_create_with_timestamp(self, monkeypatch):
@@ -453,6 +424,121 @@ class TestCreateEntry:
         resp = await create_entry(payload=self._valid_payload(timestamp="not-a-date"))
         # Should still succeed with fallback to now()
         assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_create_sats_normalised_to_msats(self, monkeypatch):
+        """When currency=sats, amount should be ×1000 and unit stored as msats."""
+        dummy_conv = CryptoConv()
+        mock_conversion = MagicMock()
+        mock_conversion.get_quote = AsyncMock()
+        mock_conversion.conversion = dummy_conv
+        monkeypatch.setattr(
+            "v4vapp_backend_v2.admin.routers.ledger_editor.CryptoConversion",
+            lambda **kwargs: mock_conversion,
+        )
+
+        entry, error = await _validate_and_build_entry(
+            self._valid_payload(amount=5000, currency="sats")
+        )
+        assert error is None
+        assert entry is not None
+        assert entry.debit_unit.value == "msats"
+        assert entry.credit_unit.value == "msats"
+        assert entry.debit_amount == 5_000_000  # 5000 sats × 1000
+        assert entry.credit_amount == 5_000_000
+
+    @pytest.mark.asyncio
+    async def test_create_hive_not_normalised(self, monkeypatch):
+        """hive should be stored as-is, not converted."""
+        dummy_conv = CryptoConv()
+        mock_conversion = MagicMock()
+        mock_conversion.get_quote = AsyncMock()
+        mock_conversion.conversion = dummy_conv
+        monkeypatch.setattr(
+            "v4vapp_backend_v2.admin.routers.ledger_editor.CryptoConversion",
+            lambda **kwargs: mock_conversion,
+        )
+
+        entry, error = await _validate_and_build_entry(
+            self._valid_payload(amount=100, currency="hive")
+        )
+        assert error is None
+        assert entry is not None
+        assert entry.debit_unit.value == "hive"
+        assert entry.debit_amount == 100
+
+    @pytest.mark.asyncio
+    async def test_create_disallowed_currency_usd(self):
+        """USD should be rejected — only sats, hive, hbd allowed."""
+        entry, error = await _validate_and_build_entry(self._valid_payload(currency="usd"))
+        assert entry is None
+        assert "cannot be stored directly" in error
+
+    @pytest.mark.asyncio
+    async def test_create_disallowed_currency_btc(self):
+        """BTC should be rejected."""
+        entry, error = await _validate_and_build_entry(self._valid_payload(currency="btc"))
+        assert entry is None
+        assert "cannot be stored directly" in error
+
+    @pytest.mark.asyncio
+    async def test_create_msats_stored_directly(self, monkeypatch):
+        """msats should be stored as-is without conversion."""
+        dummy_conv = CryptoConv()
+        mock_conversion = MagicMock()
+        mock_conversion.get_quote = AsyncMock()
+        mock_conversion.conversion = dummy_conv
+        monkeypatch.setattr(
+            "v4vapp_backend_v2.admin.routers.ledger_editor.CryptoConversion",
+            lambda **kwargs: mock_conversion,
+        )
+
+        entry, error = await _validate_and_build_entry(
+            self._valid_payload(amount=5000000, currency="msats")
+        )
+        assert error is None
+        assert entry is not None
+        assert entry.debit_unit.value == "msats"
+        assert entry.debit_amount == 5_000_000  # unchanged
+
+    @pytest.mark.asyncio
+    async def test_short_id_max_10_chars(self, monkeypatch):
+        """short_id should be at most 10 characters."""
+        dummy_conv = CryptoConv()
+        mock_conversion = MagicMock()
+        mock_conversion.get_quote = AsyncMock()
+        mock_conversion.conversion = dummy_conv
+        monkeypatch.setattr(
+            "v4vapp_backend_v2.admin.routers.ledger_editor.CryptoConversion",
+            lambda **kwargs: mock_conversion,
+        )
+
+        entry, error = await _validate_and_build_entry(
+            self._valid_payload(group_id="very_long_group_id_12345")
+        )
+        assert error is None
+        assert entry is not None
+        assert len(entry.short_id) <= 10
+
+    @pytest.mark.asyncio
+    async def test_auto_group_id_uses_uuid(self, monkeypatch):
+        """Auto-generated group_id should contain uuid hex prefix."""
+        dummy_conv = CryptoConv()
+        mock_conversion = MagicMock()
+        mock_conversion.get_quote = AsyncMock()
+        mock_conversion.conversion = dummy_conv
+        monkeypatch.setattr(
+            "v4vapp_backend_v2.admin.routers.ledger_editor.CryptoConversion",
+            lambda **kwargs: mock_conversion,
+        )
+
+        entry, error = await _validate_and_build_entry(self._valid_payload())
+        assert error is None
+        assert entry is not None
+        # Format: {uuid_hex[:10]}_manual_{ledger_type}
+        parts = entry.group_id.split("_manual_")
+        assert len(parts) == 2
+        assert len(parts[0]) == 10  # uuid hex prefix
 
 
 # ===================================================================
@@ -566,3 +652,197 @@ class TestHelperFunctions:
                 assert "debit_account_type" in entry
                 assert "credit_account_type" in entry
                 assert "cust_id" in entry
+
+
+# ===================================================================
+# /api/create-batch
+# ===================================================================
+
+
+class TestCreateBatch:
+    def _valid_entry(self, **overrides):
+        entry = {
+            "debit": {
+                "account_type": "Asset",
+                "name": "External Lightning Payments",
+                "sub": "voltage",
+            },
+            "credit": {
+                "account_type": "Asset",
+                "name": "Exchange Holdings",
+                "sub": "binance_convert",
+            },
+            "amount": 5000,
+            "currency": "sats",
+            "ledger_type": LedgerType.EXCHANGE_TO_NODE.value,
+            "description": "Test batch entry",
+            "cust_id": "voltage",
+        }
+        entry.update(overrides)
+        return entry
+
+    def _mock_crypto(self, monkeypatch):
+        dummy_conv = CryptoConv()
+        mock_conversion = MagicMock()
+        mock_conversion.get_quote = AsyncMock()
+        mock_conversion.conversion = dummy_conv
+        monkeypatch.setattr(
+            "v4vapp_backend_v2.admin.routers.ledger_editor.CryptoConversion",
+            lambda **kwargs: mock_conversion,
+        )
+
+    @pytest.mark.asyncio
+    async def test_batch_empty_list(self):
+        resp = await create_batch(entries=[])
+        assert resp.status_code == 400
+        assert "No entries" in json.loads(resp.body)["error"]
+
+    @pytest.mark.asyncio
+    async def test_batch_all_valid(self, monkeypatch):
+        self._mock_crypto(monkeypatch)
+        monkeypatch.setattr(LedgerEntry, "save", AsyncMock(return_value=MagicMock()))
+
+        entries = [
+            self._valid_entry(ledger_type=LedgerType.EXCHANGE_TO_NODE.value),
+            self._valid_entry(
+                ledger_type=LedgerType.EXCHANGE_FEES.value,
+                debit={
+                    "account_type": "Expense",
+                    "name": "Withdrawal Fees Paid",
+                    "sub": "binance_convert",
+                },
+                amount=100,
+            ),
+        ]
+        resp = await create_batch(entries=entries)
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        assert body["status"] == "ok"
+        assert len(body["group_ids"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_batch_one_invalid_blocks_all(self, monkeypatch):
+        """If one entry has zero amount, NO entries should be saved."""
+        self._mock_crypto(monkeypatch)
+        save_mock = AsyncMock(return_value=MagicMock())
+        monkeypatch.setattr(LedgerEntry, "save", save_mock)
+
+        entries = [
+            self._valid_entry(amount=5000),  # valid
+            self._valid_entry(amount=0),  # invalid — zero amount
+        ]
+        resp = await create_batch(entries=entries)
+        assert resp.status_code == 400
+        body = json.loads(resp.body)
+        assert "Validation failed" in body["error"]
+        assert len(body["details"]) == 1
+        assert "Entry #2" in body["details"][0]
+        # Crucially: save was never called
+        save_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_batch_multiple_invalid(self, monkeypatch):
+        """Multiple invalid entries should all be reported."""
+        self._mock_crypto(monkeypatch)
+        save_mock = AsyncMock(return_value=MagicMock())
+        monkeypatch.setattr(LedgerEntry, "save", save_mock)
+
+        entries = [
+            self._valid_entry(amount=0),  # invalid
+            self._valid_entry(currency="FAKE_COIN"),  # invalid
+        ]
+        resp = await create_batch(entries=entries)
+        assert resp.status_code == 400
+        body = json.loads(resp.body)
+        assert len(body["details"]) == 2
+        save_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_batch_missing_account_name_blocks_all(self, monkeypatch):
+        self._mock_crypto(monkeypatch)
+        save_mock = AsyncMock(return_value=MagicMock())
+        monkeypatch.setattr(LedgerEntry, "save", save_mock)
+
+        entries = [
+            self._valid_entry(),
+            self._valid_entry(debit={"account_type": "Asset", "name": "", "sub": ""}),
+        ]
+        resp = await create_batch(entries=entries)
+        assert resp.status_code == 400
+        body = json.loads(resp.body)
+        assert "Validation failed" in body["error"]
+        save_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_batch_invalid_ledger_type_blocks_all(self, monkeypatch):
+        self._mock_crypto(monkeypatch)
+        save_mock = AsyncMock(return_value=MagicMock())
+        monkeypatch.setattr(LedgerEntry, "save", save_mock)
+
+        entries = [
+            self._valid_entry(),
+            self._valid_entry(ledger_type="TOTALLY_INVALID"),
+        ]
+        resp = await create_batch(entries=entries)
+        assert resp.status_code == 400
+        save_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_batch_shared_group_id_gets_unique_suffixes(self, monkeypatch):
+        self._mock_crypto(monkeypatch)
+        monkeypatch.setattr(LedgerEntry, "save", AsyncMock(return_value=MagicMock()))
+
+        entries = [
+            self._valid_entry(group_id="wd_001", ledger_type=LedgerType.EXCHANGE_TO_NODE.value),
+            self._valid_entry(
+                group_id="wd_001",
+                ledger_type=LedgerType.EXCHANGE_FEES.value,
+                debit={
+                    "account_type": "Expense",
+                    "name": "Withdrawal Fees Paid",
+                    "sub": "binance_convert",
+                },
+                amount=100,
+            ),
+        ]
+        resp = await create_batch(entries=entries)
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        ids = body["group_ids"]
+        assert ids[0] != ids[1]
+        assert "exc_to_n" in ids[0]
+        assert "exc_fee" in ids[1]
+
+    @pytest.mark.asyncio
+    async def test_batch_auto_group_id_shared_prefix(self, monkeypatch):
+        """When no group_id is supplied, all entries in a batch share the same uuid prefix."""
+        self._mock_crypto(monkeypatch)
+        monkeypatch.setattr(LedgerEntry, "save", AsyncMock(return_value=MagicMock()))
+
+        entries = [
+            self._valid_entry(ledger_type=LedgerType.EXCHANGE_TO_NODE.value),
+            self._valid_entry(
+                ledger_type=LedgerType.EXCHANGE_FEES.value,
+                debit={
+                    "account_type": "Expense",
+                    "name": "Withdrawal Fees Paid",
+                    "sub": "binance_convert",
+                },
+                amount=100,
+            ),
+        ]
+        # Remove any group_id from payloads so auto-generation kicks in
+        for e in entries:
+            e.pop("group_id", None)
+
+        resp = await create_batch(entries=entries)
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        ids = body["group_ids"]
+        assert len(ids) == 2
+        # Both should share the same uuid prefix (before _manual_)
+        prefix0 = ids[0].split("_manual_")[0]
+        prefix1 = ids[1].split("_manual_")[0]
+        assert prefix0 == prefix1
+        # But suffixes differ (different ledger types)
+        assert ids[0] != ids[1]
