@@ -90,7 +90,7 @@ def _build_editor_presets() -> List[Dict[str, Any]]:
             "icon": "⚡",
             "description": (
                 f"Move sats from Exchange Holdings ({exchange_sub}) "
-                f"to Treasury Lightning ({node_name}). "
+                f"to External Lightning Payments ({node_name}). "
                 f"Records withdrawal fee paid to {exchange_sub}."
             ),
             "entries": [
@@ -98,7 +98,7 @@ def _build_editor_presets() -> List[Dict[str, Any]]:
                     "ledger_type": LedgerType.EXCHANGE_TO_NODE.value,
                     "description": f"Transfer sats from {exchange_sub} to {node_name} node",
                     "debit_account_type": "Asset",
-                    "debit_name": "Treasury Lightning",
+                    "debit_name": "External Lightning Payments",
                     "debit_sub": node_name,
                     "credit_account_type": "Asset",
                     "credit_name": "Exchange Holdings",
