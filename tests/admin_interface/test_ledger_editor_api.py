@@ -551,11 +551,11 @@ class TestPresets:
     async def test_get_presets_returns_list(self, monkeypatch):
         # Patch config calls to avoid real config
         monkeypatch.setattr(
-            "v4vapp_backend_v2.admin.routers.ledger_editor._get_exchange_sub",
+            "v4vapp_backend_v2.admin.routers.ledger_edit_presets._get_exchange_sub",
             lambda: "binance_test",
         )
         monkeypatch.setattr(
-            "v4vapp_backend_v2.admin.routers.ledger_editor._get_node_name",
+            "v4vapp_backend_v2.admin.routers.ledger_edit_presets._get_node_name",
             lambda: "test_node",
         )
 
@@ -569,11 +569,11 @@ class TestPresets:
     @pytest.mark.asyncio
     async def test_presets_contain_cust_id(self, monkeypatch):
         monkeypatch.setattr(
-            "v4vapp_backend_v2.admin.routers.ledger_editor._get_exchange_sub",
+            "v4vapp_backend_v2.admin.routers.ledger_edit_presets._get_exchange_sub",
             lambda: "binance_test",
         )
         monkeypatch.setattr(
-            "v4vapp_backend_v2.admin.routers.ledger_editor._get_node_name",
+            "v4vapp_backend_v2.admin.routers.ledger_edit_presets._get_node_name",
             lambda: "test_node",
         )
 
@@ -590,11 +590,11 @@ class TestPresets:
     @pytest.mark.asyncio
     async def test_presets_use_config_names(self, monkeypatch):
         monkeypatch.setattr(
-            "v4vapp_backend_v2.admin.routers.ledger_editor._get_exchange_sub",
+            "v4vapp_backend_v2.admin.routers.ledger_edit_presets._get_exchange_sub",
             lambda: "my_exchange",
         )
         monkeypatch.setattr(
-            "v4vapp_backend_v2.admin.routers.ledger_editor._get_node_name",
+            "v4vapp_backend_v2.admin.routers.ledger_edit_presets._get_node_name",
             lambda: "my_node",
         )
 
@@ -632,11 +632,11 @@ class TestHelperFunctions:
 
     def test_build_editor_presets_structure(self, monkeypatch):
         monkeypatch.setattr(
-            "v4vapp_backend_v2.admin.routers.ledger_editor._get_exchange_sub",
+            "v4vapp_backend_v2.admin.routers.ledger_edit_presets._get_exchange_sub",
             lambda: "ex",
         )
         monkeypatch.setattr(
-            "v4vapp_backend_v2.admin.routers.ledger_editor._get_node_name",
+            "v4vapp_backend_v2.admin.routers.ledger_edit_presets._get_node_name",
             lambda: "nd",
         )
         presets = _build_editor_presets()
