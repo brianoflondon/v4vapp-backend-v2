@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 import pytest
 
-from v4vapp_backend_v2.magi.btc_balance import MagiBTCBalance, get_magi_btc_balance_by_account
+from v4vapp_backend_v2.magi.magi_balances import MagiBTCBalance, get_magi_btc_balance_by_account
 
 
 @pytest.mark.asyncio
@@ -71,7 +71,7 @@ async def test_get_btc_balance_by_account_fallback_to_second_endpoint(mocker):
     }
 
     mocker.patch(
-        "v4vapp_backend_v2.magi.btc_balance.MAGI_ENDPOINTS",
+        "v4vapp_backend_v2.magi.magi_balances.MAGI_ENDPOINTS",
         ["https://first.example/graphql", "https://second.example/graphql"],
     )
 

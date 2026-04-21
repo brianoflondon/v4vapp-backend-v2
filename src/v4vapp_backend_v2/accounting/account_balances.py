@@ -45,7 +45,7 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
-from v4vapp_backend_v2.magi.btc_balance import get_magi_btc_balance_by_account
+from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
