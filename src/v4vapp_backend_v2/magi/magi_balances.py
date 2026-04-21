@@ -18,7 +18,10 @@ MAGI_ENDPOINTS = [
     "http://legion-witness:8081/v1/graphql",
     "https://magi.v4v.app/hasura/v1/graphql",
     "https://vsc.techcoderx.com/hasura/v1/graphql",
+    "https://api.okinoko.io/hasura/v1/graphql",
 ]
+
+ICON = "🧙‍♂️"
 
 
 class MagiBTCBalanceError(Exception):
@@ -75,19 +78,28 @@ async def get_magi_btc_balance_by_account(
 
             balances = result.get("data", {}).get("btc_mapping_balances", [])
             if not balances:
+                logger.info(f"{ICON} No MAGI BTC balance {account_str} at {attempt_endpoint}")
                 return MagiBTCBalance(account=account_str, balance_sats=Decimal(0))
             balance_record = balances[0]
 
-            return MagiBTCBalance(
+            magi_balance = MagiBTCBalance(
                 account=balance_record.get("account", ""),
                 balance_sats=Decimal(balance_record.get("balance_sats", 0)),
             )
+            logger.info(
+                f"{ICON} MAGI BTC balance {account_str} {magi_balance.balance_sats:,.0f} from {attempt_endpoint}"
+            )
+            return magi_balance
         except (httpx.HTTPError, ValueError, RuntimeError) as exc:
-            logger.warning(f"Failed to fetch BTC balance from {attempt_endpoint}: {exc}")
+            logger.warning(
+                f"{ICON} Failed to fetch MAGI BTC balance from {attempt_endpoint}: {exc}"
+            )
             endpoint_errors.append(f"{attempt_endpoint}: {exc}")
             continue
 
-    error_message = "; ".join(endpoint_errors) if endpoint_errors else "Unknown error"
+    error_message = (
+        "; ".join(endpoint_errors) if endpoint_errors else "Unknown MAGI BTC balance error"
+    )
     return MagiBTCBalance(account=account_str, balance_sats=Decimal(0), error=error_message)
 
 
