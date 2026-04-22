@@ -167,10 +167,18 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
                 )
                 raise
         elif invoice.recv_currency in {Currency.SATS, Currency.MSATS}:
+            # This is where we need to divert #magi_sats
             logger.info(
                 f"Lightning to Keepsats deposit transfer for customer ID: {invoice.cust_id}",
                 extra={"notification": False},
             )
+            if invoice.is_magi_sats:
+                logger.info(
+                    f"Invoice {invoice.short_id} is marked as MAGI_SATS, treating as MAGI BTC balance update rather than a conversion. {invoice.log_str}",
+                    extra={"notification": False, **invoice.log_extra},
+                )
+                
+                # Stub.
             if invoice.cust_id == "v4vapp.sus":
                 logger.info(
                     f"Received Lightning invoice from v4vapp.sus account, no further action will be taken. {invoice.log_str}",
