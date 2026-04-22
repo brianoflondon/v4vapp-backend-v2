@@ -29,6 +29,10 @@ from v4vapp_backend_v2.process.lock_str_class import CustIDType, LockStr
 # Updated to separate the hive name at the start of the message
 LND_INVOICE_TAG = r"^\s*(\S+).*#v4vapp"
 
+# magi_sats_tag should search for #MAGI_SATS followed by #v4vapp anywhere in the memo no capture
+# #MAGI_SATS needs to be lower case in the regex.
+MAGI_SATS_TAG = r"#magi_sats(?:\s+(\d+))?.*#v4vapp"
+
 
 class InvoiceState(StrEnum):
     """
@@ -219,6 +223,9 @@ class Invoice(TrackedBaseModel):
     is_lndtohive: bool = Field(
         default=False, description="True if the invoice is a LND to Hive invoice"
     )
+    is_magi_sats: bool = Field(
+        default=False, description="True if the invoice has the #MAGI_SATS tag in the memo"
+    )
     cust_id: CustIDType | None = Field(
         default=None, description="Customer ID associated with the invoice"
     )
@@ -250,11 +257,16 @@ class Invoice(TrackedBaseModel):
             )
         # perform my check to see if this invoice can be paid to Hive
         if self.memo:
-            match = re.match(LND_INVOICE_TAG, self.memo.lower())
-            if match:
+            # This is where we will check for #MAGI_SATS which will override Hive or HBD
+            match_magi_sats = re.match(MAGI_SATS_TAG, self.memo.lower())
+            if match_magi_sats:
+                self.is_magi_sats = True
+
+            match_lndtohive = re.match(LND_INVOICE_TAG, self.memo.lower())
+            if match_lndtohive:
                 self.is_lndtohive = True
 
-        self.fill_cust_id()
+        self.fill_cust_id()     # is_lndtohive and cust_id are determined by the same logic so we can fill them together
         self.fill_custom_records()
 
     @override
