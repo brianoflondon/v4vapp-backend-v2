@@ -2,10 +2,10 @@ from decimal import Decimal
 from time import perf_counter
 
 import httpx
-from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
+from v4vapp_backend_v2.magi.magi_classes import ICON, MagiBTCBalance
 
 BTC_BALANCE_QUERY = """query BtcBalanceByAccount($account: String!) {
   btc_mapping_balances(where: { account: { _eq: $account } }) {
@@ -20,22 +20,6 @@ MAGI_ENDPOINTS = [
     "https://vsc.techcoderx.com/hasura/v1/graphql",
     "https://api.okinoko.io/hasura/v1/graphql",
 ]
-
-ICON = "🧙‍♂️"
-
-
-class MagiBTCBalanceError(Exception):
-    """Custom exception for errors related to fetching Magi BTC balance."""
-
-
-class MagiBTCBalance(BaseModel):
-    account: str
-    balance_sats: Decimal
-    error: str | None = None
-
-    @property
-    def balance_msats(self) -> Decimal:
-        return self.balance_sats * Decimal(1000)
 
 
 async def get_magi_btc_balance_by_account(

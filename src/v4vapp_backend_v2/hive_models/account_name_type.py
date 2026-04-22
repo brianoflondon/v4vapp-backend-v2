@@ -33,6 +33,12 @@ class AccName(str):
         return False
 
     @property
+    def is_contract(self) -> bool:
+        if self.startswith("contract:"):
+            return True
+        return False
+
+    @property
     def magi_prefix(self) -> str:
         if isinstance(self, AccName):
             raw_account = str(self)
@@ -53,6 +59,9 @@ class AccName(str):
 
         if AccName(raw_account).is_evm:
             return f"did:pkh:eip155:1:{raw_account.lower()}"
+
+        if AccName(raw_account).is_contract:
+            return f"contract:{raw_account[9:].lower()}"
 
         raise ValueError("Invalid account format, expected a Hive account name or EVM address")
 
