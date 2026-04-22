@@ -160,15 +160,22 @@ class LnurlProxyData(BaseModel):
 
 
 class LnurlResponseModel(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = {"populate_by_name": True}
 
-    def dict(self, **kwargs):
+    def model_dump(self, **kwargs):
         kwargs.setdefault("by_alias", True)
-        return super().model_validate(**kwargs)
+        return super().model_dump(**kwargs)
+
+    def model_dump_json(self, **kwargs):
+        kwargs.setdefault("by_alias", True)
+        return super().model_dump_json(**kwargs)
+
+    # Keep the old names for compatibility with any existing callers.
+    def dict(self, **kwargs):
+        return self.model_dump(**kwargs)
 
     def json(self, **kwargs):
-        kwargs.setdefault("by_alias", True)
-        return super().model_validate(**kwargs)
+        return self.model_dump_json(**kwargs)
 
     @property
     def ok(self) -> bool:
@@ -213,11 +220,13 @@ class LnurlCurrencyEnum(str, Enum):
         hive (str): The currency code for Hive.
         hbd (str): The currency code for HBD.
         sats (str): The currency code for sats.
+        magi_sats (str): The currency code for Magi sats.
     """
 
     hive = "hive"
     hbd = "hbd"
     sats = "sats"
+    magi_sats = "magi_sats"
 
 
 LnurlCurrency = Annotated[
@@ -230,7 +239,8 @@ def currency_pretty(v: LnurlCurrency) -> str:
         "hive": "Hive",
         "hbd": "HBD",
         "sats": "sats",
-    }.get(v, "")
+        "magi_sats": "Magi sats",
+    }.get(v.value, "")
 
 
 def currency_hashtag(v: LnurlCurrency) -> str:
@@ -238,7 +248,8 @@ def currency_hashtag(v: LnurlCurrency) -> str:
         "hive": "#HIVE",
         "hbd": "#HBD",
         "sats": "#SATS",
-    }.get(v, "")
+        "magi_sats": "#MAGI_SATS",
+    }.get(v.value, "")
 
 
 LightningNodeUri = Annotated[str, Field(description="The URI of the lightning node.")]
