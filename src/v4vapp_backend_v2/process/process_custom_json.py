@@ -252,7 +252,12 @@ async def custom_json_internal_transfer(
     message = ""
     fee_transfer = False
     fee_sats = custom_json.fee_memo
-    if fee_sats > 0 and keepsats_transfer.sats <= fee_sats and custom_json.to_account == server_id:
+    if (
+        fee_sats > 0
+        and keepsats_transfer.sats
+        and keepsats_transfer.sats <= fee_sats
+        and custom_json.to_account == server_id
+    ):
         fee_transfer = True
 
     net_msats, account_balance = await keepsats_balance(cust_id=keepsats_transfer.from_account)

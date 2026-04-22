@@ -69,16 +69,30 @@ def _log_rates_insert_done(t: asyncio.Task) -> None:
     except Exception as e:
         logger.warning(f"{ICON} Rates insert task failed: {e}", extra={"notification": False})
 
-
+#TODO: consider moving the currency to receive function into the invoice class
 def currency_to_receive(memo: str) -> Currency:
     """
     Detects the currency to receive based on the memo.
+    This function is vital for deciding how to process incoming payments.
+
+    Call hierarchy:
+        currency_to_receive
+        └── Invoice.recv_currency  (invoice_models.py)
+            └── process_lightning_receipt_stage_2  (process_invoice.py)
+                └── process_custom_json_func  (process_hive.py)
+                    └── process_hive_op  (process_hive.py)
+
     Args:
         memo (str): The memo to check.
     Returns:
         Currency: The detected currency, defaults to HIVE if not found.
     """
-    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
+    if (
+        not memo
+        or "#sats" in memo.lower()
+        or "#keepsats" in memo.lower()
+        or "#magi_sats" in memo.lower()
+    ):
         return Currency.SATS
     if "#hbd" in memo.lower():
         return Currency.HBD

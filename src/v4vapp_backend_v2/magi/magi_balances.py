@@ -76,7 +76,8 @@ async def get_magi_btc_balance_by_account(
             return magi_balance
         except (httpx.HTTPError, ValueError, RuntimeError) as exc:
             logger.warning(
-                f"{ICON} Failed to fetch MAGI BTC balance from {attempt_endpoint}: {exc}"
+                f"{ICON} Failed to fetch MAGI BTC balance from {attempt_endpoint}: {exc}",
+                extra={"notification": False},
             )
             endpoint_errors.append(f"{attempt_endpoint}: {exc}")
             continue
