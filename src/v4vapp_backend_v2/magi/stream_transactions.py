@@ -132,6 +132,8 @@ async def stream_magi_transfer_events(
                         or AccName(transfer.from_addr).magi_prefix in watch_accounts
                     ):
                         yield transfer
+                else:
+                    yield transfer
             # clean 'complete' — stop iterating
             return
 

@@ -257,3 +257,67 @@ async def test_stream_uses_default_endpoint(mocker):
 
     assert len(seen_urls) == 1
     assert seen_urls[0].startswith("ws")
+
+
+SAMPLE_EVENT_OTHER = {
+    "from_addr": "hive:carol",
+    "to_addr": "hive:dave",
+    "amount": "250",
+    "indexer_block_height": 1001,
+    "indexer_tx_hash": "def456",
+    "indexer_ts": "2026-04-22T11:00:00",
+    "indexer_id": 44,
+}
+
+
+@pytest.mark.asyncio
+async def test_stream_watch_accounts_filters_events(mocker):
+    """Only events involving a watched account are yielded; others are dropped."""
+
+    async def mock_connect_and_stream(ws_url: str, from_indexer_id: int):
+        # SAMPLE_EVENT: alice -> bob  (bob is watched)
+        yield MagiBTCTransferEvent(**SAMPLE_EVENT)
+        # SAMPLE_EVENT_OTHER: carol -> dave  (neither watched)
+        yield MagiBTCTransferEvent(**SAMPLE_EVENT_OTHER)
+        return
+
+    mocker.patch(
+        "v4vapp_backend_v2.magi.stream_transactions._connect_and_stream",
+        side_effect=mock_connect_and_stream,
+    )
+
+    events = []
+    async for event in stream_magi_transfer_events(
+        endpoint="https://example.com/graphql",
+        from_indexer_id=0,
+        watch_accounts=["hive:bob"],
+    ):
+        events.append(event)
+
+    assert len(events) == 1
+    assert events[0].indexer_id == 42  # only alice->bob passed through
+
+
+@pytest.mark.asyncio
+async def test_stream_watch_accounts_matches_from_addr(mocker):
+    """A watched account in from_addr also matches."""
+
+    async def mock_connect_and_stream(ws_url: str, from_indexer_id: int):
+        yield MagiBTCTransferEvent(**SAMPLE_EVENT)  # alice -> bob
+        yield MagiBTCTransferEvent(**SAMPLE_EVENT_2)  # alice -> bob (different id)
+        return
+
+    mocker.patch(
+        "v4vapp_backend_v2.magi.stream_transactions._connect_and_stream",
+        side_effect=mock_connect_and_stream,
+    )
+
+    events = []
+    async for event in stream_magi_transfer_events(
+        endpoint="https://example.com/graphql",
+        from_indexer_id=0,
+        watch_accounts=["hive:alice"],  # sender, not receiver
+    ):
+        events.append(event)
+
+    assert len(events) == 2  # both events have alice as sender
