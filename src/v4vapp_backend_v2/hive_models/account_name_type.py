@@ -6,6 +6,7 @@ from pydantic import AfterValidator
 
 
 class AccName(str):
+
     @property
     def link(self) -> str:
         # Replace this with your specific URL pattern (the "mussel")
@@ -40,6 +41,10 @@ class AccName(str):
 
     @property
     def magi_prefix(self) -> str:
+        """
+        Returns the account name in the format expected by MAGI, adding prefixes as needed.
+
+        """
         if isinstance(self, AccName):
             raw_account = str(self)
         else:
@@ -63,7 +68,7 @@ class AccName(str):
         if AccName(raw_account).is_contract:
             return f"contract:{raw_account[9:].lower()}"
 
-        raise ValueError("Invalid account format, expected a Hive account name or EVM address")
+        return raw_account  # fallback to original string if it doesn't match known patterns
 
 
 # Annotated type with validator to cast to HiveAccName
