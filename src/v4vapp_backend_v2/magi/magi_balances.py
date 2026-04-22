@@ -15,7 +15,7 @@ BTC_BALANCE_QUERY = """query BtcBalanceByAccount($account: String!) {
 }"""
 
 MAGI_ENDPOINTS = [
-    "http://legion-witness:8081/v1/graphql",
+    "http://legion-witness.tail400e5.ts.net:8081/v1/graphql",
     "https://magi-api.v4v.app/hasura/v1/graphql",
     "https://vsc.techcoderx.com/hasura/v1/graphql",
     "https://api.okinoko.io/hasura/v1/graphql",
