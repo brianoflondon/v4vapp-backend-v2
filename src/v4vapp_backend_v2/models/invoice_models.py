@@ -275,9 +275,9 @@ class Invoice(TrackedBaseModel):
     def __init__(self, lnrpc_invoice: lnrpc.Invoice | None = None, **data: Any) -> None:
         if lnrpc_invoice and isinstance(lnrpc_invoice, lnrpc.Invoice):
             data_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
-            invoice_dict = convert_datetime_fields(data_dict)
+            invoice_dict: dict[str, Any] = convert_datetime_fields(data_dict)
         else:
-            invoice_dict = convert_datetime_fields(data)
+            invoice_dict: dict[str, Any] = convert_datetime_fields(data)
 
         super().__init__(**invoice_dict)
 
@@ -297,7 +297,7 @@ class Invoice(TrackedBaseModel):
             if match_lndtohive:
                 self.is_lndtohive = True
 
-        self.fill_cust_id()     # is_lndtohive and cust_id are determined by the same logic so we can fill them together
+        self.fill_cust_id()  # is_lndtohive and cust_id are determined by the same logic so we can fill them together
         self.fill_custom_records()
 
     @override
@@ -460,7 +460,7 @@ class Invoice(TrackedBaseModel):
         elif self.htlcs and self.htlcs[0] and self.htlcs[0].custom_records:
             if value := self.htlcs[0].custom_records.get("818818", None):
                 try:
-                    extracted_value = b64_decode(value).lower()
+                    extracted_value = str(b64_decode(value)).lower()
                 except Exception as e:
                     logger.warning(f"Error decoding {value}: {e}", extra={"notification": False})
 
