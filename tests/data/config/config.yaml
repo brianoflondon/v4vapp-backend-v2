@@ -243,6 +243,7 @@ hive_config:
       role: funding
     fiction:
       role: exchange
+      exchange_adapter: binance
       alternate_names:
         - b-hot2
         - b-hot3

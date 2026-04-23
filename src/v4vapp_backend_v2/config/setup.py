@@ -416,6 +416,7 @@ class HiveAccountConfig(BaseConfig):
     hbd_trade_direction: HiveTradeDirection = HiveTradeDirection.both
     threshold_delta: str = ""  # When to trigger buy/sell action based on HBD balance
     auto_rebalance: HiveAutoRebalanceConfig = HiveAutoRebalanceConfig()
+    exchange_adapter: str = ""  # Which exchange adapter to use for this account, e.g. "binance", "magi-vsc"
 
     @property
     def keys(self) -> List[str]:
