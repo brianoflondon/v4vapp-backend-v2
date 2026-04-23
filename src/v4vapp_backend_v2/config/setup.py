@@ -25,7 +25,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.error_code_manager import ErrorCodeManager
 
 load_dotenv()
-MIN_CONFIG_VERSION = "0.4.3"
+MIN_CONFIG_VERSION = "0.4.4"
 logger = logging.getLogger("backend")  # __name__ is a common choice
 ICON = "⚙️"
 
@@ -326,6 +326,8 @@ class ExchangeProviderConfig(BaseConfig):
     exchange_mode: ExchangeMode = ExchangeMode.testnet
     testnet: ExchangeNetworkConfig = ExchangeNetworkConfig()
     mainnet: ExchangeNetworkConfig = ExchangeNetworkConfig()
+    hive_accounts: List[str] = []  # List of Hive account names associated with this exchange,
+    # first used for outbound transfers, others may be inbound
 
     @property
     def use_testnet(self) -> bool:
@@ -347,7 +349,7 @@ class ExchangeConfig(BaseConfig):
 
     default_exchange: str = "binance"
     binance: ExchangeProviderConfig = ExchangeProviderConfig()
-    # vsc_exchange will be added when needed
+    magi_vsc: ExchangeProviderConfig = ExchangeProviderConfig()
 
     def get_provider(self, name: str | None = None) -> ExchangeProviderConfig:
         """Get provider config by name, defaults to default_exchange."""
@@ -356,7 +358,26 @@ class ExchangeConfig(BaseConfig):
         attr_name = provider_name.replace("-", "_")
         if hasattr(self, attr_name):
             return getattr(self, attr_name)
+
         raise ValueError(f"Unknown exchange provider: {provider_name}")
+
+    def all_hive_exchange_accounts(self) -> List[str]:
+        """Get a list of all Hive accounts associated with any exchange."""
+        accounts = set()
+        for provider in self.__dict__.values():
+            if isinstance(provider, ExchangeProviderConfig):
+                accounts.update(provider.hive_accounts)
+        return list(accounts)
+
+    def get_provider_name_from_hive_account(self, hive_account_name: str) -> str:
+        """Given a Hive account name, return the associated exchange provider config if any."""
+        for provider_name, provider_config in self.__dict__.items():
+            if (
+                isinstance(provider_config, ExchangeProviderConfig)
+                and hive_account_name in provider_config.hive_accounts
+            ):
+                return provider_name
+        return ""
 
 
 class HiveRoles(StrEnum):
@@ -416,7 +437,6 @@ class HiveAccountConfig(BaseConfig):
     hbd_trade_direction: HiveTradeDirection = HiveTradeDirection.both
     threshold_delta: str = ""  # When to trigger buy/sell action based on HBD balance
     auto_rebalance: HiveAutoRebalanceConfig = HiveAutoRebalanceConfig()
-    exchange_adapter: str = ""  # Which exchange adapter to use for this account, e.g. "binance", "magi-vsc"
 
     @property
     def keys(self) -> List[str]:
@@ -478,9 +498,9 @@ class HiveConfig(BaseConfig):
         for name, acc in self.hive_accs.items():
             acc.name = name
         if self.custom_json_prefix:
-            self.custom_json_ids_tracked.extend(
-                [f"{self.custom_json_prefix}{suffix}" for suffix in ["_transfer", "_notification"]]
-            )
+            self.custom_json_ids_tracked.extend([
+                f"{self.custom_json_prefix}{suffix}" for suffix in ["_transfer", "_notification"]
+            ])
         filter_duplicates = set(self.custom_json_ids_tracked)
         self.custom_json_ids_tracked = list(filter_duplicates)
         # TODO: #306 We can check that the auto_rebalance account (if set) is an exchange account

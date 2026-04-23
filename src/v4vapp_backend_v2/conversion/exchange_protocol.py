@@ -389,7 +389,7 @@ class BaseExchangeAdapter(ABC):
             return False, f"Error checking order: {e}"
 
 
-def get_exchange_adapter(exchange_name: str | None = None) -> BaseExchangeAdapter:
+def get_exchange_adapter(provider_name: str | None = None) -> BaseExchangeAdapter:
     """
     Factory function to get the appropriate exchange adapter based on configuration.
 
@@ -397,7 +397,7 @@ def get_exchange_adapter(exchange_name: str | None = None) -> BaseExchangeAdapte
     to use and whether to use testnet or mainnet.
 
     Args:
-        exchange_name: Optional exchange name override. If not provided,
+        provider_name: Optional provider name override. If not provided,
                       uses default_exchange from config.
 
     Returns:
@@ -413,7 +413,7 @@ def get_exchange_adapter(exchange_name: str | None = None) -> BaseExchangeAdapte
     exchange_config = config.config.exchange_config
 
     # Use provided name or default from config
-    provider_name = exchange_name or exchange_config.default_exchange
+    provider_name = provider_name or exchange_config.default_exchange
 
     # Get the provider config
     provider = exchange_config.get_provider(provider_name)
@@ -424,11 +424,13 @@ def get_exchange_adapter(exchange_name: str | None = None) -> BaseExchangeAdapte
         from v4vapp_backend_v2.conversion.binance_swap_adapter import BinanceSwapAdapter
 
         return BinanceSwapAdapter(testnet=testnet)
+
     elif provider_name == "binance" and testnet:
         from v4vapp_backend_v2.conversion.binance_adapter import BinanceAdapter
 
         return BinanceAdapter(testnet=testnet)
-    elif provider_name in ("magi-vsc", "magi_swap", "magiswap"):
+
+    elif provider_name == "magi_vsc":
         from v4vapp_backend_v2.conversion.magi_adapter import MagiAdapter
 
         return MagiAdapter(testnet=testnet)

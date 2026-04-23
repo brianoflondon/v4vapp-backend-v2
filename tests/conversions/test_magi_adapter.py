@@ -14,6 +14,11 @@ class FakeMagiBalance:
         return self.balance_sats * Decimal("1000")
 
 
+class FakeInternalConfig:
+    def __init__(self, server_id: str):
+        self.server_id = server_id
+
+
 @pytest.mark.parametrize(
     "asset, expected",
     [
@@ -33,8 +38,12 @@ def test_magi_adapter_get_balance_returns_expected(asset: str, expected: Decimal
         "v4vapp_backend_v2.conversion.magi_adapter.get_magi_btc_balance_by_account",
         fake_get_balance,
     )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.conversion.magi_adapter.InternalConfig",
+        lambda: FakeInternalConfig("v4vapp.vsc"),
+    )
 
-    adapter = MagiAdapter(server_name="v4vapp.vsc")
+    adapter = MagiAdapter()
 
     assert adapter.get_balance(asset) == expected
 
@@ -49,17 +58,43 @@ def test_magi_adapter_get_balance_invalid_asset_raises(monkeypatch):
         "v4vapp_backend_v2.conversion.magi_adapter.get_magi_btc_balance_by_account",
         fake_get_balance,
     )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.conversion.magi_adapter.InternalConfig",
+        lambda: FakeInternalConfig("v4vapp.vsc"),
+    )
 
-    adapter = MagiAdapter(server_name="v4vapp.vsc")
+    adapter = MagiAdapter()
 
     with pytest.raises(ExchangeConnectionError, match="only supports BTC/SATS/MSATS"):
         adapter.get_balance("HIVE")
 
 
+@pytest.mark.asyncio
+async def test_magi_adapter_get_balance_uses_thread_executor_when_loop_running(monkeypatch):
+    """MagiAdapter should still fetch MAGI balance when called from an active event loop."""
+
+    async def fake_get_balance(account: str):
+        assert account == "v4vapp.vsc"
+        return FakeMagiBalance()
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.conversion.magi_adapter.get_magi_btc_balance_by_account",
+        fake_get_balance,
+    )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.conversion.magi_adapter.InternalConfig",
+        lambda: FakeInternalConfig("v4vapp.vsc"),
+    )
+
+    adapter = MagiAdapter()
+
+    assert adapter.get_balance("BTC") == Decimal("1.23456789")
+
+
 def test_magi_adapter_market_methods_raise_not_implemented():
     """MagiAdapter market operations should be stubbed until implemented."""
 
-    adapter = MagiAdapter(server_name="v4vapp.vsc")
+    adapter = MagiAdapter()
 
     with pytest.raises(NotImplementedError, match="market_sell is not implemented"):
         adapter.market_sell("HIVE", "BTC", Decimal("1"))

@@ -14,34 +14,32 @@ from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
 class MagiAdapter(BaseExchangeAdapter):
     """Exchange adapter for MAGI BTC balances backed by Hive account state."""
 
-    def __init__(self, server_name: str | None = None, testnet: bool = False):
+    def __init__(self, testnet: bool = False):
         super().__init__(testnet=testnet)
-        self.server_name = server_name
 
     @property
     def exchange_name(self) -> str:
         return "MagiSwap"
 
-    def _resolve_server_account(self) -> str:
-        if self.server_name:
-            return self.server_name
-
-        config = InternalConfig()
-        server_account = config.config.server_account
-        if server_account is None:
-            raise ExchangeConnectionError(
-                "No server Hive account configured for MagiSwap balance lookup"
-            )
-        return server_account.name
-
     def get_min_order_requirements(self, base_asset: str, quote_asset: str) -> ExchangeMinimums:
         raise ExchangeConnectionError("MagiSwap order requirements are not implemented")
 
     def get_balance(self, asset: str) -> Decimal:
-        server_name = self._resolve_server_account()
+        server_name = InternalConfig().server_id
 
         try:
-            magi_balance = asyncio.run(get_magi_btc_balance_by_account(server_name))
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                magi_balance = asyncio.run(get_magi_btc_balance_by_account(server_name))
+            else:
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run, get_magi_btc_balance_by_account(server_name)
+                    )
+                    magi_balance = future.result(timeout=30)
         except Exception as exc:
             raise ExchangeConnectionError(
                 f"Failed to fetch MagiSwap balance for {server_name}: {exc}"
