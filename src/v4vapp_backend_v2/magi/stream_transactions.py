@@ -160,7 +160,7 @@ async def stream_magi_transfer_events(
 
 
 async def main_test():
-    endpoint = MAGI_ENDPOINTS[1]  # https://magi-api.v4v.app/hasura/v1/graphql
+    endpoint = MAGI_ENDPOINTS[0]  # https://magi-api.v4v.app/hasura/v1/graphql
     print(f"Streaming transfer events from {endpoint}")
     count = 0
     try:
