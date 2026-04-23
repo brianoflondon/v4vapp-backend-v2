@@ -551,6 +551,20 @@ class Overwatch:
     stall_log_interval: ClassVar[timedelta] = DEFAULT_STALL_LOG_INTERVAL
     _loaded_from_redis: ClassVar[bool] = False
 
+    # ---- completion report deduplication ----
+    # Maps trigger_group_id -> list of completed FlowInstances waiting to be reported.
+    # A single delayed task fires per group and only logs the flow with the most stages.
+    _pending_completion_reports: ClassVar[dict[str, list[FlowInstance]]] = {}
+    _completion_report_tasks: ClassVar[dict[str, asyncio.Task]] = {}
+    COMPLETION_REPORT_DELAY: ClassVar[float] = 5.0  # seconds
+
+    # ---- completion report deduplication ----
+    # Maps trigger_group_id -> list of completed FlowInstances waiting to be reported.
+    # A single delayed task fires per group and only logs the flow with the most stages.
+    _pending_completion_reports: ClassVar[dict[str, list[FlowInstance]]] = {}
+    _completion_report_tasks: ClassVar[dict[str, asyncio.Task]] = {}
+    COMPLETION_REPORT_DELAY: ClassVar[float] = 5.0  # seconds
+
     def __new__(cls) -> Overwatch:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -726,13 +740,11 @@ class Overwatch:
             )
         if loaded:
             # compute status breakdown for reporting
-            act = len(
-                [
-                    f
-                    for f in self.flow_instances
-                    if f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
-                ]
-            )
+            act = len([
+                f
+                for f in self.flow_instances
+                if f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
+            ])
             stl = len([f for f in self.flow_instances if f.status == FlowStatus.STALLED])
             comp = len([f for f in self.flow_instances if f.status == FlowStatus.COMPLETED])
             logger.info(
@@ -885,8 +897,7 @@ class Overwatch:
                         flow.superset_winner_name = None
                 if flow.is_complete:
                     newly_completed.append(flow)
-                    message = f"{ICON} ✅ {Fore.WHITE}{flow.log_str} {Fore.RESET}"
-                    asyncio.create_task(self._delay_log(flow, message))
+                    self._enqueue_completion_report(flow)
                 await self._persist_flow(flow)
         for completed in newly_completed:
             await self._resolve_candidates(completed)
@@ -933,6 +944,46 @@ class Overwatch:
                 "notification": notification,
                 "notification_str": f"{ICON} ✅ {flow.notification_str}",
                 **flow.log_extra,
+            },
+        )
+
+    def _enqueue_completion_report(self, flow: FlowInstance) -> None:
+        """Add *flow* to the pending report group and (re-)arm the delayed task.
+
+        A single :py:meth:`_fire_completion_report` task fires per
+        ``trigger_group_id`` after ``COMPLETION_REPORT_DELAY`` seconds.  If
+        the task is already scheduled we cancel and re-schedule it so the
+        window is always measured from the *last* completion, giving all
+        sibling flows a chance to finish before we pick the winner.
+        """
+        gid = flow.trigger_group_id
+        self._pending_completion_reports.setdefault(gid, []).append(flow)
+        # Cancel any already-scheduled task and replace it.
+        existing = self._completion_report_tasks.get(gid)
+        if existing and not existing.done():
+            existing.cancel()
+        self._completion_report_tasks[gid] = asyncio.create_task(self._fire_completion_report(gid))
+
+    async def _fire_completion_report(self, trigger_group_id: str) -> None:
+        """After a delay, log only the best-completed flow for *trigger_group_id*.
+
+        "Best" is the flow with the most required stages (highest total count),
+        which corresponds to the most specific / successful flow variant.
+        """
+        await asyncio.sleep(self.COMPLETION_REPORT_DELAY)
+        flows = self._pending_completion_reports.pop(trigger_group_id, [])
+        self._completion_report_tasks.pop(trigger_group_id, None)
+        if not flows:
+            return
+        # Pick the flow with the highest required-stage count as the winner.
+        best = max(flows, key=lambda f: len(f.flow_definition.required_stages))
+        message = f"{ICON} ✅ {Fore.WHITE}{best.log_str} {Fore.RESET}"
+        logger.info(
+            message,
+            extra={
+                "notification": True,
+                "notification_str": f"{ICON} ✅ {best.notification_str}",
+                **best.log_extra,
             },
         )
 
