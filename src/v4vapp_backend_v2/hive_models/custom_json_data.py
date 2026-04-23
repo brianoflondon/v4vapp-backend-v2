@@ -10,7 +10,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snak
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
-from v4vapp_backend_v2.hive_models.vsc_json_data import VSCActions, VSCTransfer
+from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall
 
 """
 This module defines a custom Pydantic model `KeepsatsTransfer` and related utilities for handling
@@ -275,7 +275,7 @@ class KeepsatsTransfer(BaseModel):
         return answer
 
 
-CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]
+CustomJsonData = Union[Any, KeepsatsTransfer, VSCCall]
 
 # This dictionary maps custom JSON operation IDs to their corresponding Pydantic models.
 # Whilst the v4vapp_dev ones could be generated from the custom_json_prefix, we hardcode them here for better clarity
@@ -288,16 +288,17 @@ CUSTOM_JSON_IDS: Dict[str, Type[BaseModel]] = {
     "v4vapp_notification": KeepsatsTransfer,
     "v4vapp_staging_transfer": KeepsatsTransfer,
     "v4vapp_staging_notification": KeepsatsTransfer,
-    "vsc.transfer": VSCTransfer,
-    "vsc.withdraw": VSCTransfer,
-    "vsc.withdraw_hbd": VSCTransfer,
-    "vsc.deposit": VSCTransfer,
-    "vsc.deposit_hbd": VSCTransfer,
-    "vsc.stake": VSCTransfer,
-    "vsc.stake_hbd": VSCTransfer,
-    "vsc.unstake": VSCTransfer,
-    "vsc.unstake_hbd": VSCTransfer,
-    "vsc.actions": VSCActions,
+    # "vsc.transfer": VSCTransfer,
+    # "vsc.withdraw": VSCTransfer,
+    # "vsc.withdraw_hbd": VSCTransfer,
+    # "vsc.deposit": VSCTransfer,
+    # "vsc.deposit_hbd": VSCTransfer,
+    # "vsc.stake": VSCTransfer,
+    # "vsc.stake_hbd": VSCTransfer,
+    # "vsc.unstake": VSCTransfer,
+    # "vsc.unstake_hbd": VSCTransfer,
+    # "vsc.actions": VSCActions,
+    "vsc.call": VSCCall,
 }
 
 
