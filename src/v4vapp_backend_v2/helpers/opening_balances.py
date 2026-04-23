@@ -168,20 +168,21 @@ async def reset_exchange_opening_balance(
         retrieval fails.  This function is intended for operational/testing purposes.
     """
     try:
-        binance_adaptor = get_exchange_adapter()
+        default_exchange_adapter = get_exchange_adapter()
     except Exception as e:
         logger.error(f"Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
         return
 
-    exchange_sub = binance_adaptor.exchange_name
+    exchange_sub = default_exchange_adapter.exchange_name
 
-    btc_balance = binance_adaptor.get_balance("BTC")
+    btc_balance = default_exchange_adapter.get_balance("BTC")
     sats_balance = btc_balance * Decimal(1e8)  # Convert BTC to satoshis
-    hive_balance = binance_adaptor.get_balance("HIVE")
+    hive_balance = default_exchange_adapter.get_balance("HIVE")
+    hbd_balance = default_exchange_adapter.get_balance("HBD")
 
-    if sats_balance == 0 and hive_balance == 0:
+    if sats_balance == 0 and hive_balance == 0 and hbd_balance == 0:
         logger.warning(
-            f"No SATS or HIVE balance found in Binance balances for {exchange_sub}. "
+            f"No SATS, HIVE, or HBD balance found in Binance balances for {exchange_sub}. "
             "Cannot reset opening balance."
         )
         return
@@ -199,6 +200,8 @@ async def reset_exchange_opening_balance(
         asset_entries.append(("sats", Currency.MSATS, Decimal(msats_balance)))
     if hive_balance > 0:
         asset_entries.append(("hive", Currency.HIVE, hive_balance))
+    if hbd_balance > 0:
+        asset_entries.append(("hbd", Currency.HBD, hbd_balance))
 
     # Snapshot the account balance ONCE before the loop so that entries written
     # during the first iteration don't cause subsequent iterations to see
@@ -206,14 +209,20 @@ async def reset_exchange_opening_balance(
     initial_ledger_balance = await one_account_balance(check_account, use_cache=False)
     initial_msats = initial_ledger_balance.msats
     initial_hive = initial_ledger_balance.hive
+    initial_hbd = initial_ledger_balance.hbd
     initial_has_transactions = initial_ledger_balance.has_transactions
 
     for asset_label, currency, balance_value in asset_entries:
         # Determine existing balance in the relevant unit from the pre-loop snapshot
         if currency == Currency.MSATS:
             existing_balance = initial_msats
-        else:
+        elif currency == Currency.HIVE:
             existing_balance = initial_hive
+        elif currency == Currency.HBD:
+            existing_balance = initial_hbd
+        else:
+            logger.warning(f"Unsupported currency {currency} for {asset_label}, skipping.")
+            continue
 
         # check if match within 0.1% to avoid creating adjustment entries for tiny differences due to conversion or timing
         if (

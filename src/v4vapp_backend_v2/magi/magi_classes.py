@@ -34,5 +34,16 @@ class MagiBTCTransferEvent(BaseModel):
     def log_str(self) -> str:
         return (
             f"{ICON} Transfer {self.from_addr:>18} -> {self.to_addr:>18} "
-            f"{self.amount:,.0f} sats (indexer_id={self.indexer_id})"
+            f"{self.amount:,.0f} sats (indexer_id={self.indexer_id}) {self.link or ''}"
         )
+
+    @property
+    def link(self) -> str:
+        """
+        Generates a link to the Hive block explorer for the transaction ID.
+
+        Returns:
+            str: A formatted string containing the link to the Hive block explorer.
+        """
+        url = f"https://hivehub.dev/tx/{self.indexer_tx_hash}"
+        return url

@@ -52,6 +52,8 @@ class MagiAdapter(BaseExchangeAdapter):
             return magi_balance.balance_sats
         if asset_key == "MSATS":
             return magi_balance.balance_msats
+        if asset_key in ["HIVE", "HBD"]:
+            return Decimal(0)
 
         raise ExchangeConnectionError(
             f"MagiSwap only supports BTC/SATS/MSATS balance lookup, not {asset}"

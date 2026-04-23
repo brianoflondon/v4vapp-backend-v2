@@ -174,4 +174,9 @@ async def main_test():
 
 
 if __name__ == "__main__":
-    asyncio.run(main_test())
+    try:
+        asyncio.run(main_test())
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        print("Stream stopped by user.")
+    except Exception as e:
+        logger.error(f"Error in MAGI transfer stream: {e}")

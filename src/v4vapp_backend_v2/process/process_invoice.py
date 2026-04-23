@@ -15,6 +15,7 @@ from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
+from v4vapp_backend_v2.process.process_magi import forward_magi_sats
 
 
 async def process_lightning_receipt(
@@ -177,8 +178,9 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
                     f"Invoice {invoice.short_id} is marked as MAGI_SATS, treating as MAGI BTC balance update rather than a conversion. {invoice.log_str}",
                     extra={"notification": False, **invoice.log_extra},
                 )
-                
-                # Stub.
+                await forward_magi_sats(invoice=invoice)
+                return
+
             if invoice.cust_id == "v4vapp.sus":
                 logger.info(
                     f"Received Lightning invoice from v4vapp.sus account, no further action will be taken. {invoice.log_str}",
