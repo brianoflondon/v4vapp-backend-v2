@@ -12,7 +12,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, LoggerFunction, logger
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse, currency_to_receive
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.models.custom_records import (
@@ -32,6 +32,37 @@ LND_INVOICE_TAG = r"^\s*(\S+).*#v4vapp"
 # magi_sats_tag should search for #MAGI_SATS followed by #v4vapp anywhere in the memo no capture
 # #MAGI_SATS needs to be lower case in the regex.
 MAGI_SATS_TAG = r"#magi_sats(?:\s+(\d+))?.*#v4vapp"
+
+
+def currency_to_receive(memo: str) -> Currency:
+    """
+    Detects the currency to receive based on the memo.
+    This function is vital for deciding how to process incoming payments.
+
+    Call hierarchy:
+        currency_to_receive
+        └── Invoice.recv_currency  (invoice_models.py)
+            └── process_lightning_receipt_stage_2  (process_invoice.py)
+                └── process_custom_json_func  (process_hive.py)
+                    └── process_hive_op  (process_hive.py)
+
+    Args:
+        memo (str): The memo to check.
+    Returns:
+        Currency: The detected currency, defaults to HIVE if not found.
+    """
+    if (
+        not memo
+        or "#sats" in memo.lower()
+        or "#keepsats" in memo.lower()
+        or "#magi_sats" in memo.lower()
+    ):
+        return Currency.SATS
+    if "#hbd" in memo.lower():
+        return Currency.HBD
+    if "#hive" in memo.lower():
+        return Currency.HIVE
+    return Currency.HIVE  # Default to HIVE if no specific currency is detected
 
 
 class InvoiceState(StrEnum):
