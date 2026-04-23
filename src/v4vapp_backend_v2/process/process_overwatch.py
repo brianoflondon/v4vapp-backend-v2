@@ -52,6 +52,22 @@ _COMPLETED_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 _LATE_EVENT_WINDOW = timedelta(seconds=120)  # only absorb late events into recent completions
 
 
+def _swallow_task_exception(task: asyncio.Task) -> None:  # type: ignore[type-arg]
+    """Done-callback that consumes exceptions from fire-and-forget tasks.
+
+    Prevents "Task exception was never retrieved" log noise for tasks that
+    are cancelled (normal timer-reset path) or raise an unexpected error.
+    CancelledError is not an exception on a cancelled task, so we only log
+    genuine unexpected errors at DEBUG level.
+    """
+    if not task.cancelled():
+        exc = task.exception()
+        if exc is not None:
+            from v4vapp_backend_v2.config.setup import logger as _logger
+
+            _logger.debug(f"{ICON} completion-report task raised: {exc!r}")
+
+
 # ---------------------------------------------------------------------------
 # Flow status enum
 # ---------------------------------------------------------------------------
@@ -551,6 +567,13 @@ class Overwatch:
     stall_log_interval: ClassVar[timedelta] = DEFAULT_STALL_LOG_INTERVAL
     _loaded_from_redis: ClassVar[bool] = False
 
+    # ---- completion report deduplication ----
+    # Maps trigger_group_id -> list of completed FlowInstances waiting to be reported.
+    # A single delayed task fires per group and only logs the flow with the most stages.
+    _pending_completion_reports: ClassVar[dict[str, list[FlowInstance]]] = {}
+    _completion_report_tasks: ClassVar[dict[str, asyncio.Task]] = {}
+    COMPLETION_REPORT_DELAY: ClassVar[float] = 5.0  # seconds
+
     def __new__(cls) -> Overwatch:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -726,13 +749,11 @@ class Overwatch:
             )
         if loaded:
             # compute status breakdown for reporting
-            act = len(
-                [
-                    f
-                    for f in self.flow_instances
-                    if f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
-                ]
-            )
+            act = len([
+                f
+                for f in self.flow_instances
+                if f.status not in (FlowStatus.COMPLETED, FlowStatus.FAILED)
+            ])
             stl = len([f for f in self.flow_instances if f.status == FlowStatus.STALLED])
             comp = len([f for f in self.flow_instances if f.status == FlowStatus.COMPLETED])
             logger.info(
@@ -885,8 +906,7 @@ class Overwatch:
                         flow.superset_winner_name = None
                 if flow.is_complete:
                     newly_completed.append(flow)
-                    message = f"{ICON} ✅ {Fore.WHITE}{flow.log_str} {Fore.RESET}"
-                    asyncio.create_task(self._delay_log(flow, message))
+                    self._enqueue_completion_report(flow)
                 await self._persist_flow(flow)
         for completed in newly_completed:
             await self._resolve_candidates(completed)
@@ -933,6 +953,56 @@ class Overwatch:
                 "notification": notification,
                 "notification_str": f"{ICON} ✅ {flow.notification_str}",
                 **flow.log_extra,
+            },
+        )
+
+    def _enqueue_completion_report(self, flow: FlowInstance) -> None:
+        """Add *flow* to the pending report group and (re-)arm the delayed task.
+
+        A single :py:meth:`_fire_completion_report` task fires per
+        ``trigger_group_id`` after ``COMPLETION_REPORT_DELAY`` seconds.  If
+        the task is already scheduled we cancel and re-schedule it so the
+        window is always measured from the *last* completion, giving all
+        sibling flows a chance to finish before we pick the winner.
+        """
+        gid = flow.trigger_group_id
+        self._pending_completion_reports.setdefault(gid, []).append(flow)
+        # Cancel any already-scheduled task and replace it.
+        existing = self._completion_report_tasks.get(gid)
+        if existing and not existing.done():
+            existing.cancel()
+        task = asyncio.create_task(self._fire_completion_report(gid))
+        # Attach a callback so that any unexpected exception is consumed
+        # rather than surfacing as "Task exception was never retrieved".
+        task.add_done_callback(_swallow_task_exception)
+        self._completion_report_tasks[gid] = task
+
+    async def _fire_completion_report(self, trigger_group_id: str) -> None:
+        """After a delay, log only the best-completed flow for *trigger_group_id*.
+
+        "Best" is the flow with the most required stages (highest total count),
+        which corresponds to the most specific / successful flow variant.
+
+        Cancellation is the normal path when a later sibling completion
+        resets the timer — it is caught here and exits silently.
+        """
+        try:
+            await asyncio.sleep(self.COMPLETION_REPORT_DELAY)
+        except asyncio.CancelledError:
+            return  # superseded by a newer enqueue — exit cleanly
+        flows = self._pending_completion_reports.pop(trigger_group_id, [])
+        self._completion_report_tasks.pop(trigger_group_id, None)
+        if not flows:
+            return
+        # Pick the flow with the highest required-stage count as the winner.
+        best = max(flows, key=lambda f: len(f.flow_definition.required_stages))
+        message = f"{ICON} ✅ {Fore.WHITE}{best.log_str} {Fore.RESET}"
+        logger.info(
+            message,
+            extra={
+                "notification": True,
+                "notification_str": f"{ICON} ✅ {best.notification_str}",
+                **best.log_extra,
             },
         )
 
@@ -1382,6 +1452,11 @@ class Overwatch:
         cls.stall_log_interval = DEFAULT_STALL_LOG_INTERVAL
         cls._loaded_from_redis = False
         cls._instance = None
+        # Cancel any in-flight completion report tasks
+        for task in cls._completion_report_tasks.values():
+            task.cancel()
+        cls._pending_completion_reports.clear()
+        cls._completion_report_tasks.clear()
 
     async def reset_redis(self) -> None:
         """Clear all overwatch data from Redis."""

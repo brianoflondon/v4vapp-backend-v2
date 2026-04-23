@@ -1027,3 +1027,183 @@ class TestFlowDataIntegrity:
         assert trigger["conv"]["msats_fee"] == 68753.0
         # Change is 0.001 HIVE
         assert trigger["change_amount"]["amount"] == "1"  # 0.001 HIVE
+
+
+# ---------------------------------------------------------------------------
+# Tests: completion report deduplication (_enqueue_completion_report /
+#         _fire_completion_report)
+# ---------------------------------------------------------------------------
+
+
+def _make_flow(
+    name: str,
+    trigger_op_type: str,
+    num_required_stages: int,
+    trigger_group_id: str = "grp1",
+    cust_id: str = "testcust",
+) -> FlowInstance:
+    """Create a minimal completed FlowInstance with *num_required_stages* required stages."""
+    stages = [
+        FlowStage(name=f"stage_{i}", event_type="op", op_type=trigger_op_type, required=True)
+        for i in range(num_required_stages)
+    ]
+    defn = FlowDefinition(name=name, trigger_op_type=trigger_op_type, stages=stages)
+    inst = FlowInstance(
+        flow_definition=defn,
+        trigger_group_id=trigger_group_id,
+        trigger_short_id=trigger_group_id[:14],
+        cust_id=cust_id,
+        status=FlowStatus.COMPLETED,
+    )
+    return inst
+
+
+@pytest.mark.asyncio
+class TestCompletionReportDeduplication:
+    """Tests for the deferred, best-winner completion reporting."""
+
+    async def test_single_completion_is_reported(self, caplog):
+        """When only one flow completes for a trigger group, it must be reported."""
+        Overwatch.reset()
+        Overwatch.COMPLETION_REPORT_DELAY = 0.05  # speed up for test
+        ow = Overwatch()
+        flow = _make_flow("flow_a", "transfer", num_required_stages=5)
+
+        caplog.set_level("INFO")
+        ow._enqueue_completion_report(flow)
+
+        # Wait for the delay + a small buffer
+        import asyncio
+
+        await asyncio.sleep(0.2)
+
+        completion_logs = [r for r in caplog.records if "✅" in r.message]
+        assert len(completion_logs) == 1
+        assert completion_logs[0].__dict__["flow"]["flow_type"] == "flow_a"
+
+    async def test_best_flow_wins_not_the_simpler_one(self, caplog):
+        """With two competing completions the one with more stages must be logged."""
+        Overwatch.reset()
+        Overwatch.COMPLETION_REPORT_DELAY = 0.05
+        ow = Overwatch()
+
+        simple = _make_flow("simple_flow", "transfer", num_required_stages=4)
+        detailed = _make_flow("detailed_flow", "transfer", num_required_stages=14)
+
+        caplog.set_level("INFO")
+        ow._enqueue_completion_report(simple)
+        ow._enqueue_completion_report(detailed)
+
+        import asyncio
+
+        await asyncio.sleep(0.2)
+
+        completion_logs = [r for r in caplog.records if "✅" in r.message]
+        assert len(completion_logs) == 1
+        assert completion_logs[0].__dict__["flow"]["flow_type"] == "detailed_flow"
+
+    async def test_failure_flow_not_reported_when_success_has_more_stages(self, caplog):
+        """Mirrors the real-world case: hive_to_keepsats (14 stages) should
+        suppress hive_transfer_failure (4 stages) that completes at the same time."""
+        Overwatch.reset()
+        Overwatch.COMPLETION_REPORT_DELAY = 0.05
+        ow = Overwatch()
+
+        failure = _make_flow("hive_transfer_failure", "transfer", num_required_stages=4)
+        success = _make_flow("hive_to_keepsats", "transfer", num_required_stages=14)
+
+        caplog.set_level("INFO")
+        ow._enqueue_completion_report(failure)
+        ow._enqueue_completion_report(success)
+
+        import asyncio
+
+        await asyncio.sleep(0.2)
+
+        completion_logs = [r for r in caplog.records if "✅" in r.message]
+        assert len(completion_logs) == 1
+        assert completion_logs[0].__dict__["flow"]["flow_type"] == "hive_to_keepsats"
+
+    async def test_timer_resets_on_second_completion(self, caplog):
+        """If a second flow completes shortly after the first, the timer must
+        restart so both are considered before a winner is picked."""
+        Overwatch.reset()
+        Overwatch.COMPLETION_REPORT_DELAY = 0.15
+        ow = Overwatch()
+
+        import asyncio
+
+        simple = _make_flow("flow_small", "transfer", num_required_stages=2)
+        big = _make_flow("flow_big", "transfer", num_required_stages=10)
+
+        caplog.set_level("INFO")
+        ow._enqueue_completion_report(simple)
+        # Enqueue the bigger flow before the first timer fires
+        await asyncio.sleep(0.05)
+        ow._enqueue_completion_report(big)
+
+        # Wait for the reset timer to expire
+        await asyncio.sleep(0.3)
+
+        completion_logs = [r for r in caplog.records if "✅" in r.message]
+        assert len(completion_logs) == 1
+        assert completion_logs[0].__dict__["flow"]["flow_type"] == "flow_big"
+
+    async def test_separate_trigger_groups_reported_independently(self, caplog):
+        """Flows from different trigger groups must each produce their own report."""
+        Overwatch.reset()
+        Overwatch.COMPLETION_REPORT_DELAY = 0.05
+        ow = Overwatch()
+
+        flow_a = _make_flow("flow_a", "transfer", num_required_stages=3, trigger_group_id="grp_A")
+        flow_b = _make_flow("flow_b", "transfer", num_required_stages=3, trigger_group_id="grp_B")
+
+        caplog.set_level("INFO")
+        ow._enqueue_completion_report(flow_a)
+        ow._enqueue_completion_report(flow_b)
+
+        import asyncio
+
+        await asyncio.sleep(0.2)
+
+        completion_logs = [r for r in caplog.records if "✅" in r.message]
+        assert len(completion_logs) == 2
+        reported_types = {r.__dict__["flow"]["flow_type"] for r in completion_logs}
+        assert "flow_a" in reported_types
+        assert "flow_b" in reported_types
+
+    async def test_reset_cancels_pending_report_tasks(self):
+        """After Overwatch.reset() no pending tasks or queued flows remain."""
+        Overwatch.reset()
+        Overwatch.COMPLETION_REPORT_DELAY = 10.0  # long enough to not fire during test
+        ow = Overwatch()
+
+        flow = _make_flow("some_flow", "transfer", num_required_stages=5)
+        ow._enqueue_completion_report(flow)
+
+        # Task should be scheduled
+        assert len(ow._pending_completion_reports) == 1
+        assert len(ow._completion_report_tasks) == 1
+
+        Overwatch.reset()
+
+        assert len(Overwatch._pending_completion_reports) == 0
+        assert len(Overwatch._completion_report_tasks) == 0
+
+    async def test_notification_extra_is_set_on_report(self, caplog):
+        """The completion log record must carry notification=True."""
+        Overwatch.reset()
+        Overwatch.COMPLETION_REPORT_DELAY = 0.05
+        ow = Overwatch()
+
+        flow = _make_flow("notify_flow", "transfer", num_required_stages=3)
+        caplog.set_level("INFO")
+        ow._enqueue_completion_report(flow)
+
+        import asyncio
+
+        await asyncio.sleep(0.2)
+
+        completion_logs = [r for r in caplog.records if "✅" in r.message]
+        assert len(completion_logs) == 1
+        assert completion_logs[0].__dict__.get("notification") is True
