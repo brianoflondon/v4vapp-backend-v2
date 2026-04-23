@@ -428,6 +428,10 @@ def get_exchange_adapter(exchange_name: str | None = None) -> BaseExchangeAdapte
         from v4vapp_backend_v2.conversion.binance_adapter import BinanceAdapter
 
         return BinanceAdapter(testnet=testnet)
+    elif provider_name in ("magi-vsc", "magi_swap", "magiswap"):
+        from v4vapp_backend_v2.conversion.magi_adapter import MagiAdapter
+
+        return MagiAdapter(testnet=testnet)
 
     # Future exchanges can be added here:
     # elif provider_name == "vsc-exchange":
