@@ -1,4 +1,4 @@
-"""Tests for stream_transactions.py — covers handshake, streaming, reconnection."""
+"""Tests for stream_magi.py — covers handshake, streaming, reconnection."""
 
 import json
 from decimal import Decimal
@@ -6,9 +6,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import websockets.exceptions
+from mongomock_motor import AsyncMongoMockClient
 
-from v4vapp_backend_v2.magi.stream_transactions import (
-    MagiBTCTransferEvent,
+from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.magi.magi_classes import DB_MAGI_BTC_COLLECTION, MagiBTCTransferEvent
+from v4vapp_backend_v2.magi.stream_magi import (
     _connect_and_stream,
     _http_to_ws,
     stream_magi_transfer_events,
@@ -119,7 +121,7 @@ async def test_connect_and_stream_simple():
         stream_messages=[_next_msg([SAMPLE_EVENT, SAMPLE_EVENT_2]), _complete_msg()],
     )
 
-    with patch("v4vapp_backend_v2.magi.stream_transactions.ws_connect", return_value=ws):
+    with patch("v4vapp_backend_v2.magi.stream_magi.ws_connect", return_value=ws):
         events = [e async for e in _connect_and_stream("wss://example.com/graphql", 0)]
 
     assert len(events) == 2
@@ -135,7 +137,7 @@ async def test_connect_and_stream_ping_before_ack():
         stream_messages=[_next_msg([SAMPLE_EVENT]), _complete_msg()],
     )
 
-    with patch("v4vapp_backend_v2.magi.stream_transactions.ws_connect", return_value=ws):
+    with patch("v4vapp_backend_v2.magi.stream_magi.ws_connect", return_value=ws):
         events = [e async for e in _connect_and_stream("wss://example.com/graphql", 0)]
 
     assert len(events) == 1
@@ -151,7 +153,7 @@ async def test_connect_and_stream_graphql_error():
         stream_messages=[_error_msg("permission denied")],
     )
 
-    with patch("v4vapp_backend_v2.magi.stream_transactions.ws_connect", return_value=ws):
+    with patch("v4vapp_backend_v2.magi.stream_magi.ws_connect", return_value=ws):
         with pytest.raises(RuntimeError, match="GraphQL error"):
             async for _ in _connect_and_stream("wss://example.com/graphql", 0):
                 pass
@@ -165,7 +167,7 @@ async def test_connect_and_stream_ping_during_stream():
         stream_messages=[_ping_msg(), _next_msg([SAMPLE_EVENT]), _complete_msg()],
     )
 
-    with patch("v4vapp_backend_v2.magi.stream_transactions.ws_connect", return_value=ws):
+    with patch("v4vapp_backend_v2.magi.stream_magi.ws_connect", return_value=ws):
         events = [e async for e in _connect_and_stream("wss://example.com/graphql", 0)]
 
     assert len(events) == 1
@@ -195,7 +197,7 @@ async def test_stream_reconnects_on_disconnect(mocker):
             return
 
     mocker.patch(
-        "v4vapp_backend_v2.magi.stream_transactions._connect_and_stream",
+        "v4vapp_backend_v2.magi.stream_magi._connect_and_stream",
         side_effect=mock_connect_and_stream,
     )
     mocker.patch("asyncio.sleep", new_callable=AsyncMock)
@@ -223,7 +225,7 @@ async def test_stream_raises_after_max_reconnects(mocker):
         yield  # make it an async generator
 
     mocker.patch(
-        "v4vapp_backend_v2.magi.stream_transactions._connect_and_stream",
+        "v4vapp_backend_v2.magi.stream_magi._connect_and_stream",
         side_effect=mock_connect_and_stream,
     )
     mocker.patch("asyncio.sleep", new_callable=AsyncMock)
@@ -248,7 +250,7 @@ async def test_stream_uses_default_endpoint(mocker):
         yield  # async generator
 
     mocker.patch(
-        "v4vapp_backend_v2.magi.stream_transactions._connect_and_stream",
+        "v4vapp_backend_v2.magi.stream_magi._connect_and_stream",
         side_effect=mock_connect_and_stream,
     )
 
@@ -282,7 +284,7 @@ async def test_stream_watch_accounts_filters_events(mocker):
         return
 
     mocker.patch(
-        "v4vapp_backend_v2.magi.stream_transactions._connect_and_stream",
+        "v4vapp_backend_v2.magi.stream_magi._connect_and_stream",
         side_effect=mock_connect_and_stream,
     )
 
@@ -308,7 +310,7 @@ async def test_stream_watch_accounts_matches_from_addr(mocker):
         return
 
     mocker.patch(
-        "v4vapp_backend_v2.magi.stream_transactions._connect_and_stream",
+        "v4vapp_backend_v2.magi.stream_magi._connect_and_stream",
         side_effect=mock_connect_and_stream,
     )
 
@@ -321,3 +323,135 @@ async def test_stream_watch_accounts_matches_from_addr(mocker):
         events.append(event)
 
     assert len(events) == 2  # both events have alice as sender
+
+
+# ---------------------------------------------------------------------------
+# MagiBTCTransferEvent TrackedBaseModel integration
+# ---------------------------------------------------------------------------
+
+
+def test_transfer_event_collection_name():
+    event = MagiBTCTransferEvent(**SAMPLE_EVENT)
+    assert event.collection_name == DB_MAGI_BTC_COLLECTION
+
+
+def test_transfer_event_op_in_trx_no_suffix():
+    """indexer_tx_hash with no suffix → op_in_trx = 1."""
+    event = MagiBTCTransferEvent(**SAMPLE_EVENT)  # hash = "abc123"
+    assert event.op_in_trx == 1
+
+
+def test_transfer_event_op_in_trx_suffix_zero():
+    """Suffix -0 (first of several ops in same tx) → op_in_trx = 1."""
+    event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": "abc123-0"})
+    assert event.op_in_trx == 1
+
+
+def test_transfer_event_op_in_trx_suffix_one():
+    """Suffix -1 → op_in_trx = 2."""
+    event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": "abc123-1"})
+    assert event.op_in_trx == 2
+
+
+def test_transfer_event_group_id():
+    """group_id follows the OpBase pattern: block_height_txhash_op_in_trx_real."""
+    event = MagiBTCTransferEvent(**SAMPLE_EVENT)  # hash = "abc123", height = 1000
+    expected = f"{SAMPLE_EVENT['indexer_block_height']}_abc123_1_real"
+    assert event.group_id == expected
+    assert event.group_id_p == expected
+
+
+def test_transfer_event_group_id_with_suffix():
+    """group_id strips -N from tx hash and reflects correct op_in_trx."""
+    event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": "abc123-1"})
+    expected = f"{SAMPLE_EVENT['indexer_block_height']}_abc123_2_real"
+    assert event.group_id == expected
+    assert event.group_id_p == expected
+
+
+def test_transfer_event_group_id_query():
+    event = MagiBTCTransferEvent(**SAMPLE_EVENT)
+    assert event.group_id_query == {"indexer_id": SAMPLE_EVENT["indexer_id"]}
+
+
+def test_transfer_event_tracked_base_fields():
+    """TrackedBaseModel extra fields are present with None defaults."""
+    event = MagiBTCTransferEvent(**SAMPLE_EVENT)
+    assert event.replies is None
+    assert event.conv is None
+    assert event.fee_conv is None
+
+
+def test_transfer_event_link_strips_suffix():
+    """link property strips the trailing -<n> from indexer_tx_hash."""
+    event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": "abc123-1"})
+    assert event.link == "https://hivehub.dev/tx/abc123"
+
+
+def test_transfer_event_link_no_suffix():
+    """link property works when no suffix is present."""
+    event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": "abc123"})
+    assert event.link == "https://hivehub.dev/tx/abc123"
+
+
+# ---------------------------------------------------------------------------
+# MagiBTCTransferEvent.save() — uses mongomock
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_transfer_event_save_and_retrieve(mocker):
+    """save() upserts the event into magi_btc; the document can be retrieved."""
+    mock_client = AsyncMongoMockClient()
+    mock_db = mock_client["test_db"]
+    mocker.patch.object(InternalConfig, "db", mock_db)
+
+    event = MagiBTCTransferEvent(**SAMPLE_EVENT)
+    await event.save()
+
+    doc = await mock_db[DB_MAGI_BTC_COLLECTION].find_one({
+        "indexer_id": SAMPLE_EVENT["indexer_id"]
+    })
+    assert doc is not None
+    assert doc["indexer_id"] == SAMPLE_EVENT["indexer_id"]
+    # amount is stored as float (convert_decimals_for_mongodb converts Decimal → float)
+    assert float(doc["amount"]) == float(SAMPLE_EVENT["amount"])
+
+
+@pytest.mark.asyncio
+async def test_transfer_event_save_upsert(mocker):
+    """Second save with updated amount overwrites the existing document."""
+    mock_client = AsyncMongoMockClient()
+    mock_db = mock_client["test_db"]
+    mocker.patch.object(InternalConfig, "db", mock_db)
+
+    event = MagiBTCTransferEvent(**SAMPLE_EVENT)
+    await event.save()
+
+    updated = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "amount": "9999"})
+    await updated.save()
+
+    # Only one document should exist
+    count = await mock_db[DB_MAGI_BTC_COLLECTION].count_documents({
+        "indexer_id": SAMPLE_EVENT["indexer_id"]
+    })
+    assert count == 1
+
+    doc = await mock_db[DB_MAGI_BTC_COLLECTION].find_one({
+        "indexer_id": SAMPLE_EVENT["indexer_id"]
+    })
+    assert float(doc["amount"]) == 9999.0
+
+
+@pytest.mark.asyncio
+async def test_transfer_event_save_multiple_ids(mocker):
+    """Different indexer_ids produce separate documents."""
+    mock_client = AsyncMongoMockClient()
+    mock_db = mock_client["test_db"]
+    mocker.patch.object(InternalConfig, "db", mock_db)
+
+    for raw in [SAMPLE_EVENT, SAMPLE_EVENT_2]:
+        await MagiBTCTransferEvent(**raw).save()
+
+    count = await mock_db[DB_MAGI_BTC_COLLECTION].count_documents({})
+    assert count == 2

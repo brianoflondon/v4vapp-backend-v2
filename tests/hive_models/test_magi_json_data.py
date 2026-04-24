@@ -1,5 +1,5 @@
 """
-Tests for magi_json_data models (VSCCall / VSCCallPayload)
+Tests for magi_json_data models (VSCCall / VSCCallPayload / VSCSwapPayload / VSCIntent)
 and their integration with op_custom_json (id: vsc.call).
 """
 
@@ -11,35 +11,81 @@ import pytest
 from pydantic import ValidationError
 
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
-from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
+from v4vapp_backend_v2.hive_models.magi_json_data import (
+    VSCCall,
+    VSCCallPayload,
+    VSCIntent,
+    VSCSwapPayload,
+)
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 
 # ---------------------------------------------------------------------------
 # Fixtures / shared data
 # ---------------------------------------------------------------------------
 
-# The exact JSON string as it arrives from the blockchain
+# ── Record 1: transfer with memo (payload is dict with hive: prefixes) ─────
 VSC_CALL_JSON_STR = (
-    '{"net_id":"vsc-mainnet","caller":"hive:devser.v4vapp",'
-    '"contract_id":"vsc1BdrQ6EtbQ64rq2PkPd21x4MaLnVRcJj85d",'
-    '"action":"transfer","payload":{"amount":"2500","to":"hive:v4vapp-test"},'
-    '"rc_limit":1000}'
+    '{   "net_id": "vsc-mainnet",   "caller": "hive:v4vapp-test",'
+    '   "contract_id": "vsc1BdrQ6EtbQ64rq2PkPd21x4MaLnVRcJj85d",'
+    '   "action": "transfer",'
+    '   "payload": {     "amount": "25",     "to": "hive:devser.v4vapp",'
+    '     "memo": "brianoflondon@walletofsatoshi.com #v4vapp"   },'
+    '   "rc_limit": 1000 }'
 )
-
-# Same data as a Python dict (already deserialized)
 VSC_CALL_DICT = json.loads(VSC_CALL_JSON_STR)
 
-# A full custom_json Hive operation envelope for vsc.call
+# ── Record 2: execute/swap – payload is a JSON string, has intents ──────────
+_SWAP_PAYLOAD_STR = (
+    '{"type":"swap","version":"1.0.0","asset_in":"HIVE","asset_out":"BTC",'
+    '"amount_in":"26772","min_amount_out":"2041",'
+    '"recipient":"bc1qskmt62sh6ej2tl4ak9wqpr69z7e50yexp2jna9",'
+    '"destination_chain":"BTC"}'
+)
+VSC_EXECUTE_DICT = {
+    "net_id": "vsc-mainnet",
+    "caller": "hive:zphrs",
+    "contract_id": "vsc1Brvi4YZHLkocYNAFd7Gf1JpsPjzNnv4i45",
+    "action": "execute",
+    "payload": _SWAP_PAYLOAD_STR,
+    "rc_limit": 10000,
+    "intents": [{"type": "transfer.allow", "args": {"limit": "26.772", "token": "hive"}}],
+}
+
+# ── Record 5: already-processed transfer (no hive: prefix, json is a dict) ──
+VSC_PROCESSED_DICT = {
+    "net_id": "vsc-mainnet",
+    "caller": "v4vapp-test",
+    "contract_id": "vsc1BdrQ6EtbQ64rq2PkPd21x4MaLnVRcJj85d",
+    "action": "transfer",
+    "payload": {"amount": "25", "to": "devser.v4vapp"},
+    "rc_limit": 1000,
+}
+
+# A full custom_json Hive operation envelope for vsc.call (transfer with memo)
 VSC_CALL_OP = {
     "_id": "aabbccdd11223344aabbccdd11223344aabbccdd",
-    "block_num": 99000001,
+    "block_num": 105775911,
     "id": "vsc.call",
     "json": VSC_CALL_JSON_STR,
-    "timestamp": datetime(2026, 4, 23, 10, 0, 0, tzinfo=timezone.utc),
-    "required_auths": ["devser.v4vapp"],
+    "timestamp": datetime(2026, 4, 23, 15, 58, 15, tzinfo=timezone.utc),
+    "required_auths": ["v4vapp-test"],
     "required_posting_auths": [],
-    "trx_id": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-    "trx_num": 1,
+    "trx_id": "353e79e7f20b99ad0dce288943dd6cbd658424af",
+    "trx_num": 17,
+    "type": "custom_json",
+}
+
+# Envelope for the execute/swap operation
+VSC_EXECUTE_OP = {
+    "_id": "bbccddee22334455bbccddee22334455bbccddee",
+    "block_num": 105777312,
+    "id": "vsc.call",
+    "json": json.dumps(VSC_EXECUTE_DICT),
+    "timestamp": datetime(2026, 4, 23, 17, 8, 27, tzinfo=timezone.utc),
+    "required_auths": ["zphrs"],
+    "required_posting_auths": [],
+    "trx_id": "3790dce308f05023511eb63cde9afb097eb23bde",
+    "trx_num": 20,
     "type": "custom_json",
 }
 
@@ -77,56 +123,205 @@ def test_vsc_call_payload_without_hive_prefix():
     assert isinstance(payload.to_account, AccName)
 
 
+def test_vsc_call_payload_with_memo():
+    """payload.memo is captured when present."""
+    payload = VSCCallPayload.model_validate({
+        "amount": "25",
+        "to": "hive:devser.v4vapp",
+        "memo": "brianoflondon@walletofsatoshi.com #v4vapp",
+    })
+    assert payload.memo == "brianoflondon@walletofsatoshi.com #v4vapp"
+
+
+def test_vsc_call_payload_memo_defaults_empty():
+    """memo defaults to empty string when absent."""
+    payload = VSCCallPayload.model_validate({"amount": "25", "to": "alice"})
+    assert payload.memo == ""
+
+
 # ---------------------------------------------------------------------------
-# VSCCall unit tests
+# VSCSwapPayload unit tests
 # ---------------------------------------------------------------------------
 
 
-def test_vsc_call_from_string():
-    """VSCCall can be built directly from the raw JSON string payload."""
+def test_vsc_swap_payload_from_dict():
+    """VSCSwapPayload parses the decoded swap dict correctly."""
+    raw = json.loads(_SWAP_PAYLOAD_STR)
+    swap = VSCSwapPayload.model_validate(raw)
+    assert swap.type == "swap"
+    assert swap.asset_in == "HIVE"
+    assert swap.asset_out == "BTC"
+    assert swap.amount_in == "26772"
+    assert swap.min_amount_out == "2041"
+    assert swap.destination_chain == "BTC"
+
+
+def test_vsc_swap_payload_hive_to_hive():
+    """VSCSwapPayload handles HBD→HIVE swaps (recipient is a Hive address)."""
+    raw = {
+        "type": "swap",
+        "version": "1.0.0",
+        "asset_in": "HBD",
+        "asset_out": "HIVE",
+        "amount_in": "625",
+        "min_amount_out": "10187",
+        "recipient": "hive:zphrs",
+    }
+    swap = VSCSwapPayload.model_validate(raw)
+    assert swap.asset_in == "HBD"
+    assert swap.recipient == "hive:zphrs"
+
+
+# ---------------------------------------------------------------------------
+# VSCIntent unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_vsc_intent_parses():
+    intent = VSCIntent.model_validate({
+        "type": "transfer.allow",
+        "args": {"limit": "26.772", "token": "hive"},
+    })
+    assert intent.type == "transfer.allow"
+    assert intent.args.limit == "26.772"
+    assert intent.args.token == "hive"
+
+
+# ---------------------------------------------------------------------------
+# VSCCall – transfer (record 1)
+# ---------------------------------------------------------------------------
+
+
+def test_vsc_call_transfer_basic():
+    """VSCCall built from a transfer dict with hive: prefix on caller and to."""
     call = VSCCall.model_validate(VSC_CALL_DICT)
     assert call.net_id == "vsc-mainnet"
-    assert call.caller == "devser.v4vapp"
-    assert isinstance(call.caller, AccName)
-    assert call.contract_id == "vsc1BdrQ6EtbQ64rq2PkPd21x4MaLnVRcJj85d"
     assert call.action == "transfer"
     assert call.rc_limit == 1000
+    assert isinstance(call.payload, VSCCallPayload)
 
 
-def test_vsc_call_caller_hive_prefix_stripped():
-    """The 'hive:' prefix in caller is stripped during validation."""
+def test_vsc_call_transfer_caller_stripped():
     call = VSCCall.model_validate(VSC_CALL_DICT)
+    assert call.caller == "v4vapp-test"
     assert not str(call.caller).startswith("hive:")
-    assert call.caller == "devser.v4vapp"
 
 
-def test_vsc_call_from_account_property():
-    """from_account property returns caller as AccName."""
+def test_vsc_call_transfer_from_account():
     call = VSCCall.model_validate(VSC_CALL_DICT)
-    assert call.from_account == AccName("devser.v4vapp")
+    assert call.from_account == AccName("v4vapp-test")
 
 
-def test_vsc_call_to_account_property():
-    """to_account property returns payload.to_account as AccName."""
+def test_vsc_call_transfer_to_account():
     call = VSCCall.model_validate(VSC_CALL_DICT)
-    assert call.to_account == AccName("v4vapp-test")
+    assert call.to_account == AccName("devser.v4vapp")
 
 
-def test_vsc_call_amount_property():
-    """amount property returns the payload amount string."""
+def test_vsc_call_transfer_amount():
     call = VSCCall.model_validate(VSC_CALL_DICT)
-    assert call.amount == "2500"
+    assert call.amount == "25"
 
 
-def test_vsc_call_log_str():
-    """log_str contains key fields."""
+def test_vsc_call_transfer_memo():
+    call = VSCCall.model_validate(VSC_CALL_DICT)
+    assert "walletofsatoshi" in call.memo
+
+
+def test_vsc_call_transfer_log_str():
     call = VSCCall.model_validate(VSC_CALL_DICT)
     log = call.log_str
-    assert "devser.v4vapp" in log
-    assert "vsc1BdrQ6EtbQ64rq2PkPd21x4MaLnVRcJj85d" in log
-    assert "transfer" in log
-    assert "2500" in log
     assert "v4vapp-test" in log
+    assert "devser.v4vapp" in log
+    assert "25" in log
+    assert "walletofsatoshi" in log
+
+
+def test_vsc_call_no_intents_on_transfer():
+    call = VSCCall.model_validate(VSC_CALL_DICT)
+    assert call.intents == []
+
+
+# ---------------------------------------------------------------------------
+# VSCCall – execute/swap (records 2–4)
+# ---------------------------------------------------------------------------
+
+
+def test_vsc_call_execute_payload_is_swap():
+    """Payload JSON string is decoded into VSCSwapPayload."""
+    call = VSCCall.model_validate(VSC_EXECUTE_DICT)
+    assert isinstance(call.payload, VSCSwapPayload)
+
+
+def test_vsc_call_execute_swap_fields():
+    call = VSCCall.model_validate(VSC_EXECUTE_DICT)
+    assert call.payload.asset_in == "HIVE"
+    assert call.payload.asset_out == "BTC"
+    assert call.payload.amount_in == "26772"
+
+
+def test_vsc_call_execute_amount_uses_amount_in():
+    """amount property returns amount_in for swap payloads."""
+    call = VSCCall.model_validate(VSC_EXECUTE_DICT)
+    assert call.amount == "26772"
+
+
+def test_vsc_call_execute_to_account_empty():
+    """to_account returns empty AccName for execute payloads."""
+    call = VSCCall.model_validate(VSC_EXECUTE_DICT)
+    assert call.to_account == AccName("")
+
+
+def test_vsc_call_execute_memo_empty():
+    call = VSCCall.model_validate(VSC_EXECUTE_DICT)
+    assert call.memo == ""
+
+
+def test_vsc_call_execute_intents():
+    """intents are parsed correctly."""
+    call = VSCCall.model_validate(VSC_EXECUTE_DICT)
+    assert len(call.intents) == 1
+    assert call.intents[0].type == "transfer.allow"
+    assert call.intents[0].args.limit == "26.772"
+    assert call.intents[0].args.token == "hive"
+
+
+def test_vsc_call_execute_log_str():
+    call = VSCCall.model_validate(VSC_EXECUTE_DICT)
+    log = call.log_str
+    assert "zphrs" in log
+    assert "HIVE" in log
+    assert "BTC" in log
+
+
+# ---------------------------------------------------------------------------
+# VSCCall – already-processed (record 5, no hive: prefix)
+# ---------------------------------------------------------------------------
+
+
+def test_vsc_call_processed_no_prefix():
+    """Accepts caller and to without hive: prefix (already stripped by earlier processing)."""
+    call = VSCCall.model_validate(VSC_PROCESSED_DICT)
+    assert call.caller == "v4vapp-test"
+    assert call.from_account == AccName("v4vapp-test")
+    assert call.to_account == AccName("devser.v4vapp")
+    assert call.amount == "25"
+
+
+# ---------------------------------------------------------------------------
+# VSCCall – error cases
+# ---------------------------------------------------------------------------
+
+
+def test_vsc_call_missing_caller_raises():
+    bad = {k: v for k, v in VSC_CALL_DICT.items() if k != "caller"}
+    with pytest.raises(ValidationError):
+        VSCCall.model_validate(bad)
+
+
+def test_vsc_call_missing_payload_raises():
+    bad = {k: v for k, v in VSC_CALL_DICT.items() if k != "payload"}
+    with pytest.raises(ValidationError):
+        VSCCall.model_validate(bad)
 
 
 def test_vsc_call_notification_str_equals_log_str():
@@ -136,22 +331,7 @@ def test_vsc_call_notification_str_equals_log_str():
 
 def test_vsc_call_log_extra():
     call = VSCCall.model_validate(VSC_CALL_DICT)
-    extra = call.log_extra
-    assert "vsc_call" in extra
-
-
-def test_vsc_call_missing_caller_raises():
-    """Omitting required 'caller' field raises a ValidationError."""
-    bad = {k: v for k, v in VSC_CALL_DICT.items() if k != "caller"}
-    with pytest.raises(ValidationError):
-        VSCCall.model_validate(bad)
-
-
-def test_vsc_call_missing_payload_raises():
-    """Omitting required 'payload' field raises a ValidationError."""
-    bad = {k: v for k, v in VSC_CALL_DICT.items() if k != "payload"}
-    with pytest.raises(ValidationError):
-        VSCCall.model_validate(bad)
+    assert "vsc_call" in call.log_extra
 
 
 # ---------------------------------------------------------------------------
@@ -159,50 +339,50 @@ def test_vsc_call_missing_payload_raises():
 # ---------------------------------------------------------------------------
 
 
-def test_custom_json_vsc_call_detected():
+def test_custom_json_vsc_call_transfer_detected():
     """CustomJson with id='vsc.call' parses json_data into a VSCCall instance."""
     custom_json = CustomJson.model_validate(VSC_CALL_OP)
     assert isinstance(custom_json.json_data, VSCCall)
+    assert isinstance(custom_json.json_data.payload, VSCCallPayload)
 
 
-def test_custom_json_vsc_call_fields():
-    """Fields surfaced through CustomJson properties are correct."""
+def test_custom_json_vsc_call_transfer_fields():
     custom_json = CustomJson.model_validate(VSC_CALL_OP)
-    assert custom_json.from_account == "devser.v4vapp"
-    assert custom_json.to_account == "v4vapp-test"
+    assert custom_json.from_account == "v4vapp-test"
+    assert custom_json.to_account == "devser.v4vapp"
     assert custom_json.cj_id == "vsc.call"
 
 
-def test_custom_json_vsc_call_log_str():
-    """log_str delegates to VSCCall.log_str and appends link + short_id."""
+def test_custom_json_vsc_call_transfer_memo():
+    custom_json = CustomJson.model_validate(VSC_CALL_OP)
+    assert "walletofsatoshi" in custom_json.memo
+
+
+def test_custom_json_vsc_call_execute_detected():
+    """CustomJson with execute/swap op deserialises to VSCCall with VSCSwapPayload."""
+    custom_json = CustomJson.model_validate(VSC_EXECUTE_OP)
+    assert isinstance(custom_json.json_data, VSCCall)
+    assert isinstance(custom_json.json_data.payload, VSCSwapPayload)
+
+
+def test_custom_json_vsc_call_execute_intents():
+    custom_json = CustomJson.model_validate(VSC_EXECUTE_OP)
+    assert len(custom_json.json_data.intents) == 1
+    assert custom_json.json_data.intents[0].type == "transfer.allow"
+
+
+def test_custom_json_vsc_call_log_str_transfer():
     custom_json = CustomJson.model_validate(VSC_CALL_OP)
     log = custom_json.log_str
+    assert "v4vapp-test" in log
     assert "devser.v4vapp" in log
-    assert "transfer" in log
 
 
-def test_custom_json_vsc_call_notification_str():
-    """notification_str delegates to VSCCall.notification_str and appends markdown link."""
-    custom_json = CustomJson.model_validate(VSC_CALL_OP)
-    notif = custom_json.notification_str
-    assert "devser.v4vapp" in notif
-
-
-def test_custom_json_vsc_call_json_str_input():
-    """json field as a raw JSON string is deserialised properly."""
-    op = VSC_CALL_OP.copy()
-    op["json"] = VSC_CALL_JSON_STR  # ensure string form
-    custom_json = CustomJson.model_validate(op)
-    assert isinstance(custom_json.json_data, VSCCall)
-    assert custom_json.json_data.amount == "2500"
-
-
-def test_custom_json_vsc_call_json_dict_input():
-    """json field as a pre-parsed dict is also handled correctly."""
-    op = VSC_CALL_OP.copy()
-    op["json"] = VSC_CALL_DICT  # dict form
-    custom_json = CustomJson.model_validate(op)
-    assert isinstance(custom_json.json_data, VSCCall)
+def test_custom_json_vsc_call_log_str_execute():
+    custom_json = CustomJson.model_validate(VSC_EXECUTE_OP)
+    log = custom_json.log_str
+    assert "zphrs" in log
+    assert "HIVE" in log
 
 
 def test_custom_json_unknown_id_not_vsc_call():
@@ -211,3 +391,11 @@ def test_custom_json_unknown_id_not_vsc_call():
     op["id"] = "some.unknown.id"
     custom_json = CustomJson.model_validate(op)
     assert not isinstance(custom_json.json_data, VSCCall)
+
+
+def test_custom_json_vsc_call_json_dict_input():
+    """json field as a pre-parsed dict is also handled correctly."""
+    op = VSC_CALL_OP.copy()
+    op["json"] = VSC_CALL_DICT  # dict form
+    custom_json = CustomJson.model_validate(op)
+    assert isinstance(custom_json.json_data, VSCCall)
