@@ -184,14 +184,13 @@ async def process_transfer_op(
     processed_d_memo = lightning_memo(hive_transfer.d_memo)
     base_description = f"{hive_transfer.amount_str} from {hive_transfer.from_account} to {hive_transfer.to_account} {processed_d_memo}"
     hive_config = InternalConfig().config.hive_config
+    exchange_config = InternalConfig().config.exchange_config
 
     server_account, treasury_account, funding_account, exchange_account = (
         hive_config.all_account_names
     )
-    if hive_config.exchange_account:
-        exchange_accounts = hive_config.exchange_account.all_names()
-    else:
-        exchange_accounts = [exchange_account]
+
+    exchange_accounts = exchange_config.all_hive_exchange_accounts()
 
     expense_accounts = InternalConfig().config.expense_config.hive_expense_accounts
     if not server_account or not treasury_account or not funding_account or not exchange_account:
@@ -273,10 +272,11 @@ async def process_transfer_op(
     # MARK: Treasury to Exchange
     elif (
         hive_transfer.from_account == treasury_account
-        and hive_transfer.to_account == exchange_account
+        and hive_transfer.to_account in exchange_accounts
     ):
         # Use the configured exchange adapter name as the Exchange Holdings sub-account
-        exchange_sub = get_exchange_adapter().exchange_name
+        provider_name = exchange_config.get_provider_name_from_hive_account(hive_transfer.to_account)
+        exchange_sub = get_exchange_adapter(provider_name).exchange_name
         ledger_entry.cust_id = exchange_sub
         ledger_entry.debit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
@@ -285,9 +285,10 @@ async def process_transfer_op(
     # MARK: Server to Exchange
     elif (
         hive_transfer.from_account == server_account
-        and hive_transfer.to_account == exchange_account
+        and hive_transfer.to_account in exchange_accounts
     ):
-        exchange_sub = get_exchange_adapter().exchange_name
+        provider_name = exchange_config.get_provider_name_from_hive_account(hive_transfer.to_account)
+        exchange_sub = get_exchange_adapter(provider_name).exchange_name
         ledger_entry.cust_id = exchange_sub
         ledger_entry.debit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
@@ -298,7 +299,8 @@ async def process_transfer_op(
         hive_transfer.from_account in exchange_accounts
         and hive_transfer.to_account == treasury_account
     ):
-        exchange_sub = get_exchange_adapter().exchange_name
+        provider_name = exchange_config.get_provider_name_from_hive_account(hive_transfer.from_account)
+        exchange_sub = get_exchange_adapter(provider_name).exchange_name
         ledger_entry.cust_id = exchange_sub
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)

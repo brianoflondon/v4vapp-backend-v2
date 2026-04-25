@@ -202,6 +202,9 @@ class LNDClient:
         if self.lightning_stub is None:
             self.setup()
         while True:
+            if self.channel is not None:
+                await self.channel.close(grace=0)
+                self.channel = None
             self.setup()
             try:
                 if self.lightning_stub is not None:

@@ -19,7 +19,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.hive_extras import (
     PendingTransaction,
     get_hive_client,
@@ -240,15 +240,14 @@ async def reset_lightning_node_balance():
         # Diagnostic check: confirm the opening balance was saved and is visible for the node
         try:
             found = (
-                await LedgerEntry.collection()
-                .find(
-                    {
-                        "$or": [
-                            {"debit.name": "External Lightning Payments", "debit.sub": node},
-                            {"credit.name": "External Lightning Payments", "credit.sub": node},
-                        ]
-                    }
-                )
+                await LedgerEntry
+                .collection()
+                .find({
+                    "$or": [
+                        {"debit.name": "External Lightning Payments", "debit.sub": node},
+                        {"credit.name": "External Lightning Payments", "credit.sub": node},
+                    ]
+                })
                 .to_list()
             )
             logger.info(

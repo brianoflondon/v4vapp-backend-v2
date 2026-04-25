@@ -308,3 +308,44 @@ async def test_concurrent_quote_failures():
     for quote in quotes:
         valid_quote = FixedHiveQuote.check_quote(quote.unique_id, quote.sats_send)
         assert valid_quote.unique_id == quote.unique_id
+
+
+@pytest.mark.asyncio
+async def test_create_magisats_quote():
+    """Test creating a fixed quote with magisats=True includes service fee in sats_send."""
+    net_sats = 50000
+    fixed_hive_quote = await FixedHiveQuote.create_quote(
+        magisats=True, sats=float(net_sats), store_db=False
+    )
+    assert fixed_hive_quote is not None
+    # sats_send should be greater than net_sats because the service fee is added on top
+    assert fixed_hive_quote.sats_send > net_sats
+
+
+@pytest.mark.asyncio
+async def test_check_magisats_quote():
+    """Test check_quote validates with sats_send (including fee) but rejects net_sats."""
+    net_sats = 50000
+    fixed_hive_quote = await FixedHiveQuote.create_quote(
+        magisats=True, sats=float(net_sats), store_db=False
+    )
+
+    # check_quote with the full sats_send (net + fee) must succeed
+    result = FixedHiveQuote.check_quote(fixed_hive_quote.unique_id, fixed_hive_quote.sats_send)
+    assert result.unique_id == fixed_hive_quote.unique_id
+
+    # check_quote with only the net sats (without fee) must fail
+    with pytest.raises(ValueError, match="Sats amount does not match the quote."):
+        FixedHiveQuote.check_quote(fixed_hive_quote.unique_id, net_sats)
+
+
+@pytest.mark.parametrize("net_sats", [10000, 50000, 100000, 500000])
+@pytest.mark.asyncio
+async def test_magisats_fee_always_positive(net_sats: int):
+    """Verify the service fee is always positive for various magisats amounts."""
+    fixed_hive_quote = await FixedHiveQuote.create_quote(
+        magisats=True, sats=float(net_sats), store_db=False
+    )
+    assert fixed_hive_quote.sats_send > net_sats, (
+        f"sats_send {fixed_hive_quote.sats_send} should exceed net_sats {net_sats}"
+    )

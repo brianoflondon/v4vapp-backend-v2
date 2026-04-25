@@ -703,6 +703,7 @@ class CryptoConversion(BaseModel):
             Currency.HBD: float(self.hbd),
             Currency.USD: float(self.usd),
             Currency.SATS: float(self.sats),
+            Currency.MAGISATS: float(self.sats),
             Currency.BTC: float(self.btc),
             Currency.MSATS: float(self.msats),
             "sats_hive": float(self.quote.sats_hive_p),  # type: ignore

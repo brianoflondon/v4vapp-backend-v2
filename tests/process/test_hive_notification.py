@@ -155,7 +155,7 @@ async def test_process_invoice_sets_force_flag(monkeypatch):
     def make_invoice(sats: Decimal):
         # memo includes #sats so that recv_currency property returns SATS rather
         # than the default HIVE (which would trigger the conversion path).
-        inv = Invoice.construct(
+        inv = Invoice.model_construct(
             cust_id="bob",
             is_lndtohive=True,
             value=sats,

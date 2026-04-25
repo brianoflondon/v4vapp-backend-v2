@@ -236,6 +236,12 @@ class LedgerAccountDetails(LedgerAccount):
     usd: Decimal = Field(Decimal(0), description="Latest running total for USD currency")
     msats: Decimal = Field(Decimal(0), description="Latest running total for MSATS currency")
     sats: Decimal = Field(Decimal(0), description="Latest running total for SATS currency")
+    magi_btc_sats: Decimal = Field(
+        Decimal(0), description="Latest running total for MAGI BTC in SATS"
+    )
+    magi_btc_msats: Decimal = Field(
+        Decimal(0), description="Latest running total for MAGI BTC in MSATS"
+    )
     conv_total: ConvertedSummary = Field(
         ConvertedSummary(),
         description="Aggregated conversion total across all currencies",
@@ -460,7 +466,7 @@ class LedgerAccountDetails(LedgerAccount):
 
     def to_api_response(
         self, hive_accname: str, line_items: bool = False, admin: bool = False
-    ) -> dict:
+    ) -> Dict:
         """
         Returns a dictionary representation of the account balance details, with numeric values
         rounded to 3 decimal places (half up) where applicable, formatted for API responses.
@@ -470,9 +476,10 @@ class LedgerAccountDetails(LedgerAccount):
             hive_accname (str): The Hive account name.
             line_items (bool): If True, includes the full account balance object in 'all_transactions';
                             otherwise, an empty list.
+            admin (bool): not currently used.
 
         Returns:
-            dict: A dictionary with the specified keys and rounded float values.
+            Dict: A dictionary with the specified keys and rounded float values.
         """
         in_progress_sats = (Decimal(self.in_progress_msats) / Decimal(1000)).quantize(
             Decimal("1"), rounding="ROUND_HALF_UP"
@@ -482,7 +489,11 @@ class LedgerAccountDetails(LedgerAccount):
         net_hive_q = self.hive.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
         net_usd_q = self.usd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
         net_hbd_q = self.hbd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
-        net_sats_q = self.sats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+        net_sats_q = self.sats.quantize(
+            Decimal("1"), rounding="ROUND_DOWN"
+        )  # Always show to nearest whole sat.
+        net_magi_msats_q = self.magi_btc_msats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+        net_magisats_q = self.magi_btc_sats.quantize(Decimal("1"), rounding="ROUND_DOWN")
         return {
             "hive_accname": hive_accname,
             "net_msats": float(net_msats_q),
@@ -490,90 +501,92 @@ class LedgerAccountDetails(LedgerAccount):
             "net_usd": float(net_usd_q),
             "net_hbd": float(net_hbd_q),
             "net_sats": float(net_sats_q),
+            "net_magisats": float(net_magisats_q),
+            "net_magi_msats": float(net_magi_msats_q),
             "in_progress_sats": float(in_progress_sats),
             "all_transactions": self if line_items else [],
         }
 
-    def to_api_response_2(self, hive_accname: str, line_items: bool = False) -> dict:
-        """
-        Returns a dictionary representation of the account balance details, optimized for the frontend display,
-        including only the fields used by the table: timestamp, timestamp_unix, icon, ledger_type_str,
-        description, user_memo, link, unit, conv_signed (with sats, hive, hbd), and conv_running_total.sats.
-        Numeric values are rounded to 3 decimal places for hive/hbd and 0 for sats, converted to floats.
-        The all_transactions field is an array to match frontend expectations.
+    # def to_api_response_2(self, hive_accname: str, line_items: bool = False) -> dict:
+    #     """
+    #     Returns a dictionary representation of the account balance details, optimized for the frontend display,
+    #     including only the fields used by the table: timestamp, timestamp_unix, icon, ledger_type_str,
+    #     description, user_memo, link, unit, conv_signed (with sats, hive, hbd), and conv_running_total.sats.
+    #     Numeric values are rounded to 3 decimal places for hive/hbd and 0 for sats, converted to floats.
+    #     The all_transactions field is an array to match frontend expectations.
 
-        Args:
-            hive_accname (str): The Hive account name.
-            line_items (bool): If True, includes a simplified list of transaction details;
-                            otherwise, an empty list.
+    #     Args:
+    #         hive_accname (str): The Hive account name.
+    #         line_items (bool): If True, includes a simplified list of transaction details;
+    #                         otherwise, an empty list.
 
-        Returns:
-            dict: A dictionary with essential account details and simplified transaction data.
-        """
-        # Calculate in_progress_sats
-        in_progress_sats = (Decimal(self.in_progress_msats) / Decimal(1000)).quantize(
-            Decimal("1"), rounding="ROUND_HALF_UP"
-        )
+    #     Returns:
+    #         dict: A dictionary with essential account details and simplified transaction data.
+    #     """
+    #     # Calculate in_progress_sats
+    #     in_progress_sats = (Decimal(self.in_progress_msats) / Decimal(1000)).quantize(
+    #         Decimal("1"), rounding="ROUND_HALF_UP"
+    #     )
 
-        # Prepare rounded Decimal values (using Decimal.quantize with ROUND_HALF_UP) then convert to float for API
-        net_msats_q = self.msats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
-        net_hive_q = self.hive.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
-        net_usd_q = self.usd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
-        net_hbd_q = self.hbd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
-        net_sats_q = self.sats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    #     # Prepare rounded Decimal values (using Decimal.quantize with ROUND_HALF_UP) then convert to float for API
+    #     net_msats_q = self.msats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    #     net_hive_q = self.hive.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
+    #     net_usd_q = self.usd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
+    #     net_hbd_q = self.hbd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
+    #     net_sats_q = self.sats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
 
-        response = {
-            "hive_accname": hive_accname,
-            "net_msats": float(net_msats_q),
-            "net_hive": float(net_hive_q),
-            "net_usd": float(net_usd_q),
-            "net_hbd": float(net_hbd_q),
-            "net_sats": float(net_sats_q),
-            "in_progress_sats": float(in_progress_sats),
-            "all_transactions": [],
-        }
+    #     response = {
+    #         "hive_accname": hive_accname,
+    #         "net_msats": float(net_msats_q),
+    #         "net_hive": float(net_hive_q),
+    #         "net_usd": float(net_usd_q),
+    #         "net_hbd": float(net_hbd_q),
+    #         "net_sats": float(net_sats_q),
+    #         "in_progress_sats": float(in_progress_sats),
+    #         "all_transactions": [],
+    #     }
 
-        if line_items:
-            # Simplified transaction data
-            transactions = []
-            for line in self.combined_balance:
-                transaction = {
-                    "timestamp": line.timestamp.isoformat(),
-                    "timestamp_unix": line.timestamp.timestamp() * 1000,
-                    "icon": line.icon,
-                    "ledger_type_str": line.ledger_type_str,
-                    "description": line.description,
-                    "user_memo": line.user_memo,
-                    "link": line.link,
-                    "unit": line.unit,
-                    "conv_signed": {
-                        "sats": float(
-                            line.conv_signed.sats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
-                        ),
-                        "hive": float(
-                            line.conv_signed.hive.quantize(
-                                Decimal("0.001"), rounding="ROUND_HALF_UP"
-                            )
-                        ),
-                        "hbd": float(
-                            line.conv_signed.hbd.quantize(
-                                Decimal("0.001"), rounding="ROUND_HALF_UP"
-                            )
-                        ),
-                    },
-                    "conv_running_total": {
-                        "sats": float(
-                            line.conv_running_total.sats.quantize(
-                                Decimal("1"), rounding="ROUND_HALF_UP"
-                            )
-                        )
-                    },
-                }
-                transactions.append(transaction)
+    #     if line_items:
+    #         # Simplified transaction data
+    #         transactions = []
+    #         for line in self.combined_balance:
+    #             transaction = {
+    #                 "timestamp": line.timestamp.isoformat(),
+    #                 "timestamp_unix": line.timestamp.timestamp() * 1000,
+    #                 "icon": line.icon,
+    #                 "ledger_type_str": line.ledger_type_str,
+    #                 "description": line.description,
+    #                 "user_memo": line.user_memo,
+    #                 "link": line.link,
+    #                 "unit": line.unit,
+    #                 "conv_signed": {
+    #                     "sats": float(
+    #                         line.conv_signed.sats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    #                     ),
+    #                     "hive": float(
+    #                         line.conv_signed.hive.quantize(
+    #                             Decimal("0.001"), rounding="ROUND_HALF_UP"
+    #                         )
+    #                     ),
+    #                     "hbd": float(
+    #                         line.conv_signed.hbd.quantize(
+    #                             Decimal("0.001"), rounding="ROUND_HALF_UP"
+    #                         )
+    #                     ),
+    #                 },
+    #                 "conv_running_total": {
+    #                     "sats": float(
+    #                         line.conv_running_total.sats.quantize(
+    #                             Decimal("1"), rounding="ROUND_HALF_UP"
+    #                         )
+    #                     )
+    #                 },
+    #             }
+    #             transactions.append(transaction)
 
-            response["all_transactions"] = transactions
+    #         response["all_transactions"] = transactions
 
-        return response
+    #     return response
 
 
 class AccountBalances(RootModel):

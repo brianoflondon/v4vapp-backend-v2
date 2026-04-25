@@ -126,8 +126,6 @@ def test_hive_acc_name():
     hive_exchange_acc = hive_accs["fiction"]
     assert hive_exchange_acc.name == "fiction"
     assert hive_exchange_acc.role == "exchange"
-    assert hive_exchange_acc.alternate_names == ["b-hot2", "b-hot3"]
-    assert hive_exchange_acc.all_names() == ["fiction", "b-hot2", "b-hot3"]
 
 
 def test_alternate_config_file():

@@ -30,12 +30,12 @@ class AmountPyd(BaseModel):
         if "asset" in data and data.get("asset", None):
             beam_amount = Amount(**data)
             new_data = beam_amount.json()
-            super().__init__(**new_data)
+            super().__init__(**new_data)    #type: ignore Hive Nectar Amount is the issue
         elif "amount" in data and isinstance(data["amount"], Amount):
             # If data contains an Amount object, convert it to a dictionary
             beam_amount = data["amount"]
             new_data = beam_amount.json()
-            super().__init__(**new_data)
+            super().__init__(**new_data)    #type: ignore
         else:
             super().__init__(**data)
 

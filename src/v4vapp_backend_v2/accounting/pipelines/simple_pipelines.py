@@ -277,7 +277,9 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
             }
         }
     ]
-    
+
+    # Magi pipeline
+
     return {
         "payments": payments_pipeline,
         "invoices": invoices_pipeline,

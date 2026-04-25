@@ -274,7 +274,7 @@ async def process_lightning_invoice(
         await ledger_entry.save()
         return [ledger_entry]
     # MARK: Regular Invoice LND to Hive or Keepsats
-    if invoice.is_lndtohive:
+    if invoice.is_lndtohive or invoice.is_magisats:
         ledger_entries = await process_lightning_receipt(invoice=invoice)
         return ledger_entries
     elif "Exchange" in invoice.memo:
