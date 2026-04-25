@@ -8,12 +8,12 @@ class Currency(StrEnum):
     SATS = "sats"
     MSATS = "msats"
     BTC = "btc"
-    # MAGISATS = "magisats"
+    MAGISATS = "magisats"
 
     @property
     def symbol(self) -> str:
         """
-        Returns the symbol of the cryptocurrency in uppercase for Nectar Amount.
+        Returns the HIVE symbol of the cryptocurrency in uppercase for Nectar Amount.
 
         Returns:
             str: The uppercase symbol of the cryptocurrency.

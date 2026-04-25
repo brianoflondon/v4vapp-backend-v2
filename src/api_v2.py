@@ -175,6 +175,10 @@ async def fixed_quote(
     HIVE: float | None = Query(None, description="The amount of Hive to convert to sats"),
     HBD: float | None = Query(None, description="The amount of HBD to convert to sats"),
     USD: float | None = Query(None, description="The amount of USD to convert to sats"),
+    MAGISATS: bool = Query(False, description="The amount of MAGI BTC in sats to convert to sats"),
+    SATS: float | None = Query(
+        None, description="The amount of sats to convert (only used for MagiSats conversion)"
+    ),
     cache_time: int = Query(600, description="Cache time in seconds"),
     use_cache: bool = Query(True, description="Use cached quotes if available"),
 ) -> FixedHiveQuote:
@@ -192,7 +196,13 @@ async def fixed_quote(
         FixedHiveQuote: An object containing the fixed quote for Hive/HBD and BTC/Sats vs USD.
     """
     return await FixedHiveQuote.create_quote(
-        hive=HIVE, hbd=HBD, usd=USD, cache_time=cache_time, use_cache=use_cache
+        hive=HIVE,
+        hbd=HBD,
+        usd=USD,
+        sats=SATS,
+        magisats=MAGISATS,
+        cache_time=cache_time,
+        use_cache=use_cache,
     )
 
 

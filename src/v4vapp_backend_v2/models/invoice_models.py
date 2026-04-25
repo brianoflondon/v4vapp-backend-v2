@@ -31,7 +31,7 @@ LND_INVOICE_TAG = r"^\s*(\S+).*#v4vapp"
 
 # magisats_tag should search for #MAGISATS followed by #v4vapp anywhere in the memo no capture
 # #MAGISATS needs to be lower case in the regex.
-MAGISATS_TAG = r"#magisats(?:\s+(\d+))?.*#v4vapp"
+MAGISATS_TAG = r"^\s*\S+.*#magisats(?:\s+(\d+))?.*#v4vapp"
 
 
 def currency_to_receive(memo: str) -> Currency:
