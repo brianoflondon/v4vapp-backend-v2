@@ -49,7 +49,7 @@ def test_magi_adapter_get_balance_returns_expected(asset: str, expected: Decimal
 
 
 def test_magi_adapter_get_balance_invalid_asset_raises(monkeypatch):
-    """MagiAdapter should raise an error for unsupported asset lookups."""
+    """MagiAdapter should raise an error for genuinely unsupported asset lookups."""
 
     async def fake_get_balance(account: str):
         return FakeMagiBalance()
@@ -66,7 +66,27 @@ def test_magi_adapter_get_balance_invalid_asset_raises(monkeypatch):
     adapter = MagiAdapter()
 
     with pytest.raises(ExchangeConnectionError, match="only supports BTC/SATS/MSATS"):
-        adapter.get_balance("HIVE")
+        adapter.get_balance("DOGE")
+
+
+@pytest.mark.parametrize("asset", ["HIVE", "HBD"])
+def test_magi_adapter_get_balance_hive_hbd_returns_zero(asset: str, monkeypatch):
+    """HIVE and HBD balances are not tracked by MAGI — adapter returns Decimal(0)."""
+
+    async def fake_get_balance(account: str):
+        return FakeMagiBalance()
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.conversion.magi_adapter.get_magi_btc_balance_by_account",
+        fake_get_balance,
+    )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.conversion.magi_adapter.InternalConfig",
+        lambda: FakeInternalConfig("v4vapp.vsc"),
+    )
+
+    adapter = MagiAdapter()
+    assert adapter.get_balance(asset) == Decimal(0)
 
 
 @pytest.mark.asyncio
