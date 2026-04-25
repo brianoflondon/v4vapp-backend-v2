@@ -58,8 +58,8 @@ async def forward_magisats(invoice: Invoice) -> None:
     magi_to = AccName(invoice.cust_id).magi_prefix
 
     vsc_payload = VSCCallPayload(
-        to=magi_to,
         amount=str(amount_to_send_sats),
+        to=magi_to,
         parent_id=invoice.group_id_p,
         msats_fee=str(net_msats_fee),
         memo=f"Forwarding #magisats from invoice {invoice.short_id} with fee: {net_msats_fee / 1000:.3f} sats",

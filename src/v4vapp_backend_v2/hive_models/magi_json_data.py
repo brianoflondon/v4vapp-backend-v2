@@ -14,9 +14,8 @@ class VSCCallPayload(BaseModel):
     """
 
     amount: str | None = Field(None, description="Amount to transfer (as a string, e.g. '2500').")
-    to_account: str | None = Field(
+    to: str | None = Field(
         None,
-        alias="to",
         description="Recipient address in its original network format (e.g. 'hive:<name>', '0x...' for EVM).",
     )
     # V4VAPP specific fields not the necessary part of  Magi Payload
@@ -33,7 +32,7 @@ class VSCCallPayload(BaseModel):
 
     @property
     def log_str(self) -> str:
-        to = f" to={self.to_account}" if self.to_account else ""
+        to = f" to={self.to}" if self.to else ""
         memo = f" memo={self.memo}" if self.memo else ""
         return f"🔗 VSC transfer amount={self.amount}{to}{memo}"
 
@@ -209,8 +208,8 @@ class VSCCall(BaseModel):
         Returns the recipient in its original network format.
         Only meaningful for transfer payloads; returns an empty string for execute payloads.
         """
-        if isinstance(self.payload, VSCCallPayload) and self.payload.to_account:
-            return self.payload.to_account
+        if isinstance(self.payload, VSCCallPayload) and self.payload.to:
+            return self.payload.to
         return ""
 
     @property
@@ -232,7 +231,7 @@ class VSCCall(BaseModel):
     @property
     def log_str(self) -> str:
         if isinstance(self.payload, VSCCallPayload):
-            to = f" to={self.to_account}" if self.payload.to_account else ""
+            to = f" to={self.to_account}" if self.to_account else ""
             memo = f" memo={self.payload.memo}" if self.payload.memo else ""
             return (
                 f"🔗 VSC transfer {self.from_account} → {self.contract_id}"
