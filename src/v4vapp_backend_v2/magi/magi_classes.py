@@ -90,6 +90,19 @@ class MagiBTCTransferEvent(TrackedBaseModel):
                 return 1
         return 1
 
+    @computed_field
+    def to_from_accounts(self) -> List[str]:
+        """
+        Returns a list with 'from' and 'to' accounts in their original network formats.
+
+        This is a convenience property to easily access the relevant accounts for the transfer.
+
+        Returns:
+            List[str]: A list with the 'from' and 'to' accounts.
+
+        """
+        return [self.to_addr, self.from_addr]
+
     @property
     def trx_id(self) -> str:
         """
