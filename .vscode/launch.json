@@ -99,8 +99,8 @@
             "args": [
                 "--config",
                 "devhive.config.yaml",
-                "--from-indexer-id",
-                "0" // start from the beginning of the indexer (use -1 to resume from last saved position in DB)
+                // "--from-indexer-id",
+                // "0" // start from the beginning of the indexer (use -1 to resume from last saved position in DB)
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

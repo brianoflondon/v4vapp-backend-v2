@@ -67,7 +67,7 @@ def convert_object_ids(o: Any) -> None:
                 convert_object_ids(v)
 
 
-@async_time_decorator
+# @async_time_decorator
 async def find_nearest_by_timestamp(
     collection: AsyncCollection,
     target: datetime,

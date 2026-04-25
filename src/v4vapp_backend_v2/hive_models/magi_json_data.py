@@ -19,9 +19,12 @@ class VSCCallPayload(BaseModel):
     to_account: AccNameType | None = Field(
         None,
         alias="to",
-        description="Recipient account. Accepts plain Hive names or 'hive:<name>' prefix.",
+        description="Recipient account. Accepts plain Hive names or 'hive:<name>' prefix or other formats.",
     )
     memo: str = Field("", description="Optional memo attached to the transfer.")
+    parent_id: str | None = Field(
+        None, description="The group_id of the parent transaction, if applicable"
+    )
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 

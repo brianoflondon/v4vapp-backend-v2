@@ -86,7 +86,7 @@ class KeepsatsTransfer(BaseModel):
         False, description="If True, this is a notification rather than a transfer"
     )
     parent_id: str | None = Field(
-        None, description="The short ID of the parent transaction, if applicable"
+        None, description="The group_id of the parent transaction, if applicable"
     )
     hive: Decimal | None = Field(
         default=None,
