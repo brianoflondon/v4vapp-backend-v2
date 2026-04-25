@@ -29,9 +29,9 @@ from v4vapp_backend_v2.process.lock_str_class import CustIDType, LockStr
 # Updated to separate the hive name at the start of the message
 LND_INVOICE_TAG = r"^\s*(\S+).*#v4vapp"
 
-# magi_sats_tag should search for #MAGI_SATS followed by #v4vapp anywhere in the memo no capture
-# #MAGI_SATS needs to be lower case in the regex.
-MAGI_SATS_TAG = r"#magi_sats(?:\s+(\d+))?.*#v4vapp"
+# magisats_tag should search for #MAGISATS followed by #v4vapp anywhere in the memo no capture
+# #MAGISATS needs to be lower case in the regex.
+MAGISATS_TAG = r"#magisats(?:\s+(\d+))?.*#v4vapp"
 
 
 def currency_to_receive(memo: str) -> Currency:
@@ -55,7 +55,7 @@ def currency_to_receive(memo: str) -> Currency:
         not memo
         or "#sats" in memo.lower()
         or "#keepsats" in memo.lower()
-        or "#magi_sats" in memo.lower()
+        or "#magisats" in memo.lower()
     ):
         return Currency.SATS
     if "#hbd" in memo.lower():
@@ -254,8 +254,8 @@ class Invoice(TrackedBaseModel):
     is_lndtohive: bool = Field(
         default=False, description="True if the invoice is a LND to Hive invoice"
     )
-    is_magi_sats: bool = Field(
-        default=False, description="True if the invoice has the #MAGI_SATS tag in the memo"
+    is_magisats: bool = Field(
+        default=False, description="True if the invoice has the #MAGISATS tag in the memo"
     )
     cust_id: CustIDType | None = Field(
         default=None, description="Customer ID associated with the invoice"
@@ -288,10 +288,10 @@ class Invoice(TrackedBaseModel):
             )
         # perform my check to see if this invoice can be paid to Hive
         if self.memo:
-            # This is where we will check for #MAGI_SATS which will override Hive or HBD
-            match_magi_sats = re.match(MAGI_SATS_TAG, self.memo.lower())
-            if match_magi_sats:
-                self.is_magi_sats = True
+            # This is where we will check for #MAGISATS which will override Hive or HBD
+            match_magisats = re.match(MAGISATS_TAG, self.memo.lower())
+            if match_magisats:
+                self.is_magisats = True
 
             match_lndtohive = re.match(LND_INVOICE_TAG, self.memo.lower())
             if match_lndtohive:

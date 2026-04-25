@@ -6,7 +6,6 @@ from bech32 import bech32_decode, bech32_encode, convertbits
 from pydantic import (
     AnyUrl,
     BaseModel,
-    ConfigDict,
     EmailStr,
     Field,
     ValidationError,
@@ -220,13 +219,13 @@ class LnurlCurrencyEnum(str, Enum):
         hive (str): The currency code for Hive.
         hbd (str): The currency code for HBD.
         sats (str): The currency code for sats.
-        magi_sats (str): The currency code for Magi sats.
+        magisats (str): The currency code for Magi sats.
     """
 
     hive = "hive"
     hbd = "hbd"
     sats = "sats"
-    magi_sats = "magi_sats"
+    magisats = "magisats"
 
 
 LnurlCurrency = Annotated[
@@ -239,7 +238,7 @@ def currency_pretty(v: LnurlCurrency) -> str:
         "hive": "Hive",
         "hbd": "HBD",
         "sats": "sats",
-        "magi_sats": "Magi sats",
+        "magisats": "Magi sats",
     }.get(v.value, "")
 
 
@@ -248,7 +247,7 @@ def currency_hashtag(v: LnurlCurrency) -> str:
         "hive": "#HIVE",
         "hbd": "#HBD",
         "sats": "#SATS",
-        "magi_sats": "#MAGI_SATS",
+        "magisats": "#MAGISATS",
     }.get(v.value, "")
 
 

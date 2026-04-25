@@ -493,7 +493,7 @@ class LedgerAccountDetails(LedgerAccount):
             Decimal("1"), rounding="ROUND_DOWN"
         )  # Always show to nearest whole sat.
         net_magi_msats_q = self.magi_btc_msats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
-        net_magi_sats_q = self.magi_btc_sats.quantize(Decimal("1"), rounding="ROUND_DOWN")
+        net_magisats_q = self.magi_btc_sats.quantize(Decimal("1"), rounding="ROUND_DOWN")
         return {
             "hive_accname": hive_accname,
             "net_msats": float(net_msats_q),
@@ -501,7 +501,7 @@ class LedgerAccountDetails(LedgerAccount):
             "net_usd": float(net_usd_q),
             "net_hbd": float(net_hbd_q),
             "net_sats": float(net_sats_q),
-            "net_magi_sats": float(net_magi_sats_q),
+            "net_magisats": float(net_magisats_q),
             "net_magi_msats": float(net_magi_msats_q),
             "in_progress_sats": float(in_progress_sats),
             "all_transactions": self if line_items else [],

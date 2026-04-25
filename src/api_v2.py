@@ -250,7 +250,7 @@ class KeepsatsApiResponse(BaseModel):
     net_usd: float = Field(..., description="Net balance of USD")
     net_hbd: float = Field(..., description="Net balance of HBD")
     net_sats: float = Field(..., description="Net balance of SATS")
-    net_magi_sats: float = Field(0.0, description="Net balance of MAGI BTC in SATS")
+    net_magisats: float = Field(0.0, description="Net balance of MAGI BTC in SATS")
     net_magi_msats: float = Field(0.0, description="Net balance of MAGI BTC in millisatoshis")
     in_progress_sats: float = Field(
         ..., description="Keepsats currently held in progress (rounded sats)"

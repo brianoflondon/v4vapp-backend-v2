@@ -15,7 +15,6 @@ from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
-from v4vapp_backend_v2.process.process_magi import forward_magi_sats
 
 
 async def process_lightning_receipt(
@@ -168,17 +167,17 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
                 )
                 raise
         elif invoice.recv_currency in {Currency.SATS, Currency.MSATS}:
-            # This is where we need to divert #magi_sats
+            # This is where we need to divert #magisats
             logger.info(
                 f"Lightning to Keepsats deposit transfer for customer ID: {invoice.cust_id}",
                 extra={"notification": False},
             )
-            if invoice.is_magi_sats:
+            if invoice.is_magisats:
                 logger.info(
-                    f"Invoice {invoice.short_id} is marked as MAGI_SATS, treating as MAGI BTC balance update rather than a conversion. {invoice.log_str}",
+                    f"Invoice {invoice.short_id} is marked as MAGISATS, treating as MAGI BTC balance update rather than a conversion. {invoice.log_str}",
                     extra={"notification": False, **invoice.log_extra},
                 )
-                await forward_magi_sats(invoice=invoice)
+                await forward_magisats(invoice=invoice)
                 return
 
             if invoice.cust_id == "v4vapp.sus":
