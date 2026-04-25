@@ -1,4 +1,17 @@
-from v4vapp_backend_v2.config.setup import logger
+from datetime import datetime, timezone
+from decimal import Decimal
+
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    AssetAccount,
+    LiabilityAccount,
+    RevenueAccount,
+)
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.hive_models.magi_json_data import VSCCallPayload
 from v4vapp_backend_v2.models.invoice_models import Invoice
 
 
@@ -8,12 +21,13 @@ async def forward_magisats(invoice: Invoice) -> None:
     The specific logic for forwarding will depend on the requirements of the application.
     For example, it could involve transferring the sats to a specific wallet or account.
     """
-    # Placeholder for the actual forwarding logic
-    logger.info("Forwarding #magisats to the designated destination.")
 
+    logger.info("Forwarding #magisats to the designated destination.")
+    msats_fee = None
     fixed_quote = invoice.fixed_quote
     if fixed_quote:
         quote = fixed_quote.quote_response
+        msats_fee = fixed_quote.msats_fee
     else:
         quote = await Invoice.nearest_quote(timestamp=invoice.timestamp)
 
@@ -24,12 +38,101 @@ async def forward_magisats(invoice: Invoice) -> None:
         logger.error("Conversion details are missing for the invoice.")
         return
 
-    amount_to_send_msats = invoice.value_msat - invoice.conv.msats_fee
+    if not msats_fee:
+        msats_fee = invoice.conv.msats_fee
+
+    amount_to_send_msats = Decimal(invoice.value_msat) - msats_fee
+    amount_to_send_sats = Decimal(amount_to_send_msats / Decimal(1000)).quantize(
+        Decimal("1."), rounding="ROUND_DOWN"
+    )
+    net_msats_fee = Decimal(invoice.value_msat) - amount_to_send_msats
 
     logger.info(
-        f"Amount to forward (after fees): {amount_to_send_msats / 1000:.0f} sats "
-        f"fee: {invoice.conv.msats_fee / 1000:.3f} sats {invoice.short_id}"
+        f"Amount to forward (after fees): {amount_to_send_sats:,.0f} sats "
+        f"fee: {net_msats_fee / 1000:.3f} sats {invoice.short_id}"
     )
+
+    # Now we transfer the amount_to_send_sats to the
+    server_id = InternalConfig().server_id
+    node_name = InternalConfig().node_name
+
+    invoice.cust_id
+
+
+    payment_custom_json = VSCCallPayload(
+        from_account=f"hive:{server_id}",
+        to_account=V4VConfig.magi_btc_destination_account,
+        amount_sats=int(amount_to_send_sats),
+        memo=f"Forwarding #magisats from invoice {invoice.short_id}",
+    )
+
+
+
+
+
+    sending_conv = CryptoConversion(
+        quote=quote,
+        conv_from=Currency.SATS,
+        value=amount_to_send_sats,
+    ).conversion
+
+    ledger_entries_list = []
+
+    ledger_type = LedgerType.WITHDRAW_LIGHTNING
+    incoming_ledger_entry = LedgerEntry(
+        cust_id=server_id,
+        short_id=invoice.short_id,
+        ledger_type=ledger_type,
+        group_id=f"{invoice.group_id}_{ledger_type.value}",
+        op_type=invoice.op_type,
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Send Lightning to Magi {amount_to_send_sats:,.0f} sats {invoice.memo}",
+        debit=LiabilityAccount(
+            name="VSC Liability",
+            sub=server_id,
+        ),
+        debit_unit=Currency.MSATS,
+        debit_amount=amount_to_send_sats * Decimal(1000),  # using the rounded version
+        debit_conv=sending_conv,
+        credit=AssetAccount(name="External Magi Payments", sub=node_name, contra=True),
+        credit_unit=Currency.MSATS,
+        credit_amount=amount_to_send_sats * Decimal(1000),
+        credit_conv=sending_conv,
+    )
+    await incoming_ledger_entry.save()
+    ledger_entries_list.append(incoming_ledger_entry)
+
+    # now send the fee to the fee account
+
+    fee_conv = CryptoConversion(
+        quote=quote,
+        conv_from=Currency.MSATS,
+        value=net_msats_fee,
+    ).conversion
+
+    ledger_type = LedgerType.DEPOSIT_LIGHTNING
+    fee_ledger_entry = LedgerEntry(
+        cust_id=server_id,
+        short_id=invoice.short_id,
+        ledger_type=ledger_type,
+        group_id=f"{invoice.group_id}_{ledger_type.value}",
+        op_type=invoice.op_type,
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Send Lightning to Magi {amount_to_send_sats:,.0f} sats {invoice.memo}",
+        debit=LiabilityAccount(
+            name="VSC Liability",
+            sub=server_id,
+        ),
+        debit_unit=Currency.MSATS,
+        debit_amount=net_msats_fee,
+        debit_conv=fee_conv,
+        credit=RevenueAccount(name="Fee Income Magisats", sub=node_name, contra=True),
+        credit_unit=Currency.MSATS,
+        credit_amount=net_msats_fee,
+        credit_conv=fee_conv,
+    )
+    await fee_ledger_entry.save()
+    ledger_entries_list.append(fee_ledger_entry)
 
     # Implement the forwarding logic here
     # check we have necessary balance on the server to forward the sats

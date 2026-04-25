@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from pprint import pprint
 from uuid import uuid4
 
@@ -23,6 +24,7 @@ class FixedHiveQuote(BaseModel):
 
     unique_id: str
     sats_send: int
+    msats_fee: int = 0
     conv: CryptoConvV1
     timestamp: datetime = datetime.now(tz=timezone.utc)
     quote_record: HiveRatesDB
@@ -119,11 +121,17 @@ class FixedHiveQuote(BaseModel):
         )
 
         # Create conversion
-        sats_send = int((conv.msats + conv.msats_fee) // 1000)
+        total_msats = conv.msats + conv.msats_fee
+        # calc the sats to send by rounding up with Decimal quantize
+        sats_send = (Decimal(total_msats) / Decimal(1000)).quantize(
+            Decimal("1."), rounding="ROUND_UP"
+        )
+
         # Create quote instance
         fixed_quote = cls(
             unique_id=str(uuid4())[:6],
-            sats_send=sats_send,
+            sats_send=int(sats_send),
+            msats_fee=int(conv.msats_fee),
             conv=conv.v1(),
             quote_record=quote_record,
             quote_response=quote_response,
