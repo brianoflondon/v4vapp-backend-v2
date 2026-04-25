@@ -517,10 +517,12 @@ class TrackedBaseModel(BaseModel):
                 error="",
                 error_details={},
             )
-            logger.info(
-                f"Found nearest quote delta from {timestamp}: {quote.timestamp - timestamp}",
-                extra={"notification": False, "quote": quote.model_dump()},
-            )
+            delta = quote.timestamp - timestamp
+            if abs(delta.total_seconds()) > 600:
+                logger.info(
+                    f"Found nearest quote delta from {timestamp}: {delta}",
+                    extra={"notification": False, "quote": quote.model_dump()},
+                )
             return quote_response
 
         except ServerSelectionTimeoutError as e:

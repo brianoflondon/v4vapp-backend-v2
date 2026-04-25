@@ -8,8 +8,8 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.conversion.exchange_process import exchange_accounting
 from v4vapp_backend_v2.conversion.exchange_protocol import ExchangeOrderResult
 from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceResult
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion, QuoteResponse
+from v4vapp_backend_v2.helpers.currency_class import Currency
 
 
 @pytest.fixture(autouse=True)

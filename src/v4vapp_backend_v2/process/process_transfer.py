@@ -411,6 +411,7 @@ async def follow_on_transfer(
                         **return_details.log_extra,
                     },
                 )
+        await lnd_client.disconnect()
 
 
 async def decode_incoming_and_checks(

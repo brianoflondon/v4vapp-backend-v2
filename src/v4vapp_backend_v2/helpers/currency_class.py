@@ -8,6 +8,7 @@ class Currency(StrEnum):
     SATS = "sats"
     MSATS = "msats"
     BTC = "btc"
+    # MAGISATS = "magisats"
 
     @property
     def symbol(self) -> str:

@@ -1029,6 +1029,18 @@ class Overwatch:
             )
             return None
 
+        # Skip VSC custom_json operations (cj_id starting with "vsc.").
+        # These are MAGI BTC transactions not yet integrated with overwatch.
+        # They produce no ledger entries so any candidate flows would stall.
+        cj_id = getattr(op, "cj_id", "")
+        if cj_id.startswith("vsc."):
+            logger.debug(
+                f"{ICON} ⏭️ Skipping flow creation for VSC op "
+                f"({event.short_id}, cj_id={cj_id!r})",
+                extra={"notification": False},
+            )
+            return None
+
         # Skip transfers originating from internal/system accounts.
         # These are payouts, refunds, change returns, or internal moves —
         # never customer-initiated deposit flows.  Customer flows are always
