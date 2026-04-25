@@ -150,7 +150,7 @@ async def find_nearest_by_timestamp(
     return convert_decimal128_to_decimal(candidate)
 
 
-@async_time_decorator
+# @async_time_decorator
 async def find_nearest_by_timestamp_server_side(
     collection: AsyncCollection,
     target: datetime,

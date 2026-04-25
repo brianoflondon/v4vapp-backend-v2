@@ -2,19 +2,23 @@
 
 import json
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import websockets.exceptions
 from mongomock_motor import AsyncMongoMockClient
 
 from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.magi.magi_classes import DB_MAGI_BTC_COLLECTION, MagiBTCTransferEvent
 from v4vapp_backend_v2.magi.stream_magi import (
     _connect_and_stream,
     _http_to_ws,
     stream_magi_transfer_events,
 )
+
+# A valid 40-char lowercase hex Hive transaction ID (for hive_custom_json tests)
+VALID_HIVE_TRX_ID = "b" * 40
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -455,3 +459,120 @@ async def test_transfer_event_save_multiple_ids(mocker):
 
     count = await mock_db[DB_MAGI_BTC_COLLECTION].count_documents({})
     assert count == 2
+
+
+# ---------------------------------------------------------------------------
+# hive_custom_json tests
+# ---------------------------------------------------------------------------
+
+
+def _fake_custom_json_trx(trx_id: str) -> dict:
+    return {
+        "block_num": 55555,
+        "transaction_num": 1,
+        "operations": [
+            {
+                "type": "custom_json_operation",
+                "value": {
+                    "required_auths": [],
+                    "required_posting_auths": ["alice"],
+                    "id": "v4v",
+                    "json": '{"memo":"payment"}',
+                },
+            }
+        ],
+    }
+
+
+def _fake_transfer_only_trx(trx_id: str) -> dict:
+    return {
+        "block_num": 55555,
+        "transaction_num": 1,
+        "operations": [
+            {
+                "type": "transfer_operation",
+                "value": {
+                    "from": "alice",
+                    "to": "bob",
+                    "amount": {"amount": "1000", "nai": "@@000000021", "precision": 3},
+                    "memo": "",
+                },
+            }
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_hive_custom_json_ipfs_cid_returns_none():
+    """IPFS CID hashes are not valid Hive txids — hive_custom_json returns None immediately
+    without making any network call."""
+    ipfs_hashes = [
+        "bafyreifnigggana4n3uvzxitdbvvywnarvhnfovwk4ojf2zodqucvktizi",
+        "bafyreifnigggana4n3uvzxitdbvvywnarvhnfovwk4ojf2zodqucvktizi-0",
+        "bafyreifnigggana4n3uvzxitdbvvywnarvhnfovwk4ojf2zodqucvktizi-1",
+    ]
+    with patch("v4vapp_backend_v2.hive_models.op_all.Blockchain") as mock_bc:
+        for ipfs_hash in ipfs_hashes:
+            event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": ipfs_hash})
+            result = await event.hive_custom_json()
+            assert result is None
+        # Blockchain must never be instantiated for IPFS hashes
+        mock_bc.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_hive_custom_json_valid_txid_with_custom_json():
+    """A valid 40-char hex txid that contains a custom_json op returns [CustomJson]."""
+    event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": VALID_HIVE_TRX_ID})
+
+    mock_blockchain = MagicMock()
+    mock_blockchain.get_transaction.return_value = _fake_custom_json_trx(VALID_HIVE_TRX_ID)
+
+    with patch(
+        "v4vapp_backend_v2.hive_models.op_all.Blockchain",
+        return_value=mock_blockchain,
+    ):
+        result = await event.hive_custom_json()
+
+    assert result is not None
+    assert len(result) == 1
+    assert isinstance(result[0], CustomJson)
+    mock_blockchain.get_transaction.assert_called_once_with(VALID_HIVE_TRX_ID)
+
+
+@pytest.mark.asyncio
+async def test_hive_custom_json_valid_txid_no_custom_json():
+    """A valid txid whose transaction has no custom_json ops returns None."""
+    event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": VALID_HIVE_TRX_ID})
+
+    mock_blockchain = MagicMock()
+    mock_blockchain.get_transaction.return_value = _fake_transfer_only_trx(VALID_HIVE_TRX_ID)
+
+    with patch(
+        "v4vapp_backend_v2.hive_models.op_all.Blockchain",
+        return_value=mock_blockchain,
+    ):
+        result = await event.hive_custom_json()
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_hive_custom_json_valid_txid_with_suffix():
+    """The -N op-index suffix is stripped before the hex check and the Hive lookup."""
+    # VALID_HIVE_TRX_ID + "-0" — trx_id property strips the suffix
+    event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": f"{VALID_HIVE_TRX_ID}-0"})
+    assert event.trx_id == VALID_HIVE_TRX_ID  # strip confirmed
+
+    mock_blockchain = MagicMock()
+    mock_blockchain.get_transaction.return_value = _fake_custom_json_trx(VALID_HIVE_TRX_ID)
+
+    with patch(
+        "v4vapp_backend_v2.hive_models.op_all.Blockchain",
+        return_value=mock_blockchain,
+    ):
+        result = await event.hive_custom_json()
+
+    assert result is not None
+    assert isinstance(result[0], CustomJson)
+    mock_blockchain.get_transaction.assert_called_once_with(VALID_HIVE_TRX_ID)

@@ -1,20 +1,26 @@
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, ClassVar, Dict
+from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.op_all import trx_unpack
 from v4vapp_backend_v2.hive_models.op_base_extras import HiveExp
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 
 ICON = "🧙‍♂️"
 DB_MAGI_BTC_COLLECTION = "magi_btc"
+
+# Hive transaction IDs are always exactly 40 lowercase hex characters.
+_HIVE_TRX_ID_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 class MagiBTCBalanceError(Exception):
@@ -84,16 +90,26 @@ class MagiBTCTransferEvent(TrackedBaseModel):
                 return 1
         return 1
 
+    @property
+    def trx_id(self) -> str:
+        """
+        Extracts the base transaction ID by removing any trailing operation index suffix.
+
+        Returns:
+            str: The base transaction ID (e.g. "abc123" from "abc123-0").
+        """
+        tx_hash = self.indexer_tx_hash
+        if "-" in tx_hash:
+            return tx_hash.rsplit("-", 1)[0]
+        return tx_hash
+
     @computed_field
     def group_id(self) -> str:
         """
         Returns a group ID analogous to OpBase: block_height_txhash_op_in_trx_realm.
         The trailing -N suffix is stripped from the tx hash; the index is captured in op_in_trx.
         """
-        tx_hash = self.indexer_tx_hash
-        if "-" in tx_hash:
-            tx_hash = tx_hash.rsplit("-", 1)[0]
-        return f"{self.indexer_block_height}_{tx_hash}_{self.op_in_trx}_real"
+        return f"{self.indexer_block_height}_{self.trx_id}_{self.op_in_trx}_real"
 
     @property
     def group_id_p(self) -> str:
@@ -114,6 +130,33 @@ class MagiBTCTransferEvent(TrackedBaseModel):
             value=self.amount,
             quote=quote,
         ).conversion
+
+    async def hive_custom_json(self) -> List[CustomJson] | None:
+        """
+        Fetch and return all CustomJson operations from the Hive transaction
+        matching this transfer's trx_id.
+
+        IPFS CID hashes (e.g. bafyrei...) are not valid Hive transaction IDs;
+        for those events there is no on-chain custom_json to look up.
+
+        Returns:
+            List[CustomJson] | None: Matching CustomJson ops, or None if none found.
+        """
+        if not _HIVE_TRX_ID_RE.match(self.trx_id):
+            logger.debug(
+                f"{ICON} trx_id={self.trx_id!r} is not a Hive txid — skipping custom_json lookup",
+                extra={"notification": False},
+            )
+            return None
+        ops = trx_unpack(self.trx_id)
+        matching = [op for op in ops if isinstance(op, CustomJson)]
+        if not matching:
+            logger.warning(
+                f"{ICON} No custom_json found for indexer_tx_hash={self.indexer_tx_hash}",
+                extra={"notification": False},
+            )
+            return None
+        return matching
 
     @property
     def log_str(self) -> str:

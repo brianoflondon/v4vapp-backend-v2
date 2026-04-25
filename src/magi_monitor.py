@@ -89,6 +89,9 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
                 try:
                     await event.update_conv()
                     await event.save()
+                    custom_json_ops = await event.hive_custom_json()
+                    for op in custom_json_ops or []:
+                        await op.save()
                     logger.info(event.log_str, extra={"notification": False})
                 except Exception as e:
                     logger.error(

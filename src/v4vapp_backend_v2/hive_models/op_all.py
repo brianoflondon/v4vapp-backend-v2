@@ -1,6 +1,9 @@
 from typing import Annotated, Any
 
+from nectar.blockchain import Blockchain
 from pydantic import BaseModel, Discriminator, Tag, ValidationError
+
+from v4vapp_backend_v2.config.setup import logger
 
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
@@ -188,3 +191,53 @@ def is_op_all_transfer(op: OpAny) -> bool:
         bool: True if the operation type is a transfer operation, False otherwise.
     """
     return op.op_type in ["transfer", "recurrent_transfer", "fill_recurrent_transfer"]
+
+
+def trx_unpack(trx_id: str) -> list[OpAny]:
+    """
+    Fetch a Hive transaction by ID and unpack its operations into typed OpAny objects.
+
+    Each operation in the transaction is converted to the most specific subclass available
+    (via op_any_or_base), with op_in_trx set to a 1-based index over the operations list.
+    The Hive API returns operation types with an `_operation` suffix
+    (e.g. `custom_json_operation`) which is stripped before dispatch.
+
+    Args:
+        trx_id: The Hive transaction ID to fetch and unpack.
+
+    Returns:
+        A list of OpAny instances (one per operation in the transaction), in order.
+
+    Raises:
+        Any exception raised by Blockchain.get_transaction() or op_any_or_base().
+    """
+    blockchain = Blockchain()
+    trx = blockchain.get_transaction(trx_id)
+
+    block_num: int = trx.get("block_num", 0)
+    trx_num: int = trx.get("transaction_num", 0)
+    operations: list[dict[str, Any]] = trx.get("operations", [])
+
+    result: list[OpAny] = []
+    for idx, op in enumerate(operations, start=1):
+        op_type_raw: str = op.get("type", "")
+        # Hive API appends `_operation` to all op types when fetched via get_transaction
+        op_type = op_type_raw.removesuffix("_operation")
+        value: dict[str, Any] = op.get("value", {})
+        event: dict[str, Any] = {
+            "type": op_type,
+            "trx_id": trx_id,
+            "block_num": block_num,
+            "trx_num": trx_num,
+            "op_in_trx": idx,
+            **value,
+        }
+        try:
+            result.append(op_any_or_base(event))
+        except Exception as e:
+            logger.warning(
+                f"trx_unpack: skipping op {idx} (type={op_type_raw!r}) in trx {trx_id}: {e}",
+                extra={"notification": False},
+            )
+
+    return result
