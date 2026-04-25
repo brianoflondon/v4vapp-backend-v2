@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from pprint import pprint
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
@@ -11,8 +12,10 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.hive_models.magi_json_data import VSCCallPayload
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
+from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
 from v4vapp_backend_v2.models.invoice_models import Invoice
+from v4vapp_backend_v2.process.hive_notification import send_magi_transfer_custom_json
 
 
 async def forward_magisats(invoice: Invoice) -> None:
@@ -52,23 +55,46 @@ async def forward_magisats(invoice: Invoice) -> None:
         f"fee: {net_msats_fee / 1000:.3f} sats {invoice.short_id}"
     )
 
-    # Now we transfer the amount_to_send_sats to the
+    magi_to = AccName(invoice.cust_id).magi_prefix
+
+    vsc_payload = VSCCallPayload(
+        to=magi_to,
+        amount=str(amount_to_send_sats),
+        parent_id=invoice.group_id_p,
+        msats_fee=str(net_msats_fee),
+        memo=f"Forwarding #magisats from invoice {invoice.short_id} with fee: {net_msats_fee / 1000:.3f} sats",
+    )
+
     server_id = InternalConfig().server_id
-    node_name = InternalConfig().node_name
+    vsc_call = VSCCall(
+        net_id="vsc-mainnet",
+        contract_id="vsc1BdrQ6EtbQ64rq2PkPd21x4MaLnVRcJj85d",
+        action="transfer",
+        caller=f"hive:{server_id}",
+        payload=vsc_payload,
+        rc_limit=2000,
+        intents=[],
+    )
+
+    pprint(vsc_call.model_dump())
+
+    trx = await send_magi_transfer_custom_json(
+        vsc_call=vsc_call,
+        nobroadcast=False,
+    )
+    trx_id = trx.get("id") if trx else None
+    logger.info(f"Sent MAGI transfer custom JSON for invoice {invoice.short_id}, trx_id: {trx_id}")
+
+    return
 
     invoice.cust_id
 
 
-    payment_custom_json = VSCCallPayload(
-        from_account=f"hive:{server_id}",
-        to_account=V4VConfig.magi_btc_destination_account,
-        amount_sats=int(amount_to_send_sats),
-        memo=f"Forwarding #magisats from invoice {invoice.short_id}",
-    )
+async def record_magisats_transfer_event(invoice: Invoice, amount_sats: Decimal) -> None:
 
-
-
-
+    # Now we transfer the amount_to_send_sats to the
+    server_id = InternalConfig().server_id
+    node_name = InternalConfig().node_name
 
     sending_conv = CryptoConversion(
         quote=quote,

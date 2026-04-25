@@ -3,8 +3,6 @@ from typing import Any, Dict, List, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
-
 
 class VSCCallPayload(BaseModel):
     """
@@ -16,28 +14,32 @@ class VSCCallPayload(BaseModel):
     """
 
     amount: str | None = Field(None, description="Amount to transfer (as a string, e.g. '2500').")
-    to_account: AccNameType | None = Field(
+    to_account: str | None = Field(
         None,
         alias="to",
-        description="Recipient account. Accepts plain Hive names or 'hive:<name>' prefix or other formats.",
+        description="Recipient address in its original network format (e.g. 'hive:<name>', '0x...' for EVM).",
     )
+    # V4VAPP specific fields not the necessary part of  Magi Payload
     memo: str = Field("", description="Optional memo attached to the transfer.")
+    msats_fee: str | None = Field(
+        None,
+        description="Optional fee in millisats (as a string, e.g. '250'). Only used for magi transfers.",
+    )
     parent_id: str | None = Field(
         None, description="The group_id of the parent transaction, if applicable"
     )
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    @model_validator(mode="before")
-    @classmethod
-    def normalise_to(cls, data: Any) -> Any:
-        """Strip leading 'hive:' prefix so the value round-trips cleanly through AccName."""
-        if isinstance(data, dict):
-            raw = data.get("to", "")
-            if isinstance(raw, str) and raw.startswith("hive:"):
-                data = dict(data)
-                data["to"] = raw[len("hive:") :]
-        return data
+    @property
+    def log_str(self) -> str:
+        to = f" to={self.to_account}" if self.to_account else ""
+        memo = f" memo={self.memo}" if self.memo else ""
+        return f"🔗 VSC transfer amount={self.amount}{to}{memo}"
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        return {"vsc_call_payload": self.model_dump(exclude_none=True, exclude_unset=True)}
 
 
 class VSCSwapPayload(BaseModel):
@@ -157,19 +159,24 @@ class VSCCall(BaseModel):
         }
     """
 
-    net_id: str = Field(..., description="The VSC network identifier (e.g. 'vsc-mainnet').")
-    caller: AccNameType = Field(
-        ...,
-        description="The calling account. Accepts plain Hive names or 'hive:<name>' prefix.",
+    net_id: str = Field(
+        "vsc-mainnet", description="The VSC network identifier (e.g. 'vsc-mainnet')."
     )
-    contract_id: str = Field(..., description="The VSC smart contract address.")
+    caller: str = Field(
+        ...,
+        description="The calling account in its original network format (e.g. 'hive:<name>').",
+    )
+    contract_id: str = Field(
+        "vsc1BdrQ6EtbQ64rq2PkPd21x4MaLnVRcJj85d",
+        description="The VSC smart contract address. Defaults to sats on BTC Magi.",
+    )
     action: str = Field(
-        ..., description="The contract action to invoke (e.g. 'transfer', 'execute')."
+        "transfer", description="The contract action to invoke (e.g. 'transfer', 'execute')."
     )
     payload: Any = Field(
         ..., description="Action-specific payload (VSCCallPayload, VSCSwapPayload, or raw)."
     )
-    rc_limit: int = Field(0, description="Resource credit limit for the operation.")
+    rc_limit: int = Field(2000, description="Resource credit limit for the operation.")
     intents: List[VSCIntent] = Field(
         default_factory=list,
         description="Optional list of intent declarations (only present on execute calls).",
@@ -180,12 +187,9 @@ class VSCCall(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalise(cls, data: Any) -> Any:
-        """Strip 'hive:' prefix from caller and deserialise the payload field."""
+        """Deserialise the payload field."""
         if isinstance(data, dict):
             data = dict(data)
-            raw_caller = data.get("caller", "")
-            if isinstance(raw_caller, str) and raw_caller.startswith("hive:"):
-                data["caller"] = raw_caller[len("hive:") :]
             if "payload" in data:
                 data["payload"] = _parse_payload(data["payload"])
         return data
@@ -195,19 +199,19 @@ class VSCCall(BaseModel):
     # ------------------------------------------------------------------
 
     @property
-    def from_account(self) -> AccName:
-        """Returns the caller as an AccName (mirrors KeepsatsTransfer / VSCTransfer API)."""
-        return AccName(self.caller)
+    def from_account(self) -> str:
+        """Returns the caller in its original network format (e.g. 'hive:<name>')."""
+        return self.caller
 
     @property
-    def to_account(self) -> AccName:
+    def to_account(self) -> str:
         """
-        Returns the recipient as an AccName.
-        Only meaningful for transfer payloads; returns an empty AccName for execute payloads.
+        Returns the recipient in its original network format.
+        Only meaningful for transfer payloads; returns an empty string for execute payloads.
         """
         if isinstance(self.payload, VSCCallPayload) and self.payload.to_account:
-            return AccName(self.payload.to_account)
-        return AccName("")
+            return self.payload.to_account
+        return ""
 
     @property
     def amount(self) -> str:

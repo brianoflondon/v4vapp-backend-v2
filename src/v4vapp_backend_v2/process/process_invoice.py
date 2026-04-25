@@ -79,16 +79,20 @@ async def process_lightning_receipt(
     await incoming_ledger_entry.save()
     ledger_entries_list.append(incoming_ledger_entry)
 
-
     if invoice.is_magisats:
         logger.info(
             f"Invoice {invoice.short_id} is marked as MAGISATS, treating as MAGI BTC balance update rather than a conversion. {invoice.log_str}",
             extra={"notification": False, **invoice.log_extra},
         )
-        await forward_magisats(invoice=invoice)
-        # We need to return from here but for tests we will do nothing.
-
-
+        try:
+            await forward_magisats(invoice=invoice)
+            # We need to return from here but for tests we will do nothing.
+        except Exception as e:
+            logger.error(
+                f"Error forwarding MAGISATS: {e}",
+                extra={"notification": False, **invoice.log_extra},
+            )
+        return ledger_entries_list
     # Now we send it to the customer (if there is one) and the custom_json receiver needs to process.
 
     if invoice.cust_id and invoice.is_lndtohive:
