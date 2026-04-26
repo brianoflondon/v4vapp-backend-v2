@@ -51,9 +51,10 @@ async def load_ledger_events(data_file: str = "tests/accounting/test_data/v4vapp
         raw_data = f.read()
         json_data = json.loads(raw_data, object_hook=json_util.object_hook)
 
-    for ledger_entry_raw in json_data:
-        ledger_entry = LedgerEntry.model_validate(ledger_entry_raw)
-        await ledger_entry.save()
+    # Validate the entries, then bulk insert them for speed.
+    docs = [LedgerEntry.model_validate(entry).model_dump() for entry in json_data]
+    if docs:
+        await InternalConfig.db["ledger"].insert_many(docs)
 
 
 async def patch_account_hive_balances_from_ledger(module_monkeypatch):
@@ -146,7 +147,6 @@ async def test_run_all_sanity_checks(module_monkeypatch):
             f"Sanity check '{check_name}' failed: {sanity_result.details}"
         )
 
-    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
     results = await run_all_sanity_checks()
     for check_name, sanity_result in results.results:
         assert sanity_result.is_valid, (
