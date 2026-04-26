@@ -49,7 +49,7 @@ ICON = "🌟"
 _REDIS_ACTIVE_KEY = "overwatch:flows:active"
 _REDIS_COMPLETED_PREFIX = "overwatch:flows:completed:"
 _COMPLETED_TTL_SECONDS = 24 * 60 * 60  # 24 hours
-_LATE_EVENT_WINDOW = timedelta(seconds=120)  # only absorb late events into recent completions
+_LATE_EVENT_WINDOW = timedelta(seconds=360)  # only absorb late events into recent completions
 
 
 def _swallow_task_exception(task: asyncio.Task) -> None:  # type: ignore[type-arg]
