@@ -83,8 +83,8 @@
             "args": [
                 "--config",
                 "devhive.config.yaml",
-                // "--overwatch"
-                "--no-overwatch"
+                "--overwatch"
+                // "--no-overwatch"
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

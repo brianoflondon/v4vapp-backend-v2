@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.hive_models.magi_json_data import (
     VSCCall,
     VSCCallPayload,
@@ -138,6 +139,34 @@ def test_vsc_call_payload_memo_defaults_empty():
     assert payload.memo == ""
 
 
+def test_vsc_call_payload_log_str_includes_amount_to_and_memo():
+    payload = VSCCallPayload.model_validate({
+        "amount": "25",
+        "to": "hive:devser.v4vapp",
+        "memo": "brianoflondon@walletofsatoshi.com #v4vapp",
+    })
+    log = payload.log_str
+    assert "amount=25" in log
+    assert "to=hive:devser.v4vapp" in log
+    assert "memo=brianoflondon@walletofsatoshi.com #v4vapp" in log
+
+
+def test_vsc_call_payload_log_extra_contains_payload_dump():
+    payload = VSCCallPayload.model_validate({
+        "amount": "99",
+        "to": "alice",
+        "memo": "test memo",
+        "msats_fee": "1000",
+        "parent_id": "abc123",
+    })
+    extra = payload.log_extra
+    assert "vsc_call_payload" in extra
+    assert extra["vsc_call_payload"]["amount"] == "99"
+    assert extra["vsc_call_payload"]["memo"] == "test memo"
+    assert extra["vsc_call_payload"]["msats_fee"] == "1000"
+    assert extra["vsc_call_payload"]["parent_id"] == "abc123"
+
+
 # ---------------------------------------------------------------------------
 # VSCSwapPayload unit tests
 # ---------------------------------------------------------------------------
@@ -238,6 +267,37 @@ def test_vsc_call_transfer_log_str():
 def test_vsc_call_no_intents_on_transfer():
     call = VSCCall.model_validate(VSC_CALL_DICT)
     assert call.intents == []
+
+
+def test_vsc_call_lightning_memo_detects_ln_address():
+    call = VSCCall.model_validate(VSC_CALL_DICT)
+    ln = call.lightning_memo
+    assert ln.is_lightning
+    assert ln.is_ln_address
+    assert ln.ln_address == "brianoflondon@walletofsatoshi.com"
+    assert ln.short_memo.startswith("⚡️")
+
+
+def test_vsc_call_description_equals_log_str():
+    call = VSCCall.model_validate(VSC_CALL_DICT)
+    assert call.description == call.log_str
+
+
+def test_vsc_call_user_memo_strips_leading_hash():
+    call = VSCCall.model_validate({
+        **VSC_CALL_DICT,
+        "payload": {**VSC_CALL_DICT["payload"], "memo": "#keep this"},
+    })
+    assert call.user_memo == "keep this"
+
+
+def test_vsc_call_is_watched_when_in_watch_users(monkeypatch):
+    instance = InternalConfig()
+    monkeypatch.setattr(
+        instance.config.hive_config, "watch_users", ["hive:v4vapp-test"], raising=False
+    )
+    call = VSCCall.model_validate(VSC_CALL_DICT)
+    assert call.is_watched is True
 
 
 # ---------------------------------------------------------------------------
