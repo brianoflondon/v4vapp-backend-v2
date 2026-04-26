@@ -873,7 +873,7 @@ class TestNotificationReplyCompletion:
     def _notification_op(
         parent_id: str = "gid_trigger",
         notification: bool = True,
-        memo: str = "Lightning error: Payment failed: FAILURE_REASON_INCORRECT_PAYMENT_DETAILS",
+        memo: str = "Processing error: Payment failed: FAILURE_REASON_INCORRECT_PAYMENT_DETAILS",
         from_account: str = "v4vapp",
         to_account: str = "jannost",
         group_id: str = "gid_notif",
@@ -1118,7 +1118,7 @@ class TestNotificationReplyCompletion:
     @staticmethod
     def _transfer_refund_op(
         ref_short_id: str = "0922_53b2e5_1",
-        memo: str = "Lightning error: 🆅 lnbc550u1p56t2 Payment failed: FAILURE_REASON_ERROR | § {ref} | Thank you for using v4v.app",
+        memo: str = "Processing error: 🆅 lnbc550u1p56t2 Payment failed: FAILURE_REASON_ERROR | § {ref} | Thank you for using v4v.app",
         group_id: str = "gid_refund",
         short_id: str = "sid_refund",
         from_account: str = "v4vapp",

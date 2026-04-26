@@ -78,12 +78,12 @@ def currency_to_receive(memo: str) -> Currency:
     Returns:
         Currency: The detected currency, defaults to HIVE if not found.
     """
-    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
-        return Currency.SATS
     if "#hbd" in memo.lower():
         return Currency.HBD
     if "#hive" in memo.lower():
         return Currency.HIVE
+    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
+        return Currency.SATS
     return Currency.HIVE  # Default to HIVE if no specific currency is detected
 
 

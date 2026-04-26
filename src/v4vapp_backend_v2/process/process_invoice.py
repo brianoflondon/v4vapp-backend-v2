@@ -15,6 +15,7 @@ from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
+from v4vapp_backend_v2.process.process_transfer import check_user_limits
 
 
 async def process_lightning_receipt(
@@ -141,8 +142,30 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
 
     # MARK: Sats to Hive or HBD
     server_id = InternalConfig().server_id
+
+    force_keepsats_limit_fail = False
     if invoice.cust_id and invoice.is_lndtohive:
-        if invoice.recv_currency in {Currency.HIVE, Currency.HBD}:
+        check_user_limits_result = await check_user_limits(
+            extra_spend_msats=Decimal(invoice.value_msat), cust_id=invoice.cust_id
+        )
+
+        if check_user_limits_result:
+            if invoice.recv_currency in {Currency.HIVE, Currency.HBD}:
+                logger.warning(
+                    f"User limits exceeded for customer ID: {invoice.cust_id}, not processing Lightning to Hive conversion. {invoice.short_id} converting to Keepsats",
+                    extra={"notification": True, **invoice.log_extra},
+                )
+            else:
+                logger.info(
+                    f"User limits exceeded for customer ID: {invoice.cust_id}, {invoice.short_id} sending to Keepsats anyway.",
+                    extra={"notification": False, **invoice.log_extra},
+                )
+            force_keepsats_limit_fail = True
+
+        if (
+            invoice.recv_currency in {Currency.HIVE, Currency.HBD}
+            and not force_keepsats_limit_fail
+        ):
             # For now we will treat any inbound amount as Keepsats.
             # Not sure this is right... need to think about the custom_json use in the LND to Hive loop.
             logger.info(
@@ -166,7 +189,7 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
                     extra={"notification": False, **invoice.log_extra},
                 )
                 raise
-        elif invoice.recv_currency in {Currency.SATS, Currency.MSATS}:
+        elif invoice.recv_currency in {Currency.SATS, Currency.MSATS} or force_keepsats_limit_fail:
             logger.info(
                 f"Lightning to Keepsats deposit transfer for customer ID: {invoice.cust_id}",
                 extra={"notification": False},

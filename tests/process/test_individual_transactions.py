@@ -378,11 +378,12 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     assert abs(net_msats_after - (net_msats_before - invoice_sats * Decimal(1000))) < 500_000, (
         f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * Decimal(1000)))} < 500_000. "
     )
+    await asyncio.sleep(5)
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "custom_json"}, sort=[("timestamp", -1)]
     )
     custom_json = CustomJson.model_validate(last_hive_op)
-    pprint(custom_json.memo)
+    pprint(f"{custom_json.memo=}")
     pprint(custom_json.model_dump())
     if custom_json.json_data:
         memo = custom_json.json_data.memo
@@ -442,14 +443,17 @@ async def test_balance_request():
 
     This test performs the following steps:
     1. Retrieves and logs the current ledger count.
-    2. Sends a Hive transaction from a customer to the server, including a memo to trigger a Keepsats transfer.
+    2. Sends a Hive transaction from a customer to the server with a memo indicating a balance request.
     3. Prints the transaction details for verification.
+    4. Waits for the ledger to reflect the expected number of new entries.
+    5. Retrieves the last Hive operation of type "transfer" and validates it.
 
     The test ensures that the integration between Hive deposits and Keepsats transfers works as expected.
 
     Raises:
         AssertionError: If any step in the process fails.
     """
+    # need to make sure op_base has a hive instance to decrypt the memo in the transfer model validation
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
 
