@@ -5,6 +5,7 @@ import sys
 from typing import Annotated, Any, Dict
 
 import typer
+from colorama import Fore, Style
 
 from status.status_api import StatusAPI
 from v4vapp_backend_v2 import __version__
@@ -136,12 +137,17 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
                 if shutdown_event.is_set():
                     break
                 try:
-                    await event.update_conv()
-                    await event.save()
-                    custom_json_ops = await event.hive_custom_json()
-                    for op in custom_json_ops or []:
-                        if op.json_data.get()
-                        await op.save()
+                    if event.is_watched:
+                        await event.update_conv()
+                        await event.save()
+                        custom_json_ops = await event.hive_custom_json()
+                        for op in custom_json_ops or []:
+                            if op.is_watched:
+                                await op.save()
+                                logger.info(
+                                    f"{ICON}{Fore.WHITE} {op.log_str}{Style.RESET_ALL}",
+                                    extra={"notification": True},
+                                )
                     logger.info(event.log_str, extra={"notification": False})
                 except Exception as e:
                     logger.error(
