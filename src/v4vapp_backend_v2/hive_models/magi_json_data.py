@@ -3,6 +3,11 @@ from typing import Any, Dict, List, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
+from v4vapp_backend_v2.hive.hive_extras import process_user_memo
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
+
 
 class VSCCallPayload(BaseModel):
     """
@@ -97,7 +102,7 @@ class VSCIntent(BaseModel):
 
     type: str = Field(..., description="Intent type (e.g. 'transfer.allow').")
     args: VSCIntentArgs = Field(
-        default_factory=VSCIntentArgs, description="Intent-specific arguments."
+        default_factory=lambda: VSCIntentArgs(), description="Intent-specific arguments."
     )
 
     model_config = ConfigDict(extra="allow")
@@ -199,18 +204,49 @@ class VSCCall(BaseModel):
 
     @property
     def from_account(self) -> str:
-        """Returns the caller in its original network format (e.g. 'hive:<name>')."""
-        return self.caller
+        """
+        Returns the caller stripped of the network prefix, if present.
+        For example, "hive:alice" becomes "alice". If the caller does not have a known prefix,
+        it is returned unchanged.
+        """
+        acc_name = AccName(self.caller)
+        return acc_name.no_prefix
 
     @property
     def to_account(self) -> str:
         """
-        Returns the recipient in its original network format.
-        Only meaningful for transfer payloads; returns an empty string for execute payloads.
+        Returns the recipient account (if applicable) stripped of the network prefix.
+        For example, "hive:alice" becomes "alice".
+        If the recipient does not have a known prefix, it is returned unchanged.
+        If the payload does not have a recipient (e.g. it's not a transfer), returns an empty string.
         """
         if isinstance(self.payload, VSCCallPayload) and self.payload.to:
-            return self.payload.to
+            acc_name = AccName(self.payload.to)
+            return acc_name.no_prefix
         return ""
+
+    @property
+    def is_watched(self) -> bool:
+        """
+        Determines if this call should be processed based on the caller and recipient.
+
+        A call is considered "watched" if either the caller or recipient matches the server ID
+        or is in the watch list of users.
+
+        Returns:
+            bool: True if the call is watched, False otherwise.
+        """
+        server_id = InternalConfig().server_id
+        if self.from_account == server_id:
+            return True
+        if self.to_account == server_id:
+            return True
+        watch_users = InternalConfig().config.hive_config.watch_users
+        if self.from_account in watch_users:
+            return True
+        if self.to_account in watch_users:
+            return True
+        return False
 
     @property
     def amount(self) -> str:
@@ -247,6 +283,38 @@ class VSCCall(BaseModel):
             f"🔗 VSC call {self.from_account} → {self.contract_id}"
             f" action={self.action} [{self.net_id}]"
         )
+
+    @property
+    def lightning_memo(self) -> LightningMemo:
+        """
+        If the memo contains a lightning address, this property returns a LightningMemo object representing it.
+        Otherwise, it returns None.
+
+        Returns:
+            LightningMemo | None: A LightningMemo object if a lightning address is found in the memo, or None if not.
+        """
+        lightning_memo = LightningMemo(self.memo)
+        return lightning_memo
+
+    @property
+    def description(self) -> str:
+        """
+        Returns a description string for the Keepsats transfer.
+        Used in the LedgerEntry creation.
+        If the invoice_message is set, it returns that; otherwise, it returns the memo.
+        """
+        return self.log_str
+
+    @property
+    def user_memo(self) -> str:
+        """
+        Returns the user memo, which is the decoded memo if available,
+        otherwise returns the original memo.
+
+        Returns:
+            str: The user memo.
+        """
+        return process_user_memo(self.memo)
 
     @property
     def notification_str(self) -> str:
