@@ -37,7 +37,9 @@ from v4vapp_backend_v2.conversion.calculate import calc_keepsats_to_hive
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
+from v4vapp_backend_v2.hive.hive_extras import get_verified_hive_client
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
@@ -68,7 +70,7 @@ async def config_file():
     await close_all_db_connections()
 
 
-@pytest.mark.skip()
+# @pytest.mark.skip()
 async def test_just_clear():
     """
     Test to clear the database and reset the environment.
@@ -378,11 +380,12 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     assert abs(net_msats_after - (net_msats_before - invoice_sats * Decimal(1000))) < 500_000, (
         f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * Decimal(1000)))} < 500_000. "
     )
+    await asyncio.sleep(5)
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "custom_json"}, sort=[("timestamp", -1)]
     )
     custom_json = CustomJson.model_validate(last_hive_op)
-    pprint(custom_json.memo)
+    pprint(f"{custom_json.memo=}")
     pprint(custom_json.model_dump())
     if custom_json.json_data:
         memo = custom_json.json_data.memo
@@ -442,14 +445,17 @@ async def test_balance_request():
 
     This test performs the following steps:
     1. Retrieves and logs the current ledger count.
-    2. Sends a Hive transaction from a customer to the server, including a memo to trigger a Keepsats transfer.
+    2. Sends a Hive transaction from a customer to the server with a memo indicating a balance request.
     3. Prints the transaction details for verification.
+    4. Waits for the ledger to reflect the expected number of new entries.
+    5. Retrieves the last Hive operation of type "transfer" and validates it.
 
     The test ensures that the integration between Hive deposits and Keepsats transfers works as expected.
 
     Raises:
         AssertionError: If any step in the process fails.
     """
+    # need to make sure op_base has a hive instance to decrypt the memo in the transfer model validation
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
 

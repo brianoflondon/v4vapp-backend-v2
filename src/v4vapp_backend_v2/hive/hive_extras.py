@@ -365,6 +365,26 @@ async def get_verified_hive_client(
     Raises:
         HiveToLightningError: If the server account configuration or required keys are missing.
     """
+    return get_verified_hive_client_non_async(hive_role=hive_role, nobroadcast=nobroadcast)
+
+
+def get_verified_hive_client_non_async(
+    hive_role: HiveRoles = HiveRoles.server,
+    nobroadcast: bool = False,
+) -> Tuple[Hive, str]:
+    """
+    Synchronously obtains a verified Hive client instance using server account credentials from the internal configuration.
+
+    Args:
+        nobroadcast (bool, optional): If True, disables broadcasting of transactions. Defaults to False.
+        hive_role (HiveRoles, optional): The role to use for the Hive client. Defaults to HiveRoles.server.
+
+    Returns:
+        Tuple[Hive, str]: A tuple containing the initialized Hive client and the server account name.
+
+    Raises:
+        HiveToLightningError: If the server account configuration or required keys are missing.
+    """
     hive_config = InternalConfig().config.hive_config
     hive_account = hive_config.get_hive_role_account(hive_role)
     if not hive_account:

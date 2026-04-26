@@ -155,7 +155,7 @@ async def test_process_invoice_sets_force_flag(monkeypatch):
     def make_invoice(sats: Decimal):
         # memo includes #sats so that recv_currency property returns SATS rather
         # than the default HIVE (which would trigger the conversion path).
-        inv = Invoice.construct(
+        inv = Invoice.model_construct(
             cust_id="bob",
             is_lndtohive=True,
             value=sats,
@@ -176,6 +176,14 @@ async def test_process_invoice_sets_force_flag(monkeypatch):
     monkeypatch.setattr(
         "v4vapp_backend_v2.process.process_invoice.reply_with_hive",
         fake_reply,
+    )
+
+    async def fake_check_user_limits(extra_spend_msats, cust_id):
+        return ""
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_invoice.check_user_limits",
+        fake_check_user_limits,
     )
 
     threshold = V4VConfig().data.force_custom_json_payment_sats

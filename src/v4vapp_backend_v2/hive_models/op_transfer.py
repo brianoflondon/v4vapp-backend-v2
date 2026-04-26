@@ -19,7 +19,12 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     seconds_only_time_diff,
 )
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
-from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_transfer_cust_id, process_user_memo
+from v4vapp_backend_v2.hive.hive_extras import (
+    decode_memo,
+    get_transfer_cust_id,
+    get_verified_hive_client_non_async,
+    process_user_memo,
+)
 from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_base import OpBase
@@ -93,6 +98,8 @@ class TransferBase(OpBase):
         Args:
             hive_inst (Hive): An instance of the Hive class used for decoding the memo.
         """
+        if not hive_inst:
+            hive_inst, _ = get_verified_hive_client_non_async()
         if not self.memo:
             self.d_memo = ""
             return
