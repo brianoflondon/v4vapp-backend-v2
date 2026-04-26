@@ -6,7 +6,6 @@ from pydantic import AfterValidator
 
 
 class AccName(str):
-
     @property
     def link(self) -> str:
         # Replace this with your specific URL pattern (the "mussel")
@@ -38,6 +37,21 @@ class AccName(str):
         if self.startswith("contract:"):
             return True
         return False
+
+    @property
+    def no_prefix(self) -> str:
+        """
+        Returns the account name stripped of any known network prefixes.
+         For example, "hive:alice" becomes "alice", and "did:pkh:eip155:1:0bob123" becomes "0xbabc123".
+         If the account name does not have a known prefix, it is returned unchanged.
+        """
+        if self.startswith("hive:"):
+            return self[5:]
+        if self.startswith("did:pkh:eip155:1:"):
+            return self[18:]
+        if self.startswith("contract:"):
+            return self[9:]
+        return self
 
     @property
     def magi_prefix(self) -> str:
