@@ -78,7 +78,7 @@ async def health_check() -> Dict[str, Any]:
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
 
-_overwatch_enabled: bool = False
+_overwatch_enabled: bool = True
 
 
 def set_overwatch_enabled(enabled: bool) -> None:
