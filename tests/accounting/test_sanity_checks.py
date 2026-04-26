@@ -9,6 +9,7 @@ from bson import json_util
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 
 """
 The test data for this module must be up to date with any changes in the accounting models.
@@ -53,6 +54,7 @@ async def load_ledger_events(data_file: str = "tests/accounting/test_data/v4vapp
 
     # Validate the entries, then bulk insert them for speed.
     docs = [LedgerEntry.model_validate(entry).model_dump() for entry in json_data]
+    docs = [convert_decimals_for_mongodb(doc) for doc in docs]
     if docs:
         await InternalConfig.db["ledger"].insert_many(docs)
 
