@@ -187,6 +187,28 @@ class KeepsatsTransfer(BaseModel):
         )
         return f"⏩️{self.from_account} sent {amount} to {self.to_account} via KeepSats"
 
+
+    @property
+    def is_watched(self) -> bool:
+        """
+        Determines if this KeepsatsTransfer should be watched based on the involved accounts.
+
+        Returns:
+            bool: True if the transfer should be watched, False otherwise.
+        """
+        server_id = InternalConfig().server_id
+        if self.from_account == server_id:
+            return True
+        if self.to_account == server_id:
+            return True
+        watch_users = InternalConfig().config.hive_config.watch_users
+        if self.to_account in watch_users:
+            return True
+        # Check if the transfer is from a watched user
+        if self.from_account in watch_users:
+            return True
+        return False
+
     def lightning_invoice_in_memo(self) -> bool:
         """
         Checks if the memo contains a lightning invoice.
