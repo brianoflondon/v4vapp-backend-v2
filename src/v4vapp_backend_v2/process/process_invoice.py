@@ -150,10 +150,16 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
         )
 
         if check_user_limits_result:
-            logger.warning(
-                f"User limits exceeded for customer ID: {invoice.cust_id}, not processing Lightning to Hive conversion. {invoice.short_id} converting to Keepsats",
-                extra={"notification": True, **invoice.log_extra},
-            )
+            if  invoice.recv_currency in {Currency.HIVE, Currency.HBD}
+                logger.warning(
+                    f"User limits exceeded for customer ID: {invoice.cust_id}, not processing Lightning to Hive conversion. {invoice.short_id} converting to Keepsats",
+                    extra={"notification": True, **invoice.log_extra},
+                )
+            else:
+                logger.info(
+                    f"User limits exceeded for customer ID: {invoice.cust_id}, {invoice.short_id} sending to Keepsats anyway.",
+                    extra={"notification": False, **invoice.log_extra},
+                )
             force_keepsats_limit_fail = True
 
         if (

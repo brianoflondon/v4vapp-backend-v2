@@ -98,8 +98,6 @@ class TransferBase(OpBase):
         Args:
             hive_inst (Hive): An instance of the Hive class used for decoding the memo.
         """
-        if not hive_inst:
-            hive_inst, _ = get_verified_hive_client_non_async()
         if not self.memo:
             self.d_memo = ""
             return
@@ -113,7 +111,9 @@ class TransferBase(OpBase):
             != self.memo  # This catches d_memos which are already decoded and start with #
         ):
             return
-        if self.memo.startswith("#") and hive_inst:
+        if self.memo.startswith("#"):
+            if not hive_inst:
+                hive_inst, _ = get_verified_hive_client_non_async()
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
         else:
             self.d_memo = self.memo

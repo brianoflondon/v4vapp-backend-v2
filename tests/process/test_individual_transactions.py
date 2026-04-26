@@ -37,9 +37,7 @@ from v4vapp_backend_v2.conversion.calculate import calc_keepsats_to_hive
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
-from v4vapp_backend_v2.hive.hive_extras import get_verified_hive_client
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
-from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
@@ -70,7 +68,7 @@ async def config_file():
     await close_all_db_connections()
 
 
-# @pytest.mark.skip()
+@pytest.mark.skip()
 async def test_just_clear():
     """
     Test to clear the database and reset the environment.
