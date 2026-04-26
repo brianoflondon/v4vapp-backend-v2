@@ -321,7 +321,7 @@ def get_good_nodes() -> List[str]:
         good_nodes = json.loads(good_nodes_json)
     if good_nodes:
         logger.warning(
-            f"Failed to fetch good nodes: {e} using last good nodes.",
+            "Failed to fetch good nodes: using last good nodes.",
             extra={
                 "notification": False,
                 "error_code": "beacon_nodes_fail",
@@ -329,7 +329,7 @@ def get_good_nodes() -> List[str]:
         )
     else:
         logger.warning(
-            f"Failed to fetch good nodes: {e} using default nodes.",
+            "Failed to fetch good nodes: using default nodes.",
             extra={
                 "notification": False,
                 "error_code": "beacon_nodes_fail",
