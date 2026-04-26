@@ -166,9 +166,6 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
             # This will send Hive or a custom_json at the end.
             # Check for fixed quote in the conversion to Hive/HBD
             # Failure in the conversion (i.e. for a small amount) will prevent follow on processes
-            
-
-
 
             try:
                 await conversion_keepsats_to_hive(
