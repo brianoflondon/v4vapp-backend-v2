@@ -1,10 +1,12 @@
 import asyncio
+import os
 import signal
 import sys
-from typing import Annotated
+from typing import Annotated, Any, Dict
 
 import typer
 
+from status.status_api import StatusAPI
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -16,6 +18,30 @@ app = typer.Typer()
 
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
+
+
+async def health_check() -> Dict[str, Any]:
+    """
+    Health check function for the StatusAPI.
+
+    Returns:
+        dict: A dictionary containing the health status.
+    """
+    stream_task_running = any(
+        t.get_name() == "magi_stream" and not t.done() for t in asyncio.all_tasks()
+    )
+    if not stream_task_running:
+        logger.warning(
+            f"{ICON} magi_stream task is not running",
+            extra={"notification": True, "error_code": "magi_stream_task_failure"},
+        )
+        shutdown_event.set()
+        raise RuntimeError("magi_stream task is not running")
+    logger.debug(
+        f"{ICON} Magi Monitor health check passed",
+        extra={"notification": False, "error_code_clear": "magi_stream_task_failure"},
+    )
+    return {"status": "OK", "name": __name__, "version": __version__}
 
 
 def handle_shutdown_signal():
@@ -61,7 +87,19 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
         from_indexer_id (int): Start scanning from this indexer_id.
             If 0, resumes from the last saved position in the database.
     """
+    # CRITICAL: Update notification_loop to the actual running event loop.
+    # setup_logging() runs before asyncio.run() so it creates a detached
+    # event loop (new_event_loop) that is never started. When the
+    # QueueListener thread later processes a notification record it calls
+    # loop.run_until_complete() which BLOCKS the listener thread, preventing
+    # all subsequent log records (including file writes) from being flushed.
+    # By pointing notification_loop at the running loop, the handler uses
+    # run_coroutine_threadsafe() instead, which is non-blocking.
+    InternalConfig.notification_loop = asyncio.get_running_loop()
+    await asyncio.sleep(1)
     CONFIG = InternalConfig().config
+    db_conn = DBConn()
+    await db_conn.setup_database()
     logger.info(
         f"{ICON} Magi Monitor: {CONFIG.logging.default_notification_bot_name} "
         f"🔗 Database: {CONFIG.dbs_config.default_name}"
@@ -70,6 +108,17 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
     # Register signal handlers for SIGTERM and SIGINT
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
+
+    process_name = os.path.splitext(os.path.basename(__file__))[0]
+    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6001")
+    status_api = StatusAPI(
+        port=int(health_check_port),
+        health_check_func=health_check,
+        shutdown_event=shutdown_event,
+        process_name=process_name,
+        version=__version__ or "0.0.0",
+    )
+
     try:
         # If from_indexer_id is -1, try to resume from the last saved position
         cursor_id = from_indexer_id
@@ -91,6 +140,7 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
                     await event.save()
                     custom_json_ops = await event.hive_custom_json()
                     for op in custom_json_ops or []:
+                        if op.json_data.get()
                         await op.save()
                     logger.info(event.log_str, extra={"notification": False})
                 except Exception as e:
@@ -99,12 +149,16 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
                         extra={"notification": False},
                     )
 
-        stream = asyncio.create_task(stream_task(), name="magi_stream")
+        tasks = [
+            asyncio.create_task(stream_task(), name="magi_stream"),
+            asyncio.create_task(status_api.start(), name="status_api"),
+        ]
 
         # Wait until shutdown is requested
         await shutdown_event.wait()
-        stream.cancel()
-        await asyncio.gather(stream, return_exceptions=True)
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
@@ -157,8 +211,6 @@ def main(
     stores each event in the magi_btc MongoDB collection.
     """
     _ = InternalConfig(config_filename=config_filename)
-    db_conn = DBConn()
-    asyncio.run(db_conn.setup_database())
     logger.info(
         f"{ICON} ✅ Magi Monitor Started. Version: {__version__} "
         f"on {InternalConfig().local_machine_name}",

@@ -11,6 +11,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.op_all import trx_unpack
 from v4vapp_backend_v2.hive_models.op_base_extras import HiveExp
@@ -124,6 +125,26 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         """
         return f"{self.indexer_block_height}_{self.trx_id}_{self.op_in_trx}_real"
 
+    @computed_field
+    def short_id(self) -> str:
+        """
+        Returns a short ID for this record. This is a string used to uniquely identify
+        the operation in the database.
+        The short ID is a combination of the block number, transaction number,
+        operation index in the transaction, and realm.
+        This is used to determine the key in the database where the operation
+        """
+        # Give the last 4 digits of the block number and first 5 chars of the trx_id
+        block_num_str = str(self.indexer_block_height)
+        short_block_num = f"{block_num_str[-4:]}"
+        short_trx_id = self.trx_id[:6]
+        short_op_in_trx = f"_{self.op_in_trx}"
+        return f"{short_block_num}_{short_trx_id}{short_op_in_trx}"
+
+    @property
+    def short_id_p(self) -> str:
+        return self.short_id  # Type: ignore
+
     @property
     def group_id_p(self) -> str:
         tx_hash = self.indexer_tx_hash
@@ -134,6 +155,16 @@ class MagiBTCTransferEvent(TrackedBaseModel):
     @property
     def group_id_query(self) -> Dict[str, Any]:
         return {"indexer_id": self.indexer_id}
+
+    @property
+    def op_type(self) -> str:
+        """
+        Returns the operation type for the Magi BTC transfer event.
+
+        Returns:
+            str: The operation type for the Magi BTC transfer event, which is always "magi_btc_transfer_event".
+        """
+        return "magi_btc_transfer_event"
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         if not quote:
@@ -177,6 +208,34 @@ class MagiBTCTransferEvent(TrackedBaseModel):
             f"{ICON} Transfer {self.from_addr:>18} -> {self.to_addr:>18} "
             f"{self.amount:,.0f} sats (indexer_id={self.indexer_id}) {self.link or ''}"
         )
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        """
+        Generates a dictionary containing additional logging information.
+        Usage: in a log entry use as an unpacked dictionary like this:
+        `logger.info(f"{op.block_num} | {op.log_str}", extra={**op.log_extra})`
+
+        Returns:
+            Dict[str, Any]: A dictionary where the key is the name of the current instance
+            and the value is the serialized representation of the instance, excluding the
+            "raw_op" field.
+        """
+        return {self.name(): self.model_dump(by_alias=True)}
+
+    @classmethod
+    def name(cls) -> str:
+        """
+        Returns the name of the class in snake_case format.
+
+        This method converts the class name to a snake_case string
+        representation, which is typically used for naming operations
+        or identifiers in a consistent and readable format.
+
+        Returns:
+            str: The snake_case representation of the class name.
+        """
+        return snake_case(cls.__name__)
 
     def _get_btc_explorer_link(self, markdown: bool = False) -> str:
         """

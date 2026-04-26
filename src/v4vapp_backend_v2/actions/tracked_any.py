@@ -17,6 +17,7 @@ from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
+from v4vapp_backend_v2.magi.magi_classes import MagiBTCTransferEvent
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
@@ -76,6 +77,11 @@ def get_tracked_any_type(value: Any) -> str:
         if message_type == "FORWARD":
             return "htlc_event"
 
+        indexer_tx_hash = value.get("indexer_tx_hash", None)
+        indexer_id = value.get("indexer_id", None)
+        if indexer_tx_hash and indexer_id:
+            return "magi_btc_transfer_event"
+
     # Check for a Lightning Tracked Hive Event
     if isinstance(value, Invoice):
         return value.op_type or "invoice"
@@ -83,6 +89,8 @@ def get_tracked_any_type(value: Any) -> str:
         return value.op_type or "payment"
     if isinstance(value, TrackedForwardEvent):
         return "htlc_event"
+    if isinstance(value, MagiBTCTransferEvent):
+        return "magi_btc_transfer_event"
     if not isinstance(value, dict) and isinstance(
         value, (OpAllTransfers, FillOrder, LimitOrderCreate, CustomJson)
     ):
@@ -124,7 +132,8 @@ TrackedAny = Annotated[
     | Annotated[TransferBase, Tag("transfer_base")]
     | Annotated[ProducerMissed, Tag("producer_missed")]
     | Annotated[ProducerReward, Tag("producer_reward")]
-    | Annotated[AccountWitnessVote, Tag("account_witness_vote")],
+    | Annotated[AccountWitnessVote, Tag("account_witness_vote")]
+    | Annotated[MagiBTCTransferEvent, Tag("magi_btc_transfer_event")],
     Discriminator(get_tracked_any_type),
 ]
 
@@ -157,6 +166,11 @@ TrackedTransferKeepsatsToHive = Annotated[
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
     | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
     | Annotated[CustomJson, Tag("custom_json")],
+    Discriminator(get_tracked_any_type),
+]
+
+TrackedMagi = Annotated[
+    Annotated[MagiBTCTransferEvent, Tag("magi_btc_transfer_event")],
     Discriminator(get_tracked_any_type),
 ]
 

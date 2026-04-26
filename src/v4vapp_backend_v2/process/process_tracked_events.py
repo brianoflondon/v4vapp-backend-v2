@@ -1,3 +1,32 @@
+"""
+Central dispatcher for processing tracked blockchain and Lightning Network events into
+ledger entries.
+
+The primary entry point is :func:`process_tracked_event`, which receives a
+:class:`~v4vapp_backend_v2.actions.tracked_any.TrackedAny` object (representing a single
+on-chain or off-chain operation) and routes it to the appropriate handler:
+
+- **Hive operations** (``TransferBase``, ``LimitOrderCreate``, ``LimitOrderCancelled``,
+  ``FillOrder``, ``CustomJson``) → :func:`~v4vapp_backend_v2.process.process_hive.process_hive_op`
+- **Inbound Lightning invoices** (``Invoice``) → :func:`process_lightning_invoice`
+- **Outbound Lightning payments** (``Payment``) → :func:`process_lightning_payment`
+- **Forward events** (``TrackedForwardEvent``) →
+  :func:`~v4vapp_backend_v2.process.process_forward_events.process_forward`
+- **Witness events** (``ProducerReward``, ``ProducerMissed``) →
+  :func:`~v4vapp_backend_v2.witness_monitor.witness_events.process_witness_event`
+- Informational-only types (``AccountUpdate2``, ``AccountWitnessVote``, ``BlockMarker``,
+  notification ``CustomJson``) are handled with early returns and no ledger entry created.
+
+Concurrency is managed via :class:`~v4vapp_backend_v2.process.lock_str_class.LockStr` —
+the outer lock is keyed on ``group_id`` (preventing duplicate ledger entries) and the inner
+lock is keyed on ``cust_id`` (serialising operations per customer).
+
+``CustomJsonRetryError`` triggers up to 3 automatic retries with an exponential back-off.
+Failed Lightning payments trigger a Hive refund via
+:func:`~v4vapp_backend_v2.process.hive_notification.reply_with_hive` when no prior reply
+has been sent.
+"""
+
 import asyncio
 from timeit import default_timer as timer
 from typing import List
@@ -28,6 +57,7 @@ from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
+from v4vapp_backend_v2.magi.magi_classes import MagiBTCTransferEvent
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
@@ -37,6 +67,7 @@ from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError
 from v4vapp_backend_v2.process.process_forward_events import process_forward
 from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
+from v4vapp_backend_v2.process.process_magi import process_magi_btc_transfer_event
 from v4vapp_backend_v2.process.process_payment import process_payment_success
 from v4vapp_backend_v2.witness_monitor.witness_events import process_witness_event
 
@@ -142,6 +173,10 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                     # success line with timing.  The previous explicit log
                     # here resulted in duplicate messages.
                     ledger_entries = await process_forward(tracked_forward_event=tracked_op)
+                elif isinstance(tracked_op, MagiBTCTransferEvent):
+                    ledger_entries = await process_magi_btc_transfer_event(
+                        magi_transfer=tracked_op
+                    )
                 else:
                     raise ValueError("Invalid tracked object")
 

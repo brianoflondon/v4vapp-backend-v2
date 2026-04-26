@@ -42,6 +42,7 @@ def filter_by_account_as_of_date_query(
     Returns:
         Dict[str, Any]: A dictionary representing the MongoDB query.
     """
+    date_range_query: Dict[str, Any] = {}
     if age:
         if not as_of_date:
             as_of_date = datetime.now(tz=timezone.utc)
@@ -277,8 +278,14 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
             }
         }
     ]
-
-    # Magi pipeline
+    magi_btc_pipeline: Sequence[Mapping[str, Any]] = [
+        {
+            "$match": {
+                "operationType": {"$ne": "delete"},
+                "fullDocument.indexer_id": {"$ne": None},
+            }
+        }
+    ]
 
     return {
         "payments": payments_pipeline,
@@ -286,4 +293,5 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
         "hive_ops": hive_ops_pipeline,
         "htlc_events": htlc_events_pipeline,
         "ledger": ledger_pipeline,
+        "magi_btc": magi_btc_pipeline,
     }

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from pprint import pprint
+from typing import List
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
@@ -14,8 +15,24 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
+from v4vapp_backend_v2.magi.magi_classes import MagiBTCTransferEvent
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.hive_notification import send_magi_transfer_custom_json
+
+
+async def process_magi_btc_transfer_event(
+    magi_transfer: MagiBTCTransferEvent,
+) -> List[LedgerEntry]:
+    """
+    Process a Magi BTC transfer event by recording it in the database and performing necessary actions.
+
+    Args:
+        magi_transfer (MagiBTCTransferEvent): The Magi BTC transfer event object.
+
+    """
+    logger.info(f"Processing Magi BTC transfer event: {magi_transfer.log_str}")
+
+    return []
 
 
 async def forward_magisats(invoice: Invoice) -> None:

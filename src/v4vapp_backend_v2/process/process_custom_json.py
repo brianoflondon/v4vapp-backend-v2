@@ -57,6 +57,11 @@ async def process_custom_json_func(
         logger.debug(f"Notification CustomJson: {custom_json.json_data.memo}")
         return []
 
+    if custom_json.cj_id == "vsc.call":
+        # These are handled based on the Magi instructions, not here.
+        logger.debug(f"VSC Call CustomJson: {custom_json.log_str}")
+        return []
+
     if not custom_json.authorized:
         message = f"CustomJson operation not authorized. {custom_json.from_account} not in {custom_json.required_auths}"
         logger.warning(message, extra={"notification": False, **custom_json.log_extra})

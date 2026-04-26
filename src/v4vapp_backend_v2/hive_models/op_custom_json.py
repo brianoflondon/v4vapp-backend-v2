@@ -148,6 +148,9 @@ class CustomJson(OpBase):
                 # Check if the transfer is from a watched user
                 if self.json_data.from_account in OpBase.watch_users:
                     return True
+                caller = 
+                if getattr(self.json_data, "caller", None) and self.json_data.caller == InternalConfig().server_id:
+                    return True
         return False
 
     # MARK: Methods to surface if it exists
