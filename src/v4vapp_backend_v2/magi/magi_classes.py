@@ -12,7 +12,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
-from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.op_all import trx_unpack
 from v4vapp_backend_v2.hive_models.op_base_extras import HiveExp
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -29,7 +29,7 @@ class MagiBTCBalanceError(Exception):
 
 
 class MagiBTCBalance(BaseModel):
-    account: AccNameType
+    account: str
     balance_sats: Decimal
     error: str | None = None
 
@@ -39,8 +39,8 @@ class MagiBTCBalance(BaseModel):
 
 
 class MagiBTCTransferEvent(TrackedBaseModel):
-    from_addr: AccNameType
-    to_addr: AccNameType
+    from_addr: str
+    to_addr: str
     amount: Decimal
     indexer_block_height: int
     indexer_tx_hash: str
@@ -72,6 +72,24 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         return InternalConfig.db[DB_MAGI_BTC_COLLECTION]
 
     @computed_field
+    def from_account(self) -> str:
+        """
+        Returns the sender account stripped of the network prefix.
+        For example, "hive:alice" becomes "alice". If the sender does not have a known prefix, it is returned unchanged.
+        """
+        acc_name = AccName(self.from_addr)
+        return acc_name.no_prefix
+
+    @computed_field
+    def to_account(self) -> str:
+        """
+        Returns the recipient account stripped of the network prefix.
+        For example, "hive:alice" becomes "alice". If the recipient does not have a known prefix, it is returned unchanged.
+        """
+        acc_name = AccName(self.to_addr)
+        return acc_name.no_prefix
+
+    @computed_field
     def op_in_trx(self) -> int:
         """
         Derives the operation index within the transaction from the indexer_tx_hash suffix.
@@ -92,7 +110,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         return 1
 
     @computed_field
-    def to_from_accounts(self) -> List[str]:
+    def all_accounts(self) -> List[str]:
         """
         Returns a list with 'from' and 'to' accounts in their original network formats.
 
@@ -102,7 +120,31 @@ class MagiBTCTransferEvent(TrackedBaseModel):
             List[str]: A list with the 'from' and 'to' accounts.
 
         """
-        return [self.to_addr, self.from_addr]
+        # problem with computed fields.
+        return [self.from_account, self.to_account]  # type: ignore
+
+    @property
+    def is_watched(self) -> bool:
+        """
+        Determines if this transfer event involves any accounts that are being watched.
+
+        Checks either the sender and recipient against the server's own ID and a list of
+        watched users from the configuration.
+
+        Returns:
+            bool: True if any watched accounts are involved, False otherwise.
+        """
+        server_id = InternalConfig().server_id
+        if self.from_account == server_id:
+            return True
+        if self.to_account == server_id:
+            return True
+        watch_users = InternalConfig().config.hive_config.watch_users
+        if self.from_account in watch_users:
+            return True
+        if self.to_account in watch_users:
+            return True
+        return False
 
     @property
     def trx_id(self) -> str:
@@ -143,7 +185,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
 
     @property
     def short_id_p(self) -> str:
-        return self.short_id  # Type: ignore
+        return self.short_id  # type: ignore
 
     @property
     def group_id_p(self) -> str:
