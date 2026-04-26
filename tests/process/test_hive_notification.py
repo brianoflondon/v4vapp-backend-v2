@@ -178,6 +178,14 @@ async def test_process_invoice_sets_force_flag(monkeypatch):
         fake_reply,
     )
 
+    async def fake_check_user_limits(extra_spend_msats, cust_id):
+        return ""
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_invoice.check_user_limits",
+        fake_check_user_limits,
+    )
+
     threshold = V4VConfig().data.force_custom_json_payment_sats
     assert threshold > 0
 

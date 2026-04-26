@@ -316,6 +316,14 @@ class TestLateEventTimeWindow:
     """Verify that the second pass only absorbs events into recently-completed
     flows, not old ones from unrelated transactions."""
 
+    @pytest.fixture(autouse=True)
+    def patch_late_event_window(self, monkeypatch):
+        self.window = timedelta(seconds=5)
+        monkeypatch.setattr(
+            "v4vapp_backend_v2.process.process_overwatch._LATE_EVENT_WINDOW",
+            self.window,
+        )
+
     @pytest.mark.asyncio
     async def test_recent_completion_absorbs_late_event(self):
         """A flow that completed < 120s ago absorbs a late event."""
@@ -337,10 +345,10 @@ class TestLateEventTimeWindow:
         completed_names = {f.flow_definition.name for f in ow.completed_flows}
         assert "external_to_keepsats" in completed_names
 
-        # Force completed_at to "just now" so it's within the window
+        # Force completed_at to just inside the late-event window
         for f in ow.completed_flows:
             if f.flow_definition.name == "external_to_keepsats":
-                f.completed_at = datetime.now(tz=timezone.utc)
+                f.completed_at = datetime.now(tz=timezone.utc) - self.window + timedelta(seconds=1)
 
         # Late HIVE notification — should be absorbed
         late_transfer = _op_event("transfer", group_id="gid_hive", short_id="hive_notif")
@@ -374,9 +382,9 @@ class TestLateEventTimeWindow:
                 f.superset_grace_expires = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
         await ow.check_stalls()
 
-        # Force completed_at to 5 minutes ago — outside the window
+        # Force completed_at to just outside the late-event window
         for f in ow.completed_flows:
-            f.completed_at = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
+            f.completed_at = datetime.now(tz=timezone.utc) - self.window - timedelta(seconds=1)
 
         # Unrelated custom_json arrives — should NOT be absorbed
         unrelated = _op_event("custom_json", group_id="gid_unrelated", short_id="3688_2320ec_1")
@@ -411,9 +419,9 @@ class TestLateEventTimeWindow:
                 f.superset_grace_expires = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
         await ow.check_stalls()
 
-        # Age all completed flows past the window
+        # Age all completed flows just outside the late-event window
         for f in ow.completed_flows:
-            f.completed_at = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
+            f.completed_at = datetime.now(tz=timezone.utc) - self.window - timedelta(seconds=1)
 
         # New internal transfer arrives — should NOT be absorbed
         new_trigger = _op_event("custom_json", group_id="gid_new", short_id="3688_2320ec_1")

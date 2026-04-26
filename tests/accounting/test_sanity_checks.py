@@ -9,6 +9,7 @@ from bson import json_util
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 
 """
 The test data for this module must be up to date with any changes in the accounting models.
@@ -51,9 +52,11 @@ async def load_ledger_events(data_file: str = "tests/accounting/test_data/v4vapp
         raw_data = f.read()
         json_data = json.loads(raw_data, object_hook=json_util.object_hook)
 
-    for ledger_entry_raw in json_data:
-        ledger_entry = LedgerEntry.model_validate(ledger_entry_raw)
-        await ledger_entry.save()
+    # Validate the entries, then bulk insert them for speed.
+    docs = [LedgerEntry.model_validate(entry).model_dump() for entry in json_data]
+    docs = [convert_decimals_for_mongodb(doc) for doc in docs]
+    if docs:
+        await InternalConfig.db["ledger"].insert_many(docs)
 
 
 async def patch_account_hive_balances_from_ledger(module_monkeypatch):
@@ -146,7 +149,6 @@ async def test_run_all_sanity_checks(module_monkeypatch):
             f"Sanity check '{check_name}' failed: {sanity_result.details}"
         )
 
-    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
     results = await run_all_sanity_checks()
     for check_name, sanity_result in results.results:
         assert sanity_result.is_valid, (

@@ -69,6 +69,23 @@ def _log_rates_insert_done(t: asyncio.Task) -> None:
         logger.warning(f"{ICON} Rates insert task failed: {e}", extra={"notification": False})
 
 
+def currency_to_receive(memo: str) -> Currency:
+    """
+    Detects the currency to receive based on the memo.
+    Args:
+        memo (str): The memo to check.
+    Returns:
+        Currency: The detected currency, defaults to HIVE if not found.
+    """
+    if "#hbd" in memo.lower():
+        return Currency.HBD
+    if "#hive" in memo.lower():
+        return Currency.HIVE
+    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
+        return Currency.SATS
+    return Currency.HIVE  # Default to HIVE if no specific currency is detected
+
+
 def _parse_iso_datetime(value: str | datetime | None) -> datetime:
     """Parse an ISO-8601 string (or pass-through a datetime) and return a
     timezone-aware datetime (UTC if missing). This centralises the handling of

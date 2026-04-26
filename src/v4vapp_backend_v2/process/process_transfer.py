@@ -154,6 +154,10 @@ async def follow_on_transfer(
             nobroadcast=nobroadcast,
         )
 
+        user_limits_text = await check_user_limits(
+            extra_spend_msats=tracked_op.conv.msats, cust_id=tracked_op.cust_id
+        )
+
         # MARK: Conversion Hive/HBD to Keepsats
         if tracked_op.keepsats and not isinstance(tracked_op, CustomJson):
             # This is a conversion of Hive/HBD and deposit Lightning Keepsats
@@ -161,9 +165,6 @@ async def follow_on_transfer(
             logger.debug(
                 f"Detected keepsats operation in memo: {tracked_op.d_memo}",
                 extra={"notification": False, **tracked_op.log_extra},
-            )
-            user_limits_text = await check_user_limits(
-                extra_spend_msats=tracked_op.conv.msats, cust_id=tracked_op.cust_id
             )
             if user_limits_text:
                 raise HiveTransferError(f"{user_limits_text}")
@@ -216,6 +217,8 @@ async def follow_on_transfer(
 
             # This is a keepsats to Hive conversion
             to_currency = Currency.HBD if tracked_op.detect_hbd else Currency.HIVE
+            if user_limits_text:
+                raise HiveTransferError(f"{user_limits_text}")
             await conversion_keepsats_to_hive(
                 server_id=server_id,
                 cust_id=cust_id,
@@ -339,7 +342,7 @@ async def follow_on_transfer(
             return_details.amount = getattr(
                 tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
             )
-        return_details.reason_str = f"Lightning error: {e}"
+        return_details.reason_str = f"Processing error: {e}"
         logger.error(
             return_details.reason_str,
             extra={"notification": False, **tracked_op.log_extra},
@@ -483,14 +486,10 @@ async def decode_incoming_and_checks(
         if tracked_op.paywithsats_amount:
             pass
 
-        message = f"Lightning decode error: {e}"
+        message = f"Lightning Invoice not found or error, processing as a Keepsats withdrawal or rejecting Lightning decode error: {e}"
         logger.warning(
             f"{message}",
             extra={"notification": False, **tracked_op.log_extra},
-        )
-        # Here we process as a keepsats to Hive/HBD conversion
-        logger.warning(
-            "Lightning Invoice not found or error, processing as a Keepsats withdrawal or rejecting"
         )
         return None
 

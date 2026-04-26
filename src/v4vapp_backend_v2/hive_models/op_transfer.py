@@ -19,7 +19,12 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     seconds_only_time_diff,
 )
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
-from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_transfer_cust_id, process_user_memo
+from v4vapp_backend_v2.hive.hive_extras import (
+    decode_memo,
+    get_transfer_cust_id,
+    get_verified_hive_client_non_async,
+    process_user_memo,
+)
 from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_base import OpBase
@@ -106,7 +111,9 @@ class TransferBase(OpBase):
             != self.memo  # This catches d_memos which are already decoded and start with #
         ):
             return
-        if self.memo.startswith("#") and hive_inst:
+        if self.memo.startswith("#"):
+            if not hive_inst:
+                hive_inst, _ = get_verified_hive_client_non_async()
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
         else:
             self.d_memo = self.memo
