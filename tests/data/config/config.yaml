@@ -257,6 +257,8 @@ hive_config:
     - vsc.deposit
   watch_witnesses:
     - brianoflondon
+  watch_users:
+    - v4vapp.dev
   witness_configs:
     brianoflondon:
       kuma_webhook_url: WEBHOOK_TEST_URL

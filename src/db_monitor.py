@@ -310,7 +310,9 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                     },
                 )
                 if overwatch_enabled() and len(ledger_entries) == 0:
-                    await Overwatch().cancel_flows_for_trigger(op.group_id_p)
+                    trigger_group_id = getattr(op, "group_id_p", None) or getattr(op, "group_id", None)
+                    if trigger_group_id is not None:
+                        await Overwatch().cancel_flows_for_trigger(trigger_group_id)
                 return
             except ValueError as e:
                 logger.exception(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})

@@ -237,12 +237,12 @@ def test_vsc_call_transfer_caller_stripped():
 
 def test_vsc_call_transfer_from_account():
     call = VSCCall.model_validate(VSC_CALL_DICT)
-    assert call.from_account == "hive:v4vapp-test"
+    assert call.from_account == "v4vapp-test"
 
 
 def test_vsc_call_transfer_to_account():
     call = VSCCall.model_validate(VSC_CALL_DICT)
-    assert call.to_account == "hive:devser.v4vapp"
+    assert call.to_account == "devser.v4vapp"
 
 
 def test_vsc_call_transfer_amount():
@@ -258,8 +258,8 @@ def test_vsc_call_transfer_memo():
 def test_vsc_call_transfer_log_str():
     call = VSCCall.model_validate(VSC_CALL_DICT)
     log = call.log_str
-    assert "hive:v4vapp-test" in log
-    assert "hive:devser.v4vapp" in log
+    assert "v4vapp-test" in log
+    assert "devser.v4vapp" in log
     assert "25" in log
     assert "walletofsatoshi" in log
 
@@ -294,7 +294,7 @@ def test_vsc_call_user_memo_strips_leading_hash():
 def test_vsc_call_is_watched_when_in_watch_users(monkeypatch):
     instance = InternalConfig()
     monkeypatch.setattr(
-        instance.config.hive_config, "watch_users", ["hive:v4vapp-test"], raising=False
+        instance.config.hive_config, "watch_users", ["v4vapp-test"], raising=False
     )
     call = VSCCall.model_validate(VSC_CALL_DICT)
     assert call.is_watched is True
@@ -407,8 +407,8 @@ def test_custom_json_vsc_call_transfer_detected():
 
 def test_custom_json_vsc_call_transfer_fields():
     custom_json = CustomJson.model_validate(VSC_CALL_OP)
-    assert custom_json.from_account == "hive:v4vapp-test"
-    assert custom_json.to_account == "hive:devser.v4vapp"
+    assert custom_json.from_account == "v4vapp-test"
+    assert custom_json.to_account == "devser.v4vapp"
     assert custom_json.cj_id == "vsc.call"
 
 
