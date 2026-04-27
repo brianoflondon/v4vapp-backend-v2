@@ -55,7 +55,7 @@ dev = [
     "pre-commit>=4.2.0",
     "jupyter",
     "ipykernel",
-    "matplotlib>=3.10.3",
+    "matplotlib>=3.10.9",
     "nbstripout>=0.8.1",
     "typer>=0.20.1",
     "types-redis>=4.6.0.20241004",
