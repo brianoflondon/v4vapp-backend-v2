@@ -1548,52 +1548,64 @@ async def check_hive_conversion_limits(
 async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal] | None:
     """
     Determines when the next rate limit will expire for a given customer and the amount that will be freed.
-    This looks at the first (shortest) rate limit period and finds the oldest transaction
-    within that period. The expiry time is when that transaction will be outside the limit window,
+    Checks all over-limit periods and returns the soonest expiry across them.
+    The expiry time is when the oldest transaction in that period will leave the limit window,
     and the amount freed is the sats value of that transaction.
 
     Args:
         cust_id (str): The customer ID to check the limit expiry for.
 
     Returns:
-        Tuple[datetime, int] | None: A tuple of (expiry_datetime, sats_freed), or None if no limits or no transactions.
+        Tuple[datetime, Decimal] | None: A tuple of (expiry_datetime, sats_freed), or None if no limits or no transactions.
     """
     lightning_rate_limits = V4VConfig().data.lightning_rate_limits
     if not lightning_rate_limits:
         return None
 
-    first_limit = min(lightning_rate_limits, key=lambda x: x.hours)
-
     pipeline = limit_check_pipeline(cust_id=cust_id, details=True)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list(length=None)
+    results = convert_decimal128_to_decimal(results)
 
     if not results:
         return None
 
+    limit_check = LimitCheckResult.model_validate(results[0])
     result = results[0]
     periods = result.get("periods", {})
-    first_period_key = str(first_limit.hours)
 
-    if first_period_key not in periods:
+    soonest_expiry: datetime | None = None
+    soonest_sats_freed: Decimal = Decimal(0)
+
+    for period_key, period_data in periods.items():
+        # Skip periods that are within their limit
+        period_result = limit_check.periods.get(period_key)
+        if period_result and period_result.limit_ok:
+            continue
+
+        details = period_data.get("details", [])
+        if not details:
+            continue
+
+        # Find the oldest transaction in this over-limit period
+        oldest_entry = min(details, key=lambda x: x["timestamp"])
+        oldest_ts: datetime = oldest_entry["timestamp"]
+        # Converts on entry to Decimal from Decimal128 out of MongoDB
+        sats_freed: Decimal = Decimal(str(oldest_entry["credit_conv"]["msats"])) // Decimal(
+            1000
+        )  # Convert msats to sats
+
+        period_hours = int(period_key)
+        expiry: datetime = oldest_ts + timedelta(hours=period_hours)
+
+        if soonest_expiry is None or expiry < soonest_expiry:
+            soonest_expiry = expiry
+            soonest_sats_freed = sats_freed
+
+    if soonest_expiry is None:
         return None
 
-    period_data = periods[first_period_key]
-    details = period_data.get("details", [])
-
-    if not details:
-        return None
-
-    # Find the oldest transaction
-    oldest_entry = min(details, key=lambda x: x["timestamp"])
-    oldest_ts: datetime = oldest_entry["timestamp"]
-    # Converts on entry to Decimal from Decimal128 out of MongoDB
-    sats_freed: Decimal = Decimal(str(oldest_entry["credit_conv"]["msats"])) // Decimal(
-        1000
-    )  # Convert msats to sats
-
-    expiry: datetime = oldest_ts + timedelta(hours=first_limit.hours)
-    return expiry, sats_freed
+    return soonest_expiry, soonest_sats_freed
 
 
 # @async_time_decorator

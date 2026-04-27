@@ -600,7 +600,13 @@ async def check_user_limits(extra_spend_msats: Decimal, cust_id: str) -> str:
                 period_result.limit_text(period_key, limit_check.cust_id),
                 extra={"notification": False},
             )
-            return period_result.limit_text(period_key, limit_check.cust_id)
+            next_limit_expiry = (
+                f". {limit_check.next_limit_expiry}" if limit_check.next_limit_expiry else ""
+            )
+            answer = (
+                f"{period_result.limit_text(period_key, limit_check.cust_id)}{next_limit_expiry}"
+            )
+            return answer
     return ""
 
 

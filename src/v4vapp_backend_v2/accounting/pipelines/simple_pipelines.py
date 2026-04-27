@@ -99,6 +99,19 @@ def limit_check_pipeline(
     lightning_rate_limits: List[V4VConfigRateLimits] | None = None,
     details: bool = False,
 ) -> List[Mapping[str, Any]]:
+    """
+    Look up the sum of lightning conversion credits for a given customer ID across multiple time periods defined in the configuration.
+    This is used to check if a customer has exceeded their lightning conversion limits in any of the
+    defined periods. The pipeline dynamically generates facets for each configured time period,
+    summing the relevant fields and checking against the limits.
+
+    Args:
+        cust_id (str): The customer ID to check the limits for.
+        extra_spend_sats (Decimal, optional): Additional sats to include in the limit check (e.g., pending transactions). Defaults to Decimal(0).
+        lightning_rate_limits (List[V4VConfigRateLimits], optional): A list of rate limit configurations to use for the check. If not provided,
+            it will use the rate limits from the V4VConfig. Defaults to None.
+        details (bool, optional): Whether to include detailed transaction information in the output. Defaults to False.
+    """
     if lightning_rate_limits is None:
         lightning_rate_limits = V4VConfig().data.lightning_rate_limits
 
