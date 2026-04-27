@@ -100,7 +100,8 @@
                 "--config",
                 "devhive.config.yaml",
                 "--from-indexer-id",
-                "209" //
+                "210"
+                // "209" //
                 // "94" // the first devser interactions is at 95
                 // "0" // start from the beginning of the indexer (use -1 or default to resume from last saved position in DB)
             ],

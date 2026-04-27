@@ -10,6 +10,7 @@ from google.protobuf.json_format import MessageToDict
 from nectar.account import Account
 from nectar.amount import Amount
 
+from v4vapp_backend_v2.helpers.opening_balances import reset_exchange_opening_balance
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
@@ -174,6 +175,7 @@ async def clear_and_reset():
 
     logger.info("Resetting Lightning Node Balance.")
     await reset_lightning_node_balance()
+    await reset_exchange_opening_balance()
     await invalidate_all_ledger_cache()
 
 
@@ -275,6 +277,7 @@ async def clear_database():
         await db["hive_ops"].delete_many({})
         await db["ledger"].delete_many({})
         await db["pending"].delete_many({})
+        await db["magi_btc"].delete_many({})
         await db["ledger_checkpoints"].delete_many({})
     finally:
         # Close the connection properly

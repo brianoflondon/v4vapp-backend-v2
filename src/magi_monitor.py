@@ -98,6 +98,11 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
     # run_coroutine_threadsafe() instead, which is non-blocking.
     # Also pause to allow the startup notifications to be processed before we start streaming events.
     InternalConfig.notification_loop = asyncio.get_running_loop()
+    logger.info(
+        f"{ICON} ✅ Magi Monitor Started. Version: {__version__} "
+        f"on {InternalConfig().local_machine_name}",
+        extra={"notification": True},
+    )
     await asyncio.sleep(1)
     CONFIG = InternalConfig().config
     db_conn = DBConn()
@@ -226,11 +231,6 @@ def main(
     stores each event in the magi_btc MongoDB collection.
     """
     _ = InternalConfig(config_filename=config_filename)
-    logger.info(
-        f"{ICON} ✅ Magi Monitor Started. Version: {__version__} "
-        f"on {InternalConfig().local_machine_name}",
-        extra={"notification": True},
-    )
     asyncio.run(main_async_start(from_indexer_id=from_indexer_id))
 
 
