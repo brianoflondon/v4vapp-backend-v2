@@ -39,17 +39,35 @@ class MagiBTCBalance(BaseModel):
 
 
 class MagiBTCTransferEvent(TrackedBaseModel):
-    from_addr: str
-    to_addr: str
-    amount: Decimal
-    indexer_block_height: int
-    indexer_tx_hash: str
-    indexer_ts: str
-    indexer_id: int
+    from_addr: str = Field(
+        "", description="The sender's account name, including network prefix (e.g. 'hive:alice')"
+    )
+    to_addr: str = Field(
+        "", description="The recipient's account name, including network prefix (e.g. 'hive:bob')"
+    )
+    amount: Decimal = Field(Decimal(0), description="The amount transferred, in satoshis")
+    indexer_block_height: int = Field(
+        0, description="The block height at which the transfer was indexed"
+    )
+    indexer_tx_hash: str = Field(
+        "",
+        description="The transaction hash from the indexer, may include -N suffix for multiple ops",
+    )
+    indexer_ts: str = Field(
+        "", description="The timestamp from the indexer for when the transfer was indexed"
+    )
+    indexer_id: int = Field(
+        0, description="The unique ID from the indexer for this transfer event"
+    )
 
+    cust_id: str = Field("", description="Customer ID determined from to/from fields")
     timestamp: datetime = Field(
         datetime(1970, 1, 1, tzinfo=timezone.utc),
         description="Timestamp for the event",
+    )
+    custom_jsons: List[CustomJson] | None = Field(
+        None,
+        description="The CustomJson operations associated with this transfer, if any",
     )
 
     block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
@@ -58,7 +76,11 @@ class MagiBTCTransferEvent(TrackedBaseModel):
 
     def __init__(self, **data: Any):
         super().__init__(**data)
-        self.timestamp = datetime.fromisoformat(self.indexer_ts)
+        try:
+            self.timestamp = datetime.fromisoformat(self.indexer_ts)
+        except ValueError:
+            self.timestamp = datetime.now(timezone.utc)
+        self.cust_id = self.get_cust_id()
         # Ensure amount is a Decimal for consistency
         if not isinstance(self.amount, Decimal):
             self.amount = Decimal(self.amount)
@@ -123,6 +145,14 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         # problem with computed fields.
         return [self.from_account, self.to_account]  # type: ignore
 
+    def get_cust_id(self) -> str:
+        server_id = InternalConfig().server_id
+        if self.from_account == server_id:
+            return self.to_account  # type: ignore
+        if self.to_account == server_id:
+            return self.from_account  # type: ignore
+        return f"{self.from_account}:{self.to_account}"
+
     @property
     def is_watched(self) -> bool:
         """
@@ -165,7 +195,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         Returns a group ID analogous to OpBase: block_height_txhash_op_in_trx_realm.
         The trailing -N suffix is stripped from the tx hash; the index is captured in op_in_trx.
         """
-        return f"{self.indexer_block_height}_{self.trx_id}_{self.op_in_trx}_real"
+        return f"{self.indexer_id}-{self.indexer_tx_hash}-magi"
 
     @computed_field
     def short_id(self) -> str:
@@ -176,12 +206,9 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         operation index in the transaction, and realm.
         This is used to determine the key in the database where the operation
         """
-        # Give the last 4 digits of the block number and first 5 chars of the trx_id
-        block_num_str = str(self.indexer_block_height)
-        short_block_num = f"{block_num_str[-4:]}"
-        short_trx_id = self.trx_id[:6]
-        short_op_in_trx = f"_{self.op_in_trx}"
-        return f"{short_block_num}_{short_trx_id}{short_op_in_trx}"
+        # Give the last 3 digits of the block number and first 5 chars of the trx_id
+
+        return f"{self.indexer_tx_hash[:8]}-m"
 
     @property
     def short_id_p(self) -> str:
@@ -189,10 +216,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
 
     @property
     def group_id_p(self) -> str:
-        tx_hash = self.indexer_tx_hash
-        if "-" in tx_hash:
-            tx_hash = tx_hash.rsplit("-", 1)[0]
-        return f"{self.indexer_block_height}_{tx_hash}_{self.op_in_trx}_real"
+        return self.group_id  # type: ignore
 
     @property
     def group_id_query(self) -> Dict[str, Any]:

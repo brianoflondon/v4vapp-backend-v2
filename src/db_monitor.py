@@ -214,17 +214,14 @@ class ResumeToken(BaseModel):
 
 def ignore_changes(change: Mapping[str, Any], collection_name: str) -> bool:
     """
-    Determines if the "locked" field is present in the updated or removed fields
-    of a database change event.
-
+    Determine whether to ignore a change based on the updated fields.
     Args:
-        change (Mapping[str, Any]): A dictionary representing a database change event.
-            It is expected to contain an "updateDescription" key with details about
-            the updated and removed fields.
+        change (Mapping[str, Any]): The change document from the MongoDB change stream.
+        collection_name (str): The name of the collection for logging purposes.
 
     Returns:
-        bool: True if the "locked" field is found in either the "updatedFields" or
-        "removedFields" of the change event, otherwise False.
+        bool: True if the change should be ignored, False otherwise.
+
     """
 
     update_description = change.get("updateDescription", {})
@@ -238,11 +235,11 @@ def ignore_changes(change: Mapping[str, Any], collection_name: str) -> bool:
     # it returns True when every element of the left‑hand set appears in the
     # right‑hand set.
     if set(updated_fields) <= set(IGNORED_UPDATE_FIELDS):
-        logger.debug(
+        logger.info(
             f"{ICON} Ignoring change with only ignored fields updated: {set(updated_fields)} in {collection_name}",
         )
         return True
-    logger.debug(f"{ICON} Processing changes to: {set(updated_fields)} in {collection_name}")
+    logger.info(f"{ICON} Processing changes to: {set(updated_fields)} in {collection_name}")
     return False
 
 
@@ -404,7 +401,7 @@ async def subscribe_stream(
                         break
                     full_document = change.get("fullDocument") or {}
                     group_id = full_document.get("group_id", None) or ""
-                    logger.debug(
+                    logger.info(
                         f"{ICON}✳️ Change detected in {collection_name} {group_id}",
                         extra={"notification": False, "change": change},
                     )

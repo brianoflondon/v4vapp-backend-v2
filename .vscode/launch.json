@@ -83,8 +83,8 @@
             "args": [
                 "--config",
                 "devhive.config.yaml",
-                "--overwatch"
-                // "--no-overwatch"
+                // "--overwatch"
+                "--no-overwatch"
             ],
             "console": "integratedTerminal",
             "justMyCode": false,
@@ -100,7 +100,9 @@
                 "--config",
                 "devhive.config.yaml",
                 "--from-indexer-id",
-                "0" // start from the beginning of the indexer (use -1 or default to resume from last saved position in DB)
+                "209" //
+                // "94" // the first devser interactions is at 95
+                // "0" // start from the beginning of the indexer (use -1 or default to resume from last saved position in DB)
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

@@ -32,7 +32,21 @@ async def process_magi_btc_transfer_event(
     """
     logger.info(f"Processing Magi BTC transfer event: {magi_transfer.log_str}")
 
-    return []
+    if not magi_transfer.conv or magi_transfer.conv.is_unset():
+        quote = await MagiBTCTransferEvent.nearest_quote(timestamp=magi_transfer.timestamp)
+        await magi_transfer.update_conv(quote=quote)
+
+    ledger_entries = []
+
+    for custom_json in magi_transfer.custom_jsons or []:
+        if custom_json.is_watched:
+            json_data = custom_json.json_data
+            if isinstance(json_data, VSCCall):
+                ledger_entries = await record_magisats_transfer_event(
+                    magi_transfer=magi_transfer, vsc_call=json_data
+                )
+
+    return ledger_entries
 
 
 async def forward_magisats(invoice: Invoice) -> None:
@@ -40,6 +54,13 @@ async def forward_magisats(invoice: Invoice) -> None:
     This function is responsible for forwarding #magisats to the appropriate destination.
     The specific logic for forwarding will depend on the requirements of the application.
     For example, it could involve transferring the sats to a specific wallet or account.
+
+    Args:
+        invoice (Invoice): The invoice object containing details about the #magisats to be forwarded.
+
+    Returns:
+        None
+
     """
 
     logger.info("Forwarding #magisats to the designated destination.")
@@ -107,61 +128,67 @@ async def forward_magisats(invoice: Invoice) -> None:
     invoice.cust_id
 
 
-async def record_magisats_transfer_event(invoice: Invoice, amount_sats: Decimal) -> None:
+async def record_magisats_transfer_event(
+    magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
+) -> List[LedgerEntry]:
 
     # Now we transfer the amount_to_send_sats to the
     server_id = InternalConfig().server_id
     node_name = InternalConfig().node_name
+    vsc_payload = vsc_call.payload
+    assert vsc_payload.amount, "Amount is missing in VSC payload"
+    assert magi_transfer.amount == Decimal(vsc_payload.amount), (
+        "Amount in VSC payload does not match Magi transfer event amount"
+    )
+    assert vsc_payload.msats_fee is not None, "MSATS fee is missing in VSC payload"
 
-    sending_conv = CryptoConversion(
-        quote=quote,
-        conv_from=Currency.SATS,
-        value=amount_to_send_sats,
-    ).conversion
-
+    net_msats_fee = Decimal(vsc_payload.msats_fee)
+    amount_to_send_msats = Decimal(magi_transfer.amount) * Decimal(1000)
     ledger_entries_list = []
 
     ledger_type = LedgerType.WITHDRAW_LIGHTNING
     incoming_ledger_entry = LedgerEntry(
-        cust_id=server_id,
-        short_id=invoice.short_id,
+        cust_id=magi_transfer.cust_id,
+        short_id=magi_transfer.short_id,
         ledger_type=ledger_type,
-        group_id=f"{invoice.group_id}_{ledger_type.value}",
-        op_type=invoice.op_type,
+        group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
+        op_type=magi_transfer.op_type,
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Send Lightning to Magi {amount_to_send_sats:,.0f} sats {invoice.memo}",
+        description=f"Send Lightning to Magi {magi_transfer.amount:,.0f} sats",
+        user_memo=vsc_payload.memo,
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=server_id,
         ),
         debit_unit=Currency.MSATS,
-        debit_amount=amount_to_send_sats * Decimal(1000),  # using the rounded version
-        debit_conv=sending_conv,
+        debit_amount=amount_to_send_msats,  # using the rounded version
+        debit_conv=magi_transfer.conv,
         credit=AssetAccount(name="External Magi Payments", sub=node_name, contra=True),
         credit_unit=Currency.MSATS,
-        credit_amount=amount_to_send_sats * Decimal(1000),
-        credit_conv=sending_conv,
+        credit_amount=amount_to_send_msats,
+        credit_conv=magi_transfer.conv,
     )
     await incoming_ledger_entry.save()
     ledger_entries_list.append(incoming_ledger_entry)
 
     # now send the fee to the fee account
-
+    quote = await MagiBTCTransferEvent.nearest_quote(timestamp=magi_transfer.timestamp)
     fee_conv = CryptoConversion(
         quote=quote,
         conv_from=Currency.MSATS,
         value=net_msats_fee,
     ).conversion
 
-    ledger_type = LedgerType.DEPOSIT_LIGHTNING
+    ledger_type = LedgerType.FEE_INCOME
     fee_ledger_entry = LedgerEntry(
-        cust_id=server_id,
-        short_id=invoice.short_id,
+        cust_id=magi_transfer.cust_id,
+        short_id=magi_transfer.short_id,
         ledger_type=ledger_type,
-        group_id=f"{invoice.group_id}_{ledger_type.value}",
-        op_type=invoice.op_type,
+        group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
+        op_type=magi_transfer.op_type,
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Send Lightning to Magi {amount_to_send_sats:,.0f} sats {invoice.memo}",
+        description=f"Fee for Magisats {net_msats_fee / 1000:.3f} sats",
+        user_memo=vsc_payload.memo,
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=server_id,
@@ -177,9 +204,4 @@ async def record_magisats_transfer_event(invoice: Invoice, amount_sats: Decimal)
     await fee_ledger_entry.save()
     ledger_entries_list.append(fee_ledger_entry)
 
-    # Implement the forwarding logic here
-    # check we have necessary balance on the server to forward the sats
-
-    # calculate the fee to take from the invoice amount to cover the forwarding transaction fee
-
-    # perform the forwarding transaction to the designated destination
+    return ledger_entries_list

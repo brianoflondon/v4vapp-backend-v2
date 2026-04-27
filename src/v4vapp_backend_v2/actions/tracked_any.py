@@ -182,6 +182,11 @@ class DiscriminatedTracked(BaseModel):
 async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | None:
     """
     Asynchronously loads a tracked object from the database using either a TrackedAny instance or a short ID string.
+    This will try to figure out which collection to query based on the input.
+    If there are collisions between short IDs across collections, it will prioritize Hive operations over Invoices and Payments, and Invoices over Payments.
+
+    If we add new tables need to be very careful about updating load_tracked_object to ensure we don't accidentally cause collisions or load the wrong object.
+    We should also consider adding logging to help debug any issues with loading tracked objects.
 
     If a string is provided, the function determines the appropriate collection to query based on the format of the string.
     If a TrackedAny instance is provided, it uses its collection and group_id_query attributes to perform the lookup.
@@ -195,6 +200,15 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
 
     if isinstance(tracked_obj, str):
         short_id = tracked_obj
+        if "-magi" in short_id or "m_" in short_id:
+            collection_name = MagiBTCTransferEvent().collection_name
+            query = TrackedBaseModel.short_id_query(short_id=short_id)
+            result = await db[collection_name].find_one(filter=query)
+            if result:
+                value = {"value": result}
+                answer = DiscriminatedTracked.model_validate(value)
+                return answer.value
+
         if "_" in short_id:
             # This is a for a hive_ops object
             collection_name = "hive_ops"

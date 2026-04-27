@@ -82,7 +82,7 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
 
     Streams BTC transfer events from the MAGI GraphQL WebSocket endpoint and
     persists each event to the magi_btc MongoDB collection. Automatically
-    resumes from the last saved indexer_id if from_indexer_id is 0.
+    resumes from the last saved indexer_id if from_indexer_id is -1.
 
     Args:
         from_indexer_id (int): Start scanning from this indexer_id.
@@ -96,6 +96,7 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
     # all subsequent log records (including file writes) from being flushed.
     # By pointing notification_loop at the running loop, the handler uses
     # run_coroutine_threadsafe() instead, which is non-blocking.
+    # Also pause to allow the startup notifications to be processed before we start streaming events.
     InternalConfig.notification_loop = asyncio.get_running_loop()
     await asyncio.sleep(1)
     CONFIG = InternalConfig().config
@@ -122,13 +123,17 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
 
     try:
         # If from_indexer_id is -1, try to resume from the last saved position
-        cursor_id = from_indexer_id
-        if cursor_id == -1:
+        cursor_id = from_indexer_id - 1
+        if cursor_id == -2:
             cursor_id = await get_last_indexer_id()
             if cursor_id:
                 logger.info(f"{ICON} Resuming from last saved indexer_id={cursor_id}")
             else:
+                cursor_id = 0
                 logger.info(f"{ICON} No saved position found, streaming from the beginning")
+        if cursor_id == -1:
+            cursor_id = 0
+            logger.info(f"{ICON} Starting from the beginning of the indexer (cursor_id=0)")
 
         logger.info(f"{ICON} Magi BTC Transfer Monitor started from indexer_id={cursor_id}.")
 
@@ -138,8 +143,6 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
                     break
                 try:
                     if event.is_watched:
-                        await event.update_conv()
-                        await event.save()
                         custom_json_ops = await event.hive_custom_json()
                         for op in custom_json_ops or []:
                             if op.is_watched:
@@ -148,7 +151,13 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
                                     f"{ICON}{Fore.WHITE} {op.log_str}{Style.RESET_ALL}",
                                     extra={"notification": True},
                                 )
-                    logger.info(event.log_str, extra={"notification": False})
+                            # Critical: update the event and save it, AFTER saving the custom_json so that the event record
+                            # can lookup the custom_json data in processing.
+                        event.custom_jsons = custom_json_ops
+                        await event.update_conv()
+                        await event.save()
+                    else:
+                        logger.info(event.log_str, extra={"notification": False})
                 except Exception as e:
                     logger.error(
                         f"{ICON} Failed to save event indexer_id={event.indexer_id}: {e}",

@@ -358,17 +358,17 @@ def test_transfer_event_op_in_trx_suffix_one():
 
 
 def test_transfer_event_group_id():
-    """group_id follows the OpBase pattern: block_height_txhash_op_in_trx_real."""
-    event = MagiBTCTransferEvent(**SAMPLE_EVENT)  # hash = "abc123", height = 1000
-    expected = f"{SAMPLE_EVENT['indexer_block_height']}_abc123_1_real"
+    """group_id uses the indexer event identifier format."""
+    event = MagiBTCTransferEvent(**SAMPLE_EVENT)  # hash = "abc123", indexer_id = 42
+    expected = f"{SAMPLE_EVENT['indexer_id']}-abc123-magi"
     assert event.group_id == expected
     assert event.group_id_p == expected
 
 
 def test_transfer_event_group_id_with_suffix():
-    """group_id strips -N from tx hash and reflects correct op_in_trx."""
+    """group_id includes the raw indexer_tx_hash suffix and the same indexer_id."""
     event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": "abc123-1"})
-    expected = f"{SAMPLE_EVENT['indexer_block_height']}_abc123_2_real"
+    expected = f"{SAMPLE_EVENT['indexer_id']}-abc123-1-magi"
     assert event.group_id == expected
     assert event.group_id_p == expected
 
