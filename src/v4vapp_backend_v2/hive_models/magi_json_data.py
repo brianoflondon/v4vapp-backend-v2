@@ -198,8 +198,8 @@ class VSCCall(BaseModel):
         "vsc-mainnet", description="The VSC network identifier (e.g. 'vsc-mainnet')."
     )
     caller: str = Field(
-        ...,
-        description="The calling account in its original network format (e.g. 'hive:<name>').",
+        "",
+        description="The calling account in its original network format (e.g. 'hive:<name>'). May be empty for non-user VSC actions.",
     )
     contract_id: str = Field(
         "vsc1BdrQ6EtbQ64rq2PkPd21x4MaLnVRcJj85d",

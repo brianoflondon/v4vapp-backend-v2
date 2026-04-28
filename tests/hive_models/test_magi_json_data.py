@@ -376,10 +376,11 @@ def test_vsc_call_processed_no_prefix():
 # ---------------------------------------------------------------------------
 
 
-def test_vsc_call_missing_caller_raises():
+def test_vsc_call_missing_caller_defaults_empty():
     bad = {k: v for k, v in VSC_CALL_DICT.items() if k != "caller"}
-    with pytest.raises(ValidationError):
-        VSCCall.model_validate(bad)
+    call = VSCCall.model_validate(bad)
+    assert call.caller == ""
+    assert call.from_account == ""
 
 
 def test_vsc_call_missing_payload_raises():
@@ -423,6 +424,15 @@ def test_custom_json_vsc_call_numeric_amount_parses():
     op = {**VSC_CALL_OP, "json": json.dumps(numeric_call)}
     custom_json = CustomJson.model_validate(op)
     assert custom_json.json_data.payload.amount == "1"
+
+
+def test_custom_json_vsc_call_missing_caller_parses():
+    missing_caller_call = json.loads(VSC_CALL_JSON_STR)
+    missing_caller_call.pop("caller", None)
+    op = {**VSC_CALL_OP, "json": json.dumps(missing_caller_call)}
+    custom_json = CustomJson.model_validate(op)
+    assert custom_json.json_data.caller == ""
+    assert custom_json.json_data.from_account == ""
 
 
 def test_custom_json_vsc_call_transfer_memo():
