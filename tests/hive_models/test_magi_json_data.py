@@ -139,6 +139,13 @@ def test_vsc_call_payload_memo_defaults_empty():
     assert payload.memo == ""
 
 
+def test_vsc_call_payload_amount_int_is_stringified():
+    """Numeric amount values are coerced to strings during payload validation."""
+    payload = VSCCallPayload.model_validate({"amount": 1, "to": "alice"})
+    assert payload.amount == "1"
+    assert isinstance(payload.amount, str)
+
+
 def test_vsc_call_payload_log_str_includes_amount_to_and_memo():
     payload = VSCCallPayload.model_validate({
         "amount": "25",
@@ -293,9 +300,7 @@ def test_vsc_call_user_memo_strips_leading_hash():
 
 def test_vsc_call_is_watched_when_in_watch_users(monkeypatch):
     instance = InternalConfig()
-    monkeypatch.setattr(
-        instance.config.hive_config, "watch_users", ["v4vapp-test"], raising=False
-    )
+    monkeypatch.setattr(instance.config.hive_config, "watch_users", ["v4vapp-test"], raising=False)
     call = VSCCall.model_validate(VSC_CALL_DICT)
     assert call.is_watched is True
 
@@ -410,6 +415,14 @@ def test_custom_json_vsc_call_transfer_fields():
     assert custom_json.from_account == "v4vapp-test"
     assert custom_json.to_account == "devser.v4vapp"
     assert custom_json.cj_id == "vsc.call"
+
+
+def test_custom_json_vsc_call_numeric_amount_parses():
+    numeric_call = json.loads(VSC_CALL_JSON_STR)
+    numeric_call["payload"]["amount"] = 1
+    op = {**VSC_CALL_OP, "json": json.dumps(numeric_call)}
+    custom_json = CustomJson.model_validate(op)
+    assert custom_json.json_data.payload.amount == "1"
 
 
 def test_custom_json_vsc_call_transfer_memo():

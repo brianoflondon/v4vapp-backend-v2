@@ -9,6 +9,13 @@ from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
 
 
+def _coerce_numeric_fields(data: dict, *field_names: str) -> dict:
+    for field_name in field_names:
+        if field_name in data and isinstance(data[field_name], (int, float)):
+            data[field_name] = str(data[field_name])
+    return data
+
+
 class VSCCallPayload(BaseModel):
     """
     Payload for ``vsc.call`` **transfer** actions.
@@ -34,6 +41,14 @@ class VSCCallPayload(BaseModel):
     )
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalise(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            data = dict(data)
+            _coerce_numeric_fields(data, "amount", "msats_fee")
+        return data
 
     @property
     def log_str(self) -> str:
@@ -81,12 +96,28 @@ class VSCSwapPayload(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalise(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            data = dict(data)
+            _coerce_numeric_fields(data, "amount_in", "min_amount_out")
+        return data
+
 
 class VSCIntentArgs(BaseModel):
     """Arguments attached to a single ``VSCIntent``."""
 
     limit: str = Field("", description="Maximum token amount the intent permits.")
     token: str = Field("", description="Token type (e.g. 'hive', 'hbd').")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalise(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            data = dict(data)
+            _coerce_numeric_fields(data, "limit")
+        return data
 
     model_config = ConfigDict(extra="allow")
 
