@@ -31,6 +31,7 @@ class ReplyType(StrEnum):
     CUSTOM_JSON = "custom_json"
     LEDGER_ERROR = "ledger_error"
     HIVE_ERROR = "hive_error"
+    MAGI_TRANSFER = "magi_transfer"
     UNKNOWN = "unknown"
 
 
