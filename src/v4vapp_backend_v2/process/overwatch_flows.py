@@ -15,6 +15,22 @@ def check_balance_request(event: FlowEvent) -> bool:
     return getattr(event.op, "balance_request", False)
 
 
+def check_magisats_invoice(event: FlowEvent) -> bool:
+    """Return True only for Lightning invoices tagged with #MAGISATS."""
+    return bool(getattr(event.op, "is_magisats", False))
+
+
+def check_not_magisats_invoice(event: FlowEvent) -> bool:
+    """Return True for Lightning invoices WITHOUT the #MAGISATS tag (standard flows)."""
+    return not bool(getattr(event.op, "is_magisats", False))
+
+
+def check_vsc_call(event: FlowEvent) -> bool:
+    """Return True only for custom_json ops that are VSC calls (cj_id starts with 'vsc.')."""
+    cj_id = getattr(event.op, "cj_id", "") or ""
+    return cj_id.startswith("vsc.")
+
+
 # ---------------------------------------------------------------------------
 # Hive-to-Keepsats conversion flow
 # ---------------------------------------------------------------------------
@@ -556,6 +572,7 @@ EXTERNAL_TO_KEEPSATS_FLOW = FlowDefinition(
             event_type="op",
             op_type="invoice",
             group="primary",
+            event_filter=check_not_magisats_invoice,
         ),
         FlowStage(
             name="deposit_lightning",
@@ -646,6 +663,7 @@ EXTERNAL_TO_HIVE_FLOW = FlowDefinition(
             event_type="op",
             op_type="invoice",
             group="primary",
+            event_filter=check_not_magisats_invoice,
         ),
         FlowStage(
             name="deposit_lightning",
@@ -762,6 +780,7 @@ EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW = FlowDefinition(
             event_type="op",
             op_type="invoice",
             group="primary",
+            event_filter=check_not_magisats_invoice,
         ),
         FlowStage(
             name="keepsats_notification_op",
@@ -819,6 +838,7 @@ EXTERNAL_TO_HIVE_LOOPBACK_FLOW = FlowDefinition(
             event_type="op",
             op_type="invoice",
             group="primary",
+            event_filter=check_not_magisats_invoice,
         ),
         FlowStage(
             name="keepsats_notification_op",
@@ -1024,6 +1044,90 @@ HIVE_TRANSFER_FAILURE_FLOW = FlowDefinition(
 
 
 # ---------------------------------------------------------------------------
+# External Lightning to MagiSats (VSC) forwarding flow
+# ---------------------------------------------------------------------------
+# Flow: A customer sends an invoice tagged with #MAGISATS.  The server
+# receives the Lightning payment, stores the sats temporarily as a VSC
+# Liability, then forwards them to the customer's Magi (VSC) wallet via a
+# VSC custom_json transfer call.  After a variable delay (typically seconds
+# to a few minutes) the Magi indexer confirms the transfer and the server
+# records the final accounting entries.
+#
+# Primary events (same short_id as trigger — invoice hash):
+#   1. invoice op (trigger) — #MAGISATS-tagged Lightning invoice
+#   2. deposit_l ledger — DEPOSIT_LIGHTNING (sats received into server node)
+#
+# VSC send events (reply group — different short_id, vsc.call custom_json):
+#   3. custom_json op (vsc.call) — VSC transfer call sent to Magi contract
+#
+# Magi receive events (reply group — different short_id, magi_btc_transfer_event):
+#   4. magi_btc_transfer_event op — Magi indexer confirms the transfer
+#   5. s_to_exc ledger — SERVER_TO_EXCHANGE (net forwarded amount)
+#   6. fee_inc ledger — FEE_INCOME (retained fee)
+#
+# Magi notification events (reply group — different short_id, OPTIONAL):
+#   7. custom_json op — KeepsatsTransfer notification sent back to customer
+# ---------------------------------------------------------------------------
+
+EXTERNAL_TO_MAGISATS_FLOW = FlowDefinition(
+    name="external_to_magisats",
+    description="External Lightning invoice forwarded to MagiSats (VSC) for BTC delivery",
+    trigger_op_type="invoice",
+    stages=[
+        # --- Primary stages (same short_id as trigger — invoice hash) ---
+        FlowStage(
+            name="trigger_invoice",
+            event_type="op",
+            op_type="invoice",
+            group="primary",
+            event_filter=check_magisats_invoice,
+        ),
+        FlowStage(
+            name="deposit_lightning",
+            event_type="ledger",
+            ledger_type=LedgerType.DEPOSIT_LIGHTNING,
+            group="primary",
+        ),
+        # --- VSC send stage (reply group — vsc.call custom_json from server) ---
+        FlowStage(
+            name="vsc_magi_send_op",
+            event_type="op",
+            op_type="custom_json",
+            group="vsc_send",
+            event_filter=check_vsc_call,
+        ),
+        # --- Magi receive stages (reply group — magi_btc_transfer_event op) ---
+        FlowStage(
+            name="magi_btc_transfer_op",
+            event_type="op",
+            op_type="magi_btc_transfer_event",
+            group="magi_receive",
+        ),
+        FlowStage(
+            name="server_to_exchange",
+            event_type="ledger",
+            ledger_type=LedgerType.SERVER_TO_EXCHANGE,
+            group="magi_receive",
+        ),
+        FlowStage(
+            name="fee_income_magi",
+            event_type="ledger",
+            ledger_type=LedgerType.FEE_INCOME,
+            group="magi_receive",
+        ),
+        # --- Magi notification stage (reply group, OPTIONAL) ---
+        FlowStage(
+            name="magi_notification_op",
+            event_type="op",
+            op_type="custom_json",
+            group="magi_notification",
+            required=False,
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Registry of all known flow definitions
 # ---------------------------------------------------------------------------
 
@@ -1036,6 +1140,7 @@ FLOW_DEFINITIONS = {
     "external_to_hive": EXTERNAL_TO_HIVE_FLOW,
     "external_to_keepsats_loopback": EXTERNAL_TO_KEEPSATS_LOOPBACK_FLOW,
     "external_to_hive_loopback": EXTERNAL_TO_HIVE_LOOPBACK_FLOW,
+    "external_to_magisats": EXTERNAL_TO_MAGISATS_FLOW,
     "keepsats_internal_transfer": KEEPSATS_INTERNAL_TRANSFER_FLOW,
     "hive_transfer_paywithsats": HIVE_TRANSFER_PAYWITHSATS_FLOW,
     "balance_request": BALANCE_REQUEST_FLOW,

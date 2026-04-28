@@ -440,7 +440,7 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     assert "Transfer v4vapp-test -> v4vapp.qrc" in custom_json.memo
 
 
-@pytest.mark.skip(reason="work in progress")
+# @pytest.mark.skip(reason="work in progress")
 async def test_magisats_inbound_payment():
     """
     Test the process of handling an inbound payment to Magisats forwarded on the Magisats side.
@@ -468,6 +468,11 @@ async def test_magisats_inbound_payment():
     invoice_value_sat = 200
     memo = "v4vapp-test | Sending a message via magisats test_magisats_inbound_payment | #MAGISATS #CLEAN #v4vapp"
     invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo=f"{memo}")
+
+    trx = await send_hive_customer_to_server(
+        send_sats=invoice_value_sat + 100, memo=f"{invoice.payment_request}", customer="v4vapp-test"
+    )
+
 
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
