@@ -60,6 +60,8 @@ async def process_custom_json_func(
     if custom_json.cj_id == "vsc.call":
         # These are handled based on the Magi instructions, not here.
         logger.debug(f"VSC Call CustomJson: {custom_json.log_str}")
+        custom_json.vsc_call_not_needed = True
+        await custom_json.save()
         return []
 
     if not custom_json.authorized:

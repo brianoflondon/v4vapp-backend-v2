@@ -16,7 +16,11 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     paywithsats_amount,
 )
 from v4vapp_backend_v2.hive.hive_extras import get_transfer_cust_id, process_user_memo
-from v4vapp_backend_v2.hive_models.custom_json_data import CustomJsonData, all_custom_json_ids, custom_json_test_data
+from v4vapp_backend_v2.hive_models.custom_json_data import (
+    CustomJsonData,
+    all_custom_json_ids,
+    custom_json_test_data,
+)
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
@@ -37,7 +41,10 @@ class CustomJson(OpBase):
         default="", description="Customer ID determined from the `required_auths` field"
     )
 
-    # Extra Fields
+    vsc_call_not_needed: bool | None = Field(
+        default=None,
+        description="Indicates if a VSC call is external to V4V.app Magi and can be cleaned later",
+    )
 
     def __init__(self, **data):
         """
