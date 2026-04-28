@@ -65,6 +65,7 @@ class LedgerType(StrEnum):
     TREASURY_TO_FUNDING = "t_to_fund"  # Treasury to Funding transfer
     TREASURY_TO_EXCHANGE = "t_to_exc"  # Treasury to Exchange transfer
     SERVER_TO_EXCHANGE = "s_to_exc"  # Server to Exchange transfer
+    EXCHANGE_TO_SERVER = "exc_to_s"  # Exchange to Server transfer
     EXCHANGE_TO_TREASURY = "exc_to_t"  # Exchange to Treasury transfer
     EXCHANGE_TO_NODE = "exc_to_n"  # Exchange to Node transfer
     LIMIT_ORDER_CREATE = "limit_or"

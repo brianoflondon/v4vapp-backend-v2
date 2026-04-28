@@ -18,6 +18,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     send_custom_json,
     send_transfer,
 )
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -379,6 +380,7 @@ async def send_transfer_custom_json(
 async def send_magi_transfer_custom_json(
     vsc_call: VSCCall,
     nobroadcast: bool = False,
+    caller: str | None = None,
 ) -> Dict[str, str]:
     """
     Sends a custom JSON transfer on the Hive blockchain.
@@ -386,24 +388,28 @@ async def send_magi_transfer_custom_json(
     this is a customer to customer or customer to server transfer.
 
     Args:
-        magi_transfer: VSCCallPayload object containing the transfer details.
+        vsc_call: VSCCall object containing the transfer details.
         nobroadcast (bool, optional): If True, the transaction will not be broadcasted. Defaults to False.
+        caller (str | None, optional): The caller of the transfer. Defaults to None.
 
     Returns:
         Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
     """
-    try:
-        server_id = InternalConfig().server_id
-        hive_client = await get_verified_hive_client_for_accounts(
-            [server_id],
-            nobroadcast=nobroadcast,
-        )
-        # ALWAYS SEND FROM THE SERVER ACCOUNT, because other accounts won't have the correct keys.
-        send_from = InternalConfig().server_id
+    id = "vsc.call"
+    server_id = InternalConfig().server_id
+    if caller:
+        caller_acc_name = AccName(caller)  # Remove hive: prefix if present
+    else:
+        caller_acc_name = AccName(f"hive:{server_id}")
 
+    hive_client = await get_verified_hive_client_for_accounts(
+        [caller_acc_name.no_prefix], nobroadcast=nobroadcast
+    )  # verify caller account exists and keys if needed
+
+    try:
+        send_from = caller_acc_name.no_prefix
         json_data = vsc_call.model_dump(exclude_none=True, exclude_unset=True, by_alias=True)
         json_data_converted = convert_decimals_for_mongodb(json_data)
-        id = "vsc.call"
         trx = await send_custom_json(
             json_data=json_data_converted,
             send_account=send_from,
@@ -423,4 +429,4 @@ async def send_magi_transfer_custom_json(
             f"Error sending custom_json transfer: {e} {vsc_call.log_str}",
             extra={"notification": False, "id": id, **vsc_call.log_extra},
         )
-        return {}
+        return {"error": str(e)}

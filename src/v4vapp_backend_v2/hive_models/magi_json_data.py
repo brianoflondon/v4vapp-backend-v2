@@ -42,6 +42,10 @@ class VSCCallPayload(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
+    def __init__(self, **data: Any):
+        data = _coerce_numeric_fields(data, "amount", "msats_fee")
+        super().__init__(**data)
+
     @model_validator(mode="before")
     @classmethod
     def normalise(cls, data: Any) -> Any:
