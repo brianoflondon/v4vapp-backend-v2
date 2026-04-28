@@ -24,16 +24,19 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance_printout,
     list_all_accounts,
+    one_account_balance,
 )
 from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
     generate_balance_sheet_mongodb,
 )
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.profit_and_loss import profit_and_loss_printout
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.calculate import calc_keepsats_to_hive
+from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
@@ -44,7 +47,7 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTrans
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = True
+turn_off_these_tests = False
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -435,6 +438,49 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     pprint(custom_json.model_dump())
     print(custom_json.memo)
     assert "Transfer v4vapp-test -> v4vapp.qrc" in custom_json.memo
+
+
+@pytest.mark.skip(reason="work in progress")
+async def test_magisats_inbound_payment():
+    """
+    Test the process of handling an inbound payment to Magisats forwarded on the Magisats side.
+
+    Needs a positive balance on the Magisats server to work
+
+
+    Raises:
+        AssertionError: If any step in the process fails.
+    """
+    try:
+        default_exchange_adapter = get_exchange_adapter()
+    except Exception as e:
+        logger.error(f"Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
+        return []
+
+    exchange_sub = default_exchange_adapter.exchange_name
+    exchange_account = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
+    magisats_exchange_balance = await one_account_balance(account=exchange_account)
+
+    assert magisats_exchange_balance is not None, "Failed to retrieve Magisats exchange balance"
+    assert magisats_exchange_balance.sats > 250, (
+        "Magisats exchange balance is too low, cannot perform test"
+    )
+    invoice_value_sat = 200
+    memo = "v4vapp-test | Sending a message via magisats test_magisats_inbound_payment | #MAGISATS #CLEAN #v4vapp"
+    invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo=f"{memo}")
+
+    ledger_count = await get_ledger_count()
+    logger.info(f"Ledger count: {ledger_count}")
+
+    # trx = await send_hive_customer_to_server(
+    #     amount=Amount("0.001 HIVE"),
+    #     memo=f"Paying #magisats with Hive! {datetime.now().isoformat()}",
+    #     customer="v4vapp-test",
+    # )
+    # pprint(trx)
+    # assert trx.get("trx_id"), "Transaction failed to send"
+
+    # await watch_for_ledger_count(ledger_count + 3)
 
 
 async def test_balance_request():

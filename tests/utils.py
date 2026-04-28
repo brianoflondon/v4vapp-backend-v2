@@ -277,7 +277,7 @@ async def clear_database():
         await db["hive_ops"].delete_many({})
         await db["ledger"].delete_many({})
         await db["pending"].delete_many({})
-        await db["magi_btc"].delete_many({})
+        # await db["magi_btc"].delete_many({})
         await db["ledger_checkpoints"].delete_many({})
     finally:
         # Close the connection properly
