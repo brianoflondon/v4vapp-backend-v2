@@ -200,7 +200,7 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
 
     if isinstance(tracked_obj, str):
         short_id = tracked_obj
-        if "-magi" in short_id or "m_" in short_id:
+        if "-magi" in short_id or "m-" in short_id:
             collection_name = MagiBTCTransferEvent().collection_name
             query = TrackedBaseModel.short_id_query(short_id=short_id)
             result = await db[collection_name].find_one(filter=query)
@@ -209,7 +209,7 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
                 answer = DiscriminatedTracked.model_validate(value)
                 return answer.value
 
-        if "_" in short_id:
+        if "_" in short_id: # and not ("magi" in short_id or "m_" in short_id):
             # This is a for a hive_ops object
             collection_name = "hive_ops"
             query = TrackedBaseModel.short_id_query(short_id=short_id)
