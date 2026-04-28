@@ -224,6 +224,7 @@ IGNORED_UPDATE_FIELDS = [
     "is_amp",
     "is_keysend",
     "invoice_description",
+    "vsc_call_not_needed",  # CustomJson field to mark VSC calls that can be ignored in processing
 ]
 
 
