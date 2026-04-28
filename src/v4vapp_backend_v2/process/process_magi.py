@@ -310,6 +310,7 @@ async def record_magisats_transfer_event(
         from_account=server_id,
         to_account=magi_transfer.cust_id,
         msats=0,  # this is a notification ONLY
+        memo=vsc_payload.memo,
         invoice_message=vsc_payload.memo,
         notification=True,
         parent_id=vsc_payload.parent_id,
