@@ -169,7 +169,40 @@ async def forward_magisats(invoice: Invoice) -> None:
 async def record_magisats_transfer_event(
     magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
 ) -> List[LedgerEntry]:
+    """
+    Record the accounting entries for a completed MagiSats transfer (forwarding) event.
 
+    This function is called after a Lightning payment has already been received
+    into the umbrel node and a corresponding VSC Liability has been created.
+
+    Accounting flow (double-entry):
+
+    1. Earlier (in the deposit handler):
+       - Debit:  External Lightning Payments (umbrel)  + full received amount (e.g. 560 sats)
+       - Credit: VSC Liability (devser.v4vapp)         + full received amount
+
+    2. Server-to-Exchange leg (this function):
+       - Debit:  VSC Liability                         - net amount sent to customer (e.g. 500 sats)
+       - Credit: Exchange Holdings (MagiSwap)          - net amount sent to customer
+         → This removes the forwarded funds from our assets while clearing the corresponding
+           portion of the customer/app liability. The funds have now left the system via Magi.
+
+    3. Fee retention leg (this function):
+       - Debit:  VSC Liability                         - net fee (e.g. 60 sats)
+       - Credit: Fee Income Magisats (MagiSwap)        + net fee
+         → The remaining 60 sats stay in our Exchange Holdings asset and are recognized as revenue.
+
+    Net economic effect of the entire flow:
+    - Assets increase by exactly the fee amount (now correctly residing in Exchange Holdings)
+    - VSC Liability returns to zero
+    - Retained earnings / profit increases by the fee amount
+
+    No "External Magi Payments" entry is needed here — the single server_to_exchange
+    credit to Exchange Holdings is sufficient and clean. The previous WITHDRAW_LIGHTNING
+    entry was creating phantom asset balances and reversed signs.
+
+    All amounts are posted in MSATS using the conversion rates from the Magi transfer event.
+    """
     # Now we transfer the amount_to_send_sats to the
     server_id = InternalConfig().server_id
     vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
@@ -190,6 +223,7 @@ async def record_magisats_transfer_event(
             f"Original invoice with group_id_p {vsc_payload.parent_id} not found or invalid for Magi transfer {magi_transfer.short_id}"
         )
         return []
+
     amount_received_msats = Decimal(original_invoice.value_msat)
     net_fee_msats = amount_received_msats - amount_sent_msats
     # now send the fee to the fee account
@@ -215,6 +249,9 @@ async def record_magisats_transfer_event(
 
     exchange_sub = default_exchange_adapter.exchange_name
 
+    # ──────────────────────────────────────────────────────────────────────
+    # 1. Server Lightning → Magi Exchange (forward the customer portion)
+    # ──────────────────────────────────────────────────────────────────────
     ledger_type = LedgerType.SERVER_TO_EXCHANGE
     server_to_exchange = LedgerEntry(
         cust_id=magi_transfer.cust_id,
@@ -240,32 +277,9 @@ async def record_magisats_transfer_event(
     await server_to_exchange.save()
     ledger_entries_list.append(server_to_exchange)
 
-    ledger_type = LedgerType.WITHDRAW_LIGHTNING
-    magi_payment = LedgerEntry(
-        cust_id=magi_transfer.cust_id,
-        short_id=magi_transfer.short_id,
-        ledger_type=ledger_type,
-        group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
-        op_type=magi_transfer.op_type,
-        timestamp=datetime.now(tz=timezone.utc),
-        description=f"Send Magi {magi_transfer.amount:,.0f} sats for {magi_transfer.cust_id}",
-        user_memo=vsc_payload.memo,
-        debit=AssetAccount(
-            name="External Magi Payments",
-            sub=exchange_sub,
-            contra=True,
-        ),
-        debit_unit=Currency.MSATS,
-        debit_amount=amount_sent_msats,
-        debit_conv=magi_transfer.conv,
-        credit=AssetAccount(name="Exchange Holdings", sub=exchange_sub),
-        credit_unit=Currency.MSATS,
-        credit_amount=amount_sent_msats,
-        credit_conv=magi_transfer.conv,
-    )
-    await magi_payment.save()
-    ledger_entries_list.append(magi_payment)
-
+    # ──────────────────────────────────────────────────────────────────────
+    # 2. Fee income (the retained portion)
+    # ──────────────────────────────────────────────────────────────────────
     ledger_type = LedgerType.FEE_INCOME
     fee_ledger_entry = LedgerEntry(
         cust_id=magi_transfer.cust_id,
@@ -291,9 +305,10 @@ async def record_magisats_transfer_event(
     await fee_ledger_entry.save()
     ledger_entries_list.append(fee_ledger_entry)
 
+    # Notification to Hive (non-accounting)
     notification = KeepsatsTransfer(
         from_account=server_id,
-        to_account=vsc_payload.to,
+        to_account=magi_transfer.cust_id,
         msats=0,  # this is a notification ONLY
         invoice_message=vsc_payload.memo,
         notification=True,
@@ -308,9 +323,10 @@ async def record_magisats_transfer_event(
         id=InternalConfig().config.hive_config.custom_json_prefix + "_notification",
         hive_client=hive_client,
     )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
     logger.info(
-        f"Notification {notification.log_str}",
-        extra={"notification": False, **notification.log_extra},
+        f"Notification {notification.log_str} (trx_id: {trx_id})",
+        extra={"notification": False, **notification.log_extra, "trx": trx},
     )
 
     return ledger_entries_list
