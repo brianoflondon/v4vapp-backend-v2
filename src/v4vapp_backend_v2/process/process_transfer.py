@@ -397,7 +397,7 @@ async def follow_on_transfer(
             logger.info(f"Releasing keepsats hold for {tracked_op.short_id}")
             await release_keepsats(tracked_op=tracked_op)
 
-        if return_details.reason_str:
+        if return_details.reason_str and not isinstance(tracked_op, MagiBTCTransferEvent):
             try:
                 # Arriving here we are usually returning the full amount sent.
                 trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)

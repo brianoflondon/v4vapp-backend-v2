@@ -43,6 +43,14 @@ class MagiBTCBalance(BaseModel):
     error: str | None = None
 
     @property
+    def sats(self) -> Decimal:
+        return self.balance_sats
+
+    @property
+    def msats(self) -> Decimal:
+        return self.balance_sats * Decimal(1000)
+
+    @property
     def balance_msats(self) -> Decimal:
         return self.balance_sats * Decimal(1000)
 
@@ -87,9 +95,14 @@ class MagiBTCTransferEvent(TrackedBaseModel):
     def __init__(self, **data: Any):
         super().__init__(**data)
         try:
-            self.timestamp = datetime.fromisoformat(self.indexer_ts)
+            ts = datetime.fromisoformat(self.indexer_ts)
+            # fromisoformat returns a naive datetime when no timezone is present;
+            # treat it as UTC so arithmetic with offset-aware datetimes works.
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            self.timestamp = ts
         except ValueError:
-            self.timestamp = datetime.now(timezone.utc)
+            self.timestamp = datetime.now(tz=timezone.utc)
         self.cust_id = self.get_cust_id()
         # Ensure amount is a Decimal for consistency
         if not isinstance(self.amount, Decimal):
@@ -99,6 +112,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
     def do_not_pay(self) -> bool:
         """
         Determines if this transfer should be marked as "do not pay" based on the presence of a specific flag in the memo.
+        We only pay onward Magi transactions if they have a #magioutbound flag in the memo.
 
         This is a placeholder implementation. The actual logic for determining "do not pay" status may involve
         checking for specific keywords or flags in the memo or other fields.
@@ -106,7 +120,21 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         Returns:
             bool: True if the transfer should be marked as "do not pay", False otherwise.
         """
-        return False
+        if self.amount <= 0:
+            return True
+        if self.d_memo and "#magioutbound" in self.memo.lower():
+            return False
+        return True
+
+    @property
+    def pay_with_sats(self) -> bool:
+        """
+        Determines if this transfer should be paid with sats based on the amount and "do not pay" status.
+
+        Returns:
+            bool: True if the transfer should be paid with sats, False otherwise.
+        """
+        return not self.do_not_pay and self.amount > 0
 
     @property
     def paywithsats(self) -> bool:
@@ -294,8 +322,18 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         """
         Returns a group ID analogous to OpBase: block_height_txhash_op_in_trx_realm.
         The trailing -N suffix is stripped from the tx hash; the index is captured in op_in_trx.
+
+        Returns:
+            str: The group ID for this transfer event, formatted as indexer_id_trx_id_magi.
+
+        **Important:** This group ID is used by `load_tracked_object` in `tracked_any.py`
+        to determine which operations belong together for processing and database storage.
+        It is crucial that all operations derived from the same indexer record share the same group ID
+
+        `_m` and `_magi` are used to identify Magi-related operations in the database, so they must be included in the group ID.
+
         """
-        return f"{self.indexer_id}-{self.indexer_tx_hash}-magi"
+        return f"{self.indexer_id}_{self.trx_id}_magi"
 
     @computed_field
     def short_id(self) -> str:
@@ -306,7 +344,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         operation index in the transaction, and realm.
         This is used to determine the key in the database where the operation
         """
-        return f"{self.indexer_tx_hash[:8]}-m"
+        return f"{self.trx_id[:8]}_m"
 
     @property
     def short_id_p(self) -> str:
@@ -331,6 +369,8 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         return "magi_btc_transfer_event"
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        if not self.memo:
+            self.memo = self.d_memo
         if not quote:
             quote = await TrackedBaseModel.nearest_quote(self.timestamp)
         self.conv = CryptoConversion(
@@ -364,6 +404,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
                 extra={"notification": False},
             )
             return None
+        self.memo = self.d_memo
         return matching
 
     @property

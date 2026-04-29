@@ -872,12 +872,16 @@ async def perform_transfer_checks(
         perform the transfer.
 
     """
+    from_account = AccName(from_account)
+    to_account = AccName(to_account)
     if await check_not_development_accounts([from_account.no_prefix, to_account.no_prefix]):
         raise HiveDevelopmentAccountError(
             f"{from_account} or {to_account} is not in allowed hive accounts for development mode"
         )
     bad_accounts_set = await get_bad_hive_accounts()
     message = ""
+    # Make sure from_account and to_account are AccName instances
+
     for account in [from_account, to_account]:
         if account.no_prefix in bad_accounts_set:
             message += f"{account} is on the bad accounts list "

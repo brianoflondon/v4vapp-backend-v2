@@ -70,7 +70,7 @@ async def get_magi_btc_balance_by_account(
                 account=balance_record.get("account", ""),
                 balance_sats=Decimal(balance_record.get("balance_sats", 0)),
             )
-            logger.info(
+            logger.debug(
                 f"{ICON} MAGI BTC balance {account_str} {magi_balance.balance_sats:,.0f} from {attempt_endpoint}"
             )
             return magi_balance

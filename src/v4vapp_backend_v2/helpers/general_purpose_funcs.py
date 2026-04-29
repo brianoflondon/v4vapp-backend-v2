@@ -532,7 +532,10 @@ class ProcessedMemo(BaseModel):
         super().__init__(**data)
         self.lightning_memo = LightningMemo(self.memo)
         self.short_memo = self.lightning_memo.short_memo
-        self.cust_id = get_cust_id(self.memo)
+        if self.lightning_memo.is_lightning:
+            self.cust_id = ""
+        else:
+            self.cust_id = get_cust_id(self.memo)
 
 
 def get_cust_id(memo: str) -> AccName | None:

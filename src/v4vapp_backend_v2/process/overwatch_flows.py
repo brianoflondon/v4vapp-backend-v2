@@ -1104,9 +1104,9 @@ EXTERNAL_TO_MAGISATS_FLOW = FlowDefinition(
             group="magi_receive",
         ),
         FlowStage(
-            name="server_to_exchange",
+            name="magi_outbound",
             event_type="ledger",
-            ledger_type=LedgerType.SERVER_TO_EXCHANGE,
+            ledger_type=LedgerType.MAGI_OUTBOUND,
             group="magi_receive",
         ),
         FlowStage(

@@ -378,7 +378,6 @@ async def magisats_inbound(
     All amounts are posted in MSATS using the conversion rates from the Magi transfer event.
     """
     # Now we transfer the amount_to_send_sats to the
-    server_id = InternalConfig().server_id
     vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
     assert vsc_payload.amount, "Amount is missing in VSC payload"
     assert magi_transfer.amount == Decimal(vsc_payload.amount), (
@@ -432,7 +431,7 @@ async def magisats_inbound(
     # 1. Magi Exchange account → Customer (forward the customer portion)
     # ──────────────────────────────────────────────────────────────────────
     ledger_type = LedgerType.MAGI_INBOUND
-    server_to_exchange = LedgerEntry(
+    magi_inbound_ledger = LedgerEntry(
         cust_id=cust_id,
         short_id=magi_transfer.short_id,
         ledger_type=ledger_type,
@@ -454,8 +453,8 @@ async def magisats_inbound(
         credit_conv=magi_transfer.conv,
         link=magi_transfer.link,
     )
-    await server_to_exchange.save()
-    ledger_entries_list.append(server_to_exchange)
+    await magi_inbound_ledger.save()
+    ledger_entries_list.append(magi_inbound_ledger)
 
     # ──────────────────────────────────────────────────────────────────────
     # 2. Fee income (the retained portion)
@@ -481,37 +480,21 @@ async def magisats_inbound(
         credit_unit=Currency.MSATS,
         credit_amount=net_fee_msats,
         credit_conv=fee_conv,
+        link=magi_transfer.link,
     )
     await fee_ledger_entry.save()
     ledger_entries_list.append(fee_ledger_entry)
 
-    await follow_on_transfer(tracked_op=magi_transfer, nobroadcast=False)
+    if magi_transfer.pay_with_sats:
+        await follow_on_transfer(tracked_op=magi_transfer, nobroadcast=False)
+        logger.info(
+            f"{ICON} {magi_transfer.short_id} Follow-on transfer initiated "
+            f"for Magi inbound transfer {magi_transfer.short_id} to {cust_id}",
+        )
 
-    # memo = vsc_payload.memo or ""
-    # # Now we need the logic from a lightning invoice parseing fucntion.
-    # # WORK IN PROGRESS: we should unify the memo parsing logic for received lightning payments and magi transfer events, since they are essentially the same thing from an accounting perspective.
-
-    # # Notification to Hive (non-accounting)
-    # notification = KeepsatsTransfer(
-    #     from_account=server_id,
-    #     to_account=vsc_payload.to,
-    #     msats=0,  # this is a notification ONLY
-    #     invoice_message=vsc_payload.memo,
-    #     notification=True,
-    #     parent_id=vsc_payload.parent_id,
-    # )
-
-    # hive_client, _ = await get_verified_hive_client()
-    # trx = await send_custom_json(
-    #     json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
-    #     send_account=server_id,
-    #     active=True,
-    #     id=InternalConfig().config.hive_config.custom_json_prefix + "_notification",
-    #     hive_client=hive_client,
-    # )
-    # logger.info(
-    #     f"Notification {notification.log_str}",
-    #     extra={"notification": False, **notification.log_extra},
-    # )
+    logger.info(
+        f"{ICON} {magi_transfer.short_id} Processed Magi inbound transfer for {cust_id} "
+        f"with total amount {magi_transfer.amount:,.0f} sats and fee {net_fee_msats / 1000:.3f} sats",
+    )
 
     return ledger_entries_list

@@ -47,6 +47,7 @@ from v4vapp_backend_v2.hive_models.magi_json_data import VSCCallPayload
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
 from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
@@ -474,6 +475,9 @@ async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     assert magisats_exchange_balance.sats > 250, (
         "Magisats exchange balance is too low, cannot perform test"
     )
+    start_magisats_balance = await get_magi_btc_balance_by_account("hive:v4vapp-test")
+    print(f"Start Magisats balance: {start_magisats_balance}")
+
     invoice_value_sat = 200
     memo = "v4vapp-test | Sending a message via magisats test_magisats_inbound_payment | #MAGISATS #CLEAN #v4vapp"
     invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo=f"{memo}")
@@ -492,6 +496,11 @@ async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     start = timer()
     await watch_for_ledger_count(ledger_count + 2, timeout=480)
     end = timer()
+    end_magisats_balance = await get_magi_btc_balance_by_account("hive:v4vapp-test")
+    print(f"End Magisats balance: {end_magisats_balance}")
+    assert end_magisats_balance.sats > start_magisats_balance.sats, (
+        "Expected Magisats balance to increase"
+    )
     print(f"Time taken for Magi Transaction update: {end - start} seconds")
 
 
@@ -513,9 +522,9 @@ async def test_receive_magisats_inbound_payment_to_keepsats():
 async def test_receive_magisats_inbound_payment_to_ln_address():
     server_id = InternalConfig().server_id
     vsc_payload = VSCCallPayload(
-        amount=str(200),
+        amount=str(1000),
         to=AccName(server_id).magi_prefix,
-        memo="brianoflondon@walletofsatoshi.com #v4vapp",
+        memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound",
     )
     trx = await send_magi_transaction(
         vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
