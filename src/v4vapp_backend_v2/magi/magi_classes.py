@@ -356,7 +356,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
 
     @property
     def group_id_query(self) -> Dict[str, Any]:
-        return {"indexer_id": self.indexer_id}
+        return {"group_id": self.group_id}
 
     @property
     def op_type(self) -> str:

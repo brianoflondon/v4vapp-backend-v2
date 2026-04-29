@@ -154,6 +154,7 @@ class CustomJson(OpBase):
                 return True
         return False
 
+    @property
     def do_not_pay(self) -> bool:
         """
         Determines if this CustomJson operation is a follow-on transfer.

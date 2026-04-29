@@ -375,7 +375,8 @@ def test_transfer_event_group_id_with_suffix():
 
 def test_transfer_event_group_id_query():
     event = MagiBTCTransferEvent(**SAMPLE_EVENT)
-    assert event.group_id_query == {"indexer_id": SAMPLE_EVENT["indexer_id"]}
+    group_id = event.group_id
+    assert event.group_id_query == {"group_id": group_id}
 
 
 def test_transfer_event_tracked_base_fields():

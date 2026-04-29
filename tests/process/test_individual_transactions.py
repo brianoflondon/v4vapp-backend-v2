@@ -52,7 +52,7 @@ from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = True
+turn_off_these_tests = False
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -434,7 +434,7 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     )
     pprint(trx)
 
-    await watch_for_ledger_count(ledger_count + 3)
+    await watch_for_ledger_count(ledger_count + 2)
     await asyncio.sleep(5)
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "custom_json"}, sort=[("timestamp", -1)]

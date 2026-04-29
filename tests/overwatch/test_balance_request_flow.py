@@ -189,10 +189,16 @@ class TestBalanceRequestOverwatch:
         assert "balance_request" in completed_names
 
     @pytest.mark.asyncio
-    async def test_superset_candidates_kept_in_grace_period(self):
+    async def test_sibling_candidates_cancelled_immediately_on_balance_request_complete(self):
         """When balance_request completes, hive_to_keepsats and
-        hive_to_keepsats_external should be kept as superset candidates
-        (their stages are a superset of balance_request's stages)."""
+        hive_to_keepsats_external should be cancelled immediately (not kept in
+        a superset grace period).
+
+        balance_request has an event_filter on its trigger stage; that makes
+        its stage signature distinct from the unfiltered trigger in
+        hive_to_keepsats/hive_to_keepsats_external.  _resolve_candidates
+        therefore does not treat them as supersets and removes them right away.
+        """
         ow = _register_transfer_flows()
         fake = _fake_op(balance_request=True)
         trigger = _op_event("transfer", op=fake)
@@ -208,12 +214,13 @@ class TestBalanceRequestOverwatch:
             )
         )
 
-        # balance_request completed; superset candidates have grace period
+        # balance_request completed; sibling flows must be immediately removed
+        active_names = {f.flow_definition.name for f in ow.active_flows}
+        assert "hive_to_keepsats" not in active_names
+        assert "hive_to_keepsats_external" not in active_names
+        # and they must not be stuck in a superset grace period either
         superset_flows = [f for f in ow.active_flows if f.superset_grace_expires is not None]
-        superset_names = {f.flow_definition.name for f in superset_flows}
-        # hive_to_keepsats and hive_to_keepsats_external are proper supersets
-        assert "hive_to_keepsats" in superset_names
-        assert "hive_to_keepsats_external" in superset_names
+        assert not superset_flows
 
     @pytest.mark.asyncio
     async def test_progress_reporting(self):

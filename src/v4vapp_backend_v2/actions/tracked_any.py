@@ -182,9 +182,9 @@ class DiscriminatedTracked(BaseModel):
 
 async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | None:
     """
-    Asynchronously loads a tracked object from the database using either a TrackedAny instance or a short ID string.
+    Asynchronously loads a tracked object from the database using either a TrackedAny instance or a group_id string.
     This will try to figure out which collection to query based on the input.
-    If there are collisions between short IDs across collections, it will prioritize Hive operations over Invoices and Payments, and Invoices over Payments.
+    If there are collisions between group IDs across collections, it will prioritize Hive operations over Invoices and Payments, and Invoices over Payments.
 
     If we add new tables need to be very careful about updating load_tracked_object to ensure we don't accidentally cause collisions or load the wrong object.
     We should also consider adding logging to help debug any issues with loading tracked objects.
@@ -192,7 +192,7 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
     If a string is provided, the function determines the appropriate collection to query based on the format of the string.
     If a TrackedAny instance is provided, it uses its collection and group_id_query attributes to perform the lookup.
 
-        tracked_obj (TrackedAny | str): The tracked object instance or its short ID.
+        tracked_obj (TrackedAny | str): The tracked object instance or its group_id.
 
         TrackedAny | None: The loaded tracked object if found, otherwise None.
 
@@ -200,20 +200,20 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
     db = InternalConfig.db
 
     if isinstance(tracked_obj, str):
-        short_id = tracked_obj
-        if "_magi" in short_id or "_m" in short_id:
+        group_id = tracked_obj
+        if "_magi" in group_id or "_m" in group_id:
             collection_name = MagiBTCTransferEvent().collection_name
-            query = TrackedBaseModel.short_id_query(short_id=short_id)
+            query = {"group_id": group_id}
             result = await db[collection_name].find_one(filter=query)
             if result:
                 value = {"value": result}
                 answer = DiscriminatedTracked.model_validate(value)
                 return answer.value
 
-        if "_" in short_id:  # and not ("magi" in short_id or "m_" in short_id):
+        if "_" in group_id:  # and not ("magi" in group_id or "m_" in group_id):
             # This is a for a hive_ops object
             collection_name = "hive_ops"
-            query = TrackedBaseModel.short_id_query(short_id=short_id)
+            query = {"group_id": group_id}
             result = await db[collection_name].find_one(filter=query)
             if result:
                 value = {"value": result}
@@ -222,7 +222,7 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
         else:
             collections = [Invoice().collection_name, Payment().collection_name]
             for collection_name in collections:
-                query = TrackedBaseModel.short_id_query(short_id=short_id)
+                query = {"group_id": group_id}
                 result = await db[collection_name].find_one(filter=query)
                 if result:
                     value = {"value": result}
