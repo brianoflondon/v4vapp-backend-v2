@@ -510,6 +510,21 @@ async def test_receive_magisats_inbound_payment_to_keepsats():
     pprint(trx)
 
 
+async def test_receive_magisats_inbound_payment_to_ln_address():
+    server_id = InternalConfig().server_id
+    vsc_payload = VSCCallPayload(
+        amount=str(200),
+        to=AccName(server_id).magi_prefix,
+        memo="brianoflondon@walletofsatoshi.com #v4vapp",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+
 async def test_balance_request():
     """
     Test the process of requesting a balance.

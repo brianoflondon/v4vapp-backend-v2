@@ -78,6 +78,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         None,
         description="The CustomJson operations associated with this transfer, if any",
     )
+    memo: str = Field("", description="The memo associated with this transfer, if any")
 
     block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
 
@@ -145,35 +146,44 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         Returns:
             str: The memo associated with this transfer event.
         """
+        if self.memo:
+            return self.memo
+
         if self.custom_jsons:
             for cj in self.custom_jsons:
-                if isinstance(cj, VSCCall):
-                    payload = cj.payload
+                if isinstance(cj.json_data, VSCCall):
+                    payload = cj.json_data.payload
                     if isinstance(payload, VSCCallPayload):
+                        self.memo = payload.memo
                         return payload.memo
         return ""
-
-    @property
-    def memo(self) -> str:
-        """
-        This is a placeholder for the memo field, which may be derived from associated CustomJson operations or other sources.
-
-        Returns:
-            str: The memo associated with this transfer event.
-        """
-        return self.d_memo
 
     def max_send_amount_msats(self) -> Decimal:
         """
         Calculates the maximum amount in millisatoshis that can be sent based on the transfer amount in sats.
+        Needs to include a fee estimate for the follow-on payment if paywithsats is enabled.
 
         Returns:
             Decimal: The maximum send amount in millisatoshis.
         """
         if not self.paywithsats:
             return Decimal(0)
-        msats_fee = self.conv.msats_fee if self.conv else Decimal(100_000)
-        return self.amount * Decimal(1000) - msats_fee
+        if not self.conv:
+            return Decimal(0)
+        msats_fee = self.conv.msats_fee
+        send_sats = self.amount - (msats_fee / Decimal(1000)).quantize(
+            Decimal("1."), rounding="ROUND_UP"
+        )
+        lnd_config = InternalConfig().config.lnd_config
+        fee_estimate_msats = Decimal(
+            Decimal(lnd_config.lightning_fee_base_msats)
+            + (
+                (send_sats * Decimal(2000))
+                * Decimal(lnd_config.lightning_fee_estimate_ppm)
+                / 1_000_000
+            )
+        ).quantize(Decimal("1."), rounding="ROUND_UP")
+        return send_sats * Decimal(1000) - fee_estimate_msats
 
     @property
     def collection_name(self) -> str:

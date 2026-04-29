@@ -279,6 +279,7 @@ async def magisats_outbound(
         credit_unit=Currency.MSATS,
         credit_amount=amount_sent_msats,
         credit_conv=magi_transfer.conv,
+        link=magi_transfer.link,
     )
     await server_to_exchange.save()
     ledger_entries_list.append(server_to_exchange)
@@ -307,6 +308,7 @@ async def magisats_outbound(
         credit_unit=Currency.MSATS,
         credit_amount=net_fee_msats,
         credit_conv=fee_conv,
+        link=magi_transfer.link,
     )
     await fee_ledger_entry.save()
     ledger_entries_list.append(fee_ledger_entry)
@@ -450,6 +452,7 @@ async def magisats_inbound(
         credit_unit=Currency.MSATS,
         credit_amount=amount_sent_msats,  # using the rounded version
         credit_conv=magi_transfer.conv,
+        link=magi_transfer.link,
     )
     await server_to_exchange.save()
     ledger_entries_list.append(server_to_exchange)
