@@ -360,15 +360,15 @@ def test_transfer_event_op_in_trx_suffix_one():
 def test_transfer_event_group_id():
     """group_id uses the indexer event identifier format."""
     event = MagiBTCTransferEvent(**SAMPLE_EVENT)  # hash = "abc123", indexer_id = 42
-    expected = f"{SAMPLE_EVENT['indexer_id']}-abc123-magi"
+    expected = f"{SAMPLE_EVENT['indexer_id']}_abc123_magi"
     assert event.group_id == expected
     assert event.group_id_p == expected
 
 
 def test_transfer_event_group_id_with_suffix():
-    """group_id includes the raw indexer_tx_hash suffix and the same indexer_id."""
+    """group_id uses trx_id (suffix stripped) with indexer_id."""
     event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": "abc123-1"})
-    expected = f"{SAMPLE_EVENT['indexer_id']}-abc123-1-magi"
+    expected = f"{SAMPLE_EVENT['indexer_id']}_abc123_magi"
     assert event.group_id == expected
     assert event.group_id_p == expected
 
