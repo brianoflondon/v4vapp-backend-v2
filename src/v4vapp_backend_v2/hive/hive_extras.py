@@ -30,7 +30,7 @@ from v4vapp_backend_v2.helpers.bad_actors_list import (
     get_bad_hive_accounts,
 )
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_to_float_or_int
-from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.hive_models.pending_transaction_class import (
     PendingCustomJson,
     PendingTransaction,
@@ -849,8 +849,8 @@ async def send_custom_json(
 
 
 async def perform_transfer_checks(
-    from_account: str,
-    to_account: str,
+    from_account: AccName,
+    to_account: AccName,
     amount: Amount = Amount(amount="0.000 HIVE"),
     nobroadcast: bool = False,
 ) -> bool:
@@ -872,14 +872,14 @@ async def perform_transfer_checks(
         perform the transfer.
 
     """
-    if await check_not_development_accounts([from_account, to_account]):
+    if await check_not_development_accounts([from_account.no_prefix, to_account.no_prefix]):
         raise HiveDevelopmentAccountError(
             f"{from_account} or {to_account} is not in allowed hive accounts for development mode"
         )
     bad_accounts_set = await get_bad_hive_accounts()
     message = ""
     for account in [from_account, to_account]:
-        if account in bad_accounts_set:
+        if account.no_prefix in bad_accounts_set:
             message += f"{account} is on the bad accounts list "
     if message:
         raise HiveAccountNameOnExchangesList(message)

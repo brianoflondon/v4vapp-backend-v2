@@ -11,8 +11,9 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import paywithsats_amount, snake_case
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
+from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
 from v4vapp_backend_v2.hive_models.op_all import trx_unpack
 from v4vapp_backend_v2.hive_models.op_base_extras import HiveExp
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -26,6 +27,14 @@ _HIVE_TRX_ID_RE = re.compile(r"^[0-9a-f]{40}$")
 
 class MagiBTCBalanceError(Exception):
     """Custom exception for errors related to fetching Magi BTC balance."""
+
+    pass
+
+
+class MagiSatsInboundFollowOnTransferError(Exception):
+    """Custom exception for errors related to processing follow-on transfers for Magi sats inbound events."""
+
+    pass
 
 
 class MagiBTCBalance(BaseModel):
@@ -45,7 +54,7 @@ class MagiBTCTransferEvent(TrackedBaseModel):
     to_addr: str = Field(
         "", description="The recipient's account name, including network prefix (e.g. 'hive:bob')"
     )
-    amount: Decimal = Field(Decimal(0), description="The amount transferred, in satoshis")
+    amount: Decimal = Field(Decimal(0), description="The amount transferred, in sats")
     indexer_block_height: int = Field(
         0, description="The block height at which the transfer was indexed"
     )
@@ -84,6 +93,87 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         # Ensure amount is a Decimal for consistency
         if not isinstance(self.amount, Decimal):
             self.amount = Decimal(self.amount)
+
+    @property
+    def do_not_pay(self) -> bool:
+        """
+        Determines if this transfer should be marked as "do not pay" based on the presence of a specific flag in the memo.
+
+        This is a placeholder implementation. The actual logic for determining "do not pay" status may involve
+        checking for specific keywords or flags in the memo or other fields.
+
+        Returns:
+            bool: True if the transfer should be marked as "do not pay", False otherwise.
+        """
+        return False
+
+    @property
+    def paywithsats(self) -> bool:
+        """
+        This mirrors the flag in the CustomJson for the follow-on transfer,
+        but is derived here for easier access when processing the initial transfer event.
+
+        This is used by mark: We have a pay_req, we will pay it in `process_transfer.py`
+
+        Returns:
+            bool: True if the transfer should be marked as "pay with sats", False otherwise.
+        """
+        if self.amount > 0 and not self.do_not_pay:
+            return True
+        return False
+
+    @property
+    def paywithsats_amount(self) -> Decimal:
+        """
+        Extracts and returns the 'paywithsats' amount from the memo if present.
+        This is in sats, not msats.
+
+        Returns:
+            Decimal: The amount specified in the memo after 'paywithsats:', or 0 if not present or not applicable.
+
+        Notes:
+            - The memo is expected to be in the format "paywithsats:amount".
+            - If 'paywithsats' is not enabled or the memo does not match the expected format, returns 0.
+        """
+        return paywithsats_amount(self.memo)
+
+    @property
+    def d_memo(self) -> str:
+        """
+        This is a placeholder for the memo field, which may be derived from associated CustomJson operations or other sources.
+
+        Returns:
+            str: The memo associated with this transfer event.
+        """
+        if self.custom_jsons:
+            for cj in self.custom_jsons:
+                if isinstance(cj, VSCCall):
+                    payload = cj.payload
+                    if isinstance(payload, VSCCallPayload):
+                        return payload.memo
+        return ""
+
+    @property
+    def memo(self) -> str:
+        """
+        This is a placeholder for the memo field, which may be derived from associated CustomJson operations or other sources.
+
+        Returns:
+            str: The memo associated with this transfer event.
+        """
+        return self.d_memo
+
+    def max_send_amount_msats(self) -> Decimal:
+        """
+        Calculates the maximum amount in millisatoshis that can be sent based on the transfer amount in sats.
+
+        Returns:
+            Decimal: The maximum send amount in millisatoshis.
+        """
+        if not self.paywithsats:
+            return Decimal(0)
+        msats_fee = self.conv.msats_fee if self.conv else Decimal(100_000)
+        return self.amount * Decimal(1000) - msats_fee
 
     @property
     def collection_name(self) -> str:
@@ -206,8 +296,6 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         operation index in the transaction, and realm.
         This is used to determine the key in the database where the operation
         """
-        # Give the last 3 digits of the block number and first 5 chars of the trx_id
-
         return f"{self.indexer_tx_hash[:8]}-m"
 
     @property

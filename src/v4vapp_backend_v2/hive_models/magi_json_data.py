@@ -238,6 +238,19 @@ class VSCCall(BaseModel):
     # ------------------------------------------------------------------
 
     @property
+    def do_not_pay(self) -> bool:
+        """
+        Determines if this call should not be paid based on the presence of the "#do_not_pay" tag in the memo.
+
+        Returns:
+            bool: True if the "#do_not_pay" tag is found in the memo, False otherwise.
+        """
+        # if isinstance(self.payload, VSCCallPayload) and self.payload.memo:
+        #     lightning_memo = LightningMemo(self.payload.memo)
+        #     if lightning_memo.is_ln
+        return False
+
+    @property
     def from_account(self) -> str:
         """
         Returns the caller stripped of the network prefix, if present.

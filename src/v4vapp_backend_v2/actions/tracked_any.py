@@ -156,7 +156,8 @@ TrackedTransferWithCustomJson = Annotated[
     Annotated[Transfer, Tag("transfer")]
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
     | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
-    | Annotated[CustomJson, Tag("custom_json")],
+    | Annotated[CustomJson, Tag("custom_json")]
+    | Annotated[MagiBTCTransferEvent, Tag("magi_btc_transfer_event")],
     Discriminator(get_tracked_any_type),
 ]
 
@@ -209,7 +210,7 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
                 answer = DiscriminatedTracked.model_validate(value)
                 return answer.value
 
-        if "_" in short_id: # and not ("magi" in short_id or "m_" in short_id):
+        if "_" in short_id:  # and not ("magi" in short_id or "m_" in short_id):
             # This is a for a hive_ops object
             collection_name = "hive_ops"
             query = TrackedBaseModel.short_id_query(short_id=short_id)

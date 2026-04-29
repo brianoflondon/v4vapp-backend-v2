@@ -18,6 +18,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
 from v4vapp_backend_v2.hive.hive_extras import get_transfer_cust_id, process_user_memo
 from v4vapp_backend_v2.hive_models.custom_json_data import (
     CustomJsonData,
+    KeepsatsTransfer,
     all_custom_json_ids,
     custom_json_test_data,
 )
@@ -151,6 +152,30 @@ class CustomJson(OpBase):
             # Check if the transfer is to a watched user
             if self.json_data.is_watched:
                 return True
+        return False
+
+    def do_not_pay(self) -> bool:
+        """
+        Determines if this CustomJson operation is a follow-on transfer.
+        This check is used in the #process_transfer logic to determine if we should skip creating a transfer operation
+        for this CustomJson because it will be followed by a transfer operation that has the same cust_id and transfer details.
+        Replaces this logic in the process_transfer:
+        ```
+            if (
+                isinstance(tracked_op, CustomJson)
+                and isinstance(tracked_op.json_data, KeepsatsTransfer)
+                and tracked_op.json_data.do_not_pay
+            ):
+        ```
+
+        Returns:
+            bool: True if this operation is a follow-on transfer, False otherwise.
+        """
+        # A follow-on transfer is defined as a CustomJson that has a json_data with a from_account and to_account
+        # where either the from_account or to_account is the server account, and the other is not the server account.
+        if self.json_data:
+            if isinstance(self.json_data, KeepsatsTransfer):
+                return self.json_data.do_not_pay
         return False
 
     # MARK: Methods to surface if it exists

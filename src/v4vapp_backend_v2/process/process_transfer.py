@@ -6,6 +6,7 @@ from nectar.amount import Amount
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance,
+    one_account_balance,
 )
 from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, TrackedTransferWithCustomJson
@@ -24,6 +25,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     account_hive_balances_async,
     perform_transfer_checks,
 )
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
@@ -35,6 +37,10 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     LNDPaymentError,
     LNDPaymentExpired,
     send_lightning_to_pay_req,
+)
+from v4vapp_backend_v2.magi.magi_classes import (
+    MagiBTCTransferEvent,
+    MagiSatsInboundFollowOnTransferError,
 )
 from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
@@ -147,9 +153,10 @@ async def follow_on_transfer(
     lnd_client = LNDClient(connection_name=lnd_config.default)
     try:
         # Check if the customer is on the bad accounts list
+
         await perform_transfer_checks(
-            from_account=tracked_op.cust_id,
-            to_account=tracked_op.to_account,
+            from_account=AccName(tracked_op.cust_id),
+            to_account=AccName(tracked_op.to_account),
             amount=amount,
             nobroadcast=nobroadcast,
         )
@@ -159,7 +166,11 @@ async def follow_on_transfer(
         )
 
         # MARK: Conversion Hive/HBD to Keepsats
-        if tracked_op.keepsats and not isinstance(tracked_op, CustomJson):
+        if (
+            not isinstance(tracked_op, MagiBTCTransferEvent)
+            and tracked_op.keepsats
+            and not isinstance(tracked_op, CustomJson)
+        ):
             # This is a conversion of Hive/HBD and deposit Lightning Keepsats
             # use msats=0 to use all the funds sent (leaving only the amount for the return transaction)
             logger.debug(
@@ -178,11 +189,8 @@ async def follow_on_transfer(
             return
 
         # Only skip decoding when this is a KeepsatsTransfer explicitly marked do_not_pay.
-        if (
-            isinstance(tracked_op, CustomJson)
-            and isinstance(tracked_op.json_data, KeepsatsTransfer)
-            and tracked_op.json_data.do_not_pay
-        ):
+        # Also deal with Magisats inbound follow on transfer here.
+        if isinstance(tracked_op, CustomJson) and tracked_op.do_not_pay:
             logger.warning(
                 f"CustomJson contains a KeepsatsTransfer with do_not_pay=True, skipping payment. {tracked_op.short_id} Memo: {tracked_op.d_memo}",
                 extra={"notification": False, **tracked_op.log_extra},
@@ -190,6 +198,7 @@ async def follow_on_transfer(
             pay_req = None
         else:
             # MARK: Attempt to decode and pay a Lightning invoice if present
+            # This also checks the balance for paywithsats.
             pay_req = await decode_incoming_and_checks(
                 tracked_op=tracked_op, lnd_client=lnd_client
             )
@@ -256,6 +265,17 @@ async def follow_on_transfer(
         # MARK: We have a pay_req, we will pay it
         if pay_req and isinstance(pay_req, PayReq):
             # At this stage we need to know if they payment came from  UI or via a custom_json/hive transfer with a memo.
+
+            # Check if the account has enough balance if it is a MagiBTCTransferEvent, otherwise we will check the balance in the decode function and raise an error before we get here.
+            if isinstance(tracked_op, MagiBTCTransferEvent):
+                account_balance = await one_account_balance(account=tracked_op.cust_id)
+                if account_balance.msats < (
+                    Decimal(pay_req.value_msat) + Decimal(pay_req.fee_estimate)
+                ):
+                    raise MagiSatsInboundFollowOnTransferError(
+                        f"Not enough balance to pay the invoice. Balance: {account_balance.sats:,.0f} sats, Invoice amount: {pay_req.value_msat} msats"
+                    )
+
             if tracked_op.paywithsats:
                 await hold_keepsats(
                     amount_msats=Decimal(pay_req.value_msat) + pay_req.fee_estimate,
@@ -350,6 +370,12 @@ async def follow_on_transfer(
 
     except CustomJsonToLightningError:
         raise
+
+    except MagiSatsInboundFollowOnTransferError as e:
+        logger.error(
+            "Error processing Magi sats inbound follow on transfer",
+            extra={"notification": True, "error": str(e), **tracked_op.log_extra},
+        )
 
     except Exception as e:
         # Unexpected error, log it but will not return Hive.

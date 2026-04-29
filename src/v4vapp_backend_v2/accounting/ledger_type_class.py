@@ -73,6 +73,9 @@ class LedgerType(StrEnum):
     FILL_ORDER_BUY = "fill_or_b"
     FILL_ORDER_NET = "fill_or_n"
 
+    MAGI_INBOUND = "magi_in"  # Inbound transfer from Magi (e.g., from a custom JSON indicating an incoming transfer)
+    MAGI_OUTBOUND = "magi_out"  # Outbound transfer to Magi
+
     @property
     def printout(self) -> str:
         """Returns the string representation of the ledger type.
@@ -161,6 +164,8 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.RECLASSIFY_VSC_HIVE: "🔄",  # Reclassify VSC Liability (server) balance
     LedgerType.RECLASSIFY_VSC_SATS: "🔄",  # Reclassify VSC Sats (server) balance
     LedgerType.OPENING_BALANCE: "📂",  # Opening balance entry
+    LedgerType.MAGI_INBOUND: "🧙‍♂️",  # Inbound transfer from Magi (e.g., from a custom JSON indicating an incoming transfer
+    LedgerType.MAGI_OUTBOUND: "🧙‍♂️",  # Outbound transfer to Magi
 }
 
 LedgerTypeStr: Dict[LedgerType, str] = {
@@ -172,6 +177,8 @@ LedgerTypeStr: Dict[LedgerType, str] = {
     LedgerType.CUSTOMER_HIVE_IN: "Deposit",  # Customer deposit into Hive
     LedgerType.WITHDRAW_LIGHTNING: "Send",  # Withdrawal to send to lightning invoice
     LedgerType.RECEIVE_LIGHTNING: "Receive",  # Receive Lightning payment
+    LedgerType.MAGI_INBOUND: "Magi Receive",  # Inbound transfer from Magi (e.g., from a custom JSON indicating an incoming transfer
+    LedgerType.MAGI_OUTBOUND: "Magi Send",  # Outbound transfer to Magi
 }
 
 

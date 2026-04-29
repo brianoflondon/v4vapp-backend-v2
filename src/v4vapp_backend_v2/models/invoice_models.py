@@ -15,6 +15,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
+from v4vapp_backend_v2.helpers.regex_constants import LND_INVOICE_TAG, MAGISATS_TAG
 from v4vapp_backend_v2.models.custom_records import (
     DecodedCustomRecord,
     b64_decode,
@@ -22,16 +23,6 @@ from v4vapp_backend_v2.models.custom_records import (
 )
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 from v4vapp_backend_v2.process.lock_str_class import CustIDType, LockStr
-
-# This is the regex for finding if a given message is an LND invoice to pay.
-# This looks for #v4vapp v4vapp
-# LND_INVOICE_TAG = r"(.*)(#(v4vapp))"
-# Updated to separate the hive name at the start of the message
-LND_INVOICE_TAG = r"^\s*(\S+).*#v4vapp"
-
-# magisats_tag should search for #MAGISATS followed by #v4vapp anywhere in the memo no capture
-# #MAGISATS needs to be lower case in the regex.
-MAGISATS_TAG = r"^\s*\S+.*#magisats(?:\s+(\d+))?.*#v4vapp"
 
 
 def currency_to_receive(memo: str) -> Currency:
