@@ -13,7 +13,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerType,
 )
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.actions.tracked_models import ReplyType, TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -24,6 +24,7 @@ from v4vapp_backend_v2.hive.hive_extras import HiveNotHiveAccount
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
+from v4vapp_backend_v2.magi.magi_classes import MagiBTCTransferEvent
 from v4vapp_backend_v2.models.payment_models import Payment
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
@@ -65,7 +66,8 @@ async def process_payment_success(
     #     )
     # Find existing ledger entries for this payment
     existing_ledger_entries = (
-        await LedgerEntry.collection()
+        await LedgerEntry
+        .collection()
         .find(filter={"group_id": {"$regex": f"{payment.group_id}"}})
         .to_list()
     )
@@ -132,6 +134,35 @@ async def process_payment_success(
         except HiveNotHiveAccount as e:
             logger.info(f"Not sending to a non-Hive Account: {e}")
 
+    if isinstance(initiating_op, MagiBTCTransferEvent):
+        if initiating_op.conv is None or initiating_op.fee_conv is None:
+            logger.warning(
+                f"Missing conversion data for Magisats transfer {initiating_op.short_id}. Cannot calculate net received or log payment details."
+            )
+            net_received_msat = Decimal(0)
+        else:
+            net_received_msat = initiating_op.conv.msats - initiating_op.fee_conv.msats
+
+        net_sent_inc_fees_msat = Decimal(payment.value_msat) + Decimal(payment.fee_msat)
+
+        remainder_msat = net_received_msat - net_sent_inc_fees_msat
+        logger.info(
+            f"Magisats {payment.short_id} payment processed for {initiating_op.short_id}. "
+            f"Net received sat: {net_received_msat / 1000:,.3f}, "
+            f"net sent inc fees sat: {net_sent_inc_fees_msat / 1000:,.3f}, "
+            f"remainder sat: {remainder_msat / 1000:,.3f}"
+        )
+
+        # TODO: if we're going to return Magisats change to the user, we do it here.
+
+    initiating_op.add_reply(
+        reply_id=payment.group_id_p,
+        reply_type=ReplyType.PAYMENT,
+        reply_msat=payment.value_msat,
+        reply_message="",
+        reply_error="",
+    )
+    await initiating_op.save()
     return ledger_entries_list
 
 

@@ -52,7 +52,7 @@ from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = True
+turn_off_these_tests = False
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -445,7 +445,9 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     assert "Transfer v4vapp-test -> v4vapp.qrc" in custom_json.memo
 
 
-# @pytest.mark.skip(reason="work in progress")
+# MARK: Magisats related tests
+
+
 async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     """
     Test the process of handling an inbound payment to Magisats forwarded on the Magisats side.
@@ -478,7 +480,7 @@ async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     start_magisats_balance = await get_magi_btc_balance_by_account("hive:v4vapp-test")
     print(f"Start Magisats balance: {start_magisats_balance}")
 
-    invoice_value_sat = 200
+    invoice_value_sat = 5000
     memo = "v4vapp-test | Sending a message via magisats test_magisats_inbound_payment | #MAGISATS #CLEAN #v4vapp"
     invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo=f"{memo}")
 
@@ -505,6 +507,16 @@ async def test_convert_incoming_lightning_to_magisats_outbound_payment():
 
 
 async def test_receive_magisats_inbound_payment_to_keepsats():
+    """
+    Test the process of receiving an inbound payment from Magisats to Keepsats.
+
+    This test performs the following steps:
+    1. Sends a Magisats transaction to the Keepsats account.
+    2. Verifies that the transaction was successfully processed.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
     server_id = InternalConfig().server_id
     vsc_payload = VSCCallPayload(
         amount=str(200),
@@ -520,11 +532,44 @@ async def test_receive_magisats_inbound_payment_to_keepsats():
 
 
 async def test_receive_magisats_inbound_payment_to_ln_address():
+    """
+    Test the process of receiving an inbound payment from Magisats to a Lightning Network address.
+    This test performs the following steps:
+    1. Sends a Magisats transaction to a Lightning Network address associated with the server.
+    2. Verifies that the transaction was successfully processed.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
     server_id = InternalConfig().server_id
     vsc_payload = VSCCallPayload(
         amount=str(1000),
         to=AccName(server_id).magi_prefix,
         memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+
+async def test_receive_magisats_inbound_payment_to_lightning_invoice():
+    """
+    Test the process of receiving an inbound payment from Magisats to a Lightning Network address.
+    This test performs the following steps:
+    1. Sends a Magisats transaction to a Lightning Network address associated with the server.
+    2. Verifies that the transaction was successfully processed.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
+    server_id = InternalConfig().server_id
+    vsc_payload = VSCCallPayload(
+        amount=str(1000),
+        to=AccName(server_id).magi_prefix,
+        memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound #paywithsats:500",
     )
     trx = await send_magi_transaction(
         vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"

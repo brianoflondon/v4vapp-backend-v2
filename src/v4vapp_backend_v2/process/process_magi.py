@@ -435,6 +435,9 @@ async def magisats_inbound(
         value=net_fee_msats,
     ).conversion
 
+    magi_transfer.fee_conv = fee_conv
+    await magi_transfer.save()
+
     assert net_fee_msats >= 0, (
         "Net fee cannot be negative. Check the amounts in the invoice and VSC payload."
     )
@@ -520,7 +523,6 @@ async def magisats_inbound(
             f"{ICON} {magi_transfer.short_id} Follow-on transfer initiated "
             f"for Magi inbound transfer {magi_transfer.short_id} to {cust_id}",
         )
-        
 
     logger.info(
         f"{ICON} {magi_transfer.short_id} Processed Magi inbound transfer for {cust_id} "
