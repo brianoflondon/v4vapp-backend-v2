@@ -33,11 +33,22 @@ async def process_magi_btc_transfer_event(
     magi_transfer: MagiBTCTransferEvent,
 ) -> List[LedgerEntry]:
     """
-    Process a Magi BTC transfer event by recording it in the database and performing necessary actions.
+    Route a Magi BTC transfer event to the correct accounting handler.
+
+    Ensures conversion rates are populated, then iterates over the watched custom JSON
+    operations attached to the event. For each VSC "transfer" action:
+
+    - If the server is the **caller** (outbound), dispatches to `magisats_outbound`.
+      Self-transfers (caller == recipient) are skipped with a warning.
+    - If the server's Magi address is the **recipient** (inbound), dispatches to
+      `magisats_inbound`.
 
     Args:
-        magi_transfer (MagiBTCTransferEvent): The Magi BTC transfer event object.
+        magi_transfer: The on-chain Magi BTC transfer event to process.
 
+    Returns:
+        List of `LedgerEntry` objects created by the handler, or an empty list if
+        no matching transfer was found or an error occurred.
     """
     logger.info(f"Processing Magi BTC transfer event: {magi_transfer.log_str}")
 
@@ -97,16 +108,23 @@ async def process_magi_btc_transfer_event(
 
 async def forward_magisats(invoice: Invoice) -> None:
     """
-    This function is responsible for forwarding #magisats to the appropriate destination.
-    The specific logic for forwarding will depend on the requirements of the application.
-    For example, it could involve transferring the sats to a specific wallet or account.
+    Forward sats to a customer's Magi address after a Lightning invoice is paid.
+
+    Called when a Lightning invoice tagged `#magisats` is settled. Computes the net
+    amount to forward after deducting the fee (from `fixed_quote` if present, otherwise
+    from the invoice's conversion), constructs a `VSCCallPayload`, and broadcasts a
+    Magi VSC transfer transaction on-chain via `send_magi_transaction`.
+
+    The fee is embedded in the payload as `msats_fee` and carried forward to
+    `magisats_outbound` (via `process_magi_btc_transfer_event`) for accounting once
+    the on-chain VSC transfer is observed.
 
     Args:
-        invoice (Invoice): The invoice object containing details about the #magisats to be forwarded.
+        invoice: The settled Lightning invoice whose `cust_id` identifies the
+                 destination Magi account.
 
     Returns:
         None
-
     """
     logger.info("Forwarding #magisats to the designated destination.")
     msats_fee = None
@@ -176,38 +194,42 @@ async def magisats_outbound(
     magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
 ) -> List[LedgerEntry]:
     """
-    Record the accounting entries for a completed MagiSats transfer (forwarding) event.
+    Record accounting entries when the server sends sats outbound via a Magi VSC transfer.
 
-    This function is called after a Lightning payment has already been received
-    into the umbrel node and a corresponding VSC Liability has been created.
+    Triggered when `process_magi_btc_transfer_event` detects an on-chain VSC "transfer"
+    whose **caller** is the server (i.e. the server initiated the transfer, typically
+    via `forward_magisats`). The original Lightning invoice is loaded via `parent_id`
+    to derive the true fee (received msats − forwarded msats).
 
-    Accounting flow (double-entry):
+    Pre-condition (recorded earlier in the deposit handler):
+      - Debit:  External Lightning Payments (umbrel)   full received amount (e.g. 560 sats)
+      - Credit: VSC Liability (server_id)              full received amount
 
-    1. Earlier (in the deposit handler):
-       - Debit:  External Lightning Payments (umbrel)  + full received amount (e.g. 560 sats)
-       - Credit: VSC Liability (devser.v4vapp)         + full received amount
+    Accounting entries created here (double-entry, all amounts in MSATS):
 
-    2. Server-to-Exchange leg (this function):
-       - Debit:  VSC Liability                         - net amount sent to customer (e.g. 500 sats)
-       - Credit: Exchange Holdings (MagiSwap)          - net amount sent to customer
-         → This removes the forwarded funds from our assets while clearing the corresponding
-           portion of the customer/app liability. The funds have now left the system via Magi.
+    1. MAGI_OUTBOUND — forward the customer portion:
+       - Debit:  VSC Liability (server_id)             amount_sent_msats  (e.g. 500,000 msats)
+       - Credit: Exchange Holdings (exchange_name)     amount_sent_msats
+         → Clears the forwarded portion of the liability; funds have left the system via Magi.
 
-    3. Fee retention leg (this function):
-       - Debit:  VSC Liability                         - net fee (e.g. 60 sats)
-       - Credit: Fee Income Magisats (MagiSwap)        + net fee
-         → The remaining 60 sats stay in our Exchange Holdings asset and are recognized as revenue.
+    2. FEE_INCOME — retain the fee:
+       - Debit:  VSC Liability (server_id)             net_fee_msats      (e.g. 60,000 msats)
+       - Credit: Fee Income Magisats (exchange_name)   net_fee_msats
+         → net_fee = amount_received − amount_sent (must be >= the fee quoted in the payload).
 
-    Net economic effect of the entire flow:
-    - Assets increase by exactly the fee amount (now correctly residing in Exchange Holdings)
-    - VSC Liability returns to zero
-    - Retained earnings / profit increases by the fee amount
+    Net effect:
+      - VSC Liability returns to zero.
+      - Exchange Holdings increases by `amount_sent_msats` (representing sats now in Magi).
+      - Revenue increases by `net_fee_msats`.
 
-    No "External Magi Payments" entry is needed here — the single server_to_exchange
-    credit to Exchange Holdings is sufficient and clean. The previous WITHDRAW_LIGHTNING
-    entry was creating phantom asset balances and reversed signs.
+    A non-accounting Hive `custom_json` notification is also broadcast to the customer.
 
-    All amounts are posted in MSATS using the conversion rates from the Magi transfer event.
+    Args:
+        magi_transfer: The on-chain Magi BTC transfer event (server as sender).
+        vsc_call:      The parsed VSC call from the watched custom JSON.
+
+    Returns:
+        List of the two `LedgerEntry` objects saved, or an empty list on error.
     """
     # Now we transfer the amount_to_send_sats to the
     server_id = InternalConfig().server_id
@@ -348,34 +370,41 @@ async def magisats_inbound(
     magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
 ) -> List[LedgerEntry]:
     """
-    Record the accounting entries for a completed MagiSats transfer (forwarding) event.
+    Record accounting entries when sats arrive at the server's Magi address from a customer.
 
-    This function is called after a Lightning payment has already been received
-    into the umbrel node and a corresponding VSC Liability has been created.
+    Triggered when `process_magi_btc_transfer_event` detects an on-chain VSC "transfer"
+    whose **recipient** (`payload.to`) is the server's Magi-prefixed address. The fee is
+    taken from the event's conversion details (`magi_transfer.conv.msats_fee`).
+    The customer identity is resolved from the memo (if present) or falls back to
+    `magi_transfer.cust_id`.
 
-    Accounting flow (double-entry):
+    Accounting entries created here (double-entry, all amounts in MSATS):
 
-    1. Server-to-Exchange leg (this function):
-       - Debit:  VSC Liability                         - net amount sent to customer (e.g. 500 sats)
-       - Credit: Exchange Holdings (MagiSwap)          - net amount sent to customer
-         → This removes the forwarded funds from our assets while clearing the corresponding
-           portion of the customer/app liability. The funds have now left the system via Magi.
+    1. MAGI_INBOUND — receive the full inbound amount:
+       - Debit:  Exchange Holdings (exchange_name)     amount_sent_msats  (full received amount)
+       - Credit: VSC Liability (cust_id)               amount_sent_msats
+         → Records the sats arriving from the Magi exchange into our holdings, creating
+           a corresponding liability to the customer.
 
-    3. Fee retention leg (this function):
-       - Debit:  VSC Liability                         - net fee (e.g. 60 sats)
-       - Credit: Fee Income Magisats (MagiSwap)        + net fee
-         → The remaining 60 sats stay in our Exchange Holdings asset and are recognized as revenue.
+    2. FEE_INCOME — retain the fee:
+       - Debit:  VSC Liability (cust_id)               net_fee_msats
+       - Credit: Fee Income Magisats (exchange_name)   net_fee_msats
+         → Reduces the customer liability by the fee amount and recognises it as revenue.
 
-    Net economic effect of the entire flow:
-    - Assets increase by exactly the fee amount (now correctly residing in Exchange Holdings)
-    - VSC Liability returns to zero
-    - Retained earnings / profit increases by the fee amount
+    Net effect:
+      - Exchange Holdings increases by `amount_sent_msats`.
+      - VSC Liability to the customer is `net_to_customer_msats` (= received − fee).
+      - Revenue increases by `net_fee_msats`.
 
-    No "External Magi Payments" entry is needed here — the single server_to_exchange
-    credit to Exchange Holdings is sufficient and clean. The previous WITHDRAW_LIGHTNING
-    entry was creating phantom asset balances and reversed signs.
+    If `magi_transfer.pay_with_sats` is set, a follow-on Lightning transfer to the
+    customer is also initiated via `follow_on_transfer`.
 
-    All amounts are posted in MSATS using the conversion rates from the Magi transfer event.
+    Args:
+        magi_transfer: The on-chain Magi BTC transfer event (server as recipient).
+        vsc_call:      The parsed VSC call from the watched custom JSON.
+
+    Returns:
+        List of the two `LedgerEntry` objects saved, or an empty list on error.
     """
     # Now we transfer the amount_to_send_sats to the
     vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
@@ -491,6 +520,7 @@ async def magisats_inbound(
             f"{ICON} {magi_transfer.short_id} Follow-on transfer initiated "
             f"for Magi inbound transfer {magi_transfer.short_id} to {cust_id}",
         )
+        
 
     logger.info(
         f"{ICON} {magi_transfer.short_id} Processed Magi inbound transfer for {cust_id} "

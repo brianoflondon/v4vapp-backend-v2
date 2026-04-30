@@ -31,6 +31,10 @@ from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.service_fees import (
+    calculate_fee_estimate_msats,
+    calculate_fee_msats,
+)
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
@@ -138,6 +142,50 @@ async def cryptoprices() -> AllQuotes:
     return all_quotes
 
 
+@crypto_v2_router.get("/to_keepsats/")
+async def magisats_to_keepsats(
+    keepsats: int = Query(
+        ...,
+        description="The amount of Sats to receive as Keepsats when sending "
+        "MagiSats (BTC in sats) to convert to Keepsats",
+    ),
+) -> Dict[str, int]:
+    """
+    Convert a specified amount of MagiSats (BTC represented in satoshis) into the amount of sats you need
+    to send to pay a lighting invoice of this amount after fees and routing fee estimate, some change will remain.
+
+    Args:
+        magisats (int): The amount of MagiSats to convert, where 1 MagiSat is equivalent to 1 satoshi of BTC.
+
+    Returns:
+        Dict[str, int]: A dictionary containing the original MagiSats amount and the equivalent Satoshis.
+    """
+    # Assuming 1 MagiSat is equal to 1 Satoshi for conversion
+    try:
+        msats = Decimal(keepsats) * Decimal(1000)  # Convert MagiSats to keepsats millisatoshis
+    except Exception as e:
+        logger.error(f"Error converting MagiSats to Sats: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid MagiSats amount"
+        )
+
+    fee_msats = calculate_fee_msats(msats)
+    forwarding_fee_estimate_msats = calculate_fee_estimate_msats(msats)
+    to_send_msats = msats + fee_msats + forwarding_fee_estimate_msats
+    to_send_sats = Decimal(Decimal(to_send_msats) / Decimal(1000)).quantize(
+        Decimal("1"), rounding="ROUND_CEILING"
+    )  # Convert back to Satoshis
+
+    return {
+        "receive_sats": keepsats,
+        "fee_sats": int(fee_msats / Decimal(1000)),
+        "fee_msats": int(fee_msats),
+        "forwarding_fee_estimate_sats": int(forwarding_fee_estimate_msats / Decimal(1000)),
+        "forwarding_fee_estimate_msats": int(forwarding_fee_estimate_msats),
+        "total_to_send_sats": int(to_send_sats),
+    }
+
+
 # @crypto_v2_router.post("")
 # MARK: Legacy v1 Cryptoprices calls
 
@@ -222,7 +270,6 @@ async def binance() -> Dict[str, str | int | float]:
     }
 
 
-@crypto_v1_router.get("/sats_to_hive/", response_model=Dict[str, Any])
 async def sats_to_hive(
     sats: int = Query(..., description="The amount of sats to convert to Hive"),
 ) -> Dict[str, Any]:
@@ -266,7 +313,7 @@ class KeepsatsApiResponse(BaseModel):
         ..., description="Keepsats currently held in progress (rounded sats)"
     )
     all_transactions: List[AccountBalanceLine] | LedgerAccountDetails = Field(
-        default_factory=List,
+        default_factory=list,
         description=("Full account balance object when line_items=True, otherwise an empty list"),
     )
 
