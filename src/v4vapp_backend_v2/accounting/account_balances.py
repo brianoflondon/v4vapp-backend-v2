@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from timeit import default_timer as timer
@@ -44,6 +45,7 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
@@ -596,7 +598,13 @@ async def one_account_balance(
         ttl = LIVE_TTL_SECONDS if as_of_date is None else HISTORICAL_TTL_SECONDS
         # pass the original intent (None for live) so key doesn't drift
         await set_cached_balance(
-            account, as_of_date, age, ledger_details, ttl=ttl, use_checkpoints=use_checkpoints
+            account,
+            as_of_date,
+            age,
+            ledger_details,
+            ttl=ttl,
+            use_checkpoints=use_checkpoints,
+            report_time=_t5 - _t0,
         )
     except Exception as e:
         logger.warning(f"Failed to set cache for {account.name}:{account.sub}: {e}")
@@ -1546,52 +1554,64 @@ async def check_hive_conversion_limits(
 async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal] | None:
     """
     Determines when the next rate limit will expire for a given customer and the amount that will be freed.
-    This looks at the first (shortest) rate limit period and finds the oldest transaction
-    within that period. The expiry time is when that transaction will be outside the limit window,
+    Checks all over-limit periods and returns the soonest expiry across them.
+    The expiry time is when the oldest transaction in that period will leave the limit window,
     and the amount freed is the sats value of that transaction.
 
     Args:
         cust_id (str): The customer ID to check the limit expiry for.
 
     Returns:
-        Tuple[datetime, int] | None: A tuple of (expiry_datetime, sats_freed), or None if no limits or no transactions.
+        Tuple[datetime, Decimal] | None: A tuple of (expiry_datetime, sats_freed), or None if no limits or no transactions.
     """
     lightning_rate_limits = V4VConfig().data.lightning_rate_limits
     if not lightning_rate_limits:
         return None
 
-    first_limit = min(lightning_rate_limits, key=lambda x: x.hours)
-
     pipeline = limit_check_pipeline(cust_id=cust_id, details=True)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list(length=None)
+    results = convert_decimal128_to_decimal(results)
 
     if not results:
         return None
 
+    limit_check = LimitCheckResult.model_validate(results[0])
     result = results[0]
     periods = result.get("periods", {})
-    first_period_key = str(first_limit.hours)
 
-    if first_period_key not in periods:
+    soonest_expiry: datetime | None = None
+    soonest_sats_freed: Decimal = Decimal(0)
+
+    for period_key, period_data in periods.items():
+        # Skip periods that are within their limit
+        period_result = limit_check.periods.get(period_key)
+        if period_result and period_result.limit_ok:
+            continue
+
+        details = period_data.get("details", [])
+        if not details:
+            continue
+
+        # Find the oldest transaction in this over-limit period
+        oldest_entry = min(details, key=lambda x: x["timestamp"])
+        oldest_ts: datetime = oldest_entry["timestamp"]
+        # Converts on entry to Decimal from Decimal128 out of MongoDB
+        sats_freed: Decimal = Decimal(str(oldest_entry["credit_conv"]["msats"])) // Decimal(
+            1000
+        )  # Convert msats to sats
+
+        period_hours = int(period_key)
+        expiry: datetime = oldest_ts + timedelta(hours=period_hours)
+
+        if soonest_expiry is None or expiry < soonest_expiry:
+            soonest_expiry = expiry
+            soonest_sats_freed = sats_freed
+
+    if soonest_expiry is None:
         return None
 
-    period_data = periods[first_period_key]
-    details = period_data.get("details", [])
-
-    if not details:
-        return None
-
-    # Find the oldest transaction
-    oldest_entry = min(details, key=lambda x: x["timestamp"])
-    oldest_ts: datetime = oldest_entry["timestamp"]
-    # Converts on entry to Decimal from Decimal128 out of MongoDB
-    sats_freed: Decimal = Decimal(str(oldest_entry["credit_conv"]["msats"])) // Decimal(
-        1000
-    )  # Convert msats to sats
-
-    expiry: datetime = oldest_ts + timedelta(hours=first_limit.hours)
-    return expiry, sats_freed
+    return soonest_expiry, soonest_sats_freed
 
 
 # @async_time_decorator
@@ -1624,12 +1644,21 @@ async def keepsats_balance(
         contra=False,
     )
     # NOTE: we set use_checkpoints=False here to ensure we get the full transaction history needed to compute the balance,
-    account_balance = await one_account_balance(
-        account=account,
-        as_of_date=as_of_date,
-        age=None,
-        use_checkpoints=False,
-    )
+    async with asyncio.TaskGroup() as task_group:
+        magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
+        account_balance_task = task_group.create_task(
+            one_account_balance(
+                account=account,
+                as_of_date=as_of_date,
+                age=None,
+                use_checkpoints=False,
+            )
+        )
+
+    magi_balance = magi_balance_task.result()
+    account_balance = account_balance_task.result()
+    account_balance.magi_btc_sats = magi_balance.balance_sats
+    account_balance.magi_btc_msats = magi_balance.balance_msats
 
     if notifications:
         # Add non-financial notifications from hive_ops to the transaction history

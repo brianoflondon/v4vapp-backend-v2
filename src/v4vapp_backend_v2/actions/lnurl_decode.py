@@ -133,10 +133,29 @@ async def decode_any_lightning_string(
         comment = extras[1] if not comment else comment
         input = extras[0]
 
-    if not lnd_client:
+    _owns_client = not lnd_client
+    if _owns_client:
         lnd_config = InternalConfig().config.lnd_config
         lnd_client = LNDClient(connection_name=lnd_config.default)
 
+    try:
+        return await _decode_any_lightning_string_inner(
+            input=input,
+            zero_amount_invoice_send_msats=zero_amount_invoice_send_msats,
+            comment=comment,
+            lnd_client=lnd_client,
+        )
+    finally:
+        if _owns_client:
+            await lnd_client.disconnect()
+
+
+async def _decode_any_lightning_string_inner(
+    input: str,
+    zero_amount_invoice_send_msats: Decimal = Decimal(0),
+    comment: str = "",
+    lnd_client: LNDClient | None = None,
+) -> "PayReq":
     if input.startswith("lnbc"):
         lnrpc_pay_req = await get_pay_req_from_pay_request(
             pay_request=input, lnd_client=lnd_client

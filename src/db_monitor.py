@@ -78,7 +78,7 @@ async def health_check() -> Dict[str, Any]:
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
 
-_overwatch_enabled: bool = False
+_overwatch_enabled: bool = True
 
 
 def set_overwatch_enabled(enabled: bool) -> None:
@@ -214,17 +214,14 @@ class ResumeToken(BaseModel):
 
 def ignore_changes(change: Mapping[str, Any], collection_name: str) -> bool:
     """
-    Determines if the "locked" field is present in the updated or removed fields
-    of a database change event.
-
+    Determine whether to ignore a change based on the updated fields.
     Args:
-        change (Mapping[str, Any]): A dictionary representing a database change event.
-            It is expected to contain an "updateDescription" key with details about
-            the updated and removed fields.
+        change (Mapping[str, Any]): The change document from the MongoDB change stream.
+        collection_name (str): The name of the collection for logging purposes.
 
     Returns:
-        bool: True if the "locked" field is found in either the "updatedFields" or
-        "removedFields" of the change event, otherwise False.
+        bool: True if the change should be ignored, False otherwise.
+
     """
 
     update_description = change.get("updateDescription", {})
@@ -310,7 +307,11 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                     },
                 )
                 if overwatch_enabled() and len(ledger_entries) == 0:
-                    await Overwatch().cancel_flows_for_trigger(op.group_id)
+                    trigger_group_id = getattr(op, "group_id_p", None) or getattr(
+                        op, "group_id", None
+                    )
+                    if trigger_group_id is not None:
+                        await Overwatch().cancel_flows_for_trigger(trigger_group_id)
                 return
             except ValueError as e:
                 logger.exception(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})

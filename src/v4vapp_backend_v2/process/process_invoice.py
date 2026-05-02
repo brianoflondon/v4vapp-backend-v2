@@ -16,6 +16,7 @@ from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
 from v4vapp_backend_v2.process.process_transfer import check_user_limits
+from v4vapp_backend_v2.process.process_magi import forward_magisats
 
 
 async def process_lightning_receipt(
@@ -79,6 +80,20 @@ async def process_lightning_receipt(
     await incoming_ledger_entry.save()
     ledger_entries_list.append(incoming_ledger_entry)
 
+    if invoice.is_magisats:
+        logger.info(
+            f"Invoice {invoice.short_id} is marked as MAGISATS, treating as MAGI BTC balance update rather than a conversion. {invoice.log_str}",
+            extra={"notification": False, **invoice.log_extra},
+        )
+        try:
+            await forward_magisats(invoice=invoice)
+            # We need to return from here but for tests we will do nothing.
+        except Exception as e:
+            logger.error(
+                f"Error forwarding MAGISATS: {e}",
+                extra={"notification": False, **invoice.log_extra},
+            )
+        return ledger_entries_list
     # Now we send it to the customer (if there is one) and the custom_json receiver needs to process.
 
     if invoice.cust_id and invoice.is_lndtohive:
@@ -174,6 +189,7 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
             # This will send Hive or a custom_json at the end.
             # Check for fixed quote in the conversion to Hive/HBD
             # Failure in the conversion (i.e. for a small amount) will prevent follow on processes
+
             try:
                 await conversion_keepsats_to_hive(
                     server_id=server_id,
@@ -194,12 +210,14 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
                 f"Lightning to Keepsats deposit transfer for customer ID: {invoice.cust_id}",
                 extra={"notification": False},
             )
+
             if invoice.cust_id == "v4vapp.sus":
                 logger.info(
                     f"Received Lightning invoice from v4vapp.sus account, no further action will be taken. {invoice.log_str}",
                     extra={"notification": False, **invoice.log_extra},
                 )
                 return
+
             sats = Decimal(invoice.value or 0)
             threshold = V4VConfig().data.force_custom_json_payment_sats
             force_flag = sats < threshold

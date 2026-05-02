@@ -233,6 +233,7 @@ async def set_cached_balance(
     result: LedgerAccountDetails,
     ttl: int = DEFAULT_TTL_SECONDS,
     use_checkpoints: bool = True,
+    report_time: float | None = None,
 ) -> None:
     """Store a ``LedgerAccountDetails`` in the cache.
 
@@ -246,6 +247,12 @@ async def set_cached_balance(
         key = _make_cache_key(gen, account, as_of_date, age, use_checkpoints)
         data = result.model_dump_json()
         await InternalConfig.redis_async.setex(key, ttl, data)
-        logger.info(f"SET: {key} (ttl={ttl}s)")
+        if report_time is not None:
+            report_time_str = f"{report_time:.3f}s"
+            logger.info(f"SET: {key} (ttl={ttl}s in {report_time_str})")
+            if report_time > 1.0:
+                logger.warning(f"Slow cache set: {report_time_str} for key {key}")
+        else:
+            logger.info(f"SET: {key} (ttl={ttl}s)")
     except Exception as e:
         logger.warning(f"Failed to set ledger cache: {e}")

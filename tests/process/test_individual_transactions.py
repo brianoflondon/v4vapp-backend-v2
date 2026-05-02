@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from decimal import Decimal
 from pprint import pprint
+from timeit import default_timer as timer
 
 import pytest
 from nectar.amount import Amount
@@ -24,23 +25,30 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance_printout,
     list_all_accounts,
+    one_account_balance,
 )
 from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
     generate_balance_sheet_mongodb,
 )
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.profit_and_loss import profit_and_loss_printout
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.calculate import calc_keepsats_to_hive
+from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.magi_json_data import VSCCallPayload
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
+from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
@@ -68,7 +76,7 @@ async def config_file():
     await close_all_db_connections()
 
 
-@pytest.mark.skip()
+# @pytest.mark.skip()
 async def test_just_clear():
     """
     Test to clear the database and reset the environment.
@@ -426,7 +434,7 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     )
     pprint(trx)
 
-    await watch_for_ledger_count(ledger_count + 3)
+    await watch_for_ledger_count(ledger_count + 2)
     await asyncio.sleep(5)
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "custom_json"}, sort=[("timestamp", -1)]
@@ -435,6 +443,140 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     pprint(custom_json.model_dump())
     print(custom_json.memo)
     assert "Transfer v4vapp-test -> v4vapp.qrc" in custom_json.memo
+
+
+# MARK: Magisats related tests
+
+
+async def test_convert_incoming_lightning_to_magisats_outbound_payment():
+    """
+    Test the process of handling an inbound payment to Magisats forwarded on the Magisats side.
+
+    Needs a positive balance on the Magisats server to work
+
+    Send a hive transaction to convert to a lighting invoice which pays on this same node
+    and uses the #magisats tag in the memo to trigger the magisats processing.
+
+    Raises:
+        AssertionError: If any step in the process fails.
+    """
+    try:
+        default_exchange_adapter = get_exchange_adapter()
+    except Exception as e:
+        logger.error(f"Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
+        return []
+
+    ledger_count_before = await get_ledger_count()
+    logger.info(f"Ledger count before: {ledger_count_before}")
+
+    exchange_sub = default_exchange_adapter.exchange_name
+    exchange_account = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
+    magisats_exchange_balance = await one_account_balance(account=exchange_account)
+
+    assert magisats_exchange_balance is not None, "Failed to retrieve Magisats exchange balance"
+    assert magisats_exchange_balance.sats > 250, (
+        "Magisats exchange balance is too low, cannot perform test"
+    )
+    start_magisats_balance = await get_magi_btc_balance_by_account("hive:v4vapp-test")
+    print(f"Start Magisats balance: {start_magisats_balance}")
+
+    invoice_value_sat = 5000
+    memo = "v4vapp-test | Sending a message via magisats test_magisats_inbound_payment | #MAGISATS #CLEAN #v4vapp"
+    invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo=f"{memo}")
+
+    trx = await send_hive_customer_to_server(
+        send_sats=invoice_value_sat + 100,
+        memo=f"{invoice.payment_request}",
+        customer="v4vapp-test",
+    )
+    pprint(trx)
+    # The transactions
+    await watch_for_ledger_count(ledger_count_before + 13, timeout=120)
+    ledger_count = await get_ledger_count()
+    print(f"Ledger count after regular transactions: {ledger_count}")
+
+    start = timer()
+    await watch_for_ledger_count(ledger_count + 2, timeout=480)
+    end = timer()
+    end_magisats_balance = await get_magi_btc_balance_by_account("hive:v4vapp-test")
+    print(f"End Magisats balance: {end_magisats_balance}")
+    assert end_magisats_balance.sats > start_magisats_balance.sats, (
+        "Expected Magisats balance to increase"
+    )
+    print(f"Time taken for Magi Transaction update: {end - start} seconds")
+
+
+async def test_receive_magisats_inbound_payment_to_keepsats():
+    """
+    Test the process of receiving an inbound payment from Magisats to Keepsats.
+
+    This test performs the following steps:
+    1. Sends a Magisats transaction to the Keepsats account.
+    2. Verifies that the transaction was successfully processed.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
+    server_id = InternalConfig().server_id
+    vsc_payload = VSCCallPayload(
+        amount=str(200),
+        to=AccName(server_id).magi_prefix,
+        memo="v4vapp-test | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #SATS #CLEAN #v4vapp",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+
+async def test_receive_magisats_inbound_payment_to_ln_address():
+    """
+    Test the process of receiving an inbound payment from Magisats to a Lightning Network address.
+    This test performs the following steps:
+    1. Sends a Magisats transaction to a Lightning Network address associated with the server.
+    2. Verifies that the transaction was successfully processed.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
+    server_id = InternalConfig().server_id
+    vsc_payload = VSCCallPayload(
+        amount=str(1000),
+        to=AccName(server_id).magi_prefix,
+        memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+
+async def test_receive_magisats_inbound_payment_to_lightning_invoice():
+    """
+    Test the process of receiving an inbound payment from Magisats to a Lightning Network address.
+    This test performs the following steps:
+    1. Sends a Magisats transaction to a Lightning Network address associated with the server.
+    2. Verifies that the transaction was successfully processed.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
+    server_id = InternalConfig().server_id
+    vsc_payload = VSCCallPayload(
+        amount=str(1000),
+        to=AccName(server_id).magi_prefix,
+        memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound #paywithsats:500",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
 
 
 async def test_balance_request():

@@ -75,7 +75,7 @@ def test_lightningmemo_parses_lightning_address_plain():
     assert "pay me" in lm.before_text
     assert "thanks" in lm.after_text
     # ln_address currently uses the generic memo shortener (chat bubble)
-    assert lm.short_memo == "💬alice@zbd.gg"
+    assert lm.short_memo == "⚡️alice@zbd.gg"
     assert lm.is_ln_address is True
     assert lm.is_lightning_invoice is False
 
@@ -87,7 +87,7 @@ def test_lightningmemo_parses_lightning_address_with_prefixes():
     assert lm.ln_address == "user+tag@sub.domain.com"
     assert lm.invoice == ""
     # ln_address currently uses the generic memo shortener (chat bubble)
-    assert lm.short_memo == "💬user+tag@sub.domain.com"
+    assert lm.short_memo == "⚡️user+tag@sub.domain.com"
     assert lm.before_text.strip().startswith("donate")
     assert lm.after_text.strip().endswith("now")
     assert lm.is_ln_address
@@ -101,7 +101,7 @@ def test_lightningmemo_parses_lightning_address_with_lightning_scheme():
     assert lm.ln_address == "bob.smith@coinos.io"
     assert lm.invoice == ""
     # ln_address currently uses the generic memo shortener (chat bubble)
-    assert lm.short_memo == "💬bob.smith@coinos.io"
+    assert lm.short_memo == "⚡️bob.smith@coinos.io"
     assert lm.is_ln_address
 
 

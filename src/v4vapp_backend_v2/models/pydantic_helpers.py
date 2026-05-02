@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, List
+from typing import Any, Dict, List, TypeVar
 
 from bson import Decimal128, Int64
 from pydantic import GetCoreSchemaHandler, ValidationInfo
@@ -55,9 +55,10 @@ def convert_timestamp_to_datetime(timestamp: int | float) -> datetime:
     return datetime.fromtimestamp(float(timestamp), tz=timezone.utc)
 
 
-def convert_datetime_fields(
-    item: dict[str, Any] | List[dict[str, Any]],
-) -> dict[str, Any] | List[dict[str, Any]]:
+Item = TypeVar("Item", Dict[str, Any], List[Dict[str, Any]])
+
+
+def convert_datetime_fields(item: Item) -> Item:
     """
     Converts timestamp fields and Decimal128 fields in an item dictionary to datetime and Decimal objects.
 

@@ -1,5 +1,5 @@
 ########### TEST CONFIG NO SECRETS #################
-version: "0.4.3"
+version: "0.4.4"
 
 logging:
   log_config_file: 2-stderr-json-file.json
@@ -243,9 +243,6 @@ hive_config:
       role: funding
     fiction:
       role: exchange
-      alternate_names:
-        - b-hot2
-        - b-hot3
     brianoflondon:
       active_key: 5K5xuVxQs7jxp75yY6vsvHxdoyV5y2w8A5Lt6XQBG2yqFbWpALx
       role: witness
@@ -260,6 +257,8 @@ hive_config:
     - vsc.deposit
   watch_witnesses:
     - brianoflondon
+  watch_users:
+    - v4vapp.dev
   witness_configs:
     brianoflondon:
       kuma_webhook_url: WEBHOOK_TEST_URL
@@ -286,6 +285,9 @@ notification_bots:
 exchange_config:
   default_exchange: binance
   binance:
+    hive_accounts:
+      - bdhivesteem
+      - binance-hot2
     exchange_mode: testnet
     api_url:
     testnet:

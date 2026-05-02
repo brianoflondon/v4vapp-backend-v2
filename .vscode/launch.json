@@ -60,6 +60,9 @@
                 "--config-filename",
                 "devhive.config.yaml",
                 // "--start-block", // The block number to start from. Default or 0 will start from the last good block,
+                // "105588176" // The start of Magi BTC operations
+                // "105597734" // lord butterfly
+                // "105601374" // continue after manual restrict
                 // "104311042"
                 // "104128503"
                 // "103924360"
@@ -82,6 +85,25 @@
                 "devhive.config.yaml",
                 "--overwatch"
                 // "--no-overwatch"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "DEV Magi Monitor App",
+            "type": "debugpy",
+            "consoleName": "DEV Magi Monitor App",
+            "request": "launch",
+            "program": "src/magi_monitor.py",
+            "args": [
+                "--config",
+                "devhive.config.yaml",
+                // "--from-indexer-id",
+                // "210"
+                // "209" //
+                // "94" // the first devser interactions is at 95
+                // "0" // start from the beginning of the indexer (use -1 or default to resume from last saved position in DB)
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

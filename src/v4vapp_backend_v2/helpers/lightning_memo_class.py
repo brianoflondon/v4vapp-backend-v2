@@ -20,6 +20,12 @@ LIGHTNING_ADDRESS_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+LIGHTNING_ADDRESS_ONLY_PATTERN = re.compile(
+    r"^\s*(?:\u26A1\uFE0F|\u26A1|lightning:)?[A-Za-z0-9_+%\-]+(?:\.[A-Za-z0-9_+%\-]+)*@"
+    r"(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}\s*$",
+    re.IGNORECASE,
+)
+
 
 def _lightning_memo(memo: str) -> str:
     """
@@ -60,6 +66,12 @@ def _lightning_memo(memo: str) -> str:
         if frag.start() > 0 or frag.end() < len(memo):
             return f"⚡️{frag_val}...{memo[-5:]}"
         return _shorten(frag_val)
+
+    # Lightning address only path
+    if LIGHTNING_ADDRESS_ONLY_PATTERN.match(memo):
+        if not memo.startswith("⚡️"):
+            return f"⚡️{memo.strip()}"
+        return memo
 
     # No invoice found -> prefix with chat bubble
     if not memo.startswith("💬"):

@@ -33,7 +33,32 @@ class AccName(str):
         return False
 
     @property
+    def is_contract(self) -> bool:
+        if self.startswith("contract:"):
+            return True
+        return False
+
+    @property
+    def no_prefix(self) -> str:
+        """
+        Returns the account name stripped of any known network prefixes.
+         For example, "hive:alice" becomes "alice", and "did:pkh:eip155:1:0bob123" becomes "0xbabc123".
+         If the account name does not have a known prefix, it is returned unchanged.
+        """
+        if self.startswith("hive:"):
+            return self[5:]
+        if self.startswith("did:pkh:eip155:1:"):
+            return self[18:]
+        if self.startswith("contract:"):
+            return self[9:]
+        return self
+
+    @property
     def magi_prefix(self) -> str:
+        """
+        Returns the account name in the format expected by MAGI, adding prefixes as needed.
+
+        """
         if isinstance(self, AccName):
             raw_account = str(self)
         else:
@@ -54,7 +79,10 @@ class AccName(str):
         if AccName(raw_account).is_evm:
             return f"did:pkh:eip155:1:{raw_account.lower()}"
 
-        raise ValueError("Invalid account format, expected a Hive account name or EVM address")
+        if AccName(raw_account).is_contract:
+            return f"contract:{raw_account[9:].lower()}"
+
+        return raw_account  # fallback to original string if it doesn't match known patterns
 
 
 # Annotated type with validator to cast to HiveAccName

@@ -5,6 +5,7 @@
         "aiocache",
         "aiofiles",
         "asgiref",
+        "bafyrei",
         "bsonint",
         "ciphertext",
         "colorama",

@@ -102,9 +102,12 @@ class StatusObject:
     time_diff: timedelta = timedelta(0)
     time_diff_str: str = ""
     is_catching_up: bool = False
+    drift_no_recovery_since: datetime | None = None
+    last_marker_time_diff: timedelta = timedelta(0)
 
 
 STATUS_OBJ = StatusObject()
+force_restart: bool = False
 
 
 async def health_check() -> Dict[str, Any]:
@@ -698,6 +701,39 @@ async def all_ops_loop(
                 STATUS_OBJ.last_good_block = op.block_num
                 STATUS_OBJ.time_diff = block_counter.time_diff
                 STATUS_OBJ.is_catching_up = block_counter.is_catching_up
+
+                # Detect unrecoverable drift: catching up but time_diff not improving for >5 min
+                if marker:
+                    if (
+                        block_counter.is_catching_up
+                        and block_counter.time_diff >= STATUS_OBJ.last_marker_time_diff
+                        and STATUS_OBJ.last_marker_time_diff > timedelta(0)
+                    ):
+                        if STATUS_OBJ.drift_no_recovery_since is None:
+                            STATUS_OBJ.drift_no_recovery_since = datetime.now(tz=timezone.utc)
+                            logger.warning(
+                                f"{ICON} Drift not recovering (behind: {block_counter.time_diff}). Monitoring for forced restart.",
+                                extra={"notification": False},
+                            )
+                        elif (
+                            datetime.now(tz=timezone.utc) - STATUS_OBJ.drift_no_recovery_since
+                        ) > timedelta(minutes=5):
+                            global force_restart
+                            force_restart = True
+                            logger.critical(
+                                f"{ICON} Drift unrecoverable for >5 minutes (behind: {block_counter.time_diff}). Triggering restart.",
+                                extra={"notification": True},
+                            )
+                            shutdown_event.set()
+                    else:
+                        if STATUS_OBJ.drift_no_recovery_since is not None:
+                            logger.info(
+                                f"{ICON} Drift recovering (behind: {block_counter.time_diff}). Cancelling forced restart.",
+                                extra={"notification": False},
+                            )
+                        STATUS_OBJ.drift_no_recovery_since = None
+                    STATUS_OBJ.last_marker_time_diff = block_counter.time_diff
+
                 if timer() - start > 55:
                     block_marker = BlockMarker(op.block_num, op.timestamp)
                     await db_store_op(block_marker)
@@ -1014,6 +1050,9 @@ def main(
         watch_witnesses = CONFIG.hive_config.watch_witnesses
     COMMAND_LINE_WATCH_ONLY = watch_only
     asyncio.run(main_async_start(watch_users, watch_witnesses, start_block=start_block))
+    if force_restart:
+        logger.info(f"{ICON} Exiting with code 1 to trigger Docker restart.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

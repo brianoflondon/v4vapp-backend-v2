@@ -18,7 +18,6 @@ from v4vapp_backend_v2.database.db_retry import (
     summarize_write_result,  # optional pretty log
 )
 from v4vapp_backend_v2.helpers.binance_extras import get_client
-from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     convert_decimals_for_mongodb,
     format_time_delta,
@@ -70,21 +69,21 @@ def _log_rates_insert_done(t: asyncio.Task) -> None:
         logger.warning(f"{ICON} Rates insert task failed: {e}", extra={"notification": False})
 
 
-def currency_to_receive(memo: str) -> Currency:
-    """
-    Detects the currency to receive based on the memo.
-    Args:
-        memo (str): The memo to check.
-    Returns:
-        Currency: The detected currency, defaults to HIVE if not found.
-    """
-    if "#hbd" in memo.lower():
-        return Currency.HBD
-    if "#hive" in memo.lower():
-        return Currency.HIVE
-    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
-        return Currency.SATS
-    return Currency.HIVE  # Default to HIVE if no specific currency is detected
+# def currency_to_receive(memo: str) -> Currency:
+#     """
+#     Detects the currency to receive based on the memo.
+#     Args:
+#         memo (str): The memo to check.
+#     Returns:
+#         Currency: The detected currency, defaults to HIVE if not found.
+#     """
+#     if "#hbd" in memo.lower():
+#         return Currency.HBD
+#     if "#hive" in memo.lower():
+#         return Currency.HIVE
+#     if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
+#         return Currency.SATS
+#     return Currency.HIVE  # Default to HIVE if no specific currency is detected
 
 
 def _parse_iso_datetime(value: str | datetime | None) -> datetime:
@@ -968,8 +967,8 @@ class QuoteService(ABC):
         return None
 
     async def set_cache(self, quote: QuoteResponse) -> None:
+        key = f"{self.__class__.__name__}:get_quote"
         try:
-            key = f"{self.__class__.__name__}:get_quote"
             if InternalConfig().config.development.enabled:
                 cache_times = TESTING_CACHE_TIMES
             else:

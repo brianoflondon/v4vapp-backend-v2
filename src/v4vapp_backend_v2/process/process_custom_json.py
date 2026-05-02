@@ -57,6 +57,13 @@ async def process_custom_json_func(
         logger.debug(f"Notification CustomJson: {custom_json.json_data.memo}")
         return []
 
+    if custom_json.cj_id == "vsc.call":
+        # These are handled based on the Magi instructions, not here.
+        logger.debug(f"VSC Call CustomJson: {custom_json.log_str}")
+        custom_json.vsc_call_not_needed = True
+        await custom_json.save()
+        return []
+
     if not custom_json.authorized:
         message = f"CustomJson operation not authorized. {custom_json.from_account} not in {custom_json.required_auths}"
         logger.warning(message, extra={"notification": False, **custom_json.log_extra})
@@ -252,7 +259,12 @@ async def custom_json_internal_transfer(
     message = ""
     fee_transfer = False
     fee_sats = custom_json.fee_memo
-    if fee_sats > 0 and keepsats_transfer.sats <= fee_sats and custom_json.to_account == server_id:
+    if (
+        fee_sats > 0
+        and keepsats_transfer.sats
+        and keepsats_transfer.sats <= fee_sats
+        and custom_json.to_account == server_id
+    ):
         fee_transfer = True
 
     net_msats, account_balance = await keepsats_balance(cust_id=keepsats_transfer.from_account)

@@ -18,9 +18,12 @@ from v4vapp_backend_v2.hive.hive_extras import (
     send_custom_json,
     send_transfer,
 )
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
+from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.lock_str_class import CustIDType, LockStr
 
 MEMO_FOOTER = " | Thank you for using v4v.app"
@@ -91,6 +94,10 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         f"Replying with Hive details: {details.original_memo}", extra={"notification": False}
     )
     # decide whether we are allowed to send a Hive transfer at all
+
+    if isinstance(details.tracked_op, TrackedForwardEvent):
+        return {}
+
     if not LockStr(details.pay_to_cust_id).is_hive:
         logger.warning(
             f"Tracked operation customer ID {details.pay_to_cust_id} is not a valid Hive account.",
@@ -336,10 +343,7 @@ async def send_transfer_custom_json(
     this is a customer to customer or customer to server transfer.
 
     Args:
-        from_account (str): The Hive account sending the transfer.
-        to_account (str): The Hive account receiving the transfer.
-        amount (Amount): The amount to be transferred.
-        memo (str, optional): The memo for the transfer. Defaults to an empty string.
+        transfer (KeepsatsTransfer): The Keepsats transfer data to be sent as a custom JSON.
         nobroadcast (bool, optional): If True, the transaction will not be broadcasted. Defaults to False.
 
     Returns:
@@ -376,3 +380,58 @@ async def send_transfer_custom_json(
             extra={"notification": False, "id": id, **transfer.log_extra},
         )
         return {}
+
+
+async def send_magi_transfer_custom_json(
+    vsc_call: VSCCall,
+    nobroadcast: bool = False,
+    caller: str | None = None,
+) -> Dict[str, str]:
+    """
+    Sends a custom JSON transfer on the Hive blockchain.
+    The get_verified_hive_client function will handle the account verification and use Server keys if
+    this is a customer to customer or customer to server transfer.
+
+    Args:
+        vsc_call: VSCCall object containing the transfer details.
+        nobroadcast (bool, optional): If True, the transaction will not be broadcasted. Defaults to False.
+        caller (str | None, optional): The caller of the transfer. Defaults to None.
+
+    Returns:
+        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
+    """
+    id = "vsc.call"
+    server_id = InternalConfig().server_id
+    if caller:
+        caller_acc_name = AccName(caller)  # Remove hive: prefix if present
+    else:
+        caller_acc_name = AccName(f"hive:{server_id}")
+
+    hive_client = await get_verified_hive_client_for_accounts(
+        [caller_acc_name.no_prefix], nobroadcast=nobroadcast
+    )  # verify caller account exists and keys if needed
+
+    try:
+        send_from = caller_acc_name.no_prefix
+        json_data = vsc_call.model_dump(exclude_none=True, exclude_unset=True, by_alias=True)
+        json_data_converted = convert_decimals_for_mongodb(json_data)
+        trx = await send_custom_json(
+            json_data=json_data_converted,
+            send_account=send_from,
+            active=True,
+            id=id,
+            hive_client=hive_client,
+            nobroadcast=nobroadcast,
+        )
+        logger.info(
+            f"Sent custom_json magi transfer: {vsc_call.log_str} {trx.get('trx_id', '')}",
+            extra={"notification": False, **vsc_call.log_extra},
+        )
+        return trx
+    # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
+    except Exception as e:
+        logger.exception(
+            f"Error sending custom_json transfer: {e} {vsc_call.log_str}",
+            extra={"notification": False, "id": id, **vsc_call.log_extra},
+        )
+        return {"error": str(e)}
