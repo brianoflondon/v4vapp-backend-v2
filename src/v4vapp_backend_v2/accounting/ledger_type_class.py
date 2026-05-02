@@ -75,6 +75,7 @@ class LedgerType(StrEnum):
 
     MAGI_INBOUND = "magi_in"  # Inbound transfer from Magi (e.g., from a custom JSON indicating an incoming transfer)
     MAGI_OUTBOUND = "magi_out"  # Outbound transfer to Magi
+    MAGI_CHANGE = "magi_chg"  # Change returned to Magi (e.g., when returning excess Magisats after a conversion)
 
     @property
     def printout(self) -> str:

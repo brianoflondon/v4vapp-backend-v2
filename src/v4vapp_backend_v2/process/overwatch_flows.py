@@ -271,17 +271,30 @@ KEEPSATS_TO_HIVE_FLOW = FlowDefinition(
             required=False,  # Notification may be missing if user has no cust_id or conv is zero
         ),
         # --- HBD transfer stages (reply group) ---
+        # These are optional because:
+        # 1. In replay scenarios (already-processed ops on monitor restart), the
+        #    on-chain Hive transfer change-stream event is outside the resume-token
+        #    window and will never re-arrive.
+        # 2. When the server HBD balance is insufficient, send_transfer raises
+        #    HiveTransferError which reply_with_hive catches silently — no Hive
+        #    transfer is broadcast and these events never appear.
+        # 3. Multiple concurrent flows would cause a transfer op from one flow to
+        #    incorrectly satisfy the hbd_transfer_op stage of another (op matching
+        #    is purely by op_type, not by short_id).
+        # The core completion signal is the 8 primary accounting stages above.
         FlowStage(
             name="hbd_transfer_op",
             event_type="op",
             op_type="transfer",
             group="hbd_transfer",
+            required=False,
         ),
         FlowStage(
             name="customer_hive_out",
             event_type="ledger",
             ledger_type=LedgerType.CUSTOMER_HIVE_OUT,
             group="hbd_transfer",
+            required=False,
         ),
         # --- Exchange order stages ---
         FlowStage(

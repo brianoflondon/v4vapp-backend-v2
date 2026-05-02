@@ -1062,11 +1062,12 @@ class TestNotificationReplyCompletion:
         ]:
             await ow._dispatch(ev)
 
-        # keepsats_to_external: 3/5, keepsats_to_hive: 1/10
+        # keepsats_to_external: 3/5, keepsats_to_hive: 1/8 (hbd_transfer_op and
+        # customer_hive_out are now optional — see overwatch_flows.py comments)
         ext = next(f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_external")
         hive = next(f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_hive")
         assert ext.progress == "3/5 required stages complete"
-        assert hive.progress == "1/10 required stages complete"
+        assert hive.progress == "1/8 required stages complete"
 
         # Notification arrives
         notif = self._notification_op(parent_id=trigger_gid)

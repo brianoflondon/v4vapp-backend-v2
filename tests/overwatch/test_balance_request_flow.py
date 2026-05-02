@@ -450,3 +450,102 @@ class TestEventFilter:
         stage = BALANCE_REQUEST_FLOW.stages[0]
         dumped = stage.model_dump()
         assert "event_filter" not in dumped
+
+
+# ---------------------------------------------------------------------------
+# Tests: late-arrival ledger event buffering
+# ---------------------------------------------------------------------------
+
+
+class TestPendingLedgerEventBuffer:
+    """Verify that ledger events arriving BEFORE the trigger op are buffered
+    and replayed when the flow is eventually created.
+
+    Regression for: keepsats_to_hive flows stalling because their ledger
+    entries (written by an earlier processing run) arrive at the change stream
+    BEFORE the trigger custom_json change event.
+    """
+
+    @pytest.mark.asyncio
+    async def test_buffered_ledger_replayed_on_flow_creation(self):
+        """Ledger event ingested before flow exists is replayed when created."""
+        ow = Overwatch()
+        Overwatch.reset()
+        Overwatch.register_flow(BALANCE_REQUEST_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        sid = "3306_06d160_1"
+        gid = "gid_trigger"
+
+        # Directly inject a ledger event into the buffer (simulating an event
+        # that arrived before the flow existed — same as what ingest_ledger_entry
+        # does when _dispatch returns None).
+        ledger_evt = _ledger_event(LedgerType.CUSTOMER_HIVE_IN, group_id=gid, short_id=sid)
+        Overwatch._pending_ledger_events[sid] = [(ledger_evt, datetime.now(tz=timezone.utc))]
+
+        # Now the trigger op arrives and creates the flow
+        fake = _fake_op(balance_request=True, group_id=gid, short_id=sid)
+        trigger = _op_event("transfer", group_id=gid, short_id=sid, op=fake)
+        await ow._try_create_flow(trigger, fake)
+
+        # The buffer should have been drained …
+        assert sid not in Overwatch._pending_ledger_events
+        # … and the flow should now show the ledger stage as matched
+        flows = [f for f in ow.active_flows if f.trigger_short_id == sid]
+        assert flows, "Expected at least one active flow for the trigger"
+        matched_types = {e.ledger_type for e in flows[0].events if e.event_type == "ledger"}
+        assert LedgerType.CUSTOMER_HIVE_IN in matched_types
+
+    @pytest.mark.asyncio
+    async def test_buffer_not_replayed_for_different_short_id(self):
+        """Buffered event for short_id A is not replayed into a flow for B."""
+        ow = Overwatch()
+        Overwatch.reset()
+        Overwatch.register_flow(BALANCE_REQUEST_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        sid_a = "aaaa_aaaaaa_1"
+        sid_b = "bbbb_bbbbbb_1"
+
+        ledger_evt_a = _ledger_event(LedgerType.CUSTOMER_HIVE_IN, group_id=sid_a, short_id=sid_a)
+        Overwatch._pending_ledger_events[sid_a] = [(ledger_evt_a, datetime.now(tz=timezone.utc))]
+
+        # Flow created for sid_b — should NOT drain sid_a buffer
+        fake_b = _fake_op(balance_request=True, group_id=sid_b, short_id=sid_b)
+        trigger_b = _op_event("transfer", group_id=sid_b, short_id=sid_b, op=fake_b)
+        await ow._try_create_flow(trigger_b, fake_b)
+
+        # sid_a buffer should still be intact
+        assert sid_a in Overwatch._pending_ledger_events
+        # sid_b buffer should never have been populated
+        assert sid_b not in Overwatch._pending_ledger_events
+
+    @pytest.mark.asyncio
+    async def test_expired_buffer_not_replayed(self):
+        """Buffer entries older than TTL are silently dropped on replay."""
+        from datetime import timedelta
+
+        ow = Overwatch()
+        Overwatch.reset()
+        Overwatch.register_flow(BALANCE_REQUEST_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        sid = "3306_06d160_1"
+        gid = "gid_trigger"
+
+        # Manually inject an already-expired entry
+        old_ts = datetime.now(tz=timezone.utc) - timedelta(minutes=10)
+        old_event = _ledger_event(LedgerType.CUSTOMER_HIVE_IN, group_id=gid, short_id=sid)
+        Overwatch._pending_ledger_events[sid] = [(old_event, old_ts)]
+
+        fake = _fake_op(balance_request=True, group_id=gid, short_id=sid)
+        trigger = _op_event("transfer", group_id=gid, short_id=sid, op=fake)
+        await ow._try_create_flow(trigger, fake)
+
+        # Buffer cleared (expired entries dropped), flow created but no ledger
+        # stage matched from the stale event
+        assert sid not in Overwatch._pending_ledger_events
+        flows = [f for f in ow.active_flows if f.trigger_short_id == sid]
+        assert flows
+        ledger_events = [e for e in flows[0].events if e.event_type == "ledger"]
+        assert ledger_events == []

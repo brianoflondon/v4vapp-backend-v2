@@ -53,6 +53,7 @@ async def follow_on_transfer(
 ) -> None:
     """
     Processes a tracked Hive-to-Lightning transfer operation, handling payment attempts and error scenarios.
+    Also handles MagiBTCTransferEvent follow-on transfers with specific error handling for insufficient balance.
 
     This function performs the following steps:
     1. Checks if the operation already has replies (e.g., a Lightning payment transaction) and skips processing if so.

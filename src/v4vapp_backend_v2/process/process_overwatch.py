@@ -574,6 +574,15 @@ class Overwatch:
     _completion_report_tasks: ClassVar[dict[str, asyncio.Task]] = {}
     COMPLETION_REPORT_DELAY: ClassVar[float] = 5.0  # seconds
 
+    # ---- late-arrival ledger event buffer ----
+    # Ledger entries can arrive via MongoDB change stream BEFORE the trigger op
+    # that creates the flow (different collection orderings, prior-run entries
+    # being replayed, etc.).  When _dispatch finds no matching flow for a ledger
+    # event, it is buffered here keyed by short_id.  _try_create_flow then
+    # replays the buffer against newly-created instances.
+    _pending_ledger_events: ClassVar[dict[str, list[tuple[FlowEvent, datetime]]]] = {}
+    _PENDING_EVENTS_TTL: ClassVar[timedelta] = timedelta(minutes=2)
+
     def __new__(cls) -> Overwatch:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -787,7 +796,16 @@ class Overwatch:
             f"{ICON} {ledger_entry.short_id} {ledger_entry.log_str}",
             extra={"notification": False, **ledger_entry.log_extra},
         )
-        return await self._dispatch(event)
+        result = await self._dispatch(event)
+        if result is None and event.short_id:
+            # No active flow matched.  Buffer the event so that if the trigger
+            # op arrives slightly later (due to MongoDB change stream ordering
+            # across collections), the newly-created flow can pick it up.
+            self._pending_ledger_events.setdefault(event.short_id, []).append((
+                event,
+                datetime.now(tz=timezone.utc),
+            ))
+        return result
 
     async def ingest_op(
         self,
@@ -1064,6 +1082,7 @@ class Overwatch:
 
         first_result: str | None = None
         candidates: list[str] = []
+        new_instances: list[FlowInstance] = []
         for defn in self._flow_definitions.values():
             if event.op_type == defn.trigger_op_type and event.group == "primary":
                 # If the first (trigger) stage has an event_filter, check it
@@ -1081,6 +1100,7 @@ class Overwatch:
                     completed_at=None,
                 )
                 self.flow_instances.append(instance)
+                new_instances.append(instance)
                 result = instance.add_event(event)
                 if first_result is None and result is not None:
                     first_result = result
@@ -1099,7 +1119,44 @@ class Overwatch:
                     f"({event.short_id}): {', '.join(candidates)}",
                     extra={"notification": False},
                 )
+            # Replay any ledger events that arrived before this trigger op
+            # (due to MongoDB change stream ordering across collections).
+            if event.short_id:
+                await self._replay_buffered_events(event.short_id, new_instances)
         return first_result
+
+    async def _replay_buffered_events(
+        self,
+        short_id: str,
+        new_instances: list[FlowInstance],
+    ) -> None:
+        """Replay buffered ledger events against newly-created flow instances.
+
+        Ledger entries for a transaction can arrive at the change stream before
+        the trigger op (different MongoDB collection, prior-run writes, etc.).
+        Those events are buffered in ``_pending_ledger_events`` by ``short_id``.
+        This method drains the buffer and feeds any still-fresh events into the
+        freshly-created instances so the flow starts at the correct stage count.
+        """
+        buffered = self._pending_ledger_events.pop(short_id, None)
+        if not buffered:
+            return
+        now = datetime.now(tz=timezone.utc)
+        replayed = 0
+        for buffered_event, ts in buffered:
+            if now - ts > self._PENDING_EVENTS_TTL:
+                continue  # expired — too old to be useful
+            for instance in new_instances:
+                if not self._is_duplicate(instance, buffered_event):
+                    result = instance.add_event(buffered_event)
+                    if result is not None:
+                        replayed += 1
+                        await self._persist_flow(instance)
+        if replayed:
+            logger.debug(
+                f"{ICON} Replayed {replayed} buffered ledger event(s) for {short_id}",
+                extra={"notification": False},
+            )
 
     async def _complete_by_notification(
         self,

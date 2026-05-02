@@ -271,6 +271,108 @@ async def test_process_op_ledger_path_respects_flag(monkeypatch):
     assert validated == [{"_id": 4}]
 
 
+@pytest.mark.asyncio
+async def test_cancel_not_called_for_already_processed_op(monkeypatch):
+    """Regression test: cancel_flows_for_trigger must NOT be called when an op
+    was already processed (either by a prior run or by a concurrent task).
+
+    The real process_tracked_event now propagates op.process_time when it
+    detects the "already processed" case (process_time already set in the DB).
+    db_monitor checks op.process_time AFTER the call — non-None means
+    "was processed, don't cancel".
+
+    Two scenarios covered:
+      1. Op arrives with process_time already set (set in-memory before call).
+      2. Op arrives with process_time=None but a concurrent task already wrote
+         it to the DB; process_tracked_event detects this and sets
+         op.process_time before returning [] — the fake here simulates that.
+    """
+    import db_monitor as module
+
+    class DummyOpAlreadyProcessed:
+        group_id_query = {}
+        group_id = "G_already"
+        group_id_p = "G_already_p"
+        log_extra = {}
+        op_type = "custom_json"
+        short_id = "S"
+        log_str = "log"
+        process_time = 1.23  # already set in-memory (prior run)
+
+    class DummyOpConcurrent:
+        """Simulates an op that arrived with process_time=None (from a stale
+        change-event fullDocument) but was concurrently processed by another
+        task; process_tracked_event will set process_time before returning."""
+
+        group_id_query = {}
+        group_id = "G_concurrent"
+        group_id_p = "G_concurrent_p"
+        log_extra = {}
+        op_type = "custom_json"
+        short_id = "S3"
+        log_str = "log3"
+        process_time = None  # not yet set in-memory
+
+    class DummyOpFresh:
+        group_id_query = {}
+        group_id = "G_fresh"
+        group_id_p = "G_fresh_p"
+        log_extra = {}
+        op_type = "custom_json"
+        short_id = "S2"
+        log_str = "log2"
+        process_time = None  # genuinely unprocessed — cancel should fire
+
+    already_op = DummyOpAlreadyProcessed()
+    concurrent_op = DummyOpConcurrent()
+    fresh_op = DummyOpFresh()
+    ops_iter = iter([already_op, concurrent_op, fresh_op])
+
+    def make_op(doc):
+        return next(ops_iter)
+
+    monkeypatch.setattr(module, "tracked_any_filter", make_op)
+
+    cancel_calls: list = []
+
+    class FakeOW:
+        async def ingest_op(self, op):
+            pass
+
+        async def cancel_flows_for_trigger(self, trigger_group_id):
+            cancel_calls.append(trigger_group_id)
+            return 0
+
+    async def fake_process_tracked_event(op):
+        # Simulate what the real function does: if the DB record was already
+        # processed by a concurrent task, set op.process_time before returning.
+        if op is concurrent_op:
+            op.process_time = 9.99  # mirrors "already processed" DB detection
+        return []
+
+    monkeypatch.setattr(module, "Overwatch", lambda: FakeOW())
+    monkeypatch.setattr(module, "process_tracked_event", fake_process_tracked_event)
+    module.set_overwatch_enabled(True)
+
+    # scenario 1: process_time already in-memory — cancel must NOT fire
+    await module.process_op({"fullDocument": {"_id": 10}}, "payments")
+    assert cancel_calls == [], (
+        "cancel_flows_for_trigger must not be called when op.process_time is set before the call"
+    )
+
+    # scenario 2: process_time set by process_tracked_event (concurrent) — cancel must NOT fire
+    await module.process_op({"fullDocument": {"_id": 12}}, "payments")
+    assert cancel_calls == [], (
+        "cancel_flows_for_trigger must not be called when process_tracked_event sets process_time"
+    )
+
+    # scenario 3: genuinely unprocessed op — cancel SHOULD fire
+    await module.process_op({"fullDocument": {"_id": 11}}, "payments")
+    assert cancel_calls == ["G_fresh_p"], (
+        "cancel_flows_for_trigger must be called for a fresh op with no ledger entries"
+    )
+
+
 @pytest.mark.skip(
     reason="This test is more of an integration test and is a bit flaky in CI; may revisit later with a more robust approach"
 )

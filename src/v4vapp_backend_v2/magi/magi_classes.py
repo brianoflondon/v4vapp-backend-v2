@@ -11,7 +11,11 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import paywithsats_amount, snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    detect_paywithsats,
+    paywithsats_amount,
+    snake_case,
+)
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
 from v4vapp_backend_v2.hive_models.op_all import trx_unpack
@@ -147,7 +151,9 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         Returns:
             bool: True if the transfer should be marked as "pay with sats", False otherwise.
         """
-        if self.amount > 0 and not self.do_not_pay:
+        if not self.do_not_pay:
+            return True
+        if detect_paywithsats(self.memo):
             return True
         return False
 

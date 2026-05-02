@@ -233,8 +233,8 @@ class TestKeepsatsToHbdDefinition:
         assert KEEPSATS_TO_HIVE_FLOW.stage_names == expected
 
     def test_required_stages_count(self):
-        # seven stages were marked optional in the definition
-        assert len(KEEPSATS_TO_HIVE_FLOW.required_stages) == 10
+        # hbd_transfer_op and customer_hive_out are now optional (required=False)
+        assert len(KEEPSATS_TO_HIVE_FLOW.required_stages) == 8
 
     def test_optional_stages_listed(self):
         optional = [s.name for s in KEEPSATS_TO_HIVE_FLOW.stages if not s.required]
@@ -242,6 +242,8 @@ class TestKeepsatsToHbdDefinition:
             "exchange_conversion",
             "exchange_fees",
             "notification_custom_json_op",
+            "hbd_transfer_op",
+            "customer_hive_out",
             "limit_order_create_op",
             "limit_order_create",
             "fill_order_op",
@@ -376,8 +378,8 @@ class TestKeepsatsToHbdComplete:
     ):
         for event in ks_all_flow_events:
             ks_flow_instance.add_event(event)
-        # only 10 stages are required after marking some optional
-        assert ks_flow_instance.progress == "10/10 required stages complete"
+        # only 8 stages are required after marking some optional
+        assert ks_flow_instance.progress == "8/8 required stages complete"
 
     def test_event_count(
         self,
@@ -428,8 +430,8 @@ class TestKeepsatsToHbdIncomplete:
     ):
         assert not ks_flow_instance.is_complete
         assert ks_flow_instance.status == FlowStatus.PENDING
-        # only 10 stages are required now
-        assert len(ks_flow_instance.missing_stages) == 10
+        # only 8 stages are required now
+        assert len(ks_flow_instance.missing_stages) == 8
 
     def test_partial_primary_events_not_complete(
         self,
@@ -457,9 +459,9 @@ class TestKeepsatsToHbdIncomplete:
 
         assert not ks_flow_instance.is_complete
         assert ks_flow_instance.status == FlowStatus.IN_PROGRESS
-        # 10 required stages total, 3 added leaving 7 missing
-        assert len(ks_flow_instance.missing_stages) == 7
-        assert ks_flow_instance.progress == "3/10 required stages complete"
+        # 8 required stages total, 3 added leaving 5 missing
+        assert len(ks_flow_instance.missing_stages) == 5
+        assert ks_flow_instance.progress == "3/8 required stages complete"
 
     def test_missing_fill_order_events_not_complete(
         self,
@@ -552,14 +554,13 @@ class TestKeepsatsToHbdIncomplete:
         for le in ks_fill_order_ledger_entries.values():
             ks_flow_instance.add_event(FlowEvent.from_ledger_entry(le))
 
-        assert not ks_flow_instance.is_complete
+        # HBD transfer stages are now optional — flow is complete without them
+        assert ks_flow_instance.is_complete
         missing_names = [s.name for s in ks_flow_instance.missing_stages]
-        # HBD transfer ledger is unique (CUSTOMER_HIVE_OUT is missing)
-        assert "customer_hive_out" in missing_names
-        # The notification custom_json consumed the trigger_custom_json's op-match,
-        # or vice versa, due to group-agnostic matching on ops. Let's just check
-        # that it's not complete and at least the ledger entry is missing.
-        assert len(missing_names) >= 1
+        # hbd_transfer_op and customer_hive_out are optional so not in missing_stages
+        assert "customer_hive_out" not in missing_names
+        assert "hbd_transfer_op" not in missing_names
+        assert len(missing_names) == 0
 
 
 # ---------------------------------------------------------------------------

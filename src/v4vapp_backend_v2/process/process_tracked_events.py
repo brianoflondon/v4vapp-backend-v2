@@ -114,6 +114,9 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 f"Process time already set for {tracked_op.short_id} already processed.",
                 extra={"notification": False},
             )
+            # Propagate the DB process_time back so callers can distinguish
+            # "already processed" from "genuinely produced no ledger entries".
+            tracked_op.process_time = existing_op.process_time
             return ledger_entries
 
         if isinstance(tracked_op, AccountUpdate2):

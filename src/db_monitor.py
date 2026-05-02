@@ -306,7 +306,16 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                         "mongo_id": mongo_id,
                     },
                 )
-                if overwatch_enabled() and len(ledger_entries) == 0:
+                # Only cancel flow candidates when there are genuinely no ledger
+                # entries AND the op was not already processed.  process_tracked_event
+                # sets op.process_time (either via its finally-block for fresh
+                # processing, or explicitly when it detects a concurrent duplicate),
+                # so a non-None value after the call means "was/is processed".
+                if (
+                    overwatch_enabled()
+                    and len(ledger_entries) == 0
+                    and getattr(op, "process_time", None) is None
+                ):
                     trigger_group_id = getattr(op, "group_id_p", None) or getattr(
                         op, "group_id", None
                     )
