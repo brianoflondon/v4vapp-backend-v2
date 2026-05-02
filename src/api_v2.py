@@ -1,7 +1,7 @@
 import argparse
 import socket
 import sys
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from typing import Any, Dict, List
 
 import uvicorn
@@ -61,7 +61,7 @@ def create_lifespan(config_filename: str):
 
 # This will be replaced when we parse command line arguments
 app = None
-
+magisats_v2_router = APIRouter(prefix="/v2/magisats")
 crypto_v2_router = APIRouter(prefix="/v2/crypto")
 crypto_v1_router = APIRouter(prefix="/cryptoprices")
 lightning_v1_router = APIRouter(prefix="/lightning")
@@ -142,51 +142,117 @@ async def cryptoprices() -> AllQuotes:
     return all_quotes
 
 
-@crypto_v2_router.get("/to_keepsats/")
-async def magisats_to_keepsats(
-    keepsats: int = Query(
-        ...,
-        description="The amount of Sats to receive as Keepsats when sending "
-        "MagiSats (BTC in sats) to convert to Keepsats",
-    ),
-) -> Dict[str, int]:
-    """
-    Convert a specified amount of MagiSats (BTC represented in satoshis) into the amount of sats you need
-    to send to pay a lighting invoice of this amount after fees and routing fee estimate, some change will remain.
-
-    Args:
-        magisats (int): The amount of MagiSats to convert, where 1 MagiSat is equivalent to 1 satoshi of BTC.
-
-    Returns:
-        Dict[str, int]: A dictionary containing the original MagiSats amount and the equivalent Satoshis.
-    """
-    # Assuming 1 MagiSat is equal to 1 Satoshi for conversion
-    try:
-        msats = Decimal(keepsats) * Decimal(1000)  # Convert MagiSats to keepsats millisatoshis
-    except Exception as e:
-        logger.error(f"Error converting MagiSats to Sats: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid MagiSats amount"
-        )
-
+def _magisats_fee_response(receive_sats: int, include_forwarding: bool = True) -> Dict[str, int]:
+    """Build the fee response payload for a given receive amount."""
+    msats = Decimal(receive_sats) * Decimal(1000)
     fee_msats = calculate_fee_msats(msats)
-    forwarding_fee_estimate_msats = calculate_fee_estimate_msats(msats)
+    forwarding_fee_estimate_msats = (
+        calculate_fee_estimate_msats(msats) if include_forwarding else Decimal(0)
+    )
     to_send_msats = msats + fee_msats + forwarding_fee_estimate_msats
-    to_send_sats = Decimal(Decimal(to_send_msats) / Decimal(1000)).quantize(
-        Decimal("1"), rounding="ROUND_CEILING"
-    )  # Convert back to Satoshis
-
+    total_to_send_sats = int(
+        Decimal(Decimal(to_send_msats) / Decimal(1000)).quantize(
+            Decimal("1"), rounding=ROUND_CEILING
+        )
+    )
     return {
-        "receive_sats": keepsats,
+        "receive_sats": receive_sats,
         "fee_sats": int(fee_msats / Decimal(1000)),
         "fee_msats": int(fee_msats),
-        "forwarding_fee_estimate_sats": int(forwarding_fee_estimate_msats / Decimal(1000)),
+        "forwarding_fee_estimate_sats": int(
+            forwarding_fee_estimate_msats / Decimal(1000)
+        ),
         "forwarding_fee_estimate_msats": int(forwarding_fee_estimate_msats),
-        "total_to_send_sats": int(to_send_sats),
+        "total_to_send_sats": total_to_send_sats,
     }
 
 
-# @crypto_v2_router.post("")
+def _find_receive_sats_for_total(reverse_sats: int, include_forwarding: bool) -> int | None:
+    """Find the maximum receive_sats value that yields the requested total_to_send_sats."""
+    low = 0
+    high = reverse_sats
+    best = None
+    while low <= high:
+        mid = (low + high) // 2
+        total = _magisats_fee_response(mid, include_forwarding)["total_to_send_sats"]
+        if total == reverse_sats:
+            best = mid
+            low = mid + 1
+        elif total < reverse_sats:
+            low = mid + 1
+        else:
+            high = mid - 1
+    return best
+
+
+def _magisats_fee(
+    sats: int | None,
+    reverse_sats: int | None,
+    include_forwarding: bool,
+) -> Dict[str, int]:
+    if (sats is None) == (reverse_sats is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide exactly one of sats or reverse_sats",
+        )
+
+    if sats is not None:
+        if sats <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid sats amount",
+            )
+        return _magisats_fee_response(sats, include_forwarding)
+
+    if reverse_sats is None or reverse_sats <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid reverse_sats amount",
+        )
+
+    receive_sats = _find_receive_sats_for_total(reverse_sats, include_forwarding)
+    if receive_sats is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=("reverse_sats cannot be matched with the current fee structure"),
+        )
+
+    return _magisats_fee_response(receive_sats, include_forwarding)
+
+
+@magisats_v2_router.get("/fee/")
+@magisats_v2_router.get("/fee_out/")
+async def magisats_fee_out(
+    sats: int | None = Query(
+        None,
+        description="The amount of Sats to receive as Keepsats when sending "
+        "MagiSats (BTC in sats) to convert to Keepsats",
+    ),
+    reverse_sats: int | None = Query(
+        None,
+        description="The total sats to send for the invoice. The API will calculate the "
+        "receive_sats such that total_to_send_sats == reverse_sats.",
+    ),
+) -> Dict[str, int]:
+    return _magisats_fee(sats, reverse_sats, include_forwarding=True)
+
+
+@magisats_v2_router.get("/fee_in/")
+async def magisats_fee_in(
+    sats: int | None = Query(
+        None,
+        description="The amount of Sats to receive as Keepsats when sending "
+        "MagiSats (BTC in sats) to convert to Keepsats",
+    ),
+    reverse_sats: int | None = Query(
+        None,
+        description="The total sats to send for the invoice. The API will calculate the "
+        "receive_sats such that total_to_send_sats == reverse_sats.",
+    ),
+) -> Dict[str, int]:
+    return _magisats_fee(sats, reverse_sats, include_forwarding=False)
+
+
 # MARK: Legacy v1 Cryptoprices calls
 
 
@@ -572,6 +638,7 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
             "documentation": "/docs",
         }
 
+    app.include_router(magisats_v2_router, tags=["magisats"])
     app.include_router(crypto_v2_router, tags=["crypto"])
     app.include_router(crypto_v1_router, tags=["legacy"])
     app.include_router(lightning_v1_router, tags=["lightning"])

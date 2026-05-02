@@ -598,7 +598,13 @@ async def one_account_balance(
         ttl = LIVE_TTL_SECONDS if as_of_date is None else HISTORICAL_TTL_SECONDS
         # pass the original intent (None for live) so key doesn't drift
         await set_cached_balance(
-            account, as_of_date, age, ledger_details, ttl=ttl, use_checkpoints=use_checkpoints
+            account,
+            as_of_date,
+            age,
+            ledger_details,
+            ttl=ttl,
+            use_checkpoints=use_checkpoints,
+            report_time=_t5 - _t0,
         )
     except Exception as e:
         logger.warning(f"Failed to set cache for {account.name}:{account.sub}: {e}")
