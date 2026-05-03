@@ -12,6 +12,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import paywithsats_amount, snake_case
+from v4vapp_backend_v2.helpers.service_fees import calculate_fee_msats
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
 from v4vapp_backend_v2.hive_models.op_all import trx_unpack
@@ -127,16 +128,6 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         return True
 
     @property
-    def pay_with_sats(self) -> bool:
-        """
-        Determines if this transfer should be paid with sats based on the amount and "do not pay" status.
-
-        Returns:
-            bool: True if the transfer should be paid with sats, False otherwise.
-        """
-        return not self.do_not_pay and self.amount > 0
-
-    @property
     def paywithsats(self) -> bool:
         """
         This mirrors the flag in the CustomJson for the follow-on transfer,
@@ -194,24 +185,41 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         Returns:
             Decimal: The maximum send amount in millisatoshis.
         """
+
         if not self.paywithsats:
             return Decimal(0)
         if not self.conv:
             return Decimal(0)
-        msats_fee = self.conv.msats_fee
-        send_sats = self.amount - (msats_fee / Decimal(1000)).quantize(
-            Decimal("1."), rounding="ROUND_UP"
-        )
+
+        if self.paywithsats_amount:
+            max_to_send_base_msats = self.paywithsats_amount * Decimal(1000)
+            delta_msats = (self.amount * Decimal(1000)) - max_to_send_base_msats
+        else:
+            max_to_send_base_msats = self.amount * Decimal(1000)
+            delta_msats = Decimal(0)
+
+        if delta_msats < Decimal(0):
+            raise ValueError("Max to send cannot exceed the total amount of the transfer")
+
+        msats_fee = calculate_fee_msats(max_to_send_base_msats)
+        max_to_send_msats = max_to_send_base_msats - msats_fee
+        max_to_send_sats = max_to_send_msats / Decimal(1000)
+
         lnd_config = InternalConfig().config.lnd_config
-        fee_estimate_msats = Decimal(
+
+        forwarding_fee_estimate_msats = Decimal(
             Decimal(lnd_config.lightning_fee_base_msats)
             + (
-                (send_sats * Decimal(2000))
+                (max_to_send_sats * Decimal(2000))
                 * Decimal(lnd_config.lightning_fee_estimate_ppm)
                 / 1_000_000
             )
         ).quantize(Decimal("1."), rounding="ROUND_UP")
-        return send_sats * Decimal(1000) - fee_estimate_msats
+
+        if forwarding_fee_estimate_msats < delta_msats:
+            return max_to_send_msats
+        else:
+            return max_to_send_msats - forwarding_fee_estimate_msats
 
     @property
     def collection_name(self) -> str:

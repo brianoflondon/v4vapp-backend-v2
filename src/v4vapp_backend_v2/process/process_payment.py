@@ -30,6 +30,7 @@ from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
+from v4vapp_backend_v2.process.process_magi import return_magi_sats_change
 
 
 async def process_payment_success(
@@ -152,6 +153,16 @@ async def process_payment_success(
             f"net sent inc fees sat: {net_sent_inc_fees_msat / 1000:,.3f}, "
             f"remainder sat: {remainder_msat / 1000:,.3f}"
         )
+
+        if remainder_msat > Decimal(1999):
+            ledger_entry_change = await return_magi_sats_change(
+                initiating_op=initiating_op,
+                payment=payment,
+                remainder_msat=remainder_msat,
+                quote=quote,
+            )
+            if ledger_entry_change:
+                ledger_entries_list.append(ledger_entry_change)
 
         # TODO: if we're going to return Magisats change to the user, we do it here.
 

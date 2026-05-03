@@ -388,15 +388,15 @@ def detect_balance_request(memo: str) -> bool:
 
 def paywithsats_amount(memo: str) -> Decimal:
     """
-    Extracts the amount specified in a memo string formatted as "paywithsats:amount".
+    Extracts the amount specified in a memo string formatted as "#paywithsats:amount".
     Args:
-        memo (str): The memo string containing the amount, expected in the format "paywithsats:amount".
+        memo (str): The memo string containing the amount, expected in the format "#paywithsats:amount".
     Returns:
         Decimal: The extracted amount as a Decimal if found; otherwise, 0.
     """
 
-    # Extract the amount from the memo, which is expected to be in the format "paywithsats:amount"
-    match = re.search(r"paywithsats:(\d+)", memo)
+    # Extract the amount from the memo, which is expected to be in the format "#paywithsats:amount"
+    match = re.search(r"#paywithsats:(\d+)", memo)
     if match:
         return Decimal(match.group(1))
     return Decimal(0)

@@ -52,7 +52,7 @@ from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = True
+turn_off_these_tests = False
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -111,6 +111,9 @@ async def test_deposit_hive_to_keepsats(
     This test sends a specified amount of Hive from a customer account to the server account.
     It checks that the transaction is successful and that the ledger entries are created correctly.
 
+    Process Overwatch Output should be:
+     ✅ Hive To Keepsats for v4vapp-test 70.007 HIVE / 5,345 sats (76) 3237_75e781_1 completed 14/14 required stages complete  [flow] 🔔
+
     """
     cust_id = "v4vapp-test"
     net_msats, balance_before = await keepsats_balance_printout(cust_id=cust_id)
@@ -147,6 +150,11 @@ async def test_hive_and_hbd_to_lnd_only():
 
     Raises:
         AssertionError: If the transaction fails to send (missing transaction ID).
+
+    Process Overwatch Output should be:
+        🌟 ✅ Hive To Keepsats External for v4vapp-test 5.000 HBD / 6,362 sats (76) 3306_4f0de8_1 completed 16/16 required stages complete  [flow] 🔔
+        🌟 ✅ External To Hive Loopback for v4vapp-test 29.124 HIVE / 2,222 sats (76) 4z7tMmPJWA completed 4/4 required stages complete  [flow] 🔔
+        🌟 ✅ External To Hive Loopback for v4vapp-test 29.124 HIVE / 2,222 sats (76) DnGAPJmOjO completed 4/4 required stages complete  [flow] 🔔
     """
     # await clear_and_reset()
 
@@ -182,7 +190,7 @@ async def test_hive_and_hbd_to_lnd_only():
         mid_ledger_count = await get_ledger_count()
         print(f"Ledger count mid: {mid_ledger_count}")
 
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 24, timeout=60)
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 24, timeout=180)
 
     await asyncio.sleep(1)
     found_len = len(all_ledger_entries) - ledger_count
@@ -206,6 +214,10 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     4. Waits for the ledger to record 11 entries, indicating all expected transactions have occurred.
     5. Asserts that exactly 11 ledger entries exist after the operations.
     Ensures the correct flow and ledger recording for Hive-to-LND and LND-to-Hive transactions.
+
+    Process Overwatch Output should be:
+        🌟 ✅ External To Keepsats for v4vapp.qrc 16.161 HIVE / 1,234 sats (76) 41byEvHuDl completed 4/4 required stages complete  [flow] 🔔
+        🌟 ✅ External To Hive for v4vapp.qrc 16.161 HIVE / 1,234 sats (76) 41byEvHuDl completed 6/6 required stages complete  [flow] 🔔
     """
     # await test_just_clear()
     net_msats_before, balance_before = await keepsats_balance_printout(cust_id="v4vapp.qrc")
@@ -259,6 +271,9 @@ async def test_deposit_hive_to_keepsats_send_to_account():
     6. Verify that the ledger count has increased as expected.
     7. Check that the Keepsats balance for the target account has increased by the transferred amount.
     8. Assert that all transactions were successful and the balances are updated accordingly.
+
+    Process Overwatch Output should be:
+        🌟 ✅ Keepsats Internal Transfer for v4vapp-test 58.937 HIVE / 4,500 sats (76) 3536_6f3297_1 completed 2/2 required stages complete  [flow] 🔔
     """
 
     ledger_count = await get_ledger_count()
@@ -309,6 +324,10 @@ async def test_conversion_keepsats_to_hive():
     5. Sends the transfer using a custom JSON transaction.
 
     The test ensures that the conversion and transfer processes function as expected.
+
+    Process Overwatch Output should be:
+        🌟 ✅ Hive To Keepsats for v4vapp-test 70.004 HIVE / 5,344 sats (76) 3617_00a4ce_1 completed 14/14 required stages complete  [flow] 🔔
+
     """
     invoice_sats = Decimal("5000")
     await test_deposit_hive_to_keepsats(
@@ -358,6 +377,11 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     5. Create and send a Keepsats transfer using custom JSON, including the Lightning invoice in the memo.
     This test ensures the integration between HIVE deposits, Keepsats balance management,
     Lightning invoice generation, and custom JSON transfers.
+
+    Process Overwatch Output should be:
+        🌟 ✅ Hive To Keepsats for v4vapp-test 83.465 HIVE / 6,363 sats (76) 3659_529523_1 completed 14/14 required stages complete  [flow] 🔔
+        🌟 ✅ Hive To Keepsats External for v4vapp-test 83.465 HIVE / 6,363 sats (76) 3659_529523_1 completed 16/16 required stages complete  [flow] 🔔
+        🌟 ✅ External To Keepsats Loopback for v4vapp-test 52.460 HIVE / 4,000 sats (76) ogttQ9TExQ completed 2/2 required stages complete  [flow] 🔔
     """
     await test_deposit_hive_to_keepsats(
         6_000, timeout=120, message="Deposit Hive for test_deposit_keepsats_spend_hive_custom_json"
@@ -418,6 +442,9 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
 
     Raises:
         AssertionError: If any step in the process fails.
+
+    Process Overwatch Output should be:
+        🌟 ✅ Hive Transfer Paywithsats for v4vapp-test 0.001 HIVE / 0 sats (76) 3728_35d4d6_1 completed 4/4 required stages complete  [flow] 🔔
     """
     await test_deposit_hive_to_keepsats(
         5_000, timeout=120, message="test_send_internal_keepsats_transfer_by_hive_transfer"
@@ -435,7 +462,7 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     pprint(trx)
 
     await watch_for_ledger_count(ledger_count + 2)
-    await asyncio.sleep(5)
+    await asyncio.sleep(10)  # wait for custom_json to be found
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "custom_json"}, sort=[("timestamp", -1)]
     )
@@ -450,15 +477,19 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
 
 async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     """
-    Test the process of handling an inbound payment to Magisats forwarded on the Magisats side.
+        Test the process of handling an inbound payment to Magisats forwarded on the Magisats side.
 
-    Needs a positive balance on the Magisats server to work
+        Needs a positive balance on the Magisats server to work
 
-    Send a hive transaction to convert to a lighting invoice which pays on this same node
-    and uses the #magisats tag in the memo to trigger the magisats processing.
+        Send a hive transaction to convert to a lighting invoice which pays on this same node
+        and uses the #magisats tag in the memo to trigger the magisats processing.
 
-    Raises:
-        AssertionError: If any step in the process fails.
+        Raises:
+            AssertionError: If any step in the process fails.
+
+        Process Overwatch Output should be:
+            🌟 ✅ Hive To Keepsats External for v4vapp-test 71.376 HIVE / 5,446 sats (76) 3921_fb3daa_1 completed 16/16 required stages complete  [flow] 🔔
+            🌟 ✅ External To Magisats for v4vapp-test 65.530 HIVE / 5,000 sats (76) FSVLWRS/1O completed 6/6 required stages complete  [flow] 🔔
     """
     try:
         default_exchange_adapter = get_exchange_adapter()
@@ -473,19 +504,20 @@ async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     exchange_account = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
     magisats_exchange_balance = await one_account_balance(account=exchange_account)
 
+    invoice_value_sat = int(10000)
+
     assert magisats_exchange_balance is not None, "Failed to retrieve Magisats exchange balance"
-    assert magisats_exchange_balance.sats > 250, (
+    assert magisats_exchange_balance.sats > invoice_value_sat * 0.1, (
         "Magisats exchange balance is too low, cannot perform test"
     )
     start_magisats_balance = await get_magi_btc_balance_by_account("hive:v4vapp-test")
     print(f"Start Magisats balance: {start_magisats_balance}")
 
-    invoice_value_sat = 5000
     memo = "v4vapp-test | Sending a message via magisats test_magisats_inbound_payment | #MAGISATS #CLEAN #v4vapp"
     invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo=f"{memo}")
 
     trx = await send_hive_customer_to_server(
-        send_sats=invoice_value_sat + 100,
+        send_sats=int(invoice_value_sat + 100),
         memo=f"{invoice.payment_request}",
         customer="v4vapp-test",
     )

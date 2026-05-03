@@ -75,6 +75,7 @@ class LedgerType(StrEnum):
 
     MAGI_INBOUND = "magi_in"  # Inbound transfer from Magi (e.g., from a custom JSON indicating an incoming transfer)
     MAGI_OUTBOUND = "magi_out"  # Outbound transfer to Magi
+    MAGI_CHANGE = "magi_chg"  # Change returned to Magi (e.g., when returning excess Magisats after a conversion)
 
     @property
     def printout(self) -> str:
@@ -166,6 +167,7 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.OPENING_BALANCE: "📂",  # Opening balance entry
     LedgerType.MAGI_INBOUND: "🧙‍♂️",  # Inbound transfer from Magi (e.g., from a custom JSON indicating an incoming transfer
     LedgerType.MAGI_OUTBOUND: "🧙‍♂️",  # Outbound transfer to Magi
+    LedgerType.MAGI_CHANGE: "🧙‍♂️",  # Change returned to Magi (e.g., when returning excess Magisats after a conversion)
 }
 
 LedgerTypeStr: Dict[LedgerType, str] = {
@@ -179,6 +181,7 @@ LedgerTypeStr: Dict[LedgerType, str] = {
     LedgerType.RECEIVE_LIGHTNING: "Receive",  # Receive Lightning payment
     LedgerType.MAGI_INBOUND: "Magi Receive",  # Inbound transfer from Magi (e.g., from a custom JSON indicating an incoming transfer
     LedgerType.MAGI_OUTBOUND: "Magi Send",  # Outbound transfer to Magi
+    LedgerType.MAGI_CHANGE: "Magi Change",  # Change returned to Magi (e.g., when returning excess Magisats after a conversion)
 }
 
 
