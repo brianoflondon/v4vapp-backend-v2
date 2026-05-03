@@ -43,15 +43,21 @@ initiates the flow (e.g. `"transfer"` or `"custom_json"`).
 
 Currently registered flows:
 
-| Name | Trigger | Required stages | Description |
-|------|---------|-----------------|-------------|
+| Name | Trigger | Req. stages (+ optional) | Description |
+|------|---------|--------------------------|-------------|
 | `hive_to_keepsats` | `transfer` | 14 | HIVE deposit converted to sats stored on system |
-| `hive_to_keepsats_external` | `transfer` | 17 | HIVE converted to keepsats then paid to external Lightning invoice |
-| `keepsats_to_hive` | `custom_json` | 12 (+ 5 optional) | Keepsats converted to HBD via exchange |
-| `keepsats_to_external` | `custom_json` | 6 (+ 1 optional) | Keepsats paid to external Lightning invoice |
-| `external_to_keepsats` | `invoice` | 4 (+ 3 optional) | External Lightning payment received, converted to keepsats |
-| `external_to_hive` | `invoice` | 6 (+ 1 optional) | External Lightning payment received, converted to HIVE and sent on-chain |
-| `keepsats_internal_transfer` | `custom_json` | 2 (+ 1 optional) | Internal keepsats transfer between two customers |
+| `hive_to_keepsats_external` | `transfer` | 16 (+ 1) | HIVE converted to keepsats then paid to external Lightning invoice |
+| `keepsats_to_hive` | `custom_json` | 10 (+ 7) | Keepsats converted to HBD via exchange (reclassify, limit-order, fill-order all optional) |
+| `keepsats_to_external` | `custom_json` | 5 (+ 2) | Keepsats paid to external Lightning invoice |
+| `external_to_keepsats` | `invoice` | 4 (+ 3) | External Lightning payment received, stored in keepsats |
+| `external_to_hive` | `invoice` | 6 (+ 1) | External Lightning payment received, converted to HIVE and sent on-chain |
+| `external_to_keepsats_loopback` | `invoice` | 2 (+ 3) | Loopback/self-payment: invoice lands on same node, stored in keepsats (no Lightning ledger entries) |
+| `external_to_hive_loopback` | `invoice` | 4 (+ 1) | Loopback/self-payment: invoice lands on same node, converted to HIVE |
+| `external_to_magisats` | `invoice` | 6 (+ 1) | #MAGISATS-tagged invoice forwarded to MagiSats (VSC) wallet via VSC custom_json |
+| `keepsats_internal_transfer` | `custom_json` | 2 (+ 1) | Internal keepsats transfer between two customers |
+| `hive_transfer_paywithsats` | `transfer` | 4 (+ 1) | HIVE transfer with `#paywithsats` memo triggers internal keepsats transfer |
+| `balance_request` | `transfer` | 4 | Balance inquiry: customer sends HIVE, server replies with balance in encrypted memo |
+| `hive_transfer_failure` | `transfer` | 4 | Failed HIVE transfer: full amount refunded to sender |
 
 ### FlowEvent
 
@@ -245,11 +251,13 @@ All flow state is mirrored to Redis so that in-progress flows survive
 
 | Redis structure | Key format | Purpose |
 |----------------|------------|---------|
-| Hash | `overwatch:flows:active` | All non-completed flows. Field key: `{trigger_group_id}:{flow_name}` |
-| String (with TTL) | `overwatch:flows:completed:{trigger_group_id}:{flow_name}` | Completed flows, 24-hour TTL |
+| Hash | `overwatch:flows:active` | All non-completed flows. Field key: `{cust_id}:{trigger_group_id}:{flow_name}` |
+| String (with TTL) | `overwatch:flows:completed:{cust_id}:{trigger_group_id}:{flow_name}` | Completed flows, 24-hour TTL |
 
-The composite key `trigger_group_id:flow_name` allows multiple candidate
-flows for the same trigger to coexist in Redis.
+The composite key `cust_id:trigger_group_id:flow_name` includes `cust_id` so
+flows for different customers sharing the same trigger group ID never collide.
+Multiple candidate flows for the same trigger coexist in Redis with different
+`flow_name` suffixes.
 
 On startup, `load_from_redis` hydrates in-memory state. If a flow definition
 has changed since the flow was persisted, the definition is refreshed and
@@ -296,6 +304,130 @@ arrive later they resume normally.
 | Stall timeout | 5 minutes | `Overwatch.stall_timeout` |
 | Superset grace period | 30 seconds | `Overwatch.superset_grace_period` |
 | Trigger-only timeout | 60 seconds | `Overwatch.trigger_only_timeout` |
+| Stall log interval | 1 hour | `Overwatch.stall_log_interval` |
+
+`stall_log_interval` throttles repeated stall-warning log lines for the same
+flow — a stalled flow is only re-logged once per interval, preventing log
+spam for long-running stalls.
+
+---
+
+## Event filters
+
+`FlowStage` accepts an optional `event_filter` callable:
+
+```python
+event_filter: Callable[[FlowEvent], bool] | None
+```
+
+When set, a stage only matches if both the structural criteria
+(`event_type` + `op_type`/`ledger_type`) **and** the filter return `True`.
+Filters prevent false-positive matches when multiple flows share the same
+structural stage signature.
+
+### Named filters in `overwatch_flows.py`
+
+| Filter | Applied to | Effect |
+|--------|-----------|--------|
+| `check_balance_request` | `balance_request` trigger stage | Accepts only transfer ops whose `balance_request` attribute is `True` |
+| `check_magisats_invoice` | `external_to_magisats` trigger | Accepts only invoice ops tagged `is_magisats=True` |
+| `check_not_magisats_invoice` | all other invoice triggers | Accepts only invoice ops where `is_magisats` is falsy |
+| `check_vsc_call` | `external_to_magisats` VSC send stage | Accepts only custom_json ops whose `cj_id` starts with `"vsc."` |
+
+**Serialisation note**: `event_filter` is excluded from Redis serialisation
+(`exclude=True` in the Pydantic field).  On reload from Redis the definition
+is refreshed from the registered `_flow_definitions`, which restores the
+callable automatically.
+
+---
+
+## Completion report deduplication
+
+When a flow completes, `Overwatch` does **not** log the result immediately.
+Instead it enqueues the flow in `_pending_completion_reports` (keyed by
+`trigger_group_id`) and arms a delayed task:
+
+```
+flow A completes (trigger_group_id = XYZ)
+  └─► _enqueue_completion_report(flow_A)
+        └─► schedule _fire_completion_report("XYZ") after 5 s
+
+flow B (superset of A, same trigger) completes 2 s later
+  └─► _enqueue_completion_report(flow_B)
+        └─► cancel previous task, reschedule _fire_completion_report("XYZ")
+
+5 s later (no more completions)
+  └─► _fire_completion_report picks the flow with the most required stages
+        └─► logs: "✅ hive_to_keepsats_external ..."
+```
+
+The delay (default `COMPLETION_REPORT_DELAY = 5 s`) gives sibling candidates
+time to also complete before the report fires, so only the most specific
+(highest required-stage count) flow is announced — preventing duplicate
+completion notifications when both `hive_to_keepsats` and
+`hive_to_keepsats_external` succeed for the same transaction.
+
+---
+
+## Payment failure handling
+
+When a payment fails the server sends a terminal notification rather than
+letting the flow complete normally.  `Overwatch.ingest_op` handles two
+failure paths after every op is dispatched:
+
+### Path 1 — custom_json notification reply
+
+If the incoming op is a `custom_json` with `parent_id` set,
+`notification=True`, and `"Payment failed"` in the memo, then
+`_complete_by_notification` is called with the `parent_id` as the lookup key.
+
+```
+custom_json notification (parent_id="XYZ", notification=True, memo="Payment failed ...")
+  └─► _complete_by_notification(parent_id="XYZ")
+        ├─► find all active flows with trigger_group_id == "XYZ"
+        ├─► force-complete the most-progressed candidate
+        └─► cancel the rest
+```
+
+### Path 2 — transfer refund
+
+If the incoming op is a `transfer` (no `parent_id`) with `"Payment failed"`
+in the memo and a `§` short-ID back-reference, `_complete_by_notification`
+is called with `trigger_short_id` as the lookup key.
+
+```
+transfer (memo="Payment failed §XY-ZW", no parent_id)
+  └─► find_short_id("Payment failed §XY-ZW") → "XY-ZW"
+      _complete_by_notification(trigger_short_id="XY-ZW")
+```
+
+In both cases the best candidate is force-completed (even if not all required
+stages were fulfilled) and the remaining candidates are cancelled.
+
+---
+
+## VSC / MAGI op skip
+
+`_try_create_flow` contains a guard that prevents `vsc.` custom_json
+operations from spawning flow candidates:
+
+```python
+if cj_id.startswith("vsc."):
+    # skip — VSC ops don't produce customer-facing ledger entries
+    return None
+```
+
+These are MAGI BTC transactions sent by the VSC layer.  They are stage events
+**within** the `external_to_magisats` flow (matched via `check_vsc_call`
+filter) but must not trigger independent flow candidates.
+
+### `cancel_flows_for_trigger`
+
+The processing pipeline can call `cancel_flows_for_trigger(trigger_group_id)`
+when a trigger op turns out to be irrelevant — for example a transfer between
+untracked accounts that produces no ledger entries.  All active candidates
+sharing that `trigger_group_id` are immediately cancelled rather than waiting
+for the trigger-only timeout.
 
 ---
 
@@ -371,10 +503,8 @@ This prevents unmatched events from:
        trigger_op_type="custom_json",  # or "transfer", etc.
        stages=[
            FlowStage(name="trigger_op", event_type="op", op_type="custom_json"),
-           FlowStage(name="some_ledger", event_type="ledger",
-                     ledger_type=LedgerType.SOME_TYPE),
-           FlowStage(name="optional_step", event_type="op",
-                     op_type="notification", required=False),
+           FlowStage(name="some_ledger", event_type="ledger", ledger_type=LedgerType.SOME_TYPE),
+           FlowStage(name="optional_step", event_type="op", op_type="notification", required=False),
        ],
    )
    ```
