@@ -509,6 +509,3 @@ class LedgerAccountDetails(LedgerAccount):
 class AccountBalances(RootModel):
     root: List[LedgerAccountDetails]
 
-
-# This is the last line# This is the last line
-# This is the last line# This is the last line
