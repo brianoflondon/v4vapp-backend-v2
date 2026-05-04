@@ -24,6 +24,7 @@ from v4vapp_backend_v2.hive.hive_extras import get_verified_hive_client, send_cu
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
+from v4vapp_backend_v2.hive_models.op_base_extras import get_hive_block_explorer_link
 from v4vapp_backend_v2.magi.magi_classes import ICON, MagiBTCTransferEvent
 from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.models.invoice_models import Invoice
@@ -532,6 +533,7 @@ async def magisats_fee_ledger_entry(
 ) -> LedgerEntry:
     """
     Create a ledger entry for the fee portion of a Magi transfer.
+    The ledger entry needs to be SAVED SEPARATELY.
 
     This is a helper function to create the fee ledger entry for both inbound and outbound
     Magi transfers, based on the provided `magi_transfer` event and the calculated
@@ -644,6 +646,7 @@ async def return_magisats(
     trx = await send_magi_transaction(vsc_payload=vsc_payload, caller=server_id, nobroadcast=False)
     trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
 
+    change_link = get_hive_block_explorer_link(trx_id=trx_id)
     # Before the server can send the sats back, we need to move the balance from the VSC Liability for the
     # customer back to the server's liability account, and then we can send the transfer to return the change to the sender.
 
@@ -679,6 +682,7 @@ async def return_magisats(
         credit_unit=Currency.MSATS,
         credit_amount=magi_change_conv.msats,
         credit_conv=magi_change_conv,
+        link=change_link,
     )
     await customer_to_server.save()
 
