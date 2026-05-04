@@ -644,6 +644,44 @@ async def test_receive_magisats_inbound_payment_to_lightning_invoice_and_failure
     pprint(trx)
 
 
+async def test_receive_magisats_inbound_payment_to_lightning_invoice_and_failure_for_low_amount():
+    """
+    Test the process of receiving an inbound payment from Magisats to a Lightning Network address with an amount lower than the invoice.
+    This test performs the following steps:
+    1. Sends a Magisats transaction to a Lightning Network address associated with the server with an amount lower than the invoice amount.
+    2. Verifies that the transaction was successfully processed, even though the amount is lower than the invoice amount.
+
+    Needs there to be 0 keepsats in the account to see failure.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
+    v4vapp_test_balance = await one_account_balance(AccName("hive:v4vapp-test"))
+    if v4vapp_test_balance and v4vapp_test_balance.sats > 50:
+        logger.warning(
+            f"Account hive:v4vapp-test has a balance of {v4vapp_test_balance.sats} sats. "
+            "For this test to properly check for failure due to low amount, the account balance should be 0. "
+            "Consider sending the balance to another account or using a different test account with 0 balance."
+        )
+
+    server_id = InternalConfig().server_id
+    invoice_pr = await get_walletofsatoshi_invoice(
+        amount_sats=2000,
+        memo="test_receive_magisats_inbound_payment_to_lightning_invoice",
+    )
+    vsc_payload = VSCCallPayload(
+        amount=str(1000),
+        to=AccName(server_id).magi_prefix,
+        memo=f"{invoice_pr} | not enough sats sent attempt | #v4vapp #magioutbound",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+
 async def test_balance_request():
     """
     Test the process of requesting a balance.

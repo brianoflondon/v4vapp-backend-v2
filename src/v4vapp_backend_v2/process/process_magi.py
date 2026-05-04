@@ -53,7 +53,9 @@ async def process_magi_btc_transfer_event(
         List of `LedgerEntry` objects created by the handler, or an empty list if
         no matching transfer was found or an error occurred.
     """
-    logger.info(f"Processing Magi BTC transfer event: {magi_transfer.log_str}")
+    logger.info(
+        f"{ICON} Processing Magi BTC transfer event: {magi_transfer.short_id} {magi_transfer.log_str}"
+    )
 
     if not magi_transfer.conv or magi_transfer.conv.is_unset():
         quote = await MagiBTCTransferEvent.nearest_quote(timestamp=magi_transfer.timestamp)
@@ -129,7 +131,7 @@ async def forward_magisats(invoice: Invoice) -> None:
     Returns:
         None
     """
-    logger.info("Forwarding #magisats to the designated destination.")
+    logger.info(f"{ICON} Forwarding #magisats to the designated destination.")
     msats_fee = None
     fixed_quote = invoice.fixed_quote
     if fixed_quote:
@@ -142,7 +144,7 @@ async def forward_magisats(invoice: Invoice) -> None:
         await invoice.update_conv(quote=quote)
 
     if not invoice.conv or invoice.conv.is_unset():
-        logger.error("Conversion details are missing for the invoice.")
+        logger.error(f"{ICON} Conversion details are missing for the invoice.")
         return
 
     if not msats_fee:
@@ -155,7 +157,7 @@ async def forward_magisats(invoice: Invoice) -> None:
     net_msats_fee = Decimal(invoice.value_msat) - amount_to_send_msats
 
     logger.info(
-        f"Amount to forward (after fees): {amount_to_send_sats:,.0f} sats "
+        f"{ICON} Amount to forward (after fees): {amount_to_send_sats:,.0f} sats "
         f"fee: {net_msats_fee / 1000:.3f} sats {invoice.short_id}"
     )
 
@@ -237,17 +239,19 @@ async def magisats_outbound(
     # Now we transfer the amount_to_send_sats to the
     server_id = InternalConfig().server_id
     vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
-    assert vsc_payload.amount, "Amount is missing in VSC payload"
+    assert vsc_payload.amount, f"{ICON} Amount is missing in VSC payload"
     assert magi_transfer.amount == Decimal(vsc_payload.amount), (
-        "Amount in VSC payload does not match Magi transfer event amount"
+        f"{ICON} Amount in VSC payload does not match Magi transfer event amount"
     )
-    assert vsc_payload.msats_fee is not None, "MSATS fee is missing in VSC payload"
+    assert vsc_payload.msats_fee is not None, f"{ICON} MSATS fee is missing in VSC payload"
 
     net_fee_original_msats = Decimal(vsc_payload.msats_fee)
     amount_sent_msats = Decimal(magi_transfer.amount) * Decimal(1000)
     ledger_entries_list = []
 
-    assert vsc_payload.parent_id, "Parent ID is missing in VSC payload for Magi transfer event"
+    assert vsc_payload.parent_id, (
+        f"{ICON} Parent ID is missing in VSC payload for Magi transfer event"
+    )
     original_event = await load_tracked_object(vsc_payload.parent_id)
 
     if not original_event:
@@ -287,7 +291,7 @@ async def magisats_outbound(
     try:
         default_exchange_adapter = get_exchange_adapter()
     except Exception as e:
-        logger.error(f"Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
+        logger.error(f"{ICON} Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
         return []
 
     exchange_sub = default_exchange_adapter.exchange_name
@@ -372,7 +376,7 @@ async def magisats_outbound(
     )
     trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
     logger.info(
-        f"Notification {notification.log_str} (trx_id: {trx_id})",
+        f"{ICON} Notification {notification.log_str} (trx_id: {trx_id})",
         extra={"notification": False, **notification.log_extra, "trx": trx},
     )
 
@@ -439,12 +443,12 @@ async def magisats_inbound(
     net_to_customer_msats = amount_sent_msats - net_fee_msats
     if net_to_customer_msats < 0:
         logger.error(
-            f"Net amount to customer is negative for Magi transfer {magi_transfer.short_id}. Check the amounts in the invoice and VSC payload."
+            f"{ICON} Net amount to customer is negative for Magi transfer {magi_transfer.short_id}. Check the amounts in the invoice and VSC payload."
         )
         return []
 
     assert net_fee_msats >= 0, (
-        "Net fee cannot be negative. Check the amounts in the invoice and VSC payload."
+        f"{ICON} Net fee cannot be negative. Check the amounts in the invoice and VSC payload."
     )
 
     try:
@@ -618,9 +622,7 @@ async def return_magisats(
     - Updating the original transfer event and related records with the return status.
     """
     # Placeholder implementation
-    logger.info(
-        f"{ICON} Returning any unforwarded Magi sats change back to sender (not yet implemented)"
-    )
+    logger.info(f"{ICON} Returning any unforwarded Magi sats change back to sender")
     remainder_sats = (remainder_msat / Decimal(1000)).quantize(
         Decimal("1."), rounding="ROUND_DOWN"
     )

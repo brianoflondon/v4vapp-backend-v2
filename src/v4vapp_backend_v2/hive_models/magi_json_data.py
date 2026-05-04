@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.helpers.general_purpose_funcs import ProcessedMemo
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
@@ -315,8 +316,12 @@ class VSCCall(BaseModel):
     @property
     def log_str(self) -> str:
         if isinstance(self.payload, VSCCallPayload):
+            if self.payload.memo:
+                processed_memo = ProcessedMemo(self.payload.memo)
+            else:
+                processed_memo = ProcessedMemo("")
             to = f" to={self.to_account}" if self.to_account else ""
-            memo = f" memo={self.payload.memo}" if self.payload.memo else ""
+            memo = f" memo={processed_memo.short_memo}" if processed_memo.short_memo else ""
             return (
                 f"🔗 VSC transfer {self.from_account} → {self.contract_id}"
                 f" amount={self.amount}{to}{memo} [{self.net_id}]"
