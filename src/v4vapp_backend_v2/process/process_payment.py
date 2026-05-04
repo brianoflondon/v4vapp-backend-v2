@@ -37,7 +37,7 @@ from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 from v4vapp_backend_v2.process.process_magi import (
     magisats_fee_ledger_entry,
-    return_magi_sats_change,
+    return_magisats,
 )
 
 
@@ -182,7 +182,7 @@ async def process_payment_success(
         )
 
         if remainder_msat > Decimal(1999):
-            ledger_entry_change = await return_magi_sats_change(
+            ledger_entry_change = await return_magisats(
                 initiating_op=initiating_op,
                 payment=payment,
                 remainder_msat=remainder_msat,

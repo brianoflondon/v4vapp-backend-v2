@@ -263,6 +263,13 @@ async def follow_on_transfer(
                 msats=Decimal(0),  # Use all the funds sent
             )
             return
+        # MARK: Handle no pay_req for a MagiBTCTransferEvent, this means the invoice decoding failed, deposit as Keepsats.
+        if not pay_req and isinstance(tracked_op, MagiBTCTransferEvent):
+            logger.info(
+                f"No Lightning invoice found in memo for MagiBTCTransferEvent, Depositing as Keepsats. {tracked_op.short_id} Memo: {tracked_op.d_memo}",
+                extra={"notification": True, **tracked_op.log_extra},
+            )
+
         # MARK: We have a pay_req, we will pay it
         if pay_req and isinstance(pay_req, PayReq):
             # At this stage we need to know if they payment came from  UI or via a custom_json/hive transfer with a memo.
@@ -359,6 +366,8 @@ async def follow_on_transfer(
             json_data := getattr(tracked_op, "json_data", None)
         ):
             return_details.msats = json_data.msats
+        elif isinstance(tracked_op, MagiBTCTransferEvent):
+            return_details.msats = tracked_op.amount * Decimal(1000)
         else:
             return_details.amount = getattr(
                 tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
@@ -377,6 +386,8 @@ async def follow_on_transfer(
             "Error processing Magi sats inbound follow on transfer",
             extra={"notification": True, "error": str(e), **tracked_op.log_extra},
         )
+        return_details.reason_str = f"Error processing Magi sats inbound follow on transfer: {e}"
+        return_details.action = ReturnAction.REFUND
 
     except Exception as e:
         # Unexpected error, log it but will not return Hive.
@@ -398,49 +409,74 @@ async def follow_on_transfer(
             logger.info(f"Releasing keepsats hold for {tracked_op.short_id}")
             await release_keepsats(tracked_op=tracked_op)
 
-        if return_details.reason_str and not isinstance(tracked_op, MagiBTCTransferEvent):
-            try:
-                # Arriving here we are usually returning the full amount sent.
-                trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
-                logger.info(
-                    f"{Fore.WHITE}Reply with Hive transfer successful after payment failure{Style.RESET_ALL}",
-                    extra={
-                        "notification": False,
-                        "trx": trx,
-                        **tracked_op.log_extra,
-                        **return_details.log_extra,
-                    },
-                )
-            # MARK: Server Balance
-            # This is where we handle not enough Hive in the server account
-            except HiveNotEnoughHiveInAccount as e:
-                server_balance = await account_hive_balances_async()
-                if return_details.amount:
-                    return_amount = Amount(return_details.amount.amount)
-                    server_has = server_balance[return_amount.symbol]
-                    shortfall = return_amount - server_has
-                    logger.warning(
-                        f"🚨🚨🚨 Not enough {return_amount.symbol}: {server_id} Shortfall: {shortfall} 🚨🚨🚨",
+        if return_details.reason_str:
+            if not isinstance(tracked_op, MagiBTCTransferEvent):
+                try:
+                    # Arriving here we are usually returning the full amount sent.
+                    trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
+                    logger.info(
+                        f"{Fore.WHITE}Reply with Hive transfer successful after payment failure{Style.RESET_ALL}",
                         extra={
-                            "notification": True,
-                            "error": str(e),
-                            "server_balance": server_balance,
+                            "notification": False,
+                            "trx": trx,
                             **tracked_op.log_extra,
+                            **return_details.log_extra,
                         },
                     )
-                    pending_list = await PendingTransaction.list_all()
-                    for pending in pending_list:
-                        logger.warning(pending)
+                # MARK: Server Balance
+                # This is where we handle not enough Hive in the server account
+                except HiveNotEnoughHiveInAccount as e:
+                    server_balance = await account_hive_balances_async()
+                    if return_details.amount:
+                        return_amount = Amount(return_details.amount.amount)
+                        server_has = server_balance[return_amount.symbol]
+                        shortfall = return_amount - server_has
+                        logger.warning(
+                            f"🚨🚨🚨 Not enough {return_amount.symbol}: {server_id} Shortfall: {shortfall} 🚨🚨🚨",
+                            extra={
+                                "notification": True,
+                                "error": str(e),
+                                "server_balance": server_balance,
+                                **tracked_op.log_extra,
+                            },
+                        )
+                        pending_list = await PendingTransaction.list_all()
+                        for pending in pending_list:
+                            logger.warning(pending)
 
-            except Exception as e:
-                logger.exception(
-                    f"Error returning Hive transfer: {e}",
-                    extra={
-                        "notification": False,
-                        **tracked_op.log_extra,
-                        **return_details.log_extra,
-                    },
-                )
+                except Exception as e:
+                    logger.exception(
+                        f"Error returning Hive transfer: {e}",
+                        extra={
+                            "notification": False,
+                            **tracked_op.log_extra,
+                            **return_details.log_extra,
+                        },
+                    )
+            else:  # MagiBTCTransferEvent follow on transfer, we return the Magisats via a custom_json transfer to the customer.
+                try:
+                    from v4vapp_backend_v2.process.process_magi import return_magisats
+
+                    if not return_details.msats:
+                        sats_to_return = tracked_op.amount
+                    else:
+                        sats_to_return = (return_details.msats / Decimal(1000)).quantize(
+                            Decimal("1."), rounding="ROUND_DOWN"
+                        )
+                    _ = await return_magisats(
+                        initiating_op=tracked_op,
+                        remainder_msat=sats_to_return * Decimal(1000),
+                        reason_str=return_details.reason_str,
+                    )
+                except Exception as e:
+                    logger.exception(
+                        f"Error returning Magisats transfer: {e}",
+                        extra={
+                            "notification": False,
+                            **tracked_op.log_extra,
+                            **return_details.log_extra,
+                        },
+                    )
         await lnd_client.disconnect()
 
 

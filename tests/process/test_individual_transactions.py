@@ -10,6 +10,7 @@ from timeit import default_timer as timer
 import pytest
 from nectar.amount import Amount
 
+from tests.process.walletofsatoshi_invoices import get_walletofsatoshi_invoice
 from tests.utils import (
     clear_and_reset,
     close_all_db_connections,
@@ -590,7 +591,7 @@ async def test_receive_magisats_inbound_payment_to_ln_address():
     vsc_payload = VSCCallPayload(
         amount=str(1000),
         to=AccName(server_id).magi_prefix,
-        memo="brianoflondon@failurewalletofsatoshi.com #v4vapp #magioutbound",
+        memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound",
     )
     trx = await send_magi_transaction(
         vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
@@ -600,7 +601,7 @@ async def test_receive_magisats_inbound_payment_to_ln_address():
     pprint(trx)
 
 
-async def test_receive_magisats_inbound_payment_to_lightning_invoice():
+async def test_receive_magisats_inbound_payment_to_lightning_invoice_and_failure_for_repeat_invoice():
     """
     Test the process of receiving an inbound payment from Magisats to a Lightning Network address.
     This test performs the following steps:
@@ -610,11 +611,30 @@ async def test_receive_magisats_inbound_payment_to_lightning_invoice():
     Raises:
         AssertionError: If the transaction fails.
     """
+
     server_id = InternalConfig().server_id
+
+    invoice_pr = await get_walletofsatoshi_invoice(
+        amount_sats=1000,
+        memo="test_receive_magisats_inbound_payment_to_lightning_invoice",
+    )
     vsc_payload = VSCCallPayload(
-        amount=str(1000),
+        amount=str(1300),
         to=AccName(server_id).magi_prefix,
-        memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound #paywithsats:500",
+        memo=f"{invoice_pr} #v4vapp #magioutbound #paywithsats:1300",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+    # This will fail because the same invoice cannot be paid twice.
+    vsc_payload = VSCCallPayload(
+        amount=str(1300),
+        to=AccName(server_id).magi_prefix,
+        memo=f"{invoice_pr} #v4vapp #magioutbound #paywithsats:1300",
     )
     trx = await send_magi_transaction(
         vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"

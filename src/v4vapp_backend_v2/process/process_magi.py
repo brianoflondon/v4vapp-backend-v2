@@ -592,11 +592,12 @@ async def magisats_fee_ledger_entry(
     return fee_ledger_entry
 
 
-async def return_magi_sats_change(
+async def return_magisats(
     initiating_op: MagiBTCTransferEvent,
-    payment: Payment,
     remainder_msat: Decimal,
-    quote: QuoteResponse,
+    quote: QuoteResponse | None = None,
+    payment: Payment | None = None,
+    reason_str: str | None = None,
 ) -> LedgerEntry:
     """
     Return any unforwarded Magi sats change back to the sender.
@@ -621,7 +622,16 @@ async def return_magi_sats_change(
     remainder_sats = (remainder_msat / Decimal(1000)).quantize(
         Decimal("1."), rounding="ROUND_DOWN"
     )
-    memo = f"Returning change {remainder_sats:,.0f} sats from transaction § {payment.short_id}"
+    if payment:
+        memo = f"Returning change {remainder_sats:,.0f} sats from transaction § {payment.short_id}"
+    elif reason_str:
+        memo = reason_str + f" § {initiating_op.short_id}"
+    else:
+        memo = f"Returning change {remainder_sats:,.0f} sats from Magi transfer § {initiating_op.short_id}"
+
+    if not quote:
+        quote = await MagiBTCTransferEvent.nearest_quote(timestamp=initiating_op.timestamp)
+
     vsc_payload = VSCCallPayload(
         amount=str(remainder_sats),
         to=AccName(initiating_op.from_account).magi_prefix,
@@ -644,6 +654,7 @@ async def return_magi_sats_change(
         parent_id=initiating_op.group_id,
     ).conversion
 
+    processed_memo = ProcessedMemo(memo)
     ledger_type = LedgerType.MAGI_CHANGE
     customer_to_server = LedgerEntry(
         cust_id=cust_id,
@@ -652,8 +663,8 @@ async def return_magi_sats_change(
         group_id=f"{initiating_op.group_id}_{ledger_type.value}",
         op_type=initiating_op.op_type,
         timestamp=datetime.now(tz=timezone.utc),
-        description=memo,
-        user_memo=initiating_op.memo,
+        description=f"Return {remainder_sats:,.0f} sats to Magi for original transfer {initiating_op.short_id}",
+        user_memo=processed_memo.short_memo,
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=cust_id,
@@ -675,12 +686,13 @@ async def return_magi_sats_change(
         f"{ICON} Sent return transfer of {remainder_sats:,.0f} sats to Magi for original transfer {initiating_op.short_id} with trx_id: {trx_id}",
         extra={"trx": trx, **vsc_payload.log_extra},
     )
-    payment.add_reply(
-        reply_id=trx_id,
-        reply_type=ReplyType.MAGI_TRANSFER,
-        reply_msat=0,
-        reply_message=memo,
-        reply_error=None,
-    )
-    await payment.save()
+    if payment:
+        payment.add_reply(
+            reply_id=trx_id,
+            reply_type=ReplyType.MAGI_TRANSFER,
+            reply_msat=0,
+            reply_message=memo,
+            reply_error=None,
+        )
+        await payment.save()
     return customer_to_server
