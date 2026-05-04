@@ -216,8 +216,12 @@ class MagiBTCTransferEvent(TrackedBaseModel):
             )
         ).quantize(Decimal("1."), rounding="ROUND_UP")
 
-        if forwarding_fee_estimate_msats < delta_msats:
-            return max_to_send_msats
+        logger.info(
+            f"{ICON} max_to_send_base_msats={max_to_send_base_msats:,.0f}, msats_fee={msats_fee:,.0f}, forwarding_fee_estimate_msats={forwarding_fee_estimate_msats:,.0f}, delta_msats={delta_msats:,.0f}"
+        )
+
+        if (forwarding_fee_estimate_msats + msats_fee) < delta_msats:
+            return max_to_send_base_msats
         else:
             return max_to_send_msats - forwarding_fee_estimate_msats
 

@@ -19,7 +19,12 @@ from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_kee
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    ProcessedMemo,
+    is_clean_memo,
+    process_clean_memo,
+)
+from v4vapp_backend_v2.helpers.service_fees import calculate_fee_msats
 from v4vapp_backend_v2.hive.hive_extras import HiveNotHiveAccount
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -30,7 +35,10 @@ from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
-from v4vapp_backend_v2.process.process_magi import return_magi_sats_change
+from v4vapp_backend_v2.process.process_magi import (
+    magisats_fee_ledger_entry,
+    return_magi_sats_change,
+)
 
 
 async def process_payment_success(
@@ -136,6 +144,27 @@ async def process_payment_success(
             logger.info(f"Not sending to a non-Hive Account: {e}")
 
     if isinstance(initiating_op, MagiBTCTransferEvent):
+        # Here we should create the fee ledger entry for the fee for the payment.
+        net_sent_inc_fees_msat = Decimal(payment.value_msat) + Decimal(payment.fee_msat)
+        fee_msats = calculate_fee_msats(net_sent_inc_fees_msat)
+        fee_conv = CryptoConversion(
+            conv_from=Currency.MSATS,
+            value=fee_msats,
+            quote=quote,
+        ).conversion
+        initiating_op.fee_conv = fee_conv
+        await initiating_op.save()
+        processed_memo = ProcessedMemo(initiating_op.d_memo)
+        fee_ledger_entry = await magisats_fee_ledger_entry(
+            magi_transfer=initiating_op,
+            net_fee_msats=fee_msats,
+            cust_id=cust_id,
+            processed_memo=processed_memo,
+            quote=quote,
+        )
+        await fee_ledger_entry.save()
+        ledger_entries_list.append(fee_ledger_entry)
+
         if initiating_op.conv is None or initiating_op.fee_conv is None:
             logger.warning(
                 f"Missing conversion data for Magisats transfer {initiating_op.short_id}. Cannot calculate net received or log payment details."
@@ -143,8 +172,6 @@ async def process_payment_success(
             net_received_msat = Decimal(0)
         else:
             net_received_msat = initiating_op.conv.msats - initiating_op.fee_conv.msats
-
-        net_sent_inc_fees_msat = Decimal(payment.value_msat) + Decimal(payment.fee_msat)
 
         remainder_msat = net_received_msat - net_sent_inc_fees_msat
         logger.info(

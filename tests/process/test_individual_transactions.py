@@ -477,19 +477,19 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
 
 async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     """
-        Test the process of handling an inbound payment to Magisats forwarded on the Magisats side.
+    Test the process of handling an inbound payment to Magisats forwarded on the Magisats side.
 
-        Needs a positive balance on the Magisats server to work
+    Needs a positive balance on the Magisats server to work
 
-        Send a hive transaction to convert to a lighting invoice which pays on this same node
-        and uses the #magisats tag in the memo to trigger the magisats processing.
+    Send a hive transaction to convert to a lighting invoice which pays on this same node
+    and uses the #magisats tag in the memo to trigger the magisats processing.
 
-        Raises:
-            AssertionError: If any step in the process fails.
+    Raises:
+        AssertionError: If any step in the process fails.
 
-        Process Overwatch Output should be:
-            🌟 ✅ Hive To Keepsats External for v4vapp-test 71.376 HIVE / 5,446 sats (76) 3921_fb3daa_1 completed 16/16 required stages complete  [flow] 🔔
-            🌟 ✅ External To Magisats for v4vapp-test 65.530 HIVE / 5,000 sats (76) FSVLWRS/1O completed 6/6 required stages complete  [flow] 🔔
+    Process Overwatch Output should be:
+        🌟 ✅ Hive To Keepsats External for v4vapp-test 71.376 HIVE / 5,446 sats (76) 3921_fb3daa_1 completed 16/16 required stages complete  [flow] 🔔
+        🌟 ✅ External To Magisats for v4vapp-test 65.530 HIVE / 5,000 sats (76) FSVLWRS/1O completed 6/6 required stages complete  [flow] 🔔
     """
     try:
         default_exchange_adapter = get_exchange_adapter()
@@ -550,10 +550,23 @@ async def test_receive_magisats_inbound_payment_to_keepsats():
         AssertionError: If the transaction fails.
     """
     server_id = InternalConfig().server_id
+    invoice_value_sats = 200
     vsc_payload = VSCCallPayload(
-        amount=str(200),
+        amount=str(invoice_value_sats),
         to=AccName(server_id).magi_prefix,
-        memo="v4vapp-test | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #SATS #CLEAN #v4vapp",
+        memo="v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #SATS #CLEAN #v4vapp",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+    # Send Second Transaction with no memo.
+    invoice_value_sats = 222
+    vsc_payload = VSCCallPayload(
+        amount=str(invoice_value_sats),
+        to=AccName(server_id).magi_prefix,
     )
     trx = await send_magi_transaction(
         vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
@@ -577,7 +590,7 @@ async def test_receive_magisats_inbound_payment_to_ln_address():
     vsc_payload = VSCCallPayload(
         amount=str(1000),
         to=AccName(server_id).magi_prefix,
-        memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound",
+        memo="brianoflondon@failurewalletofsatoshi.com #v4vapp #magioutbound",
     )
     trx = await send_magi_transaction(
         vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"

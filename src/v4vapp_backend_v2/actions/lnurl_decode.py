@@ -141,9 +141,9 @@ async def decode_any_lightning_string(
     try:
         return await _decode_any_lightning_string_inner(
             input=input,
+            lnd_client=lnd_client,
             zero_amount_invoice_send_msats=zero_amount_invoice_send_msats,
             comment=comment,
-            lnd_client=lnd_client,
         )
     finally:
         if _owns_client:
@@ -152,9 +152,9 @@ async def decode_any_lightning_string(
 
 async def _decode_any_lightning_string_inner(
     input: str,
+    lnd_client: LNDClient,
     zero_amount_invoice_send_msats: Decimal = Decimal(0),
     comment: str = "",
-    lnd_client: LNDClient | None = None,
 ) -> "PayReq":
     if input.startswith("lnbc"):
         lnrpc_pay_req = await get_pay_req_from_pay_request(

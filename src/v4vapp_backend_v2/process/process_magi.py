@@ -442,17 +442,6 @@ async def magisats_inbound(
         )
         return []
 
-    # now send the fee to the fee account
-    quote = await MagiBTCTransferEvent.nearest_quote(timestamp=magi_transfer.timestamp)
-    fee_conv = CryptoConversion(
-        quote=quote,
-        conv_from=Currency.MSATS,
-        value=net_fee_msats,
-    ).conversion
-
-    magi_transfer.fee_conv = fee_conv
-    await magi_transfer.save()
-
     assert net_fee_msats >= 0, (
         "Net fee cannot be negative. Check the amounts in the invoice and VSC payload."
     )
@@ -503,9 +492,80 @@ async def magisats_inbound(
     await magi_inbound_ledger.save()
     ledger_entries_list.append(magi_inbound_ledger)
 
-    # ──────────────────────────────────────────────────────────────────────
-    # 2. Fee income (the retained portion)
-    # ──────────────────────────────────────────────────────────────────────
+    if magi_transfer.paywithsats:
+        # After this is done, the transfer may or may not make a payment and the follow-on
+        # will be captured in #process_payment
+        await follow_on_transfer(tracked_op=magi_transfer, nobroadcast=False)
+        logger.info(
+            f"{ICON} {magi_transfer.short_id} Follow-on transfer initiated "
+            f"for Magi inbound transfer {magi_transfer.short_id} to {cust_id}",
+        )
+    else:
+        # ──────────────────────────────────────────────────────────────────────
+        # 2. Fee income (the retained portion) (this needs to be based on the actual transfer if one happens)
+        # ──────────────────────────────────────────────────────────────────────
+        fee_ledger_entry = await magisats_fee_ledger_entry(
+            magi_transfer=magi_transfer,
+            net_fee_msats=net_fee_msats,
+            cust_id=cust_id,
+            processed_memo=processed_memo,
+            exchange_sub=exchange_sub,
+        )
+        await fee_ledger_entry.save()
+        ledger_entries_list.append(fee_ledger_entry)
+
+    logger.info(
+        f"{ICON} {magi_transfer.short_id} Processed Magi inbound transfer for {cust_id} "
+        f"with total amount {magi_transfer.amount:,.0f} sats and fee {net_fee_msats / 1000:.3f} sats",
+    )
+
+    return ledger_entries_list
+
+
+async def magisats_fee_ledger_entry(
+    magi_transfer: MagiBTCTransferEvent,
+    net_fee_msats: Decimal,
+    cust_id: str,
+    processed_memo: ProcessedMemo,
+    exchange_sub: str | None = None,
+    quote: QuoteResponse | None = None,
+) -> LedgerEntry:
+    """
+    Create a ledger entry for the fee portion of a Magi transfer.
+
+    This is a helper function to create the fee ledger entry for both inbound and outbound
+    Magi transfers, based on the provided `magi_transfer` event and the calculated
+    `fee_conv` conversion details.
+
+    Args:
+        magi_transfer: The Magi BTC transfer event containing the details of the transfer.
+        net_fee_msats: The net fee in millisatoshis.
+        cust_id: The customer ID associated with the transfer.
+        exchange_sub: The exchange sub-account identifier.
+        processed_memo: The processed memo object containing the short memo.
+    """
+    if not exchange_sub:
+        try:
+            default_exchange_adapter = get_exchange_adapter()
+        except Exception as e:
+            logger.error(
+                f"{ICON} Failed to initialize exchange adapter: {e}", extra={"error": str(e)}
+            )
+            return []
+
+        exchange_sub = default_exchange_adapter.exchange_name
+
+    if not quote:
+        quote = await MagiBTCTransferEvent.nearest_quote(timestamp=magi_transfer.timestamp)
+
+    fee_conv = CryptoConversion(
+        quote=quote,
+        conv_from=Currency.MSATS,
+        value=net_fee_msats,
+    ).conversion
+
+    magi_transfer.fee_conv = fee_conv
+    await magi_transfer.save()
     ledger_type = LedgerType.FEE_INCOME
     fee_ledger_entry = LedgerEntry(
         cust_id=cust_id,
@@ -529,24 +589,7 @@ async def magisats_inbound(
         credit_conv=fee_conv,
         link=magi_transfer.link,
     )
-    await fee_ledger_entry.save()
-    ledger_entries_list.append(fee_ledger_entry)
-
-    if magi_transfer.paywithsats:
-        # After this is done, the transfer may or may not make a payment and the follow-on
-        # will be captured in #process_payment
-        await follow_on_transfer(tracked_op=magi_transfer, nobroadcast=False)
-        logger.info(
-            f"{ICON} {magi_transfer.short_id} Follow-on transfer initiated "
-            f"for Magi inbound transfer {magi_transfer.short_id} to {cust_id}",
-        )
-
-    logger.info(
-        f"{ICON} {magi_transfer.short_id} Processed Magi inbound transfer for {cust_id} "
-        f"with total amount {magi_transfer.amount:,.0f} sats and fee {net_fee_msats / 1000:.3f} sats",
-    )
-
-    return ledger_entries_list
+    return fee_ledger_entry
 
 
 async def return_magi_sats_change(

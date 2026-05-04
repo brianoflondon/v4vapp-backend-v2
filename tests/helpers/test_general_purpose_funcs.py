@@ -1,7 +1,7 @@
-from pprint import pprint
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from pprint import pprint
 from types import SimpleNamespace
 
 import pytest
@@ -139,6 +139,42 @@ def test_processed_memo_accepts_positional_string_init():
     pprint(processed.model_dump())
 
 
+def test_processed_memo_accept_v4vapp_memo_init():
+    memo = "v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #SATS #CLEAN #v4vapp"
+    processed = ProcessedMemo(memo)
+
+    assert processed.memo == memo
+    assert (
+        processed.short_memo
+        == "💬v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #SATS #CLEAN #v4vapp"
+    )
+    assert str(processed.cust_id) == "v4vapp.qrc"
+    assert (
+        str(processed.clean_memo)
+        == "Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #sats"
+    )
+    print(f"ProcessedMemo: {processed}")
+    pprint(processed.model_dump())
+
+
+def test_processed_memo_accept_v4vapp_memo_init_not_clean():
+    memo = "v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #v4vapp"
+    processed = ProcessedMemo(memo)
+
+    assert processed.memo == memo
+    assert (
+        processed.short_memo
+        == "💬v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #v4vapp"
+    )
+    assert str(processed.cust_id) == "v4vapp.qrc"
+    assert (
+        str(processed.clean_memo)
+        == "Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats"
+    )
+    print(f"ProcessedMemo: {processed}")
+    pprint(processed.model_dump())
+
+
 def test_processed_memo_accepts_keyword_memo_init():
     memo = "@alice #v4vapp payment request"
     processed = ProcessedMemo(memo=memo)
@@ -148,6 +184,7 @@ def test_processed_memo_accepts_keyword_memo_init():
     assert str(processed.cust_id) == "alice"
     print(f"ProcessedMemo: {processed}")
     pprint(processed.model_dump())
+
 
 @pytest.mark.parametrize(
     "memo, expected",

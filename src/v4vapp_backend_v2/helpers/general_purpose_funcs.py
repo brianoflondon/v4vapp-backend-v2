@@ -514,24 +514,26 @@ class ProcessedMemo(BaseModel):
     cust_id: AccNameType | None = Field(
         None, description="The extracted customer ID from the memo, if available"
     )
-    short_memo: str = Field(
-        "", description="A shortened version of the memo for display purposes"
-    )
+    short_memo: str = Field("", description="A shortened version of the memo for display purposes")
     lightning_memo: LightningMemo = Field(
-        default_factory=LightningMemo, description="The LightningMemo object containing the original and short memo"
+        default_factory=LightningMemo,
+        description="The LightningMemo object containing the original and short memo",
+    )
+    clean_memo: str = Field(
+        "",
+        description="Clean memo processed version, removing tags and account names for a cleaner display",
     )
 
     def __init__(self, *args: Any, **data: Any):
         if len(args) == 1 and isinstance(args[0], str):
             data["memo"] = args[0]
         elif len(args) > 1:
-            raise TypeError(
-                "ProcessedMemo accepts at most one positional argument (memo string)"
-            )
+            raise TypeError("ProcessedMemo accepts at most one positional argument (memo string)")
 
         super().__init__(**data)
         self.lightning_memo = LightningMemo(self.memo)
         self.short_memo = self.lightning_memo.short_memo
+        self.clean_memo = process_clean_memo(self.memo)
         if self.lightning_memo.is_lightning:
             self.cust_id = ""
         else:
