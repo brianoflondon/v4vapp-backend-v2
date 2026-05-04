@@ -416,15 +416,33 @@ async def magisats_inbound(
       - VSC Liability to the customer is `net_to_customer_msats` (= received − fee).
       - Revenue increases by `net_fee_msats`.
 
-    If `magi_transfer.paywithsats` is set, a follow-on Lightning transfer to the
-    customer is also initiated via `follow_on_transfer`.
+    Follow-on Lightning payment (optional)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    `magi_transfer.paywithsats` is ``True`` when **all** of the following hold:
+
+    - `amount > 0`
+    - The memo contains ``#magioutbound`` (case-insensitive)
+
+    When `paywithsats` is True the function calls `follow_on_transfer()` to pay the
+    Lightning invoice or address found in the memo.  The follow-on payment handler
+    records its own accounting entries; the fee entry is **not** written here in
+    that branch (it is captured later in `process_payment`).
+
+    Optional ``#paywithsats:<N>`` memo tag
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    If the memo also contains ``#paywithsats:<N>`` (e.g. ``#paywithsats:1300``),
+    the server caps the outbound Lightning payment at *N* sats.  Any remainder above
+    the fee is returned to the sender via `return_magisats`.
+
+    Without ``#magioutbound``, received sats remain as a VSC Liability credited to
+    the customer's Keepsats balance and a ``FEE_INCOME`` entry is written immediately.
 
     Args:
         magi_transfer: The on-chain Magi BTC transfer event (server as recipient).
         vsc_call:      The parsed VSC call from the watched custom JSON.
 
     Returns:
-        List of the two `LedgerEntry` objects saved, or an empty list on error.
+        List of `LedgerEntry` objects saved (one or two entries), or an empty list on error.
     """
     # Now we transfer the amount_to_send_sats to the
     vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
@@ -606,21 +624,43 @@ async def return_magisats(
     reason_str: str | None = None,
 ) -> LedgerEntry:
     """
-    Return any unforwarded Magi sats change back to the sender.
+    Return unforwarded Magi sats change back to the original sender.
 
-    This is a placeholder for the logic that would identify any Magi transfer events where
-    the full amount was not forwarded to the customer (e.g. due to an error or if the
-    invoice was cancelled), and initiate a return transfer of the remaining balance back
-    to the sender's Magi address.
+    Called when a follow-on Lightning payment via `follow_on_transfer` either fails or
+    leaves a remainder (e.g. the paid invoice was cheaper than the sats received, or
+    the payment itself failed after the inbound accounting was already written).
 
-    The implementation would likely involve:
-    - Querying for recent Magi transfer events with a certain status or tag indicating
-      they need review.
-    - For each event, calculating if there is a remaining balance that should be returned.
-    - Constructing a `VSCCallPayload` for the return transfer and sending it via
-      `send_magi_transaction`.
-    - Updating the original transfer event and related records with the return status.
+    Steps performed:
+
+    1. Constructs a `VSCCallPayload` targeting the sender's Magi address
+       (`AccName(initiating_op.from_account).magi_prefix`) for `remainder_sats`.
+    2. Broadcasts the return VSC transfer on-chain via `send_magi_transaction`.
+    3. Writes a ``MAGI_CHANGE`` `LedgerEntry` that moves the change from the
+       **customer's** VSC Liability to the **server's** VSC Liability, reflecting that
+       the server now owes the amount back to the Magi network rather than the customer.
+
+    Accounting entry (double-entry, amounts in MSATS):
+
+    - MAGI_CHANGE:
+      - Debit:  VSC Liability (cust_id)      remainder_msats
+      - Credit: VSC Liability (server_id)    remainder_msats
+
+    If a `payment` object is provided its reply list is updated with the return
+    transaction ID.
+
+    Args:
+        initiating_op:   The original inbound `MagiBTCTransferEvent` whose remainder is
+                         being returned.
+        remainder_msat:  The amount in millisatoshis to return.
+        quote:           Optional price quote; fetched from the DB if not provided.
+        payment:         Optional `Payment` object to attach the reply to.
+        reason_str:      Optional human-readable reason string; used as the memo when
+                         provided instead of the default "Returning change ..." message.
+
+    Returns:
+        The saved ``MAGI_CHANGE`` `LedgerEntry`.
     """
+    # Placeholder implementation
     # Placeholder implementation
     logger.info(f"{ICON} Returning any unforwarded Magi sats change back to sender")
     remainder_sats = (remainder_msat / Decimal(1000)).quantize(
