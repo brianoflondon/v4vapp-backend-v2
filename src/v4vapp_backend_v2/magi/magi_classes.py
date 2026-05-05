@@ -15,7 +15,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import paywithsats_amount, 
 from v4vapp_backend_v2.helpers.service_fees import calculate_fee_msats
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
-from v4vapp_backend_v2.hive_models.op_all import trx_unpack
+from v4vapp_backend_v2.hive_models.op_all import trx_hive_fetch_unpack
 from v4vapp_backend_v2.hive_models.op_base_extras import HiveExp
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 
@@ -293,6 +293,53 @@ class MagiBTCTransferEvent(TrackedBaseModel):
             return self.from_account  # type: ignore
         return f"{self.from_account}:{self.to_account}"
 
+    async def fill_custom_jsons(self) -> None:
+        """
+        Fetches and fills the custom_jsons field with associated CustomJson operations from the Hive transaction.
+        Also updates the conversion and saves the record after populating the custom_jsons.
+
+        This method should be called after initializing the MagiBTCTransferEvent to populate the custom_jsons field
+        with the relevant CustomJson operations for further processing.
+
+        Returns:
+            None
+        """
+        custom_jsons = await self.hive_custom_json()
+        for op in custom_jsons or []:
+            if op.is_watched:
+                await op.save()
+        self.custom_jsons = custom_jsons
+        await self.update_conv()
+        await self.save()
+
+    async def hive_custom_json(self) -> List[CustomJson] | None:
+        """
+        Fetch and return all CustomJson operations from the Hive transaction
+        matching this transfer's trx_id.
+
+        IPFS CID hashes (e.g. bafyrei...) are not valid Hive transaction IDs;
+        for those events there is no on-chain custom_json to look up.
+
+        Returns:
+            List[CustomJson] | None: Matching CustomJson ops, or None if none found.
+        """
+        if not _HIVE_TRX_ID_RE.match(self.trx_id):
+            logger.debug(
+                f"{ICON} trx_id={self.trx_id!r} is not a Hive txid — skipping custom_json lookup",
+                extra={"notification": False},
+            )
+            return None
+        ops = trx_hive_fetch_unpack(self.trx_id)
+        matching = [op for op in ops if isinstance(op, CustomJson)]
+        if not matching:
+            logger.warning(
+                f"{ICON} No custom_json found for indexer_tx_hash={self.indexer_tx_hash}",
+                extra={"notification": False},
+            )
+            return None
+        self.memo = self.d_memo
+        return matching
+
     @property
     def is_watched(self) -> bool:
         """
@@ -390,34 +437,6 @@ class MagiBTCTransferEvent(TrackedBaseModel):
             value=self.amount,
             quote=quote,
         ).conversion
-
-    async def hive_custom_json(self) -> List[CustomJson] | None:
-        """
-        Fetch and return all CustomJson operations from the Hive transaction
-        matching this transfer's trx_id.
-
-        IPFS CID hashes (e.g. bafyrei...) are not valid Hive transaction IDs;
-        for those events there is no on-chain custom_json to look up.
-
-        Returns:
-            List[CustomJson] | None: Matching CustomJson ops, or None if none found.
-        """
-        if not _HIVE_TRX_ID_RE.match(self.trx_id):
-            logger.debug(
-                f"{ICON} trx_id={self.trx_id!r} is not a Hive txid — skipping custom_json lookup",
-                extra={"notification": False},
-            )
-            return None
-        ops = trx_unpack(self.trx_id)
-        matching = [op for op in ops if isinstance(op, CustomJson)]
-        if not matching:
-            logger.warning(
-                f"{ICON} No custom_json found for indexer_tx_hash={self.indexer_tx_hash}",
-                extra={"notification": False},
-            )
-            return None
-        self.memo = self.d_memo
-        return matching
 
     @property
     def log_str(self) -> str:

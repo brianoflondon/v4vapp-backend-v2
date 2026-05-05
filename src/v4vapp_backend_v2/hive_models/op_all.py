@@ -4,7 +4,6 @@ from nectar.blockchain import Blockchain
 from pydantic import BaseModel, Discriminator, Tag, ValidationError
 
 from v4vapp_backend_v2.config.setup import logger
-
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, OpBase
@@ -193,7 +192,7 @@ def is_op_all_transfer(op: OpAny) -> bool:
     return op.op_type in ["transfer", "recurrent_transfer", "fill_recurrent_transfer"]
 
 
-def trx_unpack(trx_id: str) -> list[OpAny]:
+def trx_hive_fetch_unpack(trx_id: str) -> list[OpAny]:
     """
     Fetch a Hive transaction by ID and unpack its operations into typed OpAny objects.
 

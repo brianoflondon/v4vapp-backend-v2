@@ -4,8 +4,8 @@ import signal
 import sys
 from typing import Annotated, Any, Dict
 
-import typer
 from colorama import Fore, Style
+import typer
 
 from status.status_api import StatusAPI
 from v4vapp_backend_v2 import __version__
@@ -148,19 +148,13 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
                     break
                 try:
                     if event.is_watched:
-                        custom_json_ops = await event.hive_custom_json()
-                        for op in custom_json_ops or []:
-                            if op.is_watched:
-                                await op.save()
+                        await event.fill_custom_jsons()
+                        for custom_json in event.custom_jsons or []:
+                            if custom_json.is_watched:
                                 logger.info(
-                                    f"{ICON}{Fore.WHITE} {op.log_str}{Style.RESET_ALL}",
+                                    f"{ICON}{Fore.WHITE} {custom_json.log_str}{Style.RESET_ALL}",
                                     extra={"notification": True},
                                 )
-                            # Critical: update the event and save it, AFTER saving the custom_json so that the event record
-                            # can lookup the custom_json data in processing.
-                        event.custom_jsons = custom_json_ops
-                        await event.update_conv()
-                        await event.save()
                     else:
                         logger.info(event.log_str, extra={"notification": False})
                 except Exception as e:

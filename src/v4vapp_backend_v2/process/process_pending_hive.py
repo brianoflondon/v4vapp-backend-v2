@@ -146,7 +146,7 @@ async def resend_pending_custom_jsons():
                 nobroadcast=pending.nobroadcast,
                 resend_attempt=pending.resend_attempt,
             )
-            logger.debug(f"Resent pending custom JSON {pending}, trx: {trx.get('trx_id')}")
+            logger.info(f"Resent pending custom JSON {pending}, trx: {trx.get('trx_id')}")
             await pending.delete()
         except CustomJsonSendError as e:
             logger.error(f"CustomJsonSendError when resending custom JSON {pending}: {e}")

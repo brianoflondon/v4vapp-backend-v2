@@ -19,6 +19,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive.hive_extras import perform_transfer_checks
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
@@ -105,9 +106,11 @@ async def process_custom_json_func(
             and custom_json.from_account != custom_json.to_account
         ):
             try:
+                from_account = AccName(keepsats_transfer.from_account)
+                to_account = AccName(keepsats_transfer.to_account)
                 await perform_transfer_checks(
-                    from_account=keepsats_transfer.from_account,
-                    to_account=keepsats_transfer.to_account,
+                    from_account=from_account,
+                    to_account=to_account,
                 )
             except Exception as e:
                 logger.error(

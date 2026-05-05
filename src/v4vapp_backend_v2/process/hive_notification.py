@@ -22,7 +22,9 @@ from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingCustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
+from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.lock_str_class import CustIDType, LockStr
 
@@ -407,14 +409,45 @@ async def send_magi_transfer_custom_json(
     else:
         caller_acc_name = AccName(f"hive:{server_id}")
 
+    try:
+        send_from = caller_acc_name.no_prefix
+        json_data = vsc_call.model_dump(exclude_none=True, exclude_unset=True, by_alias=True)
+        json_data_converted = convert_decimals_for_mongodb(json_data)
+    except Exception as e:
+        logger.exception(
+            f"Error preparing custom_json transfer data: {e} {vsc_call.log_str}",
+            extra={"notification": False, "id": id, **vsc_call.log_extra},
+        )
+        return {"error": "Failed to prepare custom JSON data for transfer."}
+
+    # Server balance:
+    server_id = InternalConfig().server_id
+    server_balance = await get_magi_btc_balance_by_account(server_id)
+    if server_balance.balance_sats < vsc_call.payload.sats:
+        logger.error(
+            f"Insufficient Magi balance for transaction: required {vsc_call.payload.sats:,.0f} sats, available {server_balance.balance_sats:,.0f} sats.",
+            extra={"notification": True, **vsc_call.payload.log_extra},
+        )
+        pending_custom_json = PendingCustomJson(
+            unique_key=f"{caller_acc_name.no_prefix}:{id}:{vsc_call.payload.parent_id}",
+            cj_id=id,
+            send_account=AccName(server_id),
+            json_data=json_data_converted,
+            active=True,
+            pending_type="pending_custom_json",
+        )
+        await pending_custom_json.save()
+        logger.warning(
+            f"{caller_acc_name.no_prefix} attempted to send a Magi transfer but the server has insufficient balance. Stored as pending_custom_json with ID {pending_custom_json.id}.",
+            extra={"notification": True, **vsc_call.payload.log_extra},
+        )
+        return {"error": "Insufficient Magi balance for transaction."}
+
     hive_client = await get_verified_hive_client_for_accounts(
         [caller_acc_name.no_prefix], nobroadcast=nobroadcast
     )  # verify caller account exists and keys if needed
 
     try:
-        send_from = caller_acc_name.no_prefix
-        json_data = vsc_call.model_dump(exclude_none=True, exclude_unset=True, by_alias=True)
-        json_data_converted = convert_decimals_for_mongodb(json_data)
         trx = await send_custom_json(
             json_data=json_data_converted,
             send_account=send_from,

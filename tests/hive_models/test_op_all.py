@@ -10,13 +10,13 @@ from tests.helpers.test_crypto_prices import mock_binance
 from tests.load_data import load_hive_events
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.general_purpose_funcs import find_short_id
-from v4vapp_backend_v2.hive_models.op_all import op_any, op_any_or_base, trx_unpack
+from v4vapp_backend_v2.hive_models.op_all import op_any, op_any_or_base, trx_hive_fetch_unpack
 from v4vapp_backend_v2.hive_models.op_base import HiveExp, OpBase
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 
-# A valid 40-character lowercase hex Hive transaction ID for use in trx_unpack tests.
+# A valid 40-character lowercase hex Hive transaction ID for use in trx_hive_fetch_unpack tests.
 FAKE_TRX_ID = "a" * 40
 
 
@@ -148,7 +148,7 @@ def test_hive_account_name_links(mocker):
 
 
 # ---------------------------------------------------------------------------
-# trx_unpack tests — Blockchain.get_transaction is mocked
+# trx_hive_fetch_unpack tests — Blockchain.get_transaction is mocked
 # ---------------------------------------------------------------------------
 
 
@@ -159,7 +159,7 @@ def _make_blockchain_mock(response: dict) -> MagicMock:
     return mock_blockchain
 
 
-def test_trx_unpack_single_custom_json():
+def test_trx_hive_fetch_unpack_single_custom_json():
     """A transaction with one custom_json_operation is unpacked to [CustomJson]."""
     fake_trx = {
         "block_num": 12345,
@@ -180,7 +180,7 @@ def test_trx_unpack_single_custom_json():
         "v4vapp_backend_v2.hive_models.op_all.Blockchain",
         return_value=_make_blockchain_mock(fake_trx),
     ):
-        ops = trx_unpack(FAKE_TRX_ID)
+        ops = trx_hive_fetch_unpack(FAKE_TRX_ID)
 
     assert len(ops) == 1
     assert isinstance(ops[0], CustomJson)
@@ -189,7 +189,7 @@ def test_trx_unpack_single_custom_json():
     assert ops[0].op_in_trx == 1
 
 
-def test_trx_unpack_multiple_ops():
+def test_trx_hive_fetch_unpack_multiple_ops():
     """A transaction with a transfer followed by a custom_json is unpacked in order."""
     fake_trx = {
         "block_num": 99999,
@@ -219,7 +219,7 @@ def test_trx_unpack_multiple_ops():
         "v4vapp_backend_v2.hive_models.op_all.Blockchain",
         return_value=_make_blockchain_mock(fake_trx),
     ):
-        ops = trx_unpack(FAKE_TRX_ID)
+        ops = trx_hive_fetch_unpack(FAKE_TRX_ID)
 
     assert len(ops) == 2
     assert isinstance(ops[0], Transfer)
@@ -232,19 +232,19 @@ def test_trx_unpack_multiple_ops():
     assert ops[1].trx_id == FAKE_TRX_ID
 
 
-def test_trx_unpack_empty_transaction():
+def test_trx_hive_fetch_unpack_empty_transaction():
     """A transaction with no operations returns an empty list."""
     fake_trx = {"block_num": 1, "transaction_num": 0, "operations": []}
     with patch(
         "v4vapp_backend_v2.hive_models.op_all.Blockchain",
         return_value=_make_blockchain_mock(fake_trx),
     ):
-        ops = trx_unpack(FAKE_TRX_ID)
+        ops = trx_hive_fetch_unpack(FAKE_TRX_ID)
 
     assert ops == []
 
 
-def test_trx_unpack_strips_operation_suffix():
+def test_trx_hive_fetch_unpack_strips_operation_suffix():
     """The '_operation' suffix in op type names is stripped before dispatch."""
     fake_trx = {
         "block_num": 1,
@@ -265,13 +265,13 @@ def test_trx_unpack_strips_operation_suffix():
         "v4vapp_backend_v2.hive_models.op_all.Blockchain",
         return_value=_make_blockchain_mock(fake_trx),
     ):
-        ops = trx_unpack(FAKE_TRX_ID)
+        ops = trx_hive_fetch_unpack(FAKE_TRX_ID)
 
     # Would be OpBase if the suffix were NOT stripped (unknown type "custom_json_operation")
     assert isinstance(ops[0], CustomJson)
 
 
-def test_trx_unpack_unknown_op_is_skipped():
+def test_trx_hive_fetch_unpack_unknown_op_is_skipped():
     """An unrecognised op type is skipped with a warning; the list omits that op."""
     fake_trx = {
         "block_num": 1,
@@ -287,6 +287,6 @@ def test_trx_unpack_unknown_op_is_skipped():
         "v4vapp_backend_v2.hive_models.op_all.Blockchain",
         return_value=_make_blockchain_mock(fake_trx),
     ):
-        ops = trx_unpack(FAKE_TRX_ID)
+        ops = trx_hive_fetch_unpack(FAKE_TRX_ID)
 
     assert ops == []
