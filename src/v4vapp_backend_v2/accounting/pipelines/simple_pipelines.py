@@ -120,9 +120,15 @@ def limit_check_pipeline(
 
     max_hours = V4VConfig().data.max_rate_limit_hours
     start_date = datetime.now(tz=timezone.utc) - timedelta(hours=max_hours)
+    ledger_types = [
+        LedgerType.CONV_HIVE_TO_KEEPSATS.value,
+        LedgerType.CONV_KEEPSATS_TO_HIVE.value,
+        LedgerType.MAGI_INBOUND.value,
+        LedgerType.MAGI_OUTBOUND.value,
+    ]
 
     top_level_match = {
-        "ledger_type": {"$in": ["h_conv_k", "k_conv_h"]},
+        "ledger_type": {"$in": ledger_types},
         "cust_id": cust_id,
         "timestamp": {"$gte": start_date},
     }
