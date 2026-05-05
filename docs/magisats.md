@@ -47,6 +47,23 @@ A user pays a Lightning invoice whose memo identifies a Hive account + `#magisat
 4. Broadcasts a VSC `transfer` `custom_json` on Hive sending the net sats (after fee) to `hive:<cust_id>`.
 5. When the Magi indexer confirms the on-chain transfer, `process_magi_btc_transfer_event()` → `magisats_outbound()` writes the final accounting entries.
 
+### Generating the Invoice which receives the Lightning payment
+
+#### Lightning Address
+
+There is a new form of Lightning Address which includes will direct all sats received direct to your Magi address instead of your normal `keepsats` balance or to a Hive transfer:
+
+`<accountname>@magi.v4v.app`
+
+In this case the `accountname` part is used as the `cust_id` for the Magi transfer. This can be either a hive account name or a EVM address with the 0x prefix. It can also handle the `hive:` prefix and the `did:pkh:eip155:1:` prefix if included, so all of the following are valid and resolve to the same Magi address:
+
+```
+alice@magi.v4v.app
+0x1234567890abcdef@magi.v4v.app
+hive:alice@magi.v4v.app
+did:pkh:eip155:1:0x1234567890abcdef@magi.v4v.app
+```
+
 ### Accounting entries
 
 **Step A — Lightning deposit (standard invoice handler)**
