@@ -110,7 +110,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
 
         existing_op = await load_tracked_object(tracked_obj=tracked_op.group_id_p)
         if existing_op and existing_op.process_time:
-            logger.warning(
+            logger.debug(
                 f"Process time already set for {tracked_op.short_id} already processed.",
                 extra={"notification": False},
             )

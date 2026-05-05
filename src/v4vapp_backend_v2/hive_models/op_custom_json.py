@@ -46,6 +46,13 @@ class CustomJson(OpBase):
         default=None,
         description="Indicates if a VSC call is external to V4V.app Magi and can be cleaned later",
     )
+    vsc_call_pending: bool = Field(
+        False, description="Indicates if a VSC call is pending for this operation"
+    )
+    vsc_call_success: bool | None = Field(
+        default=None,
+        description="Indicates if the VSC call was successful. Only relevant if `vsc_call_not_needed` is False or None.",
+    )
 
     def __init__(self, **data):
         """

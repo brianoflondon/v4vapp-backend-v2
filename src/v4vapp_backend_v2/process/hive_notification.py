@@ -1,4 +1,5 @@
 from typing import Any, Dict
+from uuid import uuid4
 
 from nectar.amount import Amount
 
@@ -388,7 +389,7 @@ async def send_magi_transfer_custom_json(
     vsc_call: VSCCall,
     nobroadcast: bool = False,
     caller: str | None = None,
-) -> Dict[str, str]:
+) -> tuple[Dict[str, str], PendingCustomJson | None]:
     """
     Sends a custom JSON transfer on the Hive blockchain.
     The get_verified_hive_client function will handle the account verification and use Server keys if
@@ -418,7 +419,7 @@ async def send_magi_transfer_custom_json(
             f"Error preparing custom_json transfer data: {e} {vsc_call.log_str}",
             extra={"notification": False, "id": id, **vsc_call.log_extra},
         )
-        return {"error": "Failed to prepare custom JSON data for transfer."}
+        return {"error": "Failed to prepare custom JSON data for transfer."}, None
 
     # Server balance:
     server_id = InternalConfig().server_id
@@ -428,20 +429,16 @@ async def send_magi_transfer_custom_json(
             f"Insufficient Magi balance for transaction: required {vsc_call.payload.sats:,.0f} sats, available {server_balance.balance_sats:,.0f} sats.",
             extra={"notification": True, **vsc_call.payload.log_extra},
         )
-        pending_custom_json = PendingCustomJson(
-            unique_key=f"{caller_acc_name.no_prefix}:{id}:{vsc_call.payload.parent_id}",
-            cj_id=id,
-            send_account=AccName(server_id),
-            json_data=json_data_converted,
-            active=True,
-            pending_type="pending_custom_json",
-        )
-        await pending_custom_json.save()
-        logger.warning(
-            f"{caller_acc_name.no_prefix} attempted to send a Magi transfer but the server has insufficient balance. Stored as pending_custom_json with ID {pending_custom_json.id}.",
-            extra={"notification": True, **vsc_call.payload.log_extra},
-        )
-        return {"error": "Insufficient Magi balance for transaction."}
+    uuid4_str = vsc_call.payload.parent_id or str(uuid4().hex)[:18]
+    pending_custom_json = PendingCustomJson(
+        unique_key=f"{caller_acc_name.no_prefix}:{id}:{uuid4_str}",
+        cj_id=id,
+        send_account=AccName(server_id),
+        json_data=json_data_converted,
+        active=True,
+        pending_type="pending_custom_json",
+    )
+    await pending_custom_json.save()
 
     hive_client = await get_verified_hive_client_for_accounts(
         [caller_acc_name.no_prefix], nobroadcast=nobroadcast
@@ -460,11 +457,12 @@ async def send_magi_transfer_custom_json(
             f"Sent custom_json magi transfer: {vsc_call.log_str} {trx.get('trx_id', '')}",
             extra={"notification": False, **vsc_call.log_extra},
         )
-        return trx
+
+        return trx, pending_custom_json
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
     except Exception as e:
         logger.exception(
             f"Error sending custom_json transfer: {e} {vsc_call.log_str}",
             extra={"notification": False, "id": id, **vsc_call.log_extra},
         )
-        return {"error": str(e)}
+        return {"error": str(e)}, pending_custom_json

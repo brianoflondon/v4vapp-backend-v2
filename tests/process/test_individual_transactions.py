@@ -53,7 +53,7 @@ from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = True
+turn_off_these_tests = False
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -505,10 +505,10 @@ async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     exchange_account = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
     magisats_exchange_balance = await one_account_balance(account=exchange_account)
 
-    invoice_value_sat = int(10000)
+    invoice_value_sat = int(50000)
 
     assert magisats_exchange_balance is not None, "Failed to retrieve Magisats exchange balance"
-    assert magisats_exchange_balance.sats > invoice_value_sat * 0.1, (
+    assert magisats_exchange_balance.sats > invoice_value_sat * 1.1, (
         "Magisats exchange balance is too low, cannot perform test"
     )
     start_magisats_balance = await get_magi_btc_balance_by_account("hive:v4vapp-test")
@@ -544,8 +544,9 @@ async def test_receive_magisats_inbound_payment_to_keepsats():
     Test the process of receiving an inbound payment from Magisats to Keepsats.
 
     This test performs the following steps:
-    1. Sends a Magisats transaction to the Keepsats account.
-    2. Verifies that the transaction was successfully processed.
+    1. Sends a Magisats transaction to the Keepsats account for v4vapp.qrc with a specific memo.
+    2. Sends a second Magisats transaction to the same account without a memo goes to v4vapp-test.
+    3. Verifies that the transaction was successfully processed.
 
     Raises:
         AssertionError: If the transaction fails.
@@ -558,7 +559,7 @@ async def test_receive_magisats_inbound_payment_to_keepsats():
         memo="v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #SATS #CLEAN #v4vapp",
     )
     trx = await send_magi_transaction(
-        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
     )
     trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
     assert trx_id != "Failed", "Failed to send Magi transaction"
@@ -570,7 +571,7 @@ async def test_receive_magisats_inbound_payment_to_keepsats():
         to=AccName(server_id).magi_prefix,
     )
     trx = await send_magi_transaction(
-        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
     )
     trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
     assert trx_id != "Failed", "Failed to send Magi transaction"
@@ -594,7 +595,7 @@ async def test_receive_magisats_inbound_payment_to_ln_address():
         memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound",
     )
     trx = await send_magi_transaction(
-        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
     )
     trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
     assert trx_id != "Failed", "Failed to send Magi transaction"
@@ -624,7 +625,7 @@ async def test_receive_magisats_inbound_payment_to_lightning_invoice_and_failure
         memo=f"{invoice_pr} | first attempt | #v4vapp #magioutbound #paywithsats:1300",
     )
     trx = await send_magi_transaction(
-        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
     )
     trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
     assert trx_id != "Failed", "Failed to send Magi transaction"
@@ -675,7 +676,7 @@ async def test_receive_magisats_inbound_payment_to_lightning_invoice_and_failure
         memo=f"{invoice_pr} | not enough sats sent attempt | #v4vapp #magioutbound",
     )
     trx = await send_magi_transaction(
-        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
     )
     trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
     assert trx_id != "Failed", "Failed to send Magi transaction"
