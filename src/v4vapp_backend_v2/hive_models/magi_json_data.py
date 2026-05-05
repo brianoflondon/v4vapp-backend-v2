@@ -1,4 +1,5 @@
 import json as json_module
+from decimal import Decimal
 from typing import Any, Dict, List, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -64,6 +65,13 @@ class VSCCallPayload(BaseModel):
     @property
     def log_extra(self) -> Dict[str, Any]:
         return {"vsc_call_payload": self.model_dump(exclude_none=True, exclude_unset=True)}
+
+    @property
+    def sats(self) -> Decimal:
+        """Returns the amount in sats as a Decimal, assuming the amount is in whole sats."""
+        if self.amount is None:
+            return Decimal(0)
+        return Decimal(self.amount)
 
 
 class VSCSwapPayload(BaseModel):
