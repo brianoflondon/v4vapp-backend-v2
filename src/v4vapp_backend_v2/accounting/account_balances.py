@@ -1638,6 +1638,7 @@ async def keepsats_balance(
         net_msats (int): The net balance of Keepsats in milisatoshis.
         LedgerAccountDetails: An object containing the balance details for the specified customer.
     """
+    start = timer()
     account = LiabilityAccount(
         name="VSC Liability",
         sub=cust_id,
@@ -1667,6 +1668,9 @@ async def keepsats_balance(
     net_msats = account_balance.msats
     if net_msats < Decimal(0) and account_balance.sats == Decimal(0):
         net_msats = Decimal(0)
+    end = timer()
+    num_lines = len(account_balance.combined_balance) if account_balance.combined_balance else 0
+    logger.info(f"{end - start:.3f}s {cust_id} keepsats_balance {num_lines:,} lines")
     return net_msats, account_balance
 
 
