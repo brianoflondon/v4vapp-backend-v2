@@ -98,7 +98,7 @@ async def resend_pending_transactions() -> None:
             logger.warning(f"Failed to resend pending transaction {pending}: {e}")
 
 
-async def resend_pending_custom_jsons():
+async def resend_pending_custom_jsons(resend_vsc_calls: bool = False) -> None:
     """
     Asynchronously re-sends all active pending custom JSONs stored in the system.
 
@@ -134,6 +134,11 @@ async def resend_pending_custom_jsons():
     for pending in sending_cj:
         if pending.json_data is None:
             logger.warning(f"Skipping custom JSON {pending} as json_data is None.")
+            continue
+        if not resend_vsc_calls and pending.cj_id == "vsc.call":
+            logger.warning(
+                f"Skipping custom JSON {pending.unique_key} as it appears to be a VSC call."
+            )
             continue
         try:
             # Note: Adjust parameters based on actual send_custom_json signature
