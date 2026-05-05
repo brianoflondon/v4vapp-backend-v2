@@ -389,6 +389,7 @@ async def send_magi_transfer_custom_json(
     vsc_call: VSCCall,
     nobroadcast: bool = False,
     caller: str | None = None,
+    no_pending: bool = False,
 ) -> tuple[Dict[str, str], PendingCustomJson | None]:
     """
     Sends a custom JSON transfer on the Hive blockchain.
@@ -438,7 +439,8 @@ async def send_magi_transfer_custom_json(
         active=True,
         pending_type="pending_custom_json",
     )
-    await pending_custom_json.save()
+    if not no_pending:
+        await pending_custom_json.save()
 
     hive_client = await get_verified_hive_client_for_accounts(
         [caller_acc_name.no_prefix], nobroadcast=nobroadcast

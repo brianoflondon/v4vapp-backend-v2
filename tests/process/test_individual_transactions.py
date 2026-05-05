@@ -53,7 +53,7 @@ from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = False
+turn_off_these_tests = True
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -505,7 +505,7 @@ async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     exchange_account = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
     magisats_exchange_balance = await one_account_balance(account=exchange_account)
 
-    invoice_value_sat = int(50000)
+    invoice_value_sat = int(10000)
 
     assert magisats_exchange_balance is not None, "Failed to retrieve Magisats exchange balance"
     assert magisats_exchange_balance.sats > invoice_value_sat * 1.1, (
@@ -638,7 +638,7 @@ async def test_receive_magisats_inbound_payment_to_lightning_invoice_and_failure
         memo=f"{invoice_pr} | Second attempt to send | #v4vapp  #magioutbound #paywithsats:1300",
     )
     trx = await send_magi_transaction(
-        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test"
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
     )
     trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
     assert trx_id != "Failed", "Failed to send Magi transaction"

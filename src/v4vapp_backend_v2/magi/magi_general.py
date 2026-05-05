@@ -50,6 +50,7 @@ async def send_magi_transaction(
             vsc_call=vsc_call,
             nobroadcast=nobroadcast,
             caller=caller,
+            no_pending=no_pending,
         )
         trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
         logger.info(
@@ -97,7 +98,7 @@ async def verify_magi_transaction(
             magi_event = await wait_for_magi_btc_event(custom_json)
             if magi_event:
                 logger.info(
-                    f"Magi transaction verified successfully for trx_id {trx_id}",
+                    f"{ICON} Magi transaction verified successfully for trx_id {trx_id}",
                     extra={"notification": True, "magi_event": magi_event.log_str},
                 )
                 custom_json.vsc_call_pending = False
@@ -115,6 +116,9 @@ async def verify_magi_transaction(
                 await custom_json.save()
                 await pending_custom_json.delete()
                 return
+        logger.info(
+            f"{ICON} {trx_id} ...waiting for Magi transaction to be processed... {time.time() - start_time:.2f}s elapsed"
+        )
         await asyncio.sleep(5)
 
     custom_json_raw = await CustomJson.collection().find_one({"trx_id": trx_id})
