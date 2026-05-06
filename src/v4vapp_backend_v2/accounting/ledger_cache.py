@@ -251,8 +251,11 @@ async def set_cached_balance(
             report_time_str = f"{report_time:.3f}s"
             logger.info(f"SET: {key} (ttl={ttl}s in {report_time_str})")
             if report_time > 1.0:
-                logger.warning(f"Slow cache set: {report_time_str} for key {key}")
+                logger.warning(
+                    f"Slow cache set: {report_time_str} for key {key}",
+                    extra={"notification": False},
+                )
         else:
             logger.info(f"SET: {key} (ttl={ttl}s)")
     except Exception as e:
-        logger.warning(f"Failed to set ledger cache: {e}")
+        logger.warning(f"Failed to set ledger cache: {e}", extra={"notification": True})
