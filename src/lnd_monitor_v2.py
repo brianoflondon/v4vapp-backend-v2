@@ -1338,6 +1338,16 @@ async def main_async_start(connection_name: str) -> None:
                 ),
                 asyncio.create_task(status_api.start(), name="status_api"),
             ]
+            critical_tasks = [
+                t for t in running_tasks
+                if t.get_name() in {"invoices_loop", "payments_loop", "htlc_events_loop", "channel_events_loop"}
+            ]
+            running_tasks.append(
+                asyncio.create_task(
+                    _task_watchdog(critical_tasks, shutdown_event),
+                    name="task_watchdog",
+                )
+            )
             lnd_node = InternalConfig().config.lnd_config.default
             icon = InternalConfig().config.lnd_config.connections[lnd_node].icon
             logger.info(
@@ -1396,6 +1406,38 @@ async def main_async_start(connection_name: str) -> None:
         # Let notifications flush before tearing down logging/redis
         await asyncio.sleep(1)
         InternalConfig().shutdown()
+
+
+async def _task_watchdog(
+    critical_tasks: list[asyncio.Task],
+    shutdown_event: asyncio.Event,
+    poll_interval: float = 10.0,
+) -> None:
+    """Watch critical tasks and trigger a non-zero exit if any die unexpectedly.
+
+    When a critical streaming task dies outside of a normal shutdown, the main
+    process stays alive (blocked on shutdown_event.wait) and Docker never sees
+    a failure exit code — so 'restart: on-failure' never fires.  This watchdog
+    detects that situation, logs the dead tasks, then calls sys.exit(1) so
+    Docker will restart the container.
+    """
+    while not shutdown_event.is_set():
+        await asyncio.sleep(poll_interval)
+        if shutdown_event.is_set():
+            break
+        dead = [t for t in critical_tasks if t.done()]
+        if dead:
+            for t in dead:
+                exc = t.exception() if not t.cancelled() else None
+                logger.error(
+                    f"Critical task '{t.get_name()}' died unexpectedly "
+                    f"(exception: {exc}). Triggering restart.",
+                    extra={"notification": True, "error_code": "hive_monitor_task_failure"},
+                )
+            shutdown_event.set()
+            # Brief pause so the logger can flush the error before we exit
+            await asyncio.sleep(2)
+            sys.exit(1)
 
 
 async def _background_sync(lnd_client: LNDClient) -> None:
