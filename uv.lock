@@ -226,16 +226,16 @@ wheels = [
 
 [[package]]
 name = "binance-connector"
-version = "3.13.0"
+version = "3.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pycryptodome" },
     { name = "requests" },
     { name = "websocket-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1f/45/efbb746654594ed1ed1a067c36444db638bea054002c1067ddbb7913703b/binance_connector-3.13.0.tar.gz", hash = "sha256:841a589b81c5eda874b54143a0d436d02ecdf81dcff1a6e23b6380662099c004", size = 66834, upload-time = "2026-04-30T05:32:51.792Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f2/cf/746736941f3b2e9a6f97e38e58675df147500e28563ad4b0f41e762a2442/binance-connector-3.12.0.tar.gz", hash = "sha256:33bf03052e2f1be3ced1196a36c51a736a50aaae07f7922640c7ebc017c6011f", size = 64894, upload-time = "2025-01-13T11:35:54.228Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/21/a95e32d3e1fb7dda85bc69c1a2e2076f16a3c581fb9bfbac88c64f245967/binance_connector-3.13.0-py3-none-any.whl", hash = "sha256:a29cd50c75efa3f1b9bc6355b5fdcacc9eae965655aa613562cf3d7c056247a5", size = 74551, upload-time = "2026-04-30T05:32:50.207Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/a6/000219c5417c5ab5d5b85d6d62a9fb8c000dbd97aca2596b3ed9ceb7abf1/binance_connector-3.12.0-py3-none-any.whl", hash = "sha256:b6706426acd2089f6cd3cb1516a8c47210805eac1f855bc8574b01f52cab218b", size = 74363, upload-time = "2025-01-13T11:35:52.954Z" },
 ]
 
 [[package]]
@@ -3719,7 +3719,7 @@ wheels = [
 
 [[package]]
 name = "v4vapp-backend-v2"
-version = "2.8.0"
+version = "2.8.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiocache" },

@@ -32,7 +32,7 @@ async def test_crypto_conversion(mocker):
     print(json.dumps(conv.c_dict, indent=2))
     print(conv.conversion)
     print(conv.conversion.source)
-    print(conv.quote.log_data)
+    print(conv.quote.log_extra)
 
 
 @pytest.mark.parametrize(

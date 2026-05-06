@@ -372,8 +372,8 @@ class QuoteResponse(BaseModel):
         return (datetime.now(tz=timezone.utc) - fd).total_seconds()
 
     @property
-    def log_data(self) -> Dict[str, Any]:
-        return self.model_dump(exclude={"raw_response"}, exclude_none=True)
+    def log_extra(self) -> Dict[str, Any]:
+        return {"quote_response": self.model_dump(exclude={"raw_response"}, exclude_none=True)}
 
 
 class AllQuotes(BaseModel):
@@ -607,8 +607,8 @@ class AllQuotes(BaseModel):
         for quote in self.quotes.values():
             if quote.error:
                 logger.error(
-                    f"{ICON} Error in quote from {quote.source}: {quote.error}",
-                    extra={"notification": False, **quote.log_data},
+                    f"{ICON} Error in quote from {quote.source}: {quote.error[:20]}",
+                    extra={"notification": False, **quote.log_extra},
                 )
         self.get_one_quote()
         self.fetch_date = self.quote.fetch_date
@@ -1015,7 +1015,7 @@ class CoinGecko(QuoteService):
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
                 error=message,
-                error_details={"exception": ex},
+                error_details={"exception": str(ex), "exception_type": type(ex).__name__},
             )
 
 
@@ -1102,7 +1102,7 @@ class Binance(QuoteService):
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
                 error=message,
-                error_details={"exception": ex},
+                error_details={"exception": str(ex), "exception_type": type(ex).__name__},
             )
 
 
@@ -1164,7 +1164,7 @@ class CoinMarketCap(QuoteService):
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
                 error=message,
-                error_details={"exception": ex},
+                error_details={"exception": str(ex), "exception_type": type(ex).__name__},
             )
 
 
@@ -1200,7 +1200,7 @@ class HiveInternalMarket(QuoteService):
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
                 error=message,
-                error_details={"exception": ex},
+                error_details={"exception": str(ex), "exception_type": type(ex).__name__},
             )
 
 
