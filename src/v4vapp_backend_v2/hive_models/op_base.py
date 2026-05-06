@@ -8,7 +8,11 @@ from pymongo.asynchronous.collection import AsyncCollection
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    check_time_diff,
+    format_time_delta,
+    snake_case,
+)
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids
 from v4vapp_backend_v2.hive_models.op_base_extras import (
     OP_TRACKED,
@@ -424,3 +428,42 @@ class OpBase(TrackedBaseModel):
         for the transaction. If the subclass has a `conv` object
         """
         raise NotImplementedError("Subclasses must implement the update_conv method.")
+
+    @classmethod
+    async def get_last_good_block(cls) -> int:
+        """
+        Asynchronously retrieves the last good block.
+
+        This function retrieves the last good block by getting the dynamic global properties
+        from the Hive client and returning the head block number minus 30.
+
+        Returns:
+            int: The last good block.
+        """
+        from v4vapp_backend_v2.config.setup import logger
+
+        try:
+            ans = await cls.collection().find_one(filter={}, sort=[("block_num", -1)])
+            if ans and "block_num" in ans:
+                time_diff = check_time_diff(ans["timestamp"])
+                logger.info(
+                    f"Last good block: {ans['block_num']:,} {ans['timestamp']} {time_diff} ago",
+                    extra={"db": ans},
+                )
+                last_good_block = int(ans["block_num"])
+            else:
+                try:
+                    hive = Hive()
+                    global_properties = hive.get_dynamic_global_properties()
+                    if not global_properties:
+                        raise Exception("Could not get global properties from hive client")
+                    else:
+                        last_good_block = global_properties["head_block_number"]
+                except Exception as e:
+                    logger.exception(f"{e}", extra={"notification": True, "exc_info": True})
+                    last_good_block = 103468945
+            return last_good_block
+
+        except Exception as e:
+            logger.exception(f"{e}", extra={"notification": True, "exc_info": True})
+            raise e

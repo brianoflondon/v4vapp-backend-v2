@@ -324,44 +324,6 @@ async def balance_server_hbd_level(transfer: Transfer | None = None) -> None:
         )
 
 
-async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
-    """
-    Asynchronously retrieves the last good block.
-
-    This function retrieves the last good block by getting the dynamic global properties
-    from the Hive client and returning the head block number minus 30.
-
-    Returns:
-        int: The last good block.
-    """
-    try:
-        ans = await OpBase.collection().find_one(filter={}, sort=[("block_num", -1)])
-        if ans and "block_num" in ans:
-            time_diff = check_time_diff(ans["timestamp"])
-            logger.info(
-                f"{ICON} Last good block: {ans['block_num']:,} {ans['timestamp']} {time_diff} ago",
-                extra={"db": ans},
-            )
-            last_good_block = int(ans["block_num"])
-        else:
-            try:
-                hive = get_hive_client()
-                global_properties = hive.get_dynamic_global_properties()
-                if not global_properties:
-                    raise Exception("Could not get global properties from hive client")
-                else:
-                    last_good_block = global_properties["head_block_number"]
-            except Exception as e:
-                logger.exception(f"{ICON} {e}", extra={"notification": True, "exc_info": True})
-                last_good_block = 103468945
-        return last_good_block
-
-    except Exception as e:
-        logger.exception(f"{ICON} {e}", extra={"notification": True, "exc_info": True})
-        raise e
-    return 0
-
-
 async def witness_first_run(watch_witness: str) -> ProducerReward | None:
     """
     Asynchronously retrieves the last good block produced by a specified witness
@@ -580,7 +542,7 @@ async def all_ops_loop(
 
     hive_client = get_hive_client(keys=InternalConfig().config.hive_config.memo_keys)
     if start_block == 0:
-        last_good_block = await get_last_good_block() + 1
+        last_good_block = await OpBase.get_last_good_block() + 1
     elif start_block == -1:
         global_properties: Dict = hive_client.get_dynamic_global_properties()  # type: ignore
         last_good_block = global_properties.get("head_block_number", 97112440)
