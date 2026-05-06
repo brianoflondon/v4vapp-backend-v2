@@ -12,7 +12,10 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
+from v4vapp_backend_v2.conversion.exchange_protocol import (
+    BaseExchangeAdapter,
+    get_exchange_adapter,
+)
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -30,6 +33,29 @@ from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
+
+
+def magi_exchange_adapter(provider_name: str = "magi_vsc") -> BaseExchangeAdapter:
+    """
+    Helper function to get the exchange adapter for Magi VSC transfers.
+
+    This centralizes the logic for retrieving the exchange adapter based on the
+    provider name specified in the config, with error handling to log any issues
+    during initialization.
+
+    Args:
+        provider_name: The name of the exchange provider to retrieve (default: "magi_vsc").
+
+    Returns:
+        The initialized exchange adapter instance, or None if initialization fails.
+    """
+    try:
+        return get_exchange_adapter(provider_name=provider_name)
+    except Exception as e:
+        logger.error(f"{ICON} Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
+        raise Exception(
+            f"Configuration Error, {provider_name} must be configured correctly. Failed to initialize exchange adapter for provider {provider_name}: {e}"
+        )
 
 
 async def process_magi_btc_transfer_event(
@@ -288,13 +314,7 @@ async def magisats_outbound(
         "Net fee is less than the original fee. Check the amounts in the invoice and VSC payload."
     )
 
-    try:
-        default_exchange_adapter = get_exchange_adapter()
-    except Exception as e:
-        logger.error(f"{ICON} Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
-        return []
-
-    exchange_sub = default_exchange_adapter.exchange_name
+    exchange_sub = magi_exchange_adapter().exchange_name
 
     # ──────────────────────────────────────────────────────────────────────
     # 1. Server Lightning → Magi Exchange (forward the customer portion)
@@ -469,13 +489,7 @@ async def magisats_inbound(
         f"{ICON} Net fee cannot be negative. Check the amounts in the invoice and VSC payload."
     )
 
-    try:
-        default_exchange_adapter = get_exchange_adapter()
-    except Exception as e:
-        logger.error(f"{ICON} Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
-        return []
-
-    exchange_sub = default_exchange_adapter.exchange_name
+    exchange_sub = magi_exchange_adapter().exchange_name
     processed_memo = ProcessedMemo(vsc_payload.memo)
 
     # Takes the cust_id (i.e. the destination) from either the sender of the transaction or the memo if there is one.
@@ -569,15 +583,7 @@ async def magisats_fee_ledger_entry(
         processed_memo: The processed memo object containing the short memo.
     """
     if not exchange_sub:
-        try:
-            default_exchange_adapter = get_exchange_adapter()
-        except Exception as e:
-            logger.error(
-                f"{ICON} Failed to initialize exchange adapter: {e}", extra={"error": str(e)}
-            )
-            return []
-
-        exchange_sub = default_exchange_adapter.exchange_name
+        exchange_sub = magi_exchange_adapter().exchange_name
 
     if not quote:
         quote = await MagiBTCTransferEvent.nearest_quote(timestamp=magi_transfer.timestamp)
