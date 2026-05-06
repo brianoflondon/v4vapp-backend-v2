@@ -241,7 +241,7 @@ class OpBase(TrackedBaseModel):
 
     @property
     def short_id_p(self) -> str:
-        return self.short_id
+        return self.short_id  # Type: ignore
 
     @classmethod
     def name(cls) -> str:

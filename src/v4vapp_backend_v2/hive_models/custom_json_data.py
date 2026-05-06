@@ -10,7 +10,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snak
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
-from v4vapp_backend_v2.hive_models.vsc_json_data import VSCActions, VSCTransfer
+from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall
 
 """
 This module defines a custom Pydantic model `KeepsatsTransfer` and related utilities for handling
@@ -86,7 +86,7 @@ class KeepsatsTransfer(BaseModel):
         False, description="If True, this is a notification rather than a transfer"
     )
     parent_id: str | None = Field(
-        None, description="The short ID of the parent transaction, if applicable"
+        None, description="The group_id of the parent transaction, if applicable"
     )
     hive: Decimal | None = Field(
         default=None,
@@ -187,6 +187,28 @@ class KeepsatsTransfer(BaseModel):
         )
         return f"⏩️{self.from_account} sent {amount} to {self.to_account} via KeepSats"
 
+
+    @property
+    def is_watched(self) -> bool:
+        """
+        Determines if this KeepsatsTransfer should be watched based on the involved accounts.
+
+        Returns:
+            bool: True if the transfer should be watched, False otherwise.
+        """
+        server_id = InternalConfig().server_id
+        if self.from_account == server_id:
+            return True
+        if self.to_account == server_id:
+            return True
+        watch_users = InternalConfig().config.hive_config.watch_users
+        if self.to_account in watch_users:
+            return True
+        # Check if the transfer is from a watched user
+        if self.from_account in watch_users:
+            return True
+        return False
+
     def lightning_invoice_in_memo(self) -> bool:
         """
         Checks if the memo contains a lightning invoice.
@@ -275,7 +297,7 @@ class KeepsatsTransfer(BaseModel):
         return answer
 
 
-CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]
+CustomJsonData = Union[Any, KeepsatsTransfer, VSCCall]
 
 # This dictionary maps custom JSON operation IDs to their corresponding Pydantic models.
 # Whilst the v4vapp_dev ones could be generated from the custom_json_prefix, we hardcode them here for better clarity
@@ -288,16 +310,17 @@ CUSTOM_JSON_IDS: Dict[str, Type[BaseModel]] = {
     "v4vapp_notification": KeepsatsTransfer,
     "v4vapp_staging_transfer": KeepsatsTransfer,
     "v4vapp_staging_notification": KeepsatsTransfer,
-    "vsc.transfer": VSCTransfer,
-    "vsc.withdraw": VSCTransfer,
-    "vsc.withdraw_hbd": VSCTransfer,
-    "vsc.deposit": VSCTransfer,
-    "vsc.deposit_hbd": VSCTransfer,
-    "vsc.stake": VSCTransfer,
-    "vsc.stake_hbd": VSCTransfer,
-    "vsc.unstake": VSCTransfer,
-    "vsc.unstake_hbd": VSCTransfer,
-    "vsc.actions": VSCActions,
+    # "vsc.transfer": VSCTransfer,
+    # "vsc.withdraw": VSCTransfer,
+    # "vsc.withdraw_hbd": VSCTransfer,
+    # "vsc.deposit": VSCTransfer,
+    # "vsc.deposit_hbd": VSCTransfer,
+    # "vsc.stake": VSCTransfer,
+    # "vsc.stake_hbd": VSCTransfer,
+    # "vsc.unstake": VSCTransfer,
+    # "vsc.unstake_hbd": VSCTransfer,
+    # "vsc.actions": VSCActions,
+    "vsc.call": VSCCall,
 }
 
 

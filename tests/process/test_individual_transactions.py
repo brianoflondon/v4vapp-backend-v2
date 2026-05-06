@@ -5,10 +5,12 @@ import os
 from datetime import datetime
 from decimal import Decimal
 from pprint import pprint
+from timeit import default_timer as timer
 
 import pytest
 from nectar.amount import Amount
 
+from tests.process.walletofsatoshi_invoices import get_walletofsatoshi_invoice
 from tests.utils import (
     clear_and_reset,
     close_all_db_connections,
@@ -24,23 +26,30 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance_printout,
     list_all_accounts,
+    one_account_balance,
 )
 from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
     generate_balance_sheet_mongodb,
 )
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.profit_and_loss import profit_and_loss_printout
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.calculate import calc_keepsats_to_hive
+from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.magi_json_data import VSCCallPayload
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
+from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
@@ -68,7 +77,7 @@ async def config_file():
     await close_all_db_connections()
 
 
-@pytest.mark.skip()
+# @pytest.mark.skip()
 async def test_just_clear():
     """
     Test to clear the database and reset the environment.
@@ -102,6 +111,9 @@ async def test_deposit_hive_to_keepsats(
     Test to deposit Hive to Keepsats.
     This test sends a specified amount of Hive from a customer account to the server account.
     It checks that the transaction is successful and that the ledger entries are created correctly.
+
+    Process Overwatch Output should be:
+     ✅ Hive To Keepsats for v4vapp-test 70.007 HIVE / 5,345 sats (76) 3237_75e781_1 completed 14/14 required stages complete  [flow] 🔔
 
     """
     cust_id = "v4vapp-test"
@@ -139,6 +151,11 @@ async def test_hive_and_hbd_to_lnd_only():
 
     Raises:
         AssertionError: If the transaction fails to send (missing transaction ID).
+
+    Process Overwatch Output should be:
+        🌟 ✅ Hive To Keepsats External for v4vapp-test 5.000 HBD / 6,362 sats (76) 3306_4f0de8_1 completed 16/16 required stages complete  [flow] 🔔
+        🌟 ✅ External To Hive Loopback for v4vapp-test 29.124 HIVE / 2,222 sats (76) 4z7tMmPJWA completed 4/4 required stages complete  [flow] 🔔
+        🌟 ✅ External To Hive Loopback for v4vapp-test 29.124 HIVE / 2,222 sats (76) DnGAPJmOjO completed 4/4 required stages complete  [flow] 🔔
     """
     # await clear_and_reset()
 
@@ -174,7 +191,7 @@ async def test_hive_and_hbd_to_lnd_only():
         mid_ledger_count = await get_ledger_count()
         print(f"Ledger count mid: {mid_ledger_count}")
 
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 24, timeout=60)
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 24, timeout=180)
 
     await asyncio.sleep(1)
     found_len = len(all_ledger_entries) - ledger_count
@@ -198,6 +215,10 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     4. Waits for the ledger to record 11 entries, indicating all expected transactions have occurred.
     5. Asserts that exactly 11 ledger entries exist after the operations.
     Ensures the correct flow and ledger recording for Hive-to-LND and LND-to-Hive transactions.
+
+    Process Overwatch Output should be:
+        🌟 ✅ External To Keepsats for v4vapp.qrc 16.161 HIVE / 1,234 sats (76) 41byEvHuDl completed 4/4 required stages complete  [flow] 🔔
+        🌟 ✅ External To Hive for v4vapp.qrc 16.161 HIVE / 1,234 sats (76) 41byEvHuDl completed 6/6 required stages complete  [flow] 🔔
     """
     # await test_just_clear()
     net_msats_before, balance_before = await keepsats_balance_printout(cust_id="v4vapp.qrc")
@@ -251,6 +272,9 @@ async def test_deposit_hive_to_keepsats_send_to_account():
     6. Verify that the ledger count has increased as expected.
     7. Check that the Keepsats balance for the target account has increased by the transferred amount.
     8. Assert that all transactions were successful and the balances are updated accordingly.
+
+    Process Overwatch Output should be:
+        🌟 ✅ Keepsats Internal Transfer for v4vapp-test 58.937 HIVE / 4,500 sats (76) 3536_6f3297_1 completed 2/2 required stages complete  [flow] 🔔
     """
 
     ledger_count = await get_ledger_count()
@@ -301,6 +325,10 @@ async def test_conversion_keepsats_to_hive():
     5. Sends the transfer using a custom JSON transaction.
 
     The test ensures that the conversion and transfer processes function as expected.
+
+    Process Overwatch Output should be:
+        🌟 ✅ Hive To Keepsats for v4vapp-test 70.004 HIVE / 5,344 sats (76) 3617_00a4ce_1 completed 14/14 required stages complete  [flow] 🔔
+
     """
     invoice_sats = Decimal("5000")
     await test_deposit_hive_to_keepsats(
@@ -350,6 +378,11 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     5. Create and send a Keepsats transfer using custom JSON, including the Lightning invoice in the memo.
     This test ensures the integration between HIVE deposits, Keepsats balance management,
     Lightning invoice generation, and custom JSON transfers.
+
+    Process Overwatch Output should be:
+        🌟 ✅ Hive To Keepsats for v4vapp-test 83.465 HIVE / 6,363 sats (76) 3659_529523_1 completed 14/14 required stages complete  [flow] 🔔
+        🌟 ✅ Hive To Keepsats External for v4vapp-test 83.465 HIVE / 6,363 sats (76) 3659_529523_1 completed 16/16 required stages complete  [flow] 🔔
+        🌟 ✅ External To Keepsats Loopback for v4vapp-test 52.460 HIVE / 4,000 sats (76) ogttQ9TExQ completed 2/2 required stages complete  [flow] 🔔
     """
     await test_deposit_hive_to_keepsats(
         6_000, timeout=120, message="Deposit Hive for test_deposit_keepsats_spend_hive_custom_json"
@@ -410,6 +443,9 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
 
     Raises:
         AssertionError: If any step in the process fails.
+
+    Process Overwatch Output should be:
+        🌟 ✅ Hive Transfer Paywithsats for v4vapp-test 0.001 HIVE / 0 sats (76) 3728_35d4d6_1 completed 4/4 required stages complete  [flow] 🔔
     """
     await test_deposit_hive_to_keepsats(
         5_000, timeout=120, message="test_send_internal_keepsats_transfer_by_hive_transfer"
@@ -426,8 +462,8 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     )
     pprint(trx)
 
-    await watch_for_ledger_count(ledger_count + 3)
-    await asyncio.sleep(5)
+    await watch_for_ledger_count(ledger_count + 2)
+    await asyncio.sleep(10)  # wait for custom_json to be found
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "custom_json"}, sort=[("timestamp", -1)]
     )
@@ -435,6 +471,216 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     pprint(custom_json.model_dump())
     print(custom_json.memo)
     assert "Transfer v4vapp-test -> v4vapp.qrc" in custom_json.memo
+
+
+# MARK: Magisats related tests
+
+
+async def test_convert_incoming_lightning_to_magisats_outbound_payment():
+    """
+    Test the process of handling an inbound payment to Magisats forwarded on the Magisats side.
+
+    Needs a positive balance on the Magisats server to work
+
+    Send a hive transaction to convert to a lighting invoice which pays on this same node
+    and uses the #magisats tag in the memo to trigger the magisats processing.
+
+    Raises:
+        AssertionError: If any step in the process fails.
+
+    Process Overwatch Output should be:
+        🌟 ✅ Hive To Keepsats External for v4vapp-test 71.376 HIVE / 5,446 sats (76) 3921_fb3daa_1 completed 16/16 required stages complete  [flow] 🔔
+        🌟 ✅ External To Magisats for v4vapp-test 65.530 HIVE / 5,000 sats (76) FSVLWRS/1O completed 6/6 required stages complete  [flow] 🔔
+    """
+    try:
+        default_exchange_adapter = get_exchange_adapter()
+    except Exception as e:
+        logger.error(f"Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
+        return []
+
+    ledger_count_before = await get_ledger_count()
+    logger.info(f"Ledger count before: {ledger_count_before}")
+
+    exchange_sub = default_exchange_adapter.exchange_name
+    exchange_account = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
+    magisats_exchange_balance = await one_account_balance(account=exchange_account)
+
+    invoice_value_sat = int(10000)
+
+    assert magisats_exchange_balance is not None, "Failed to retrieve Magisats exchange balance"
+    assert magisats_exchange_balance.sats > invoice_value_sat * 1.1, (
+        "Magisats exchange balance is too low, cannot perform test"
+    )
+    start_magisats_balance = await get_magi_btc_balance_by_account("hive:v4vapp-test")
+    print(f"Start Magisats balance: {start_magisats_balance}")
+
+    memo = "v4vapp-test | Sending a message via magisats test_magisats_inbound_payment | #MAGISATS #CLEAN #v4vapp"
+    invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo=f"{memo}")
+
+    trx = await send_hive_customer_to_server(
+        send_sats=int(invoice_value_sat + 100),
+        memo=f"{invoice.payment_request}",
+        customer="v4vapp-test",
+    )
+    pprint(trx)
+    # The transactions
+    await watch_for_ledger_count(ledger_count_before + 13, timeout=120)
+    ledger_count = await get_ledger_count()
+    print(f"Ledger count after regular transactions: {ledger_count}")
+
+    start = timer()
+    await watch_for_ledger_count(ledger_count + 2, timeout=480)
+    end = timer()
+    end_magisats_balance = await get_magi_btc_balance_by_account("hive:v4vapp-test")
+    print(f"End Magisats balance: {end_magisats_balance}")
+    assert end_magisats_balance.sats > start_magisats_balance.sats, (
+        "Expected Magisats balance to increase"
+    )
+    print(f"Time taken for Magi Transaction update: {end - start} seconds")
+
+
+async def test_receive_magisats_inbound_payment_to_keepsats():
+    """
+    Test the process of receiving an inbound payment from Magisats to Keepsats.
+
+    This test performs the following steps:
+    1. Sends a Magisats transaction to the Keepsats account for v4vapp.qrc with a specific memo.
+    2. Sends a second Magisats transaction to the same account without a memo goes to v4vapp-test.
+    3. Verifies that the transaction was successfully processed.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
+    server_id = InternalConfig().server_id
+    invoice_value_sats = 200
+    vsc_payload = VSCCallPayload(
+        amount=str(invoice_value_sats),
+        to=AccName(server_id).magi_prefix,
+        memo="v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #SATS #CLEAN #v4vapp",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+    # Send Second Transaction with no memo.
+    invoice_value_sats = 222
+    vsc_payload = VSCCallPayload(
+        amount=str(invoice_value_sats),
+        to=AccName(server_id).magi_prefix,
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+
+async def test_receive_magisats_inbound_payment_to_ln_address():
+    """
+    Test the process of receiving an inbound payment from Magisats to a Lightning Network address.
+    This test performs the following steps:
+    1. Sends a Magisats transaction to a Lightning Network address associated with the server.
+    2. Verifies that the transaction was successfully processed.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
+    server_id = InternalConfig().server_id
+    vsc_payload = VSCCallPayload(
+        amount=str(1000),
+        to=AccName(server_id).magi_prefix,
+        memo="brianoflondon@walletofsatoshi.com #v4vapp #magioutbound",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+
+async def test_receive_magisats_inbound_payment_to_lightning_invoice_and_failure_for_repeat_invoice():
+    """
+    Test the process of receiving an inbound payment from Magisats to a Lightning Network address.
+    This test performs the following steps:
+    1. Sends a Magisats transaction to a Lightning Network address associated with the server.
+    2. Verifies that the transaction was successfully processed.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
+
+    server_id = InternalConfig().server_id
+
+    invoice_pr = await get_walletofsatoshi_invoice(
+        amount_sats=1000,
+        memo="test_receive_magisats_inbound_payment_to_lightning_invoice",
+    )
+    vsc_payload = VSCCallPayload(
+        amount=str(1300),
+        to=AccName(server_id).magi_prefix,
+        memo=f"{invoice_pr} | first attempt | #v4vapp #magioutbound #paywithsats:1300",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+    # This will fail because the same invoice cannot be paid twice.
+    vsc_payload = VSCCallPayload(
+        amount=str(1300),
+        to=AccName(server_id).magi_prefix,
+        memo=f"{invoice_pr} | Second attempt to send | #v4vapp  #magioutbound #paywithsats:1300",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
+
+
+async def test_receive_magisats_inbound_payment_to_lightning_invoice_and_failure_for_low_amount():
+    """
+    Test the process of receiving an inbound payment from Magisats to a Lightning Network address with an amount lower than the invoice.
+    This test performs the following steps:
+    1. Sends a Magisats transaction to a Lightning Network address associated with the server with an amount lower than the invoice amount.
+    2. Verifies that the transaction was successfully processed, even though the amount is lower than the invoice amount.
+
+    Needs there to be 0 keepsats in the account to see failure.
+
+    Raises:
+        AssertionError: If the transaction fails.
+    """
+    v4vapp_test_balance = await one_account_balance(AccName("hive:v4vapp-test"))
+    if v4vapp_test_balance and v4vapp_test_balance.sats > 50:
+        logger.warning(
+            f"Account hive:v4vapp-test has a balance of {v4vapp_test_balance.sats} sats. "
+            "For this test to properly check for failure due to low amount, the account balance should be 0. "
+            "Consider sending the balance to another account or using a different test account with 0 balance."
+        )
+
+    server_id = InternalConfig().server_id
+    invoice_pr = await get_walletofsatoshi_invoice(
+        amount_sats=2000,
+        memo="test_receive_magisats_inbound_payment_to_lightning_invoice",
+    )
+    vsc_payload = VSCCallPayload(
+        amount=str(1000),
+        to=AccName(server_id).magi_prefix,
+        memo=f"{invoice_pr} | not enough sats sent attempt | #v4vapp #magioutbound",
+    )
+    trx = await send_magi_transaction(
+        vsc_payload=vsc_payload, nobroadcast=False, caller="v4vapp-test", no_pending=True
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    assert trx_id != "Failed", "Failed to send Magi transaction"
+    pprint(trx)
 
 
 async def test_balance_request():

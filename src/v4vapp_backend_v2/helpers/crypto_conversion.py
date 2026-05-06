@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, computed_field, field_validator
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
+from v4vapp_backend_v2.helpers.service_fees import calculate_fee_msats, limit_test
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 
@@ -661,7 +661,7 @@ class CryptoConversion(BaseModel):
                 quantizer = Decimal("0.0000000001")
                 self.hive = hive_val.quantize(quantizer, rounding=ROUND_HALF_UP)
 
-            self.msats_fee = msats_fee(self.msats)
+            self.msats_fee = calculate_fee_msats(self.msats)
         except ZeroDivisionError as e:
             # Handle division by zero if the quote is not available
             logger.warning(
@@ -703,6 +703,7 @@ class CryptoConversion(BaseModel):
             Currency.HBD: float(self.hbd),
             Currency.USD: float(self.usd),
             Currency.SATS: float(self.sats),
+            Currency.MAGISATS: float(self.sats),
             Currency.BTC: float(self.btc),
             Currency.MSATS: float(self.msats),
             "sats_hive": float(self.quote.sats_hive_p),  # type: ignore

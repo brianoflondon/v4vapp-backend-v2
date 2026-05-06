@@ -1,0 +1,750 @@
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import List
+
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    AssetAccount,
+    LiabilityAccount,
+    RevenueAccount,
+)
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
+from v4vapp_backend_v2.actions.tracked_models import ReplyType
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.conversion.exchange_protocol import (
+    BaseExchangeAdapter,
+    get_exchange_adapter,
+)
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
+from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    ProcessedMemo,
+    received_lightning_message,
+)
+from v4vapp_backend_v2.hive.hive_extras import get_verified_hive_client, send_custom_json
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
+from v4vapp_backend_v2.hive_models.op_base_extras import get_hive_block_explorer_link
+from v4vapp_backend_v2.magi.magi_classes import ICON, MagiBTCTransferEvent
+from v4vapp_backend_v2.magi.magi_general import send_magi_transaction
+from v4vapp_backend_v2.models.invoice_models import Invoice
+from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
+
+
+def magi_exchange_adapter(provider_name: str = "magi_vsc") -> BaseExchangeAdapter:
+    """
+    Helper function to get the exchange adapter for Magi VSC transfers.
+
+    This centralizes the logic for retrieving the exchange adapter based on the
+    provider name specified in the config, with error handling to log any issues
+    during initialization.
+
+    Args:
+        provider_name: The name of the exchange provider to retrieve (default: "magi_vsc").
+
+    Returns:
+        The initialized exchange adapter instance, or None if initialization fails.
+    """
+    try:
+        return get_exchange_adapter(provider_name=provider_name)
+    except Exception as e:
+        logger.error(f"{ICON} Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
+        raise Exception(
+            f"Configuration Error, {provider_name} must be configured correctly. Failed to initialize exchange adapter for provider {provider_name}: {e}"
+        )
+
+
+async def process_magi_btc_transfer_event(
+    magi_transfer: MagiBTCTransferEvent,
+) -> List[LedgerEntry]:
+    """
+    Route a Magi BTC transfer event to the correct accounting handler.
+
+    Ensures conversion rates are populated, then iterates over the watched custom JSON
+    operations attached to the event. For each VSC "transfer" action:
+
+    - If the server is the **caller** (outbound), dispatches to `magisats_outbound`.
+      Self-transfers (caller == recipient) are skipped with a warning.
+    - If the server's Magi address is the **recipient** (inbound), dispatches to
+      `magisats_inbound`.
+
+    Args:
+        magi_transfer: The on-chain Magi BTC transfer event to process.
+
+    Returns:
+        List of `LedgerEntry` objects created by the handler, or an empty list if
+        no matching transfer was found or an error occurred.
+    """
+    logger.info(
+        f"{ICON} Processing Magi BTC transfer event: {magi_transfer.short_id} {magi_transfer.log_str}"
+    )
+
+    if not magi_transfer.conv or magi_transfer.conv.is_unset():
+        quote = await MagiBTCTransferEvent.nearest_quote(timestamp=magi_transfer.timestamp)
+        await magi_transfer.update_conv(quote=quote)
+
+    server_id = InternalConfig().server_id
+    ledger_entries = []
+
+    try:
+        for custom_json in magi_transfer.custom_jsons or []:
+            if custom_json.is_watched:
+                vsc_call = VSCCall.model_validate(custom_json.json_data)
+                if isinstance(vsc_call, VSCCall) and vsc_call.action == "transfer":
+                    vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
+                    # Outbound payment from the server to Magi.
+                    if vsc_call.caller == f"hive:{server_id}":
+                        if vsc_payload.to == vsc_call.caller:
+                            logger.warning(
+                                f"{ICON} Skipping Magi transfer event {magi_transfer.short_id} with self-transfer in custom JSON {custom_json.short_id}",
+                                extra={"notification": False, **vsc_call.log_extra},
+                            )
+                            continue
+                        logger.info(
+                            f"{ICON} Found outgoing VSC transfer call from {server_id} in custom JSON {magi_transfer.short_id}",
+                            extra={**vsc_call.log_extra},
+                        )
+                        ledger_entries = await magisats_outbound(
+                            magi_transfer=magi_transfer, vsc_call=vsc_call
+                        )
+                    if vsc_payload.to == AccName(server_id).magi_prefix:
+                        logger.info(
+                            f"{ICON} Found incoming transfer to {server_id} in custom JSON {magi_transfer.short_id}",
+                            extra={**vsc_call.log_extra},
+                        )
+                        ledger_entries = await magisats_inbound(
+                            magi_transfer=magi_transfer, vsc_call=vsc_call
+                        )
+    except AssertionError as e:
+        logger.error(
+            f"{ICON} Assertion error while processing Magi BTC transfer event {magi_transfer.short_id}: {e}",
+            extra={"error": str(e), **magi_transfer.log_extra},
+        )
+
+    except Exception as e:
+        logger.error(
+            f"{ICON} Unexpected error while processing Magi BTC transfer event {magi_transfer.short_id}: {e}",
+            extra={"error": str(e), **magi_transfer.log_extra},
+        )
+
+    return ledger_entries
+
+
+# MARK: FORWARD Magisats
+
+
+async def forward_magisats(invoice: Invoice) -> None:
+    """
+    Forward sats to a customer's Magi address after a Lightning invoice is paid.
+
+    Called when a Lightning invoice tagged `#magisats` is settled. Computes the net
+    amount to forward after deducting the fee (from `fixed_quote` if present, otherwise
+    from the invoice's conversion), constructs a `VSCCallPayload`, and broadcasts a
+    Magi VSC transfer transaction on-chain via `send_magi_transaction`.
+
+    The fee is embedded in the payload as `msats_fee` and carried forward to
+    `magisats_outbound` (via `process_magi_btc_transfer_event`) for accounting once
+    the on-chain VSC transfer is observed.
+
+    Args:
+        invoice: The settled Lightning invoice whose `cust_id` identifies the
+                 destination Magi account.
+
+    Returns:
+        None
+    """
+    logger.info(f"{ICON} Forwarding #magisats to the designated destination.")
+    msats_fee = None
+    fixed_quote = invoice.fixed_quote
+    if fixed_quote:
+        quote = fixed_quote.quote_response
+        msats_fee = fixed_quote.msats_fee
+    else:
+        quote = await Invoice.nearest_quote(timestamp=invoice.timestamp)
+
+    if not invoice.conv or invoice.conv.is_unset():
+        await invoice.update_conv(quote=quote)
+
+    if not invoice.conv or invoice.conv.is_unset():
+        logger.error(f"{ICON} Conversion details are missing for the invoice.")
+        return
+
+    if not msats_fee:
+        msats_fee = invoice.conv.msats_fee
+
+    amount_to_send_msats = Decimal(invoice.value_msat) - msats_fee
+    amount_to_send_sats = Decimal(amount_to_send_msats / Decimal(1000)).quantize(
+        Decimal("1."), rounding="ROUND_DOWN"
+    )
+    net_msats_fee = Decimal(invoice.value_msat) - amount_to_send_msats
+
+    logger.info(
+        f"{ICON} Amount to forward (after fees): {amount_to_send_sats:,.0f} sats "
+        f"fee: {net_msats_fee / 1000:.3f} sats {invoice.short_id}"
+    )
+
+    magi_to = AccName(invoice.cust_id).magi_prefix
+
+    memo = received_lightning_message(invoice.memo, amount_to_send_sats)
+
+    vsc_payload = VSCCallPayload(
+        amount=str(amount_to_send_sats),
+        to=magi_to,
+        parent_id=invoice.group_id_p,
+        msats_fee=str(net_msats_fee),
+        memo=memo,
+    )
+
+    trx = await send_magi_transaction(vsc_payload=vsc_payload, nobroadcast=False)
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+
+    invoice.add_reply(
+        reply_id=trx_id,
+        reply_type=ReplyType.MAGI_TRANSFER,
+        reply_msat=0,
+        reply_message=f"Sent {amount_to_send_sats:,.0f} sats to Magi with fee {net_msats_fee / 1000:.3f} sats. Transaction ID: {trx_id}",
+        reply_error=None,
+    )
+    await invoice.save()
+
+    logger.info(
+        f"{ICON} Forwarded {amount_to_send_sats:,.0f} sats to Magi for invoice {invoice.short_id} with trx_id: {trx_id}",
+        extra={"trx": trx, **vsc_payload.log_extra},
+    )
+    return
+
+
+# MARK: OUTBOUND Magisats
+
+
+async def magisats_outbound(
+    magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
+) -> List[LedgerEntry]:
+    """
+    Record accounting entries when the server sends sats outbound via a Magi VSC transfer.
+
+    Triggered when `process_magi_btc_transfer_event` detects an on-chain VSC "transfer"
+    whose **caller** is the server (i.e. the server initiated the transfer, typically
+    via `forward_magisats`). The original Lightning invoice is loaded via `parent_id`
+    to derive the true fee (received msats − forwarded msats).
+
+    Pre-condition (recorded earlier in the deposit handler):
+      - Debit:  External Lightning Payments (umbrel)   full received amount (e.g. 560 sats)
+      - Credit: VSC Liability (server_id)              full received amount
+
+    Accounting entries created here (double-entry, all amounts in MSATS):
+
+    1. MAGI_OUTBOUND — forward the customer portion:
+       - Debit:  VSC Liability (server_id)             amount_sent_msats  (e.g. 500,000 msats)
+       - Credit: Exchange Holdings (exchange_name)     amount_sent_msats
+         → Clears the forwarded portion of the liability; funds have left the system via Magi.
+
+    2. FEE_INCOME — retain the fee:
+       - Debit:  VSC Liability (server_id)             net_fee_msats      (e.g. 60,000 msats)
+       - Credit: Fee Income Magisats (exchange_name)   net_fee_msats
+         → net_fee = amount_received − amount_sent (must be >= the fee quoted in the payload).
+
+    Net effect:
+      - VSC Liability returns to zero.
+      - Exchange Holdings increases by `amount_sent_msats` (representing sats now in Magi).
+      - Revenue increases by `net_fee_msats`.
+
+    A non-accounting Hive `custom_json` notification is also broadcast to the customer.
+
+    Args:
+        magi_transfer: The on-chain Magi BTC transfer event (server as sender).
+        vsc_call:      The parsed VSC call from the watched custom JSON.
+
+    Returns:
+        List of the two `LedgerEntry` objects saved, or an empty list on error.
+    """
+    # Now we transfer the amount_to_send_sats to the
+    server_id = InternalConfig().server_id
+    vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
+    assert vsc_payload.amount, f"{ICON} Amount is missing in VSC payload"
+    assert magi_transfer.amount == Decimal(vsc_payload.amount), (
+        f"{ICON} Amount in VSC payload does not match Magi transfer event amount"
+    )
+    assert vsc_payload.msats_fee is not None, f"{ICON} MSATS fee is missing in VSC payload"
+
+    net_fee_original_msats = Decimal(vsc_payload.msats_fee)
+    amount_sent_msats = Decimal(magi_transfer.amount) * Decimal(1000)
+    ledger_entries_list = []
+
+    assert vsc_payload.parent_id, (
+        f"{ICON} Parent ID is missing in VSC payload for Magi transfer event"
+    )
+    original_event = await load_tracked_object(vsc_payload.parent_id)
+
+    if not original_event:
+        logger.error(
+            f"{ICON} Original event with group_id_p {vsc_payload.parent_id} not found for Magi transfer {magi_transfer.short_id}"
+        )
+        return []
+
+    if isinstance(original_event, Invoice):
+        amount_received_msats = Decimal(original_event.value_msat)
+        net_fee_msats = amount_received_msats - amount_sent_msats
+    elif isinstance(original_event, MagiBTCTransferEvent):
+        amount_received_msats = Decimal(magi_transfer.amount) * Decimal(1000)
+        net_fee_msats = Decimal(0)
+
+    else:
+        logger.error(
+            f"{ICON} Original event with group_id_p {vsc_payload.parent_id} is not an Invoice or MagiBTCTransferEvent for Magi transfer {magi_transfer.short_id}"
+        )
+        return []
+
+    # now send the fee to the fee account
+    quote = await MagiBTCTransferEvent.nearest_quote(timestamp=magi_transfer.timestamp)
+    fee_conv = CryptoConversion(
+        quote=quote,
+        conv_from=Currency.MSATS,
+        value=net_fee_msats,
+    ).conversion
+
+    assert net_fee_msats >= 0, (
+        "Net fee cannot be negative. Check the amounts in the invoice and VSC payload."
+    )
+    assert net_fee_msats >= net_fee_original_msats, (
+        "Net fee is less than the original fee. Check the amounts in the invoice and VSC payload."
+    )
+
+    exchange_sub = magi_exchange_adapter().exchange_name
+
+    # ──────────────────────────────────────────────────────────────────────
+    # 1. Server Lightning → Magi Exchange (forward the customer portion)
+    # ──────────────────────────────────────────────────────────────────────
+    ledger_type = LedgerType.MAGI_OUTBOUND
+    server_to_exchange = LedgerEntry(
+        cust_id=magi_transfer.cust_id,
+        short_id=magi_transfer.short_id,
+        ledger_type=ledger_type,
+        group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
+        op_type=magi_transfer.op_type,
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Magi Transfer out {magi_transfer.amount:,.0f} sats for {magi_transfer.cust_id}",
+        user_memo=vsc_payload.memo,
+        debit=LiabilityAccount(
+            name="VSC Liability",
+            sub=server_id,
+        ),
+        debit_unit=Currency.MSATS,
+        debit_amount=amount_sent_msats,  # using the rounded version
+        debit_conv=magi_transfer.conv,
+        credit=AssetAccount(name="Exchange Holdings", sub=exchange_sub),
+        credit_unit=Currency.MSATS,
+        credit_amount=amount_sent_msats,
+        credit_conv=magi_transfer.conv,
+        link=magi_transfer.link,
+    )
+    await server_to_exchange.save()
+    ledger_entries_list.append(server_to_exchange)
+
+    if net_fee_msats > Decimal(0):
+        # ──────────────────────────────────────────────────────────────────────
+        # 2. Fee income (the retained portion)
+        # ──────────────────────────────────────────────────────────────────────
+        ledger_type = LedgerType.FEE_INCOME
+        fee_ledger_entry = LedgerEntry(
+            cust_id=magi_transfer.cust_id,
+            short_id=magi_transfer.short_id,
+            ledger_type=ledger_type,
+            group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
+            op_type=magi_transfer.op_type,
+            timestamp=datetime.now(tz=timezone.utc),
+            description=f"Fee for Magisats {net_fee_msats / 1000:.3f} sats",
+            user_memo=vsc_payload.memo,
+            debit=LiabilityAccount(
+                name="VSC Liability",
+                sub=server_id,
+            ),
+            debit_unit=Currency.MSATS,
+            debit_amount=net_fee_msats,
+            debit_conv=fee_conv,
+            credit=RevenueAccount(name="Fee Income Magisats", sub=exchange_sub),
+            credit_unit=Currency.MSATS,
+            credit_amount=net_fee_msats,
+            credit_conv=fee_conv,
+            link=magi_transfer.link,
+        )
+        await fee_ledger_entry.save()
+        ledger_entries_list.append(fee_ledger_entry)
+
+    # Notification to Hive (non-accounting)
+    notification = KeepsatsTransfer(
+        from_account=server_id,
+        to_account=magi_transfer.cust_id,
+        msats=0,  # this is a notification ONLY
+        memo=vsc_payload.memo,
+        invoice_message=vsc_payload.memo,
+        notification=True,
+        parent_id=vsc_payload.parent_id,
+    )
+
+    hive_client, _ = await get_verified_hive_client()
+    trx = await send_custom_json(
+        json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
+        send_account=server_id,
+        active=True,
+        id=InternalConfig().config.hive_config.custom_json_prefix + "_notification",
+        hive_client=hive_client,
+    )
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+    logger.info(
+        f"{ICON} Notification {notification.log_str} (trx_id: {trx_id})",
+        extra={"notification": False, **notification.log_extra, "trx": trx},
+    )
+
+    return ledger_entries_list
+
+
+# MARK: INBOUND Magisats
+
+
+async def magisats_inbound(
+    magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
+) -> List[LedgerEntry]:
+    """
+    Record accounting entries when sats arrive at the server's Magi address from a customer.
+
+    Triggered when `process_magi_btc_transfer_event` detects an on-chain VSC "transfer"
+    whose **recipient** (`payload.to`) is the server's Magi-prefixed address. The fee is
+    taken from the event's conversion details (`magi_transfer.conv.msats_fee`).
+    The customer identity is resolved from the memo (if present) or falls back to
+    `magi_transfer.cust_id`.
+
+    Accounting entries created here (double-entry, all amounts in MSATS):
+
+    1. MAGI_INBOUND — receive the full inbound amount:
+       - Debit:  Exchange Holdings (exchange_name)     amount_sent_msats  (full received amount)
+       - Credit: VSC Liability (cust_id)               amount_sent_msats
+         → Records the sats arriving from the Magi exchange into our holdings, creating
+           a corresponding liability to the customer.
+
+    2. FEE_INCOME — retain the fee:
+       - Debit:  VSC Liability (cust_id)               net_fee_msats
+       - Credit: Fee Income Magisats (exchange_name)   net_fee_msats
+         → Reduces the customer liability by the fee amount and recognises it as revenue.
+
+    Net effect:
+      - Exchange Holdings increases by `amount_sent_msats`.
+      - VSC Liability to the customer is `net_to_customer_msats` (= received − fee).
+      - Revenue increases by `net_fee_msats`.
+
+    Follow-on Lightning payment (optional)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    `magi_transfer.paywithsats` is ``True`` when **all** of the following hold:
+
+    - `amount > 0`
+    - The memo contains ``#magioutbound`` (case-insensitive)
+
+    When `paywithsats` is True the function calls `follow_on_transfer()` to pay the
+    Lightning invoice or address found in the memo.  The follow-on payment handler
+    records its own accounting entries; the fee entry is **not** written here in
+    that branch (it is captured later in `process_payment`).
+
+    Optional ``#paywithsats:<N>`` memo tag
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    If the memo also contains ``#paywithsats:<N>`` (e.g. ``#paywithsats:1300``),
+    the server caps the outbound Lightning payment at *N* sats.  Any remainder above
+    the fee is returned to the sender via `return_magisats`.
+
+    Without ``#magioutbound``, received sats remain as a VSC Liability credited to
+    the customer's Keepsats balance and a ``FEE_INCOME`` entry is written immediately.
+
+    Args:
+        magi_transfer: The on-chain Magi BTC transfer event (server as recipient).
+        vsc_call:      The parsed VSC call from the watched custom JSON.
+
+    Returns:
+        List of `LedgerEntry` objects saved (one or two entries), or an empty list on error.
+    """
+    # Now we transfer the amount_to_send_sats to the
+    vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
+    assert vsc_payload.amount, "Amount is missing in VSC payload"
+    assert magi_transfer.amount == Decimal(vsc_payload.amount), (
+        "Amount in VSC payload does not match Magi transfer event amount"
+    )
+    assert magi_transfer.conv and not magi_transfer.conv.is_unset(), (
+        "Conversion details are missing in Magi transfer event"
+    )
+
+    amount_sent_msats = Decimal(magi_transfer.amount) * Decimal(1000)
+    ledger_entries_list = []
+    net_fee_msats = magi_transfer.conv.msats_fee
+
+    net_to_customer_msats = amount_sent_msats - net_fee_msats
+    if net_to_customer_msats < 0:
+        logger.error(
+            f"{ICON} Net amount to customer is negative for Magi transfer {magi_transfer.short_id}. Check the amounts in the invoice and VSC payload."
+        )
+        return []
+
+    assert net_fee_msats >= 0, (
+        f"{ICON} Net fee cannot be negative. Check the amounts in the invoice and VSC payload."
+    )
+
+    exchange_sub = magi_exchange_adapter().exchange_name
+    processed_memo = ProcessedMemo(vsc_payload.memo)
+
+    # Takes the cust_id (i.e. the destination) from either the sender of the transaction or the memo if there is one.
+    cust_id = processed_memo.cust_id or magi_transfer.cust_id
+    if not cust_id:
+        logger.error(
+            f"{ICON} Customer ID is missing in both processed memo and Magi transfer event for {magi_transfer.short_id}"
+        )
+        cust_id = "unknown_cust_id"
+
+    # ──────────────────────────────────────────────────────────────────────
+    # 1. Magi Exchange account → Customer (forward the customer portion)
+    # ──────────────────────────────────────────────────────────────────────
+    ledger_type = LedgerType.MAGI_INBOUND
+    magi_inbound_ledger = LedgerEntry(
+        cust_id=cust_id,
+        short_id=magi_transfer.short_id,
+        ledger_type=ledger_type,
+        group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
+        op_type=magi_transfer.op_type,
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Receive Magisats to Keepsats {magi_transfer.amount:,.0f} sats for {cust_id}",
+        user_memo=processed_memo.short_memo,
+        debit=AssetAccount(name="Exchange Holdings", sub=exchange_sub),
+        debit_unit=Currency.MSATS,
+        debit_amount=amount_sent_msats,
+        debit_conv=magi_transfer.conv,
+        credit=LiabilityAccount(
+            name="VSC Liability",
+            sub=cust_id,
+        ),
+        credit_unit=Currency.MSATS,
+        credit_amount=amount_sent_msats,  # using the rounded version
+        credit_conv=magi_transfer.conv,
+        link=magi_transfer.link,
+    )
+    await magi_inbound_ledger.save()
+    ledger_entries_list.append(magi_inbound_ledger)
+
+    if magi_transfer.paywithsats:
+        # After this is done, the transfer may or may not make a payment and the follow-on
+        # will be captured in #process_payment
+        await follow_on_transfer(tracked_op=magi_transfer, nobroadcast=False)
+        logger.info(
+            f"{ICON} {magi_transfer.short_id} Follow-on transfer initiated "
+            f"for Magi inbound transfer {magi_transfer.short_id} to {cust_id}",
+        )
+    else:
+        # ──────────────────────────────────────────────────────────────────────
+        # 2. Fee income (the retained portion) (this needs to be based on the actual transfer if one happens)
+        # ──────────────────────────────────────────────────────────────────────
+        fee_ledger_entry = await magisats_fee_ledger_entry(
+            magi_transfer=magi_transfer,
+            net_fee_msats=net_fee_msats,
+            cust_id=cust_id,
+            processed_memo=processed_memo,
+            exchange_sub=exchange_sub,
+        )
+        await fee_ledger_entry.save()
+        ledger_entries_list.append(fee_ledger_entry)
+
+    logger.info(
+        f"{ICON} {magi_transfer.short_id} Processed Magi inbound transfer for {cust_id} "
+        f"with total amount {magi_transfer.amount:,.0f} sats and fee {net_fee_msats / 1000:.3f} sats",
+    )
+
+    return ledger_entries_list
+
+
+async def magisats_fee_ledger_entry(
+    magi_transfer: MagiBTCTransferEvent,
+    net_fee_msats: Decimal,
+    cust_id: str,
+    processed_memo: ProcessedMemo,
+    exchange_sub: str | None = None,
+    quote: QuoteResponse | None = None,
+) -> LedgerEntry:
+    """
+    Create a ledger entry for the fee portion of a Magi transfer.
+    The ledger entry needs to be SAVED SEPARATELY.
+
+    This is a helper function to create the fee ledger entry for both inbound and outbound
+    Magi transfers, based on the provided `magi_transfer` event and the calculated
+    `fee_conv` conversion details.
+
+    Args:
+        magi_transfer: The Magi BTC transfer event containing the details of the transfer.
+        net_fee_msats: The net fee in millisatoshis.
+        cust_id: The customer ID associated with the transfer.
+        exchange_sub: The exchange sub-account identifier.
+        processed_memo: The processed memo object containing the short memo.
+    """
+    if not exchange_sub:
+        exchange_sub = magi_exchange_adapter().exchange_name
+
+    if not quote:
+        quote = await MagiBTCTransferEvent.nearest_quote(timestamp=magi_transfer.timestamp)
+
+    fee_conv = CryptoConversion(
+        quote=quote,
+        conv_from=Currency.MSATS,
+        value=net_fee_msats,
+    ).conversion
+
+    magi_transfer.fee_conv = fee_conv
+    await magi_transfer.save()
+    ledger_type = LedgerType.FEE_INCOME
+    fee_ledger_entry = LedgerEntry(
+        cust_id=cust_id,
+        short_id=magi_transfer.short_id,
+        ledger_type=ledger_type,
+        group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
+        op_type=magi_transfer.op_type,
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Fee for Magisats receive {magi_transfer.amount:,.0f} sats {net_fee_msats / 1000:.3f} sats for {cust_id}",
+        user_memo=processed_memo.short_memo,
+        debit=LiabilityAccount(
+            name="VSC Liability",
+            sub=cust_id,
+        ),
+        debit_unit=Currency.MSATS,
+        debit_amount=net_fee_msats,
+        debit_conv=fee_conv,
+        credit=RevenueAccount(name="Fee Income Magisats", sub=exchange_sub),
+        credit_unit=Currency.MSATS,
+        credit_amount=net_fee_msats,
+        credit_conv=fee_conv,
+        link=magi_transfer.link,
+    )
+    return fee_ledger_entry
+
+
+async def return_magisats(
+    initiating_op: MagiBTCTransferEvent,
+    remainder_msat: Decimal,
+    quote: QuoteResponse | None = None,
+    payment: Payment | None = None,
+    reason_str: str | None = None,
+) -> LedgerEntry:
+    """
+    Return unforwarded Magi sats change back to the original sender.
+
+    Called when a follow-on Lightning payment via `follow_on_transfer` either fails or
+    leaves a remainder (e.g. the paid invoice was cheaper than the sats received, or
+    the payment itself failed after the inbound accounting was already written).
+
+    Steps performed:
+
+    1. Constructs a `VSCCallPayload` targeting the sender's Magi address
+       (`AccName(initiating_op.from_account).magi_prefix`) for `remainder_sats`.
+    2. Broadcasts the return VSC transfer on-chain via `send_magi_transaction`.
+    3. Writes a ``MAGI_CHANGE`` `LedgerEntry` that moves the change from the
+       **customer's** VSC Liability to the **server's** VSC Liability, reflecting that
+       the server now owes the amount back to the Magi network rather than the customer.
+
+    Accounting entry (double-entry, amounts in MSATS):
+
+    - MAGI_CHANGE:
+      - Debit:  VSC Liability (cust_id)      remainder_msats
+      - Credit: VSC Liability (server_id)    remainder_msats
+
+    If a `payment` object is provided its reply list is updated with the return
+    transaction ID.
+
+    Args:
+        initiating_op:   The original inbound `MagiBTCTransferEvent` whose remainder is
+                         being returned.
+        remainder_msat:  The amount in millisatoshis to return.
+        quote:           Optional price quote; fetched from the DB if not provided.
+        payment:         Optional `Payment` object to attach the reply to.
+        reason_str:      Optional human-readable reason string; used as the memo when
+                         provided instead of the default "Returning change ..." message.
+
+    Returns:
+        The saved ``MAGI_CHANGE`` `LedgerEntry`.
+    """
+    # Placeholder implementation
+    # Placeholder implementation
+    logger.info(f"{ICON} Returning any unforwarded Magi sats change back to sender")
+    remainder_sats = (remainder_msat / Decimal(1000)).quantize(
+        Decimal("1."), rounding="ROUND_DOWN"
+    )
+    if payment:
+        memo = f"Returning change {remainder_sats:,.0f} sats from transaction § {payment.short_id}"
+    elif reason_str:
+        memo = reason_str + f" § {initiating_op.short_id}"
+    else:
+        memo = f"Returning change {remainder_sats:,.0f} sats from Magi transfer § {initiating_op.short_id}"
+
+    if not quote:
+        quote = await MagiBTCTransferEvent.nearest_quote(timestamp=initiating_op.timestamp)
+
+    vsc_payload = VSCCallPayload(
+        amount=str(remainder_sats),
+        to=AccName(initiating_op.from_account).magi_prefix,
+        memo=memo,
+        msats_fee="0",  # No fee for returning change, or could set a small fee if desired
+        parent_id=initiating_op.group_id,
+    )
+    server_id = InternalConfig().server_id
+    cust_id = initiating_op.cust_id or "unknown_cust_id"
+    trx = await send_magi_transaction(vsc_payload=vsc_payload, caller=server_id, nobroadcast=False)
+    trx_id = trx.get("trx_id", "Failed") if trx else "Failed"
+
+    change_link = get_hive_block_explorer_link(trx_id=trx_id)
+    # Before the server can send the sats back, we need to move the balance from the VSC Liability for the
+    # customer back to the server's liability account, and then we can send the transfer to return the change to the sender.
+
+    magi_change_conv = CryptoConversion(
+        quote=quote,
+        conv_from=Currency.SATS,
+        value=remainder_sats,
+        parent_id=initiating_op.group_id,
+    ).conversion
+
+    processed_memo = ProcessedMemo(memo)
+    ledger_type = LedgerType.MAGI_CHANGE
+    customer_to_server = LedgerEntry(
+        cust_id=cust_id,
+        short_id=initiating_op.short_id,
+        ledger_type=ledger_type,
+        group_id=f"{initiating_op.group_id}_{ledger_type.value}",
+        op_type=initiating_op.op_type,
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Return {remainder_sats:,.0f} sats to Magi for original transfer {initiating_op.short_id}",
+        user_memo=processed_memo.short_memo,
+        debit=LiabilityAccount(
+            name="VSC Liability",
+            sub=cust_id,
+        ),
+        debit_unit=Currency.MSATS,
+        debit_amount=magi_change_conv.msats,  # using the rounded version
+        debit_conv=magi_change_conv,
+        credit=LiabilityAccount(
+            name="VSC Liability",
+            sub=server_id,
+        ),
+        credit_unit=Currency.MSATS,
+        credit_amount=magi_change_conv.msats,
+        credit_conv=magi_change_conv,
+        link=change_link,
+    )
+    await customer_to_server.save()
+
+    logger.info(
+        f"{ICON} Sent return transfer of {remainder_sats:,.0f} sats to Magi for original transfer {initiating_op.short_id} with trx_id: {trx_id}",
+        extra={"trx": trx, **vsc_payload.log_extra},
+    )
+    if payment:
+        payment.add_reply(
+            reply_id=trx_id,
+            reply_type=ReplyType.MAGI_TRANSFER,
+            reply_msat=0,
+            reply_message=memo,
+            reply_error=None,
+        )
+        await payment.save()
+    return customer_to_server

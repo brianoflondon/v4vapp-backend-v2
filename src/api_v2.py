@@ -1,15 +1,20 @@
 import argparse
 import socket
 import sys
-from decimal import Decimal
-from typing import Any, Dict
+from decimal import ROUND_CEILING, Decimal
+from typing import Any, Dict, List
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, status
 from fastapi.concurrency import asynccontextmanager
+from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance
+from v4vapp_backend_v2.accounting.accounting_classes import (
+    AccountBalanceLine,
+    LedgerAccountDetails,
+)
 from v4vapp_backend_v2.api.v1_legacy.api_classes import (
     KeepsatsConvertExternal,
     KeepsatsInvoice,
@@ -26,6 +31,10 @@ from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.service_fees import (
+    calculate_fee_estimate_msats,
+    calculate_fee_msats,
+)
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
@@ -52,7 +61,7 @@ def create_lifespan(config_filename: str):
 
 # This will be replaced when we parse command line arguments
 app = None
-
+magisats_v2_router = APIRouter(prefix="/v2/magisats")
 crypto_v2_router = APIRouter(prefix="/v2/crypto")
 crypto_v1_router = APIRouter(prefix="/cryptoprices")
 lightning_v1_router = APIRouter(prefix="/lightning")
@@ -133,7 +142,117 @@ async def cryptoprices() -> AllQuotes:
     return all_quotes
 
 
-# @crypto_v2_router.post("")
+def _magisats_fee_response(receive_sats: int, include_forwarding: bool = True) -> Dict[str, int]:
+    """Build the fee response payload for a given receive amount."""
+    msats = Decimal(receive_sats) * Decimal(1000)
+    fee_msats = calculate_fee_msats(msats)
+    forwarding_fee_estimate_msats = (
+        calculate_fee_estimate_msats(msats) if include_forwarding else Decimal(0)
+    )
+    to_send_msats = msats + fee_msats + forwarding_fee_estimate_msats
+    total_to_send_sats = int(
+        Decimal(Decimal(to_send_msats) / Decimal(1000)).quantize(
+            Decimal("1"), rounding=ROUND_CEILING
+        )
+    )
+    return {
+        "receive_sats": receive_sats,
+        "fee_sats": int(fee_msats / Decimal(1000)),
+        "fee_msats": int(fee_msats),
+        "forwarding_fee_estimate_sats": int(
+            forwarding_fee_estimate_msats / Decimal(1000)
+        ),
+        "forwarding_fee_estimate_msats": int(forwarding_fee_estimate_msats),
+        "total_to_send_sats": total_to_send_sats,
+    }
+
+
+def _find_receive_sats_for_total(reverse_sats: int, include_forwarding: bool) -> int | None:
+    """Find the maximum receive_sats value that yields the requested total_to_send_sats."""
+    low = 0
+    high = reverse_sats
+    best = None
+    while low <= high:
+        mid = (low + high) // 2
+        total = _magisats_fee_response(mid, include_forwarding)["total_to_send_sats"]
+        if total == reverse_sats:
+            best = mid
+            low = mid + 1
+        elif total < reverse_sats:
+            low = mid + 1
+        else:
+            high = mid - 1
+    return best
+
+
+def _magisats_fee(
+    sats: int | None,
+    reverse_sats: int | None,
+    include_forwarding: bool,
+) -> Dict[str, int]:
+    if (sats is None) == (reverse_sats is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide exactly one of sats or reverse_sats",
+        )
+
+    if sats is not None:
+        if sats <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid sats amount",
+            )
+        return _magisats_fee_response(sats, include_forwarding)
+
+    if reverse_sats is None or reverse_sats <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid reverse_sats amount",
+        )
+
+    receive_sats = _find_receive_sats_for_total(reverse_sats, include_forwarding)
+    if receive_sats is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=("reverse_sats cannot be matched with the current fee structure"),
+        )
+
+    return _magisats_fee_response(receive_sats, include_forwarding)
+
+
+@magisats_v2_router.get("/fee/")
+@magisats_v2_router.get("/fee_out/")
+async def magisats_fee_out(
+    sats: int | None = Query(
+        None,
+        description="The amount of Sats to receive as Keepsats when sending "
+        "MagiSats (BTC in sats) to convert to Keepsats",
+    ),
+    reverse_sats: int | None = Query(
+        None,
+        description="The total sats to send for the invoice. The API will calculate the "
+        "receive_sats such that total_to_send_sats == reverse_sats.",
+    ),
+) -> Dict[str, int]:
+    return _magisats_fee(sats, reverse_sats, include_forwarding=True)
+
+
+@magisats_v2_router.get("/fee_in/")
+async def magisats_fee_in(
+    sats: int | None = Query(
+        None,
+        description="The amount of Sats to receive as Keepsats when sending "
+        "MagiSats (BTC in sats) to convert to Keepsats",
+    ),
+    reverse_sats: int | None = Query(
+        None,
+        description="The total sats to send for the invoice. The API will calculate the "
+        "receive_sats such that total_to_send_sats == reverse_sats.",
+    ),
+) -> Dict[str, int]:
+    return _magisats_fee(sats, reverse_sats, include_forwarding=False)
+
+
 # MARK: Legacy v1 Cryptoprices calls
 
 
@@ -170,6 +289,10 @@ async def fixed_quote(
     HIVE: float | None = Query(None, description="The amount of Hive to convert to sats"),
     HBD: float | None = Query(None, description="The amount of HBD to convert to sats"),
     USD: float | None = Query(None, description="The amount of USD to convert to sats"),
+    MAGISATS: bool = Query(False, description="The amount of MAGI BTC in sats to convert to sats"),
+    SATS: float | None = Query(
+        None, description="The amount of sats to convert (only used for MagiSats conversion)"
+    ),
     cache_time: int = Query(600, description="Cache time in seconds"),
     use_cache: bool = Query(True, description="Use cached quotes if available"),
 ) -> FixedHiveQuote:
@@ -187,7 +310,13 @@ async def fixed_quote(
         FixedHiveQuote: An object containing the fixed quote for Hive/HBD and BTC/Sats vs USD.
     """
     return await FixedHiveQuote.create_quote(
-        hive=HIVE, hbd=HBD, usd=USD, cache_time=cache_time, use_cache=use_cache
+        hive=HIVE,
+        hbd=HBD,
+        usd=USD,
+        sats=SATS,
+        magisats=MAGISATS,
+        cache_time=cache_time,
+        use_cache=use_cache,
     )
 
 
@@ -207,7 +336,6 @@ async def binance() -> Dict[str, str | int | float]:
     }
 
 
-@crypto_v1_router.get("/sats_to_hive/", response_model=Dict[str, Any])
 async def sats_to_hive(
     sats: int = Query(..., description="The amount of sats to convert to Hive"),
 ) -> Dict[str, Any]:
@@ -236,6 +364,26 @@ async def sats_to_hive(
 # MARK: /lightning
 
 
+class KeepsatsApiResponse(BaseModel):
+    """Represents the keepsats API response payload."""
+
+    hive_accname: str = Field(..., description="Hive account name")
+    net_msats: float = Field(..., description="Net balance in millisatoshis")
+    net_hive: float = Field(..., description="Net balance of HIVE")
+    net_usd: float = Field(..., description="Net balance of USD")
+    net_hbd: float = Field(..., description="Net balance of HBD")
+    net_sats: float = Field(..., description="Net balance of SATS")
+    net_magisats: float = Field(0.0, description="Net balance of MAGI BTC in SATS")
+    net_magi_msats: float = Field(0.0, description="Net balance of MAGI BTC in millisatoshis")
+    in_progress_sats: float = Field(
+        ..., description="Keepsats currently held in progress (rounded sats)"
+    )
+    all_transactions: List[AccountBalanceLine] | LedgerAccountDetails = Field(
+        default_factory=list,
+        description=("Full account balance object when line_items=True, otherwise an empty list"),
+    )
+
+
 @lightning_v1_router.get("/keepsats")
 async def keepsats(
     hive_accname: str = Query(..., description="Hive account name to check for keepsats"),
@@ -246,7 +394,7 @@ async def keepsats(
         True,
         description="Whether to include non-financial notifications in the transaction history",
     ),
-) -> Dict[str, Any]:
+) -> KeepsatsApiResponse:
     """
     Retrieves the keepsats balance and related information for a specified Hive account.
     This is the main information end point which fetches all transactions and balances for a Hive account.
@@ -256,7 +404,7 @@ async def keepsats(
         transactions (bool): Whether to include transaction history. Defaults to False.
         admin (bool): Whether the user is an admin. Defaults to False.
     Returns:
-        Dict[str, Any]: A dictionary containing the Hive account name, net balances in various currencies,
+        KeepsatsApiResponse: A response model containing the Hive account name, net balances in various currencies,
         in-progress sats, and transaction history.
     Raises:
         Any exceptions raised by get_keepsats_balance.
@@ -272,9 +420,12 @@ async def keepsats(
         else:
             account_balance = account_balance.remove_balances()
 
-    return account_balance.to_api_response(
-        hive_accname=hive_accname, line_items=line_items, admin=admin
+    api_response = KeepsatsApiResponse.model_validate(
+        account_balance.to_api_response(
+            hive_accname=hive_accname, line_items=line_items, admin=admin
+        )
     )
+    return api_response
 
 
 @lightning_v1_router.post("/keepsats/transfer")
@@ -487,6 +638,7 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
             "documentation": "/docs",
         }
 
+    app.include_router(magisats_v2_router, tags=["magisats"])
     app.include_router(crypto_v2_router, tags=["crypto"])
     app.include_router(crypto_v1_router, tags=["legacy"])
     app.include_router(lightning_v1_router, tags=["lightning"])

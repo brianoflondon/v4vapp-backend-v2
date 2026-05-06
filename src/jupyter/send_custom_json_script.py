@@ -11,7 +11,7 @@ import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.hive_extras import (
     get_hive_client,
     get_verified_hive_client_for_accounts,

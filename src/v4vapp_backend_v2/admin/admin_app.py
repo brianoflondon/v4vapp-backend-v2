@@ -28,6 +28,7 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.process.hold_release_keepsats import (
     archive_old_hold_release_keepsats_entries,
 )
+from v4vapp_backend_v2.process.process_pending_hive import resend_pending_custom_jsons
 
 
 @asynccontextmanager
@@ -329,6 +330,20 @@ class AdminApp:
                     status_code=500,
                     detail=f"Archive process failed: {e}",
                 )
+
+        @self.app.post("/admin/pending/resend-vsc-custom-jsons")
+        async def resend_vsc_custom_jsons_endpoint() -> JSONResponse:
+            """Re-send all pending VSC custom JSONs."""
+            try:
+                await resend_pending_custom_jsons(resend_vsc_calls=True)
+                return JSONResponse({"success": True})
+            except Exception as e:
+                logger.exception(
+                    "Error resending VSC custom JSONs via admin endpoint: %s",
+                    e,
+                    extra={"notification": True},
+                )
+                raise HTTPException(status_code=500, detail=f"Resend VSC custom JSONs failed: {e}")
 
         @self.app.get("/dev_accounts")
         async def get_dev_accounts() -> List[str]:

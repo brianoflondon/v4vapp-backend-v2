@@ -19,6 +19,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive.hive_extras import perform_transfer_checks
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
@@ -55,6 +56,13 @@ async def process_custom_json_func(
         == InternalConfig().config.hive_config.custom_json_prefix + "_notification"
     ):
         logger.debug(f"Notification CustomJson: {custom_json.json_data.memo}")
+        return []
+
+    if custom_json.cj_id == "vsc.call":
+        # These are handled based on the Magi instructions, not here.
+        logger.debug(f"VSC Call CustomJson: {custom_json.log_str}")
+        custom_json.vsc_call_not_needed = True
+        await custom_json.save()
         return []
 
     if not custom_json.authorized:
@@ -98,9 +106,11 @@ async def process_custom_json_func(
             and custom_json.from_account != custom_json.to_account
         ):
             try:
+                from_account = AccName(keepsats_transfer.from_account)
+                to_account = AccName(keepsats_transfer.to_account)
                 await perform_transfer_checks(
-                    from_account=keepsats_transfer.from_account,
-                    to_account=keepsats_transfer.to_account,
+                    from_account=from_account,
+                    to_account=to_account,
                 )
             except Exception as e:
                 logger.error(
@@ -252,7 +262,12 @@ async def custom_json_internal_transfer(
     message = ""
     fee_transfer = False
     fee_sats = custom_json.fee_memo
-    if fee_sats > 0 and keepsats_transfer.sats <= fee_sats and custom_json.to_account == server_id:
+    if (
+        fee_sats > 0
+        and keepsats_transfer.sats
+        and keepsats_transfer.sats <= fee_sats
+        and custom_json.to_account == server_id
+    ):
         fee_transfer = True
 
     net_msats, account_balance = await keepsats_balance(cust_id=keepsats_transfer.from_account)

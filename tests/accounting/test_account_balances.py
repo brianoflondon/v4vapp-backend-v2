@@ -458,7 +458,6 @@ async def test_account_balance_printout_includes_opening_only_currency_rows(monk
 async def test_get_keepsats_balance():
     cust_id = "v4vapp.qrc"
     net_sats, details = await keepsats_balance(cust_id=cust_id)
-    pprint(details.model_dump())
     print(f"Net Sats for {cust_id}: {net_sats}")
 
 

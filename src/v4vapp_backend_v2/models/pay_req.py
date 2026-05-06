@@ -6,8 +6,9 @@ from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.service_fees import calculate_fee_estimate_msats
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 
@@ -289,12 +290,7 @@ class PayReq(BaseModel):
         Returns:
             int: The estimated fee in millisatoshis.
         """
-        # This is a placeholder implementation. Actual fee estimation logic should be implemented.
-        lnd_config = InternalConfig().config.lnd_config
-        return Decimal(
-            Decimal(lnd_config.lightning_fee_base_msats)
-            + (self.value_msat * Decimal(lnd_config.lightning_fee_estimate_ppm) / 1_000_000)
-        )
+        return calculate_fee_estimate_msats(Decimal(self.value_msat))
 
 
 def protobuf_pay_req_to_pydantic(pay_req: lnrpc.PayReq, pay_req_str: str) -> PayReq:

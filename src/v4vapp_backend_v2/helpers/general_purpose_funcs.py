@@ -7,9 +7,12 @@ from pathlib import Path
 from typing import Any, Generator
 
 from bson.decimal128 import Decimal128
+from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
+from v4vapp_backend_v2.helpers.regex_constants import LND_INVOICE_TAG
+from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 
 
 # MARK: General Text
@@ -385,15 +388,15 @@ def detect_balance_request(memo: str) -> bool:
 
 def paywithsats_amount(memo: str) -> Decimal:
     """
-    Extracts the amount specified in a memo string formatted as "paywithsats:amount".
+    Extracts the amount specified in a memo string formatted as "#paywithsats:amount".
     Args:
-        memo (str): The memo string containing the amount, expected in the format "paywithsats:amount".
+        memo (str): The memo string containing the amount, expected in the format "#paywithsats:amount".
     Returns:
         Decimal: The extracted amount as a Decimal if found; otherwise, 0.
     """
 
-    # Extract the amount from the memo, which is expected to be in the format "paywithsats:amount"
-    match = re.search(r"paywithsats:(\d+)", memo)
+    # Extract the amount from the memo, which is expected to be in the format "#paywithsats:amount"
+    match = re.search(r"#paywithsats:(\d+)", memo)
     if match:
         return Decimal(match.group(1))
     return Decimal(0)
@@ -504,6 +507,67 @@ def process_clean_memo(
             message = message.replace("#clean", "").strip()
 
     return message
+
+
+class ProcessedMemo(BaseModel):
+    memo: str = Field("", description="The original memo string from the invoice")
+    cust_id: AccNameType | None = Field(
+        None, description="The extracted customer ID from the memo, if available"
+    )
+    short_memo: str = Field("", description="A shortened version of the memo for display purposes")
+    lightning_memo: LightningMemo = Field(
+        default_factory=LightningMemo,
+        description="The LightningMemo object containing the original and short memo",
+    )
+    clean_memo: str = Field(
+        "",
+        description="Clean memo processed version, removing tags and account names for a cleaner display",
+    )
+
+    def __init__(self, *args: Any, **data: Any):
+        if len(args) == 1 and isinstance(args[0], str):
+            data["memo"] = args[0]
+        elif len(args) > 1:
+            raise TypeError("ProcessedMemo accepts at most one positional argument (memo string)")
+
+        super().__init__(**data)
+        self.lightning_memo = LightningMemo(self.memo)
+        self.short_memo = self.lightning_memo.short_memo
+        self.clean_memo = process_clean_memo(self.memo)
+        if self.lightning_memo.is_lightning:
+            self.cust_id = ""
+        else:
+            self.cust_id = get_cust_id(self.memo)
+
+
+def get_cust_id(memo: str) -> AccName | None:
+    """
+    Extracts and returns the customer ID associated with the invoice, if available.
+
+    The method attempts to extract the customer ID from the `memo` field or the
+    `custom_records` field of the first HTLC (Hashed Time-Locked Contract) in the invoice.
+
+    Returns:
+        AccName | None: The extracted customer ID as an `AccName` object if
+        successfully decoded and valid, otherwise `None`.
+
+    Notes:
+    - The method looks for a specific tag (defined by `LND_INVOICE_TAG`) in the `memo` to extract the customer ID.
+    - If the tag is found, it processes the extracted value by converting it to lowercase and removing any leading "@" character.
+    - If a valid customer ID is extracted, it is returned
+    """
+    extracted_value = None
+    if memo:
+        match = re.match(LND_INVOICE_TAG, memo.lower())
+        if match:
+            extracted_value = match.group(1).lower()
+            if extracted_value.startswith("@"):
+                extracted_value = extracted_value[1:]
+
+    if extracted_value:
+        cust_id = AccName(extracted_value)
+        return cust_id
+    return None
 
 
 # TODO: #252 Combine this with the lightning memo class

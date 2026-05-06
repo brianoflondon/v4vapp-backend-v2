@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 
@@ -38,9 +38,9 @@ class PeriodResult(BaseModel):
 class LimitCheckResult(BaseModel):
     cust_id: str = ""
     periods: Dict[str, PeriodResult] = {}
-    next_limit_expiry: str = ""
+    next_limit_expiry: str = Field("", description="Next limit expiry time as a string")
     expiry: datetime | None = None
-    sats_freed: int | None = None
+    sats_freed: Decimal | None = None
 
     def __init__(self, **data):
         super().__init__(**data)

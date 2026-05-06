@@ -31,6 +31,7 @@ class ReplyType(StrEnum):
     CUSTOM_JSON = "custom_json"
     LEDGER_ERROR = "ledger_error"
     HIVE_ERROR = "hive_error"
+    MAGI_TRANSFER = "magi_transfer"
     UNKNOWN = "unknown"
 
 
@@ -517,10 +518,12 @@ class TrackedBaseModel(BaseModel):
                 error="",
                 error_details={},
             )
-            logger.info(
-                f"Found nearest quote delta from {timestamp}: {quote.timestamp - timestamp}",
-                extra={"notification": False, "quote": quote.model_dump()},
-            )
+            delta = quote.timestamp - timestamp
+            if abs(delta.total_seconds()) > 600:
+                logger.info(
+                    f"Found nearest quote delta from {timestamp}: {delta}",
+                    extra={"notification": False, "quote": quote.model_dump()},
+                )
             return quote_response
 
         except ServerSelectionTimeoutError as e:

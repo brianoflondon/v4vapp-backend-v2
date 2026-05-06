@@ -15,7 +15,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.opening_balances import (
     reset_exchange_opening_balance,
     reset_lightning_opening_balance,
@@ -265,9 +265,7 @@ class TestResetExchangeOpeningBalance:
         _setup_quote()
         await InternalConfig.db["ledger"].drop()
 
-        mock_adapter = _make_mock_adapter(
-            btc=Decimal(0), hive=Decimal(0), name="binance_testnet"
-        )
+        mock_adapter = _make_mock_adapter(btc=Decimal(0), hive=Decimal(0), name="binance_testnet")
 
         with (
             patch(
@@ -328,9 +326,7 @@ class TestResetExchangeOpeningBalance:
         await InternalConfig.db["ledger"].drop()
 
         hive_value = Decimal("1875.000")
-        mock_adapter = _make_mock_adapter(
-            btc=Decimal(0), hive=hive_value, name="binance_testnet"
-        )
+        mock_adapter = _make_mock_adapter(btc=Decimal(0), hive=hive_value, name="binance_testnet")
 
         with (
             patch(

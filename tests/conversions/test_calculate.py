@@ -11,7 +11,7 @@ from tests.get_last_quote import last_quote
 from tests.utils import fake_trx_id, latest_block_num
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.conversion.calculate import calc_hive_to_keepsats, calc_keepsats_to_hive
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 
 

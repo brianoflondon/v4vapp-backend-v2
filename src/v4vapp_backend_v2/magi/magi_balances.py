@@ -1,12 +1,11 @@
 from decimal import Decimal
-from pprint import pprint
 from time import perf_counter
 
 import httpx
-from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
+from v4vapp_backend_v2.magi.magi_classes import ICON, MagiBTCBalance
 
 BTC_BALANCE_QUERY = """query BtcBalanceByAccount($account: String!) {
   btc_mapping_balances(where: { account: { _eq: $account } }) {
@@ -16,21 +15,17 @@ BTC_BALANCE_QUERY = """query BtcBalanceByAccount($account: String!) {
 }"""
 
 MAGI_ENDPOINTS = [
-    "http://legion-witness:8081/v1/graphql",
-    "https://magi.v4v.app/hasura/v1/graphql",
+    "http://legion-witness.tail400e5.ts.net:8081/v1/graphql",
+    "https://magi-api.v4v.app/hasura/v1/graphql",
     "https://vsc.techcoderx.com/hasura/v1/graphql",
+    "https://api.okinoko.io/hasura/v1/graphql",
 ]
 
 
-class MagiBTCBalance(BaseModel):
-    account: str
-    balance_sats: Decimal
-
-
-async def get_btc_balance_by_account(
+async def get_magi_btc_balance_by_account(
     account: str | AccName,
     endpoint: str | None = None,
-) -> MagiBTCBalance | None:
+) -> MagiBTCBalance:
     """Fetch BTC balance data for a Hive account from the Hasura GraphQL endpoint."""
     account_str = AccName(account).magi_prefix
 
@@ -60,7 +55,6 @@ async def get_btc_balance_by_account(
                 response = await client.post(attempt_endpoint, json=payload, headers=headers)
                 response.raise_for_status()
                 result = response.json()
-                pprint(result)
 
             response_errors = result.get("errors")
             if response_errors:
@@ -68,22 +62,30 @@ async def get_btc_balance_by_account(
 
             balances = result.get("data", {}).get("btc_mapping_balances", [])
             if not balances:
-                return None
+                logger.info(f"{ICON} No MAGI BTC balance {account_str} at {attempt_endpoint}")
+                return MagiBTCBalance(account=account_str, balance_sats=Decimal(0))
             balance_record = balances[0]
 
-            return MagiBTCBalance(
+            magi_balance = MagiBTCBalance(
                 account=balance_record.get("account", ""),
                 balance_sats=Decimal(balance_record.get("balance_sats", 0)),
             )
+            logger.debug(
+                f"{ICON} MAGI BTC balance {account_str} {magi_balance.balance_sats:,.0f} from {attempt_endpoint}"
+            )
+            return magi_balance
         except (httpx.HTTPError, ValueError, RuntimeError) as exc:
-            logger.warning(f"Failed to fetch BTC balance from {attempt_endpoint}: {exc}")
+            logger.warning(
+                f"{ICON} Failed to fetch MAGI BTC balance from {attempt_endpoint}: {exc}",
+                extra={"notification": False},
+            )
             endpoint_errors.append(f"{attempt_endpoint}: {exc}")
             continue
 
-    raise RuntimeError(
-        f"Failed to fetch BTC balance for account {account} from endpoints {endpoints}. "
-        f"Last error: {endpoint_errors[-1] if endpoint_errors else 'unknown error'}"
+    error_message = (
+        "; ".join(endpoint_errors) if endpoint_errors else "Unknown MAGI BTC balance error"
     )
+    return MagiBTCBalance(account=account_str, balance_sats=Decimal(0), error=error_message)
 
 
 async def main_test():
@@ -106,7 +108,7 @@ async def main_test():
         for endpoint in MAGI_ENDPOINTS:
             start = perf_counter()
             try:
-                result = await get_btc_balance_by_account(account, endpoint=endpoint)
+                result = await get_magi_btc_balance_by_account(account, endpoint=endpoint)
                 elapsed = perf_counter() - start
                 endpoint_stats[endpoint]["durations"].append(elapsed)
                 account_results[endpoint] = result
@@ -127,7 +129,9 @@ async def main_test():
             print("One or more endpoints failed for this account; skipping comparison.")
             continue
 
-        unique_results = {repr(result): endpoint for endpoint, result in successful_results.items()}
+        unique_results = {
+            repr(result): endpoint for endpoint, result in successful_results.items()
+        }
         if len(unique_results) == 1:
             print("All endpoints returned the same answer.")
         else:

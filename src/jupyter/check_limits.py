@@ -12,7 +12,9 @@ from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
+from v4vapp_backend_v2.process.process_transfer import check_user_limits
 
 # async def get_limits():
 #     cust_id = "v4vapp.qrc"
@@ -68,30 +70,36 @@ async def main():
     # # print(account_printout_str)
     # # pprint(account_details)
 
-    cust_id = "v4vapp-test"
-    limit_empty = LimitCheckResult()
-    print("-------------- Keepsats balance ----------------")
-    net_sats, account_balance = await keepsats_balance_printout(cust_id=cust_id, line_items=False)
-    logger.info(InternalConfig.db)
-    print(f"Net: sats for account {cust_id}: {net_sats}")
-
-    pipeline = limit_check_pipeline(cust_id=cust_id, details=False)
-    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
-    results = await cursor.to_list(length=None)
-    pprint(results[0])
-    limit_check = LimitCheckResult.model_validate(results[0]) if results else None
-    if limit_check:
-        print(limit_check)
-        print(limit_check.next_limit_expiry)
-    expiry_info = await get_next_limit_expiry(cust_id)
-    if expiry_info:
-        expiry, sats_freed = expiry_info
-        expires_in = expiry - datetime.now(tz=timezone.utc)
-        print(
-            f"Next limit expires in: {format_time_delta(expires_in)}, freeing {sats_freed:,.0f} sats"
+    for cust_id in ["jza", "azurecherenkov", "v4vapp-test"]:
+        limit_empty = LimitCheckResult()
+        print("-------------- Keepsats balance ----------------")
+        net_sats, account_balance = await keepsats_balance_printout(
+            cust_id=cust_id, line_items=False
         )
-    else:
-        print("No active limits or transactions")
+        logger.info(InternalConfig.db)
+        print(f"Net: sats for account {cust_id}: {net_sats}")
+
+        pipeline = limit_check_pipeline(cust_id=cust_id, details=False)
+        cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+        results = await cursor.to_list(length=None)
+        results = convert_decimal128_to_decimal(results)
+        pprint(results[0])
+        limit_check = LimitCheckResult.model_validate(results[0]) if results else None
+        if limit_check:
+            print(limit_check)
+            print(limit_check.next_limit_expiry)
+        expiry_info = await get_next_limit_expiry(cust_id)
+        if expiry_info:
+            expiry, sats_freed = expiry_info
+            expires_in = expiry - datetime.now(tz=timezone.utc)
+            print(
+                f"Next limit expires in: {format_time_delta(expires_in)}, freeing {sats_freed:,.0f} sats"
+            )
+        else:
+            print("No active limits or transactions")
+
+        check_result = await check_user_limits(extra_spend_msats=0, cust_id=cust_id)
+        print(f"Check result for {cust_id}: {check_result}")
 
 
 if __name__ == "__main__":
@@ -99,6 +107,6 @@ if __name__ == "__main__":
     os.chdir(target_dir)
     print("Current working directory:", os.getcwd())
 
-    CONFIG = InternalConfig(config_filename="devhive.config.yaml").config
+    InternalConfig(config_filename="production.fromhome.config.yaml")
 
     asyncio.run(main())

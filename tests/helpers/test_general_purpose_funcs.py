@@ -1,11 +1,13 @@
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from pprint import pprint
 from types import SimpleNamespace
 
 import pytest
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    ProcessedMemo,
     cap_camel_case,
     check_time_diff,
     detect_balance_request,
@@ -123,6 +125,65 @@ def test_get_in_flight_time_exact_date():
     exact_date = datetime.now(tz=timezone.utc)
     result = get_in_flight_time(exact_date)
     assert result == "00:00", f"Expected '00:00', but got {result}"
+
+
+def test_processed_memo_accepts_positional_string_init():
+    memo = "Hello world"
+    processed = ProcessedMemo(memo)
+
+    assert processed.memo == memo
+    assert processed.short_memo == "💬Hello world"
+    assert processed.lightning_memo.short_memo == "💬Hello world"
+    assert processed.cust_id is None
+    print(f"ProcessedMemo: {processed}")
+    pprint(processed.model_dump())
+
+
+def test_processed_memo_accept_v4vapp_memo_init():
+    memo = "v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #SATS #CLEAN #v4vapp"
+    processed = ProcessedMemo(memo)
+
+    assert processed.memo == memo
+    assert (
+        processed.short_memo
+        == "💬v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #SATS #CLEAN #v4vapp"
+    )
+    assert str(processed.cust_id) == "v4vapp.qrc"
+    assert (
+        str(processed.clean_memo)
+        == "Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #sats"
+    )
+    print(f"ProcessedMemo: {processed}")
+    pprint(processed.model_dump())
+
+
+def test_processed_memo_accept_v4vapp_memo_init_not_clean():
+    memo = "v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #v4vapp"
+    processed = ProcessedMemo(memo)
+
+    assert processed.memo == memo
+    assert (
+        processed.short_memo
+        == "💬v4vapp.qrc | Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats | #v4vapp"
+    )
+    assert str(processed.cust_id) == "v4vapp.qrc"
+    assert (
+        str(processed.clean_memo)
+        == "Receiving inbound from Magi to Keepsats test_receive_magisats_inbound_payment_to_keepsats"
+    )
+    print(f"ProcessedMemo: {processed}")
+    pprint(processed.model_dump())
+
+
+def test_processed_memo_accepts_keyword_memo_init():
+    memo = "@alice #v4vapp payment request"
+    processed = ProcessedMemo(memo=memo)
+
+    assert processed.memo == memo
+    assert processed.short_memo == "💬@alice #v4vapp payment request"
+    assert str(processed.cust_id) == "alice"
+    print(f"ProcessedMemo: {processed}")
+    pprint(processed.model_dump())
 
 
 @pytest.mark.parametrize(

@@ -16,7 +16,7 @@ from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.hive_extras import (
     PendingTransaction,
     get_verified_hive_client,

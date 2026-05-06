@@ -12,9 +12,10 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, LoggerFunction, logger
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse, currency_to_receive
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
+from v4vapp_backend_v2.helpers.regex_constants import LND_INVOICE_TAG, MAGISATS_TAG
 from v4vapp_backend_v2.models.custom_records import (
     DecodedCustomRecord,
     b64_decode,
@@ -23,11 +24,36 @@ from v4vapp_backend_v2.models.custom_records import (
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 from v4vapp_backend_v2.process.lock_str_class import CustIDType, LockStr
 
-# This is the regex for finding if a given message is an LND invoice to pay.
-# This looks for #v4vapp v4vapp
-# LND_INVOICE_TAG = r"(.*)(#(v4vapp))"
-# Updated to separate the hive name at the start of the message
-LND_INVOICE_TAG = r"^\s*(\S+).*#v4vapp"
+
+def currency_to_receive(memo: str) -> Currency:
+    """
+    Detects the currency to receive based on the memo.
+    This function is vital for deciding how to process incoming payments.
+
+    Call hierarchy:
+        currency_to_receive
+        └── Invoice.recv_currency  (invoice_models.py)
+            └── process_lightning_receipt_stage_2  (process_invoice.py)
+                └── process_custom_json_func  (process_hive.py)
+                    └── process_hive_op  (process_hive.py)
+
+    Args:
+        memo (str): The memo to check.
+    Returns:
+        Currency: The detected currency, defaults to HIVE if not found.
+    """
+    if "#hbd" in memo.lower():
+        return Currency.HBD
+    if "#hive" in memo.lower():
+        return Currency.HIVE
+    if (
+        not memo
+        or "#sats" in memo.lower()
+        or "#keepsats" in memo.lower()
+        or "#magisats" in memo.lower()
+    ):
+        return Currency.SATS
+    return Currency.HIVE  # Default to HIVE if no specific currency is detected
 
 
 class InvoiceState(StrEnum):
@@ -219,6 +245,9 @@ class Invoice(TrackedBaseModel):
     is_lndtohive: bool = Field(
         default=False, description="True if the invoice is a LND to Hive invoice"
     )
+    is_magisats: bool = Field(
+        default=False, description="True if the invoice has the #MAGISATS tag in the memo"
+    )
     cust_id: CustIDType | None = Field(
         default=None, description="Customer ID associated with the invoice"
     )
@@ -237,9 +266,9 @@ class Invoice(TrackedBaseModel):
     def __init__(self, lnrpc_invoice: lnrpc.Invoice | None = None, **data: Any) -> None:
         if lnrpc_invoice and isinstance(lnrpc_invoice, lnrpc.Invoice):
             data_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
-            invoice_dict = convert_datetime_fields(data_dict)
+            invoice_dict: dict[str, Any] = convert_datetime_fields(data_dict)
         else:
-            invoice_dict = convert_datetime_fields(data)
+            invoice_dict: dict[str, Any] = convert_datetime_fields(data)
 
         super().__init__(**invoice_dict)
 
@@ -250,11 +279,16 @@ class Invoice(TrackedBaseModel):
             )
         # perform my check to see if this invoice can be paid to Hive
         if self.memo:
-            match = re.match(LND_INVOICE_TAG, self.memo.lower())
-            if match:
+            # This is where we will check for #MAGISATS which will override Hive or HBD
+            match_magisats = re.match(MAGISATS_TAG, self.memo.lower())
+            if match_magisats:
+                self.is_magisats = True
+
+            match_lndtohive = re.match(LND_INVOICE_TAG, self.memo.lower())
+            if match_lndtohive:
                 self.is_lndtohive = True
 
-        self.fill_cust_id()
+        self.fill_cust_id()  # is_lndtohive and cust_id are determined by the same logic so we can fill them together
         self.fill_custom_records()
 
     @override
@@ -417,7 +451,7 @@ class Invoice(TrackedBaseModel):
         elif self.htlcs and self.htlcs[0] and self.htlcs[0].custom_records:
             if value := self.htlcs[0].custom_records.get("818818", None):
                 try:
-                    extracted_value = b64_decode(value).lower()
+                    extracted_value = str(b64_decode(value)).lower()
                 except Exception as e:
                     logger.warning(f"Error decoding {value}: {e}", extra={"notification": False})
 

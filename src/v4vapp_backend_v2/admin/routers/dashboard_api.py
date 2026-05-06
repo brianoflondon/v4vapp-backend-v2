@@ -28,6 +28,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances_async
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
 from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
 
 router = APIRouter()
@@ -82,6 +83,48 @@ async def dashboard_hive_balances() -> JSONResponse:
                     "HBD_fmt": result.get("HBD_fmt", "0.000"),
                 }
         except Exception as e:
+            balances[acc] = {"error": str(e)}
+
+    return JSONResponse({"balances": balances})
+
+
+@router.get("/magi-balances")
+async def dashboard_magi_balances() -> JSONResponse:
+    """
+    Fetch Magi Sats balances for all highlight_users.
+    """
+
+    async def _safe_magi_balance(acc: str) -> Optional[dict[str, str]]:
+        try:
+            balance = await get_magi_btc_balance_by_account(acc)
+            if balance.error:
+                return {"error": balance.error}
+
+            return {
+                "Magi Sats": f"{int(balance.balance_sats):,}",
+            }
+        except Exception as e:
+            logger.warning(
+                f"Magi balance for {acc} failed: {e}",
+                extra={"notification": False},
+            )
+            return {"error": str(e)}
+
+    highlight_users = InternalConfig().config.admin_config.highlight_users
+    tasks = {}
+    async with TaskGroup() as tg:
+        for acc in highlight_users:
+            tasks[acc] = tg.create_task(_safe_magi_balance(acc))
+
+    balances = {}
+    for acc, task in tasks.items():
+        try:
+            balances[acc] = task.result()
+        except Exception as e:
+            logger.warning(
+                f"Magi balance task for {acc} failed: {e}",
+                extra={"notification": False},
+            )
             balances[acc] = {"error": str(e)}
 
     return JSONResponse({"balances": balances})
@@ -194,12 +237,10 @@ async def dashboard_financial_summary() -> JSONResponse:
     profit_loss_usd = pl_task.result()
     trading_pnl_usd = tp_task.result()
 
-    return JSONResponse(
-        {
-            "profit_loss_usd": profit_loss_usd,
-            "trading_pnl_usd": trading_pnl_usd,
-        }
-    )
+    return JSONResponse({
+        "profit_loss_usd": profit_loss_usd,
+        "trading_pnl_usd": trading_pnl_usd,
+    })
 
 
 @router.get("/sanity")
@@ -229,28 +270,22 @@ async def dashboard_sanity() -> JSONResponse:
     # Serialize sanity results
     results_data = []
     for name, result in sanity_results.results:
-        results_data.append(
-            {
-                "name": name,
-                "is_valid": result.is_valid,
-                "details": result.details,
-            }
-        )
+        results_data.append({
+            "name": name,
+            "is_valid": result.is_valid,
+            "details": result.details,
+        })
 
     failed_data = []
     for name, result in sanity_results.failed:
-        failed_data.append(
-            {
-                "name": name,
-                "details": result.details,
-            }
-        )
+        failed_data.append({
+            "name": name,
+            "details": result.details,
+        })
 
-    return JSONResponse(
-        {
-            "server_balance_check": server_balance_check,
-            "sanity_results": results_data,
-            "sanity_failed": failed_data,
-            "pending_transactions": pending_transactions,
-        }
-    )
+    return JSONResponse({
+        "server_balance_check": server_balance_check,
+        "sanity_results": results_data,
+        "sanity_failed": failed_data,
+        "pending_transactions": pending_transactions,
+    })

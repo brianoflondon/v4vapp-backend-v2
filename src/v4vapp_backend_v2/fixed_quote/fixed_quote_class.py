@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from pprint import pprint
 from uuid import uuid4
 
@@ -23,6 +24,7 @@ class FixedHiveQuote(BaseModel):
 
     unique_id: str
     sats_send: int
+    msats_fee: int = 0
     conv: CryptoConvV1
     timestamp: datetime = datetime.now(tz=timezone.utc)
     quote_record: HiveRatesDB
@@ -35,6 +37,8 @@ class FixedHiveQuote(BaseModel):
         hive: float | None = None,
         hbd: float | None = None,
         usd: float | None = None,
+        sats: float | None = None,
+        magisats: bool = False,
         cache_time: int = 600,
         use_cache: bool = True,
         store_db: bool = True,
@@ -46,6 +50,8 @@ class FixedHiveQuote(BaseModel):
             hive (float | None): Amount in HIVE currency. If provided, used as the quote currency.
             hbd (float | None): Amount in HBD currency. Used if `hive` is None and `hbd` is not None.
             usd (float | None): Amount in USD currency. Used if both `hive` and `hbd` are None and `usd` is not None.
+            sats (int | None): Amount in SATS currency. Used if `magisats` is True and `sats` is provided.
+            magisats (bool): Whether to include fees in the sats calc as if this was a conversion.
             cache_time (int): Time in seconds to cache the quote in Redis. Defaults to 600.
             use_cache (bool): Whether to use cached quotes when fetching all quotes. Defaults to True.
 
@@ -73,6 +79,11 @@ class FixedHiveQuote(BaseModel):
             else Currency.HBD
             if hbd is not None
             else Currency.USD
+            if usd is not None
+            else Currency.SATS
+            if sats is not None
+            and magisats  # if we flag this as receiving magisats, we treat the sats as value
+            else Currency.USD  # Default to USD if none provided
         )
         if hive is not None:
             value = hive
@@ -80,6 +91,8 @@ class FixedHiveQuote(BaseModel):
             value = hbd
         elif usd is not None:
             value = usd
+        elif sats is not None and magisats:
+            value = sats
         else:
             value = 0.0
 
@@ -108,11 +121,17 @@ class FixedHiveQuote(BaseModel):
         )
 
         # Create conversion
-        sats_send = int((conv.msats + conv.msats_fee) // 1000)
+        total_msats = conv.msats + conv.msats_fee
+        # calc the sats to send by rounding up with Decimal quantize
+        sats_send = (Decimal(total_msats) / Decimal(1000)).quantize(
+            Decimal("1."), rounding="ROUND_UP"
+        )
+
         # Create quote instance
         fixed_quote = cls(
             unique_id=str(uuid4())[:6],
-            sats_send=sats_send,
+            sats_send=int(sats_send),
+            msats_fee=int(conv.msats_fee),
             conv=conv.v1(),
             quote_record=quote_record,
             quote_response=quote_response,

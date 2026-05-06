@@ -9,7 +9,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import timestamp_inc
 from v4vapp_backend_v2.models.payment_models import Payment
 

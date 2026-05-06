@@ -368,7 +368,7 @@ class TransferBase(OpBase):
             return max_payment_amount - fee_estimate
         return Decimal(0)
 
-    def get_cust_id(self):
+    def get_cust_id(self) -> CustIDType:
         """Return the cust id for this transfer by delegating to the
         module-level helper `get_transfer_cust_id` so the same logic
         can be reused elsewhere."""

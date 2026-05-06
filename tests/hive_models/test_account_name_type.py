@@ -45,8 +45,11 @@ def test_acc_name_magi_prefix_for_evm():
 
 
 def test_acc_name_magi_prefix_raises_for_invalid_value():
-    with pytest.raises(ValueError):
-        AccName("invalid!name").magi_prefix
+    # Behaviour changed.
+    invalid_name = AccName(
+        "invalid!name"
+    ).magi_prefix  # should not raise, just return original string
+    assert invalid_name == "invalid!name"
 
 
 def test_acc_name_links():

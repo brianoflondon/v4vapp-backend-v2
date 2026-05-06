@@ -103,7 +103,6 @@ async def health_check() -> Dict[str, Any]:
                 f"{ICON} {task} task is not running",
                 extra={"notification": True, "error_code": "hive_monitor_task_failure"},
             )
-            sys.exit(1)
 
     if exceptions:
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
@@ -972,13 +971,11 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                     except Exception as e:
                         logger.warning(e, extra={"notification": False, "invoice": read_invoice})
                         pass
-                bulk_updates.append(
-                    {
-                        "filter": query,
-                        "update": {"$set": insert_one},
-                        "upsert": True,
-                    }
-                )
+                bulk_updates.append({
+                    "filter": query,
+                    "update": {"$set": insert_one},
+                    "upsert": True,
+                })
             try:
                 if bulk_updates:
                     result = await Invoice.collection().bulk_write(
@@ -1064,9 +1061,13 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 )
                 status = read_payment.get("status", None) if read_payment else None
                 # if we already have a meaningful route or description, nothing to do
-                if (read_payment and route_str and invoice_description):
+                if read_payment and route_str and invoice_description:
                     continue
-                if read_payment and route_str and (not invoice_description or invoice_description == "Not set"):
+                if (
+                    read_payment
+                    and route_str
+                    and (not invoice_description or invoice_description == "Not set")
+                ):
                     continue
                 logger.info(
                     f"Updating payment {payment.payment_index} {route_str} {invoice_description} {payment.payment_hash} {status}"
@@ -1082,13 +1083,11 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 insert_one = payment.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
                 )
-                bulk_updates.append(
-                    {
-                        "filter": query,
-                        "update": {"$set": insert_one},
-                        "upsert": True,
-                    }
-                )
+                bulk_updates.append({
+                    "filter": query,
+                    "update": {"$set": insert_one},
+                    "upsert": True,
+                })
             try:
                 if bulk_updates:
                     result = await Payment.collection().bulk_write(

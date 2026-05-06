@@ -81,6 +81,33 @@ services:
       retries: 3
       start_period: 30s
 
+  magi-monitor:
+    container_name: magi-monitor
+    depends_on:
+      - v4vapp-backend-v2-base
+    image: v4vapp-backend-v2-base:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker:/app/logs
+    command: [
+      "python", "src/magi_monitor.py",
+      "--config", "devdocker.config.yaml",
+    ]
+    restart: on-failure:3
+    stop_grace_period: 20s
+    networks:
+      - v4vapp-backend
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+
   api-v2:
     container_name: api-v2
     depends_on:

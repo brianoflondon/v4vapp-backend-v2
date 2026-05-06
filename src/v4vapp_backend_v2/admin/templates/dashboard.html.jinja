@@ -177,9 +177,27 @@
 
     // --- Render helpers ---
 
+    let latestHiveBalances = {};
+    let latestMagiBalances = null;
+
+    function _renderMagiBalanceCell(acc) {
+        if (latestMagiBalances === null) {
+            return '<span class="text-muted">loading…</span>';
+        }
+        const magi = latestMagiBalances[acc];
+        if (!magi) {
+            return '<span class="text-muted">N/A</span>';
+        }
+        if (magi.error) {
+            return '<span class="text-danger small">Error</span>';
+        }
+        return escHtml(magi['Magi Sats'] || '0');
+    }
+
     function renderHiveBalances(data) {
+        latestHiveBalances = data.balances || {};
         const section = document.getElementById('hive-balances-section');
-        const balances = data.balances || {};
+        const balances = latestHiveBalances;
         const keys = Object.keys(balances);
         if (keys.length === 0) {
             section.innerHTML = '<h6 class="text-muted">Hive Balances</h6>'
@@ -188,20 +206,26 @@
         }
         let html = '<h6 class="text-muted">Hive Balances</h6>'
             + '<div class="table-responsive"><table class="table table-borderless table-sm mb-0">'
-            + '<thead><tr><th>Account</th><th class="text-end">HIVE</th><th class="text-end">HBD</th></tr></thead><tbody>';
+            + '<thead><tr><th>Account</th><th class="text-end">HIVE</th><th class="text-end">HBD</th><th class="text-end">Magi Sats</th></tr></thead><tbody>';
         for (const acc of keys) {
             const b = balances[acc];
             if (b.error) {
                 html += '<tr><td><strong>' + escHtml(acc) + '</strong></td>'
-                    + '<td colspan="2" class="text-danger small">Error: ' + escHtml(b.error) + '</td></tr>';
+                    + '<td colspan="3" class="text-danger small">Error: ' + escHtml(b.error) + '</td></tr>';
             } else {
                 html += '<tr><td><strong>' + escHtml(acc) + '</strong></td>'
                     + '<td class="text-end">' + escHtml(b.HIVE_fmt || '0.000') + '</td>'
-                    + '<td class="text-end">' + escHtml(b.HBD_fmt || '0.000') + '</td></tr>';
+                    + '<td class="text-end">' + escHtml(b.HBD_fmt || '0.000') + '</td>'
+                    + '<td class="text-end">' + _renderMagiBalanceCell(acc) + '</td></tr>';
             }
         }
         html += '</tbody></table></div>';
         section.innerHTML = html;
+    }
+
+    function renderMagiBalances(data) {
+        latestMagiBalances = data.balances || {};
+        renderHiveBalances({ balances: latestHiveBalances });
     }
 
     function renderLndInfo(data) {
@@ -344,6 +368,16 @@
             document.getElementById('hive-balances-section').innerHTML =
                 '<h6 class="text-muted">Hive Balances</h6>'
                 + '<div class="text-danger small">Failed to load: ' + escHtml(String(err)) + '</div>';
+        });
+
+    const magiPromise = fetch('/admin/api/dashboard/magi-balances')
+        .then(r => r.json())
+        .then(renderMagiBalances)
+        .catch(err => {
+            latestMagiBalances = {};
+            if (latestHiveBalances) {
+                renderHiveBalances({ balances: latestHiveBalances });
+            }
         });
 
     const lndPromise = fetch('/admin/api/dashboard/lnd-info')

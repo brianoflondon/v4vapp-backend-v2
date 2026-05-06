@@ -1029,6 +1029,17 @@ class Overwatch:
             )
             return None
 
+        # Skip VSC custom_json operations (cj_id starting with "vsc.").
+        # These are MAGI BTC transactions not yet integrated with overwatch.
+        # They produce no ledger entries so any candidate flows would stall.
+        cj_id = getattr(op, "cj_id", "")
+        if cj_id.startswith("vsc."):
+            logger.debug(
+                f"{ICON} ⏭️ Skipping flow creation for VSC op ({event.short_id}, cj_id={cj_id!r})",
+                extra={"notification": False},
+            )
+            return None
+
         # Skip transfers originating from internal/system accounts.
         # These are payouts, refunds, change returns, or internal moves —
         # never customer-initiated deposit flows.  Customer flows are always
@@ -1176,8 +1187,18 @@ class Overwatch:
         winner_stages = winner.flow_definition.stages
 
         def _stage_sig(s: FlowStage) -> tuple:
-            """Hashable matching-criteria signature for a stage."""
-            return (s.event_type, s.op_type, s.ledger_type)
+            """Hashable matching-criteria signature for a stage.
+
+            The ``event_filter`` presence is included so that a filtered stage
+            (e.g. ``balance_request``'s transfer trigger which uses
+            ``check_balance_request``) is never considered equivalent to an
+            unfiltered stage of the same op_type in another flow.  Without
+            this, ``balance_request`` would look like a proper subset of
+            ``hive_to_keepsats`` (both have ``(op, transfer, None)`` stages),
+            causing the siblings to be kept alive under the superset-grace
+            window instead of being cancelled immediately.
+            """
+            return (s.event_type, s.op_type, s.ledger_type, s.event_filter is not None)
 
         winner_sigs = {_stage_sig(s) for s in winner_stages}
         winner_req_sigs = {_stage_sig(s) for s in winner.flow_definition.required_stages}
