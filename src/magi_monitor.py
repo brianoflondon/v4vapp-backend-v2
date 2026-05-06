@@ -4,13 +4,14 @@ import signal
 import sys
 from typing import Annotated, Any, Dict
 
-from colorama import Fore, Style
 import typer
+from colorama import Fore, Style
 
 from status.status_api import StatusAPI
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.magi.magi_classes import DB_MAGI_BTC_COLLECTION
 from v4vapp_backend_v2.magi.stream_magi import stream_magi_transfer_events
 
@@ -68,6 +69,8 @@ async def get_last_indexer_id() -> int:
         )
         if doc:
             return int(doc.get("indexer_id", 0))
+        # No documents found, want to therefore start from the most recent blocknumber we have
+
     except Exception as e:
         logger.warning(
             f"{ICON} Could not retrieve last indexer_id from DB: {e}",
@@ -129,13 +132,17 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
     try:
         # If from_indexer_id is -1, try to resume from the last saved position
         cursor_id = from_indexer_id - 1
+        last_good_block = None
         if cursor_id == -2:
             cursor_id = await get_last_indexer_id()
             if cursor_id:
                 logger.info(f"{ICON} Resuming from last saved indexer_id={cursor_id}")
             else:
                 cursor_id = 0
-                logger.info(f"{ICON} No saved position found, streaming from the beginning")
+                last_good_block = await OpBase.get_last_good_block()
+                logger.info(
+                    f"{ICON} No saved position found, streaming from the last block: {last_good_block:,}"
+                )
         if cursor_id == -1:
             cursor_id = 0
             logger.info(f"{ICON} Starting from the beginning of the indexer (cursor_id=0)")
@@ -146,6 +153,12 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
             async for event in stream_magi_transfer_events(from_indexer_id=cursor_id):
                 if shutdown_event.is_set():
                     break
+                if last_good_block and event.indexer_block_height < last_good_block:
+                    logger.info(
+                        f"{ICON} Skipping indexer_id={event.indexer_id} at block {event.indexer_block_height:,} because it's below the last good block {last_good_block:,}",
+                        extra={"notification": False},
+                    )
+                    continue
                 try:
                     if event.is_watched:
                         await event.fill_custom_jsons()
