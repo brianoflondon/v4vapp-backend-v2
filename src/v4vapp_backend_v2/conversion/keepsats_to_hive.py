@@ -20,9 +20,9 @@ Steps:
      - Credit: Asset "Customer Deposits Hive" (server)           - HIVE/HBD
 
 4) Fee recognition (LedgerType.FEE_INCOME)
-     - Debit:  Liability "VSC Liability" (server)        - MSATS
-     - Credit: Revenue "Fee Income Keepsats" (server)    - MSATS
-     (Fee is funded from sats captured by the server.)
+     - Debit:  Liability "VSC Liability" (customer)      - MSATS
+     - Credit: Revenue "Fee Income Keepsats" (from_keepsats) - MSATS
+     (Fee is charged from the customer's VSC liability.)
 
 5) Deposit converted Hive to customer liability (LedgerType.DEPOSIT_HIVE)
      - Debit:  Liability "VSC Liability" (server) - HIVE/HBD
@@ -284,7 +284,9 @@ async def conversion_keepsats_to_hive(
             debit_unit=Currency.MSATS,
             debit_amount=conv_result.net_to_receive_conv.msats,  # Changed from to_convert_conv.msats to net_to_receive_conv.msats
             debit_conv=conv_result.net_to_receive_conv,
-            credit=AssetAccount(name="Converted Keepsats Offset", sub="from_keepsats"),
+            credit=AssetAccount(
+                name="Converted Keepsats Offset", sub="from_keepsats", contra=True
+            ),
             credit_unit=Currency.MSATS,
             credit_amount=conv_result.net_to_receive_conv.msats,  # Changed from to_convert_conv.msats to net_to_receive_conv.msats
             credit_conv=conv_result.net_to_receive_conv,

@@ -147,16 +147,16 @@ async def process_create_fill_order_op(
                 op_type=limit_fill_order.op_type,
                 ledger_type=ledger_type,
                 cust_id=limit_fill_order.cust_id,
-                description=f"pays {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} Orderid: {limit_fill_order.open_orderid}",
+                description=f"pays {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} for {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} Orderid: {limit_fill_order.open_orderid}",
                 debit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.current_owner
-                ),  # Buyer debits their deposits for HIVE paid
+                ),  # Buyer debits their deposits for HIVE received
                 debit_unit=limit_fill_order.open_pays.unit,  # HIVE
                 debit_amount=limit_fill_order.open_pays.amount_decimal,
                 debit_conv=limit_fill_order.debit_conv,
                 credit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.current_owner
-                ),  # Buyer credits their deposits for HBD received
+                ),  # Buyer credits their deposits for HBD paid
                 credit_unit=limit_fill_order.current_pays.unit,  # HBD
                 credit_amount=limit_fill_order.current_pays.amount_decimal,
                 credit_conv=limit_fill_order.credit_conv,
@@ -172,16 +172,16 @@ async def process_create_fill_order_op(
                 op_type=limit_fill_order.op_type,
                 ledger_type=ledger_type,
                 cust_id=limit_fill_order.cust_id,
-                description=f"receives {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} Orderid: {limit_fill_order.open_orderid}",
+                description=f"pays {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} Orderid: {limit_fill_order.open_orderid}",
                 debit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.open_owner
-                ),  # Seller debits escrow for HBD delivered
+                ),  # Seller debits deposits for HBD received
                 debit_unit=limit_fill_order.current_pays.unit,  # HBD
                 debit_amount=limit_fill_order.current_pays.amount_decimal,
                 debit_conv=limit_fill_order.credit_conv,  # Use credit_conv for seller's debit (HBD)
                 credit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.open_owner
-                ),  # Seller credits deposits for HIVE received
+                ),  # Seller credits deposits for HIVE delivered
                 credit_unit=limit_fill_order.open_pays.unit,  # HIVE
                 credit_amount=limit_fill_order.open_pays.amount_decimal,
                 credit_conv=limit_fill_order.debit_conv,  # Use debit_conv for seller's credit (HIVE)
@@ -201,13 +201,13 @@ async def process_create_fill_order_op(
                 description=f"trades {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} for {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} (external seller) Orderid: {limit_fill_order.open_orderid}",
                 debit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.current_owner
-                ),  # Buyer debits deposits for HIVE paid
+                ),  # Buyer debits deposits for HIVE received
                 debit_unit=limit_fill_order.open_pays.unit,
                 debit_amount=limit_fill_order.open_pays.amount_decimal,
                 debit_conv=limit_fill_order.debit_conv,
                 credit=AssetAccount(
                     name="Traded Deposits Hive", sub=limit_fill_order.current_owner
-                ),  # Buyer credits deposits for HBD received (net effect)
+                ),  # Buyer credits deposits for HBD paid (net effect)
                 credit_unit=limit_fill_order.current_pays.unit,
                 credit_amount=limit_fill_order.current_pays.amount_decimal,
                 credit_conv=limit_fill_order.credit_conv,

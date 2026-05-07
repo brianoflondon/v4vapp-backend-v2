@@ -777,12 +777,21 @@ async def magisats_funding(
     Returns:
         List of `LedgerEntry` objects created by the handler, or an empty list on error.
     """
+    vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
+    assert vsc_payload.amount, "Amount is missing in VSC payload"
+    assert magi_transfer.amount == Decimal(vsc_payload.amount), (
+        "Amount in VSC payload does not match Magi transfer event amount"
+    )
+    assert magi_transfer.conv and not magi_transfer.conv.is_unset(), (
+        "Conversion details are missing in Magi transfer event"
+    )
+
     ledger_entries_list = []
     exchange_sub = magi_exchange_adapter().exchange_name
     amount_sent_msats = Decimal(magi_transfer.amount) * Decimal(1000)
     ledger_type = LedgerType.FUNDING
     magi_inbound_ledger = LedgerEntry(
-        cust_id=exchange_sub,
+        cust_id=magi_transfer.from_account,
         short_id=magi_transfer.short_id,
         ledger_type=ledger_type,
         group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
