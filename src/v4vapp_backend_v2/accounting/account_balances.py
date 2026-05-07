@@ -381,11 +381,11 @@ async def one_account_balance(
         )
 
     # Special case, force use of checkpoints.
-    logger.info(f"{as_of_date=} {age=} {use_cache=} {use_checkpoints=}")
+    logger.info(f"{account} {as_of_date=} {age=} {use_cache=} {use_checkpoints=}")
     if account.sub == InternalConfig().server_id:
         if account.name == "VSC Liability":
             logger.info(
-                f"{use_checkpoints=} forced True, {use_cache=} forced True for server account balance"
+                f"{account} {use_checkpoints=} forced True, {use_cache=} forced True for server account balance"
             )
             use_checkpoints = True
             use_cache = True
