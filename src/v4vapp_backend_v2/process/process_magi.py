@@ -89,7 +89,7 @@ async def process_magi_btc_transfer_event(
 
     server_id = InternalConfig().server_id
     ledger_entries = []
-    funding_accounts = InternalConfig().config.hive_config.funding_accounts
+    funding_accounts = InternalConfig().config.hive_config.funding_account_names
 
     try:
         for custom_json in magi_transfer.custom_jsons or []:
@@ -123,7 +123,9 @@ async def process_magi_btc_transfer_event(
                                 f"{ICON} Incoming transfer from a Funding Account {vsc_call.caller} in custom JSON {magi_transfer.short_id}",
                                 extra={**vsc_call.log_extra},
                             )
-
+                            ledger_entries = await magisats_funding(
+                                magi_transfer=magi_transfer, vsc_call=vsc_call
+                            )
                         else:
                             ledger_entries = await magisats_inbound(
                                 magi_transfer=magi_transfer, vsc_call=vsc_call
@@ -786,7 +788,7 @@ async def magisats_funding(
         group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
         op_type=magi_transfer.op_type,
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Funding to Magi Server {magi_transfer.amount:,.0f} sats",
+        description=f"Funding to Magi Server {magi_transfer.amount:,.0f} sats from {magi_transfer.from_account}",
         debit=AssetAccount(name="Exchange Holdings", sub=exchange_sub),
         debit_unit=Currency.MSATS,
         debit_amount=amount_sent_msats,

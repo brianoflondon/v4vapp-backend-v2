@@ -189,9 +189,9 @@ async def process_transfer_op(
     server_account, treasury_account, funding_account, exchange_account = (
         hive_config.all_account_names
     )
-    server_accounts = hive_config.server_accounts
-    funding_accounts = hive_config.funding_accounts
-    treasury_accounts = hive_config.treasury_accounts
+    server_accounts = hive_config.server_account_names
+    funding_accounts = hive_config.funding_account_names
+    treasury_accounts = hive_config.treasury_account_names
     exchange_accounts = exchange_config.all_hive_exchange_accounts()
 
     expense_accounts = InternalConfig().config.expense_config.hive_expense_accounts
