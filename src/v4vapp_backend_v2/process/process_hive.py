@@ -189,7 +189,9 @@ async def process_transfer_op(
     server_account, treasury_account, funding_account, exchange_account = (
         hive_config.all_account_names
     )
-
+    server_accounts = hive_config.server_accounts
+    funding_accounts = hive_config.funding_accounts
+    treasury_accounts = hive_config.treasury_accounts
     exchange_accounts = exchange_config.all_hive_exchange_accounts()
 
     expense_accounts = InternalConfig().config.expense_config.hive_expense_accounts
@@ -226,8 +228,8 @@ async def process_transfer_op(
 
     # MARK: Server to Treasury
     elif (
-        hive_transfer.from_account == server_account
-        and hive_transfer.to_account == treasury_account
+        hive_transfer.from_account in server_accounts
+        and hive_transfer.to_account in treasury_accounts
     ):
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
@@ -235,8 +237,8 @@ async def process_transfer_op(
         ledger_entry.ledger_type = LedgerType.SERVER_TO_TREASURY
     # MARK: Treasury to Server
     elif (
-        hive_transfer.from_account == treasury_account
-        and hive_transfer.to_account == server_account
+        hive_transfer.from_account in treasury_accounts
+        and hive_transfer.to_account in server_accounts
     ):
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
@@ -253,8 +255,8 @@ async def process_transfer_op(
 
     # MARK: Funding to Treasury
     elif (
-        hive_transfer.from_account == funding_account
-        and hive_transfer.to_account == treasury_account
+        hive_transfer.from_account in funding_accounts
+        and hive_transfer.to_account in treasury_accounts
     ):
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = LiabilityAccount(name="Owner Loan Payable", sub=funding_account)
@@ -262,8 +264,8 @@ async def process_transfer_op(
         ledger_entry.ledger_type = LedgerType.FUNDING
     # MARK: Treasury to Funding
     elif (
-        hive_transfer.from_account == treasury_account
-        and hive_transfer.to_account == funding_account
+        hive_transfer.from_account in treasury_accounts
+        and hive_transfer.to_account in funding_accounts
     ):
         ledger_entry.debit = LiabilityAccount(name="Owner Loan Payable", sub=treasury_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=funding_account)
@@ -271,11 +273,13 @@ async def process_transfer_op(
         ledger_entry.ledger_type = LedgerType.TREASURY_TO_FUNDING
     # MARK: Treasury to Exchange
     elif (
-        hive_transfer.from_account == treasury_account
+        hive_transfer.from_account in treasury_accounts
         and hive_transfer.to_account in exchange_accounts
     ):
         # Use the configured exchange adapter name as the Exchange Holdings sub-account
-        provider_name = exchange_config.get_provider_name_from_hive_account(hive_transfer.to_account)
+        provider_name = exchange_config.get_provider_name_from_hive_account(
+            hive_transfer.to_account
+        )
         exchange_sub = get_exchange_adapter(provider_name).exchange_name
         ledger_entry.cust_id = exchange_sub
         ledger_entry.debit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
@@ -284,10 +288,12 @@ async def process_transfer_op(
         ledger_entry.ledger_type = LedgerType.TREASURY_TO_EXCHANGE
     # MARK: Server to Exchange
     elif (
-        hive_transfer.from_account == server_account
+        hive_transfer.from_account in server_accounts
         and hive_transfer.to_account in exchange_accounts
     ):
-        provider_name = exchange_config.get_provider_name_from_hive_account(hive_transfer.to_account)
+        provider_name = exchange_config.get_provider_name_from_hive_account(
+            hive_transfer.to_account
+        )
         exchange_sub = get_exchange_adapter(provider_name).exchange_name
         ledger_entry.cust_id = exchange_sub
         ledger_entry.debit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
@@ -297,9 +303,11 @@ async def process_transfer_op(
     # MARK: Exchange to Treasury
     elif (
         hive_transfer.from_account in exchange_accounts
-        and hive_transfer.to_account == treasury_account
+        and hive_transfer.to_account in treasury_accounts
     ):
-        provider_name = exchange_config.get_provider_name_from_hive_account(hive_transfer.from_account)
+        provider_name = exchange_config.get_provider_name_from_hive_account(
+            hive_transfer.from_account
+        )
         exchange_sub = get_exchange_adapter(provider_name).exchange_name
         ledger_entry.cust_id = exchange_sub
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
@@ -331,7 +339,7 @@ async def process_transfer_op(
         ledger_entry.ledger_type = expense_rule.ledger_type
 
     # MARK: Server to customer account withdrawal
-    elif hive_transfer.from_account == server_account:
+    elif hive_transfer.from_account in server_accounts:
         customer = hive_transfer.to_account
         server = hive_transfer.from_account
         ledger_entry.debit = LiabilityAccount("VSC Liability", sub=customer)
@@ -345,7 +353,7 @@ async def process_transfer_op(
             follow_on_task = suspicious_account_transfer_accounting(hive_transfer=hive_transfer)
 
     # MARK: Customer account to server account deposit
-    elif hive_transfer.to_account == server_account:
+    elif hive_transfer.to_account in server_accounts:
         customer = hive_transfer.from_account
         server = hive_transfer.to_account
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
