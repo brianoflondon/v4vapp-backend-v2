@@ -667,6 +667,16 @@ class HiveConfig(BaseConfig):
         return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.exchange]
 
     @property
+    def funding_account_names(self) -> List[str]:
+        """
+        Retrieve the names of the funding accounts.
+
+        Returns:
+            List[str]: A list containing the names of all funding accounts.
+        """
+        return [acc.name for acc in self.funding_accounts]
+
+    @property
     def exchange_account_names(self) -> List[str]:
         """
         Retrieve the names of the exchange accounts.
@@ -776,7 +786,7 @@ class ExpenseConfig(BaseConfig):
         Returns:
             List[str]: A list containing the names of Hive expense accounts.
         """
-        return list({rule.expense_account_name for rule in self.hive_expense_rules.values()})
+        return list(self.hive_expense_rules.keys())
 
     @property
     def lnd_expense_accounts(self) -> List[str]:

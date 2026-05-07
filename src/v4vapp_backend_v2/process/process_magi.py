@@ -89,6 +89,7 @@ async def process_magi_btc_transfer_event(
 
     server_id = InternalConfig().server_id
     ledger_entries = []
+    funding_accounts = InternalConfig().config.hive_config.funding_account_names
 
     try:
         for custom_json in magi_transfer.custom_jsons or []:
@@ -116,9 +117,19 @@ async def process_magi_btc_transfer_event(
                             f"{ICON} Found incoming transfer to {server_id} in custom JSON {magi_transfer.short_id}",
                             extra={**vsc_call.log_extra},
                         )
-                        ledger_entries = await magisats_inbound(
-                            magi_transfer=magi_transfer, vsc_call=vsc_call
-                        )
+                        # Deal with a special case only of coming from a Funding Account.
+                        if AccName(vsc_call.caller).no_prefix in funding_accounts:
+                            logger.info(
+                                f"{ICON} Incoming transfer from a Funding Account {vsc_call.caller} in custom JSON {magi_transfer.short_id}",
+                                extra={**vsc_call.log_extra},
+                            )
+                            ledger_entries = await magisats_funding(
+                                magi_transfer=magi_transfer, vsc_call=vsc_call
+                            )
+                        else:
+                            ledger_entries = await magisats_inbound(
+                                magi_transfer=magi_transfer, vsc_call=vsc_call
+                            )
     except AssertionError as e:
         logger.error(
             f"{ICON} Assertion error while processing Magi BTC transfer event {magi_transfer.short_id}: {e}",
@@ -748,3 +759,59 @@ async def return_magisats(
         )
         await payment.save()
     return customer_to_server
+
+
+async def magisats_funding(
+    magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
+) -> List[LedgerEntry]:
+    """
+    Handle special case of Magi transfer from a Funding Account.
+
+    When the server receives a Magi transfer from a known Funding Account, it may choose
+    to handle it differently (e.g. skip the follow-on payment or apply different fee
+    logic). This function can be implemented to encapsulate that special handling logic.
+
+    Args:
+        magi_transfer: The on-chain Magi BTC transfer event from a Funding Account.
+        vsc_call:      The parsed VSC call from the watched custom JSON.
+    Returns:
+        List of `LedgerEntry` objects created by the handler, or an empty list on error.
+    """
+    vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
+    assert vsc_payload.amount, "Amount is missing in VSC payload"
+    assert magi_transfer.amount == Decimal(vsc_payload.amount), (
+        "Amount in VSC payload does not match Magi transfer event amount"
+    )
+    assert magi_transfer.conv and not magi_transfer.conv.is_unset(), (
+        "Conversion details are missing in Magi transfer event"
+    )
+
+    ledger_entries_list = []
+    exchange_sub = magi_exchange_adapter().exchange_name
+    amount_sent_msats = Decimal(magi_transfer.amount) * Decimal(1000)
+    ledger_type = LedgerType.FUNDING
+    magi_inbound_ledger = LedgerEntry(
+        cust_id=magi_transfer.from_account,
+        short_id=magi_transfer.short_id,
+        ledger_type=ledger_type,
+        group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
+        op_type=magi_transfer.op_type,
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Funding to Magi Server {magi_transfer.amount:,.0f} sats from {magi_transfer.from_account}",
+        debit=AssetAccount(name="Exchange Holdings", sub=exchange_sub),
+        debit_unit=Currency.MSATS,
+        debit_amount=amount_sent_msats,
+        debit_conv=magi_transfer.conv,
+        credit=LiabilityAccount(
+            name="Owner Loan Payable",
+            sub=exchange_sub,
+        ),
+        credit_unit=Currency.MSATS,
+        credit_amount=amount_sent_msats,  # using the rounded version
+        credit_conv=magi_transfer.conv,
+        link=magi_transfer.link,
+    )
+    await magi_inbound_ledger.save()
+    ledger_entries_list.append(magi_inbound_ledger)
+
+    return ledger_entries_list
