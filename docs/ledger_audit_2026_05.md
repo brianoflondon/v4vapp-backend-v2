@@ -156,3 +156,58 @@ server-held sats) and `Converted Keepsats Offset / from_keepsats` increases its 
 (partially offsetting `Treasury Lightning / from_keepsats` which is negative by the same magnitude).
 The pair `Converted Keepsats Offset / from_keepsats` (+11,368) and `Treasury Lightning / from_keepsats` (-11,368)
 netting to zero is the intended and correct result.
+
+---
+
+## Fix 4 — Accumulated fractional-msats rounding drift in VSC Liability (May 2026)
+
+**Branch:** `fix/deal-with-residual-rounding-issues`
+
+### Root cause
+
+HIVE/HBD → msats conversions produce a fractional millisatoshi value:
+
+```
+53.999 HIVE × 81.565 sats/HIVE × 1000 = 4,544,449.839963 msats
+```
+
+Before this fix, ledger entries in the `CONV_HIVE_TO_KEEPSATS`, `CONV_CUSTOMER`,
+`CONV_KEEPSATS_TO_HIVE`, `CONSUME_CUSTOMER_KEEPSATS`, and `RECLASSIFY_VSC_SATS`
+flows stored the full-precision fractional value as their `debit_amount` / `credit_amount`.
+The corresponding Lightning Network payments and on-chain keepsats transfers use
+**integer** millisatoshis, so the offsetting ledger entries use an integer amount.
+Each transaction leaves a tiny sub-msat residual in `VSC Liability (v4vapp)` — over
+2,500+ transactions on the live server account this accumulated to **188.23 msats**.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/v4vapp_backend_v2/helpers/crypto_conversion.py` | Added `msats_rounded` property to `CryptoConv` (ROUND_HALF_UP to integer Decimal, parallel to existing `sats_rounded`) |
+| `src/v4vapp_backend_v2/conversion/hive_to_keepsats.py` | `CONV_HIVE_TO_KEEPSATS.debit_amount` and `CONV_CUSTOMER.credit_amount` now use `conv.msats_rounded` |
+| `src/v4vapp_backend_v2/conversion/keepsats_to_hive.py` | `CONV_KEEPSATS_TO_HIVE.credit_amount`, `CONSUME_CUSTOMER_KEEPSATS.debit/credit_amount`, and `RECLASSIFY_VSC_SATS.debit/credit_amount` now use `conv.msats_rounded` |
+| `src/v4vapp_backend_v2/models/invoice_models.py` | `update_conv`: `float(amount_msat)` → `int(amount_msat)` |
+| `src/v4vapp_backend_v2/models/payment_models.py` | `update_conv`: `float(fee_msat)` and `float(value_msat + fee_msat)` → `int(...)` |
+
+### Test coverage
+
+New test file: `tests/helpers/test_msats_rounding.py` (17 tests)
+
+- `TestMsatsRoundedProperty` — unit tests for the new property (zero, fractions, integers, large values, return type)
+- `TestCryptoConversionIntegerMsats` — verifies integer MSATS inputs stay integer; HIVE inputs produce fractional; `msats_rounded` eliminates fractional drift; `int()` vs `float()` inputs for LND values
+- `TestAccumulatedRoundingDrift` — simulation tests demonstrating that without rounding the residual grows with transaction count, while with `msats_rounded` it is bounded to ≤ 0.5 msats per transaction
+
+### Remaining residual in historical data
+
+The **188 msats** in the live VSC Liability account as of 2026-05-08 remains as a
+historical artefact. It can be corrected with a manual adjustment ledger entry if
+desired. All **new** transactions from this fix forward will use rounded integer
+msats and will not introduce further fractional drift.
+
+### Why ROUND_HALF_UP (not floor/truncation)
+
+The Lightning Network itself can send any integer msats value — there is no requirement
+to truncate. Using ROUND_HALF_UP is consistent with `sats_rounded` and gives the customer
+the nearest-integer approximation of the calculated value. The residual per transaction
+is bounded to ±0.5 msats (whichever rounding direction is closest), which is negligible
+and symmetric across many transactions.

@@ -72,6 +72,23 @@ class CryptoConv(BaseModel):
         """
         return self.sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
+    @property
+    def msats_rounded(self) -> Decimal:
+        """
+        Round msats to the nearest integer using standard rounding (ROUND_HALF_UP).
+
+        This is the canonical value to use in ledger entries for msats amounts that
+        correspond to actual Lightning Network payments, which are always integer msats.
+        Using the full-precision fractional value (e.g. 4544449.839963) instead of an
+        integer causes accumulated sub-msat rounding drift across many transactions.
+
+        Examples:
+        - 4544449.2 -> 4544449
+        - 4544449.5 -> 4544450  (rounds UP)
+        - 4544449.839963 -> 4544450
+        """
+        return self.msats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
     @field_validator(
         "hive",
         "hbd",

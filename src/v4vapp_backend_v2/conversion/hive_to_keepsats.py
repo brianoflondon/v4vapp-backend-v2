@@ -136,7 +136,7 @@ async def conversion_hive_to_keepsats(
             sub="to_keepsats",
         ),
         debit_unit=Currency.MSATS,
-        debit_amount=conv_result.to_convert_conv.msats,
+        debit_amount=conv_result.to_convert_conv.msats_rounded,
         debit_conv=conv_result.to_convert_conv,
         credit=AssetAccount(
             name="Customer Deposits Hive",
@@ -200,7 +200,7 @@ async def conversion_hive_to_keepsats(
             sub=server_id,  # This is the asset account for the server, where keepsats are held
         ),
         credit_unit=Currency.MSATS,
-        credit_amount=conv_result.to_convert_conv.msats,
+        credit_amount=conv_result.to_convert_conv.msats_rounded,
         credit_conv=conv_result.to_convert_conv,
         link=tracked_op.link,
     )

@@ -172,7 +172,7 @@ async def conversion_keepsats_to_hive(
         debit_conv=conv_result.to_convert_conv,
         credit=AssetAccount(name="Treasury Lightning", sub="from_keepsats"),
         credit_unit=Currency.MSATS,
-        credit_amount=conv_result.to_convert_conv.msats,
+        credit_amount=conv_result.to_convert_conv.msats_rounded,
         credit_conv=conv_result.to_convert_conv,
         link=tracked_op.link,
     )
@@ -282,13 +282,13 @@ async def conversion_keepsats_to_hive(
             description=f"Consume customer SATS for Keepsats-to-{to_currency} conversion {conv_result.net_to_receive_conv.sats_rounded:,.0f} msats for {cust_id}",  # Updated description
             debit=LiabilityAccount(name="VSC Liability", sub=cust_id),
             debit_unit=Currency.MSATS,
-            debit_amount=conv_result.net_to_receive_conv.msats,  # Changed from to_convert_conv.msats to net_to_receive_conv.msats
+            debit_amount=conv_result.net_to_receive_conv.msats_rounded,
             debit_conv=conv_result.net_to_receive_conv,
             credit=AssetAccount(
                 name="Converted Keepsats Offset", sub="from_keepsats", contra=True
             ),
             credit_unit=Currency.MSATS,
-            credit_amount=conv_result.net_to_receive_conv.msats,  # Changed from to_convert_conv.msats to net_to_receive_conv.msats
+            credit_amount=conv_result.net_to_receive_conv.msats_rounded,
             credit_conv=conv_result.net_to_receive_conv,
             link=tracked_op.link,
         )
@@ -341,13 +341,13 @@ async def conversion_keepsats_to_hive(
             description=f"Reclassify positive SATS (net) from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive inflow",
             debit=LiabilityAccount(name="VSC Liability", sub=server_id),
             debit_unit=Currency.MSATS,
-            debit_amount=conv_result.net_to_receive_conv.msats,
+            debit_amount=conv_result.net_to_receive_conv.msats_rounded,
             debit_conv=conv_result.net_to_receive_conv,
             credit=AssetAccount(
                 name="Converted Keepsats Offset", sub="from_keepsats", contra=True
             ),
             credit_unit=Currency.MSATS,
-            credit_amount=conv_result.net_to_receive_conv.msats,
+            credit_amount=conv_result.net_to_receive_conv.msats_rounded,
             credit_conv=conv_result.net_to_receive_conv,
             link=tracked_op.link,
         )

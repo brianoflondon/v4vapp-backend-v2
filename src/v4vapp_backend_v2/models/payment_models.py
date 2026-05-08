@@ -177,12 +177,12 @@ class Payment(TrackedBaseModel):
         if self.fee_msat:
             self.fee_conv = CryptoConversion(
                 conv_from=Currency.MSATS,
-                value=float(self.fee_msat),
+                value=int(self.fee_msat),
                 quote=quote,
             ).conversion
         self.conv = CryptoConversion(
             conv_from=Currency.MSATS,
-            value=float(self.value_msat + self.fee_msat),
+            value=int(self.value_msat + self.fee_msat),
             quote=quote,
         ).conversion
 
@@ -302,16 +302,14 @@ class Payment(TrackedBaseModel):
             return "Unknown"
 
         route_fees_ppm = self.route_fees_ppm
-        ans = " -> ".join(
-            [
-                (
-                    f"{hop.alias}"
-                    if route_fees_ppm.get(hop.pub_key) is None
-                    else f"{hop.alias} ({route_fees_ppm.get(hop.pub_key):.0f} ppm)"
-                )
-                for hop in self.route
-            ]
-        )
+        ans = " -> ".join([
+            (
+                f"{hop.alias}"
+                if route_fees_ppm.get(hop.pub_key) is None
+                else f"{hop.alias} ({route_fees_ppm.get(hop.pub_key):.0f} ppm)"
+            )
+            for hop in self.route
+        ])
         return ans
 
     # Methods from Payment
