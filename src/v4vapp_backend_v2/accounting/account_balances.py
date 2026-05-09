@@ -1671,7 +1671,7 @@ async def keepsats_balance(
         contra=False,
     )
 
-    if line_items or notifications:
+    if line_items:
         # Full per-transaction history is needed (transactions=True or notifications requested).
         logger.info(
             f"FULL.  balance for {cust_id} keepsats_balance (line items or notifications requested)"
