@@ -24,7 +24,11 @@ from v4vapp_backend_v2.accounting.in_progress_results_class import (
     InProgressResults,
     all_held_msats,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    AccountType,
+    LedgerAccount,
+    LiabilityAccount,
+)
 from v4vapp_backend_v2.accounting.ledger_cache import (
     HISTORICAL_TTL_SECONDS,
     LIVE_TTL_SECONDS,
@@ -1654,20 +1658,48 @@ async def keepsats_balance(
         sub=cust_id,
         contra=False,
     )
-    # NOTE: we set use_checkpoints=False here to ensure we get the full transaction history needed to compute the balance,
-    async with asyncio.TaskGroup() as task_group:
-        magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
-        account_balance_task = task_group.create_task(
-            one_account_balance(
-                account=account,
-                as_of_date=as_of_date,
-                age=None,
-                use_checkpoints=True,
+
+    if line_items or notifications:
+        # Full per-transaction history is needed (transactions=True or notifications requested).
+        async with asyncio.TaskGroup() as task_group:
+            magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
+            account_balance_task = task_group.create_task(
+                one_account_balance(
+                    account=account,
+                    as_of_date=as_of_date,
+                    age=None,
+                    use_checkpoints=True,
+                )
             )
-        )
+        account_balance = account_balance_task.result()
+    else:
+        # Balance-only path (transactions=False): use the lightweight summary aggregation.
+        # all_account_balances_summary runs a simple $group (no O(n) running-total window)
+        # which is significantly faster for high-volume accounts like the operator account.
+        async with asyncio.TaskGroup() as task_group:
+            magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
+            summary_task = task_group.create_task(
+                all_account_balances_summary(
+                    account_name="VSC Liability",
+                    cust_ids={cust_id},
+                    as_of_date=as_of_date,
+                )
+            )
+        summary = summary_task.result()
+        # Extract the non-contra VSC Liability entry for this customer.
+        # Note: avoid passing a constructed default to next() — it would be
+        # evaluated eagerly even when a match is found.
+        _match = next((a for a in summary.root if a.sub == cust_id and not a.contra), None)
+        if _match is not None:
+            account_balance = _match
+        else:
+            account_balance = LedgerAccountDetails(
+                name="VSC Liability",
+                account_type=AccountType.LIABILITY,
+                sub=cust_id,
+            )
 
     magi_balance = magi_balance_task.result()
-    account_balance = account_balance_task.result()
     account_balance.magi_btc_sats = magi_balance.balance_sats
     account_balance.magi_btc_msats = magi_balance.balance_msats
 
