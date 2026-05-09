@@ -257,24 +257,46 @@ async def all_account_balances_summary(
     results = convert_decimal128_to_decimal(results)
     _t1 = timer()
 
-    # Group rows by (account_type, name, sub, contra) — same grouping as the
-    # full pipeline so contra variants stay separate.
+    # Group rows by (account_type, name, sub), merging contra and non-contra
+    # variants into a single entry — mirroring the merge that one_account_balance
+    # performs after its pipeline.  The contra sign is already baked into
+    # amount_signed / conv_signed by the time the pipeline emits a row, so
+    # summing across contra variants gives the correct net balance.
     account_groups: dict[tuple, dict] = {}
     for row in results:
-        key = (row["account_type"], row["name"], row["sub"], row.get("contra", False))
+        key = (row["account_type"], row["name"], row["sub"])
         if key not in account_groups:
             account_groups[key] = {
                 "account_type": row["account_type"],
                 "name": row["name"],
                 "sub": row["sub"],
-                "contra": row.get("contra", False),
+                "contra": False,  # merged view is always non-contra
                 "units": {},
                 "max_timestamp": None,
                 "total_count": 0,
                 "has_non_opening": False,
             }
         group = account_groups[key]
-        group["units"][row["unit"]] = row
+        unit = row["unit"]
+        if unit in group["units"]:
+            # Accumulate amounts from contra variant into the existing unit row.
+            existing = group["units"][unit]
+            existing["total_amount"] += row["total_amount"]
+            existing["total_conv_hive"] += row["total_conv_hive"]
+            existing["total_conv_hbd"] += row["total_conv_hbd"]
+            existing["total_conv_usd"] += row["total_conv_usd"]
+            existing["total_conv_sats"] += row["total_conv_sats"]
+            existing["total_conv_msats"] += row["total_conv_msats"]
+            existing["count"] = existing.get("count", 0) + row.get("count", 0)
+            if row.get("has_non_opening"):
+                existing["has_non_opening"] = True
+            ts_unit = row.get("max_timestamp")
+            if ts_unit and (
+                existing.get("max_timestamp") is None or ts_unit > existing["max_timestamp"]
+            ):
+                existing["max_timestamp"] = ts_unit
+        else:
+            group["units"][unit] = dict(row)  # copy — we may mutate it above
         ts = row.get("max_timestamp")
         if ts and (group["max_timestamp"] is None or ts > group["max_timestamp"]):
             group["max_timestamp"] = ts
