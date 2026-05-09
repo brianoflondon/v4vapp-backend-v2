@@ -211,3 +211,31 @@ to truncate. Using ROUND_HALF_UP is consistent with `sats_rounded` and gives the
 the nearest-integer approximation of the calculated value. The residual per transaction
 is bounded to ±0.5 msats (whichever rounding direction is closest), which is negligible
 and symmetric across many transactions.
+
+
+# To Fix Outstanding rounding drift in VSC Liability account:
+
+Based on the code and docs, here's the accounting assessment:
+
+**Do not touch the database records. Make a single adjusting journal entry instead.**
+
+Reasons:
+
+1. **Audit trail is sacred** — Double-entry ledger records should be immutable. Retroactively modifying 2,500+ historical `cust_conv` entries would destroy the audit trail. Any future audit would show records that don't match the chain events that created them.
+
+2. **Risk vs. reward is terrible** — Each historical entry is part of a double-entry pair. To correctly round all of them you'd need to update both debit AND credit sides consistently, and the rounding direction on each pair is independent — some fractional parts would have rounded up, some down. Getting this right across 2,500 entries in MongoDB with Decimal math is very risky. The residual is **188 msats ≈ $0.001 at $200k BTC** — not worth it.
+
+3. **This is standard practice** — Every professional accounting system (QuickBooks, SAP, etc.) corrects accumulated rounding drift with a single adjusting entry, never retroactive record modification.
+
+**The right fix is one journal entry:**
+
+```
+Debit:  VSC Liability (sub=v4vapp)  +188 msats   ← reduces phantom liability
+Credit: Fee Income (sub=rounding)   +188 msats   ← recognises it as rounding income
+```
+
+Use `LedgerType.FEE_INCOME` (or add `ROUNDING_ADJUSTMENT` to the enum if you want it clearly labelled), `ledger_type` in the entry, and a description like `"Accumulated sub-msat rounding drift correction — prior to fix/deal-with-residual-rounding-issues"`.
+
+The exact residual amount to use is `188` msats (the 0.2266... fraction rounds down with `ROUND_HALF_UP`) — consistent with your new policy of integer msats in ledger entries.
+
+**Practically speaking**: if `v4vapp` is your own operator account (not an external customer), you could also just leave it. 188 msats will never matter. The fix prevents further accumulation, which is the important part.
