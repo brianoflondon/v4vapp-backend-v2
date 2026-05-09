@@ -279,7 +279,7 @@ async def conversion_keepsats_to_hive(
             ledger_type=ledger_type,
             group_id=f"{tracked_op.group_id}_{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
-            description=f"Consume customer SATS for Keepsats-to-{to_currency} conversion {conv_result.net_to_receive_conv.sats_rounded:,.0f} msats for {cust_id}",  # Updated description
+            description=f"Consume customer SATS for Keepsats-to-{to_currency} conversion {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",  # Updated description
             debit=LiabilityAccount(name="VSC Liability", sub=cust_id),
             debit_unit=Currency.MSATS,
             debit_amount=conv_result.net_to_receive_conv.msats_rounded,

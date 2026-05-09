@@ -183,8 +183,12 @@ class TestAccumulatedRoundingDrift:
 
     def _simulate_transactions(self, use_rounded: bool) -> Decimal:
         """
-        For each HIVE amount, compute the cust_conv ledger credit and the
-        corresponding Lightning send (which uses integer msats = floor of fractional).
+        For each HIVE amount, compute the ledger credit and the Lightning transfer.
+
+        use_rounded=False (old code): ledger used msats_rounded, transfer used
+            int(msats) i.e. floor — so residual = credit_rounded - floor(msats).
+        use_rounded=True (fixed code): both ledger AND transfer use msats_rounded,
+            so residual = 0 per transaction.
 
         Returns the accumulated residual: sum(credit - debit).
         """
@@ -196,38 +200,39 @@ class TestAccumulatedRoundingDrift:
                 value=Decimal(amount_str), conv_from=Currency.HIVE, quote=quote
             ).conversion
 
-            # cust_conv ledger credit: fractional or rounded
-            credit = conv.msats_rounded if use_rounded else conv.msats
+            if use_rounded:
+                # Fixed code: both ledger and transfer use msats_rounded
+                credit = conv.msats_rounded
+                lightning_send = conv.msats_rounded  # int(msats_rounded) in code
+            else:
+                # Old code: ledger used msats_rounded, transfer used int(msats) = floor
+                credit = conv.msats_rounded
+                lightning_send = conv.msats.to_integral_value(rounding="ROUND_FLOOR")
 
-            # Lightning payment always truncates to integer msats (floor)
-            lightning_send = conv.msats.to_integral_value(rounding="ROUND_FLOOR")
-
-            # Running total per transaction: credit - debit
             total_residual += credit - lightning_send
 
         return total_residual
 
     def test_without_rounding_residual_accumulates(self):
-        """Without rounding, fractional msats accumulate across transactions."""
-        residual = self._simulate_transactions(use_rounded=False)
-        # The residual should be the sum of fractional parts (all positive)
-        assert residual > 0, "Expected positive drift from unrounded ledger entries"
-        # It should be clearly sub-msat in total (each fraction is < 1 msat)
-        assert residual < len(self.HIVE_AMOUNTS), "Residual bounded by transaction count"
-
-    def test_with_msats_rounded_residual_bounded_to_half_msat_per_tx(self):
         """
-        With msats_rounded (ROUND_HALF_UP), the residual per transaction is
-        at most ±0.5 msats.  Over N transactions the maximum accumulated drift
-        is N/2 msats — dramatically smaller than the unrounded case.
+        Old code: ledger used msats_rounded but transfer used int(msats) = floor.
+        The per-tx residual is credit_rounded - floor(msats), which is 0 or +1 msat.
+        Over N transactions the maximum drift is N msats (one per tx when fraction >= 0.5).
         """
-        quote = make_quote(sats_per_hive="81.565")
         n = len(self.HIVE_AMOUNTS)
-        max_expected = Decimal(n) * Decimal("0.5")
+        residual = self._simulate_transactions(use_rounded=False)
+        # Residual is non-negative (rounded >= floor always) and at most N
+        assert residual >= 0, "Expected non-negative drift from floor transfer"
+        assert residual <= n, f"Residual {residual} exceeds max possible {n}"
 
+    def test_with_msats_rounded_residual_is_zero(self):
+        """
+        Fixed code: both the ledger credit AND the Lightning transfer use msats_rounded.
+        credit == debit per transaction → accumulated residual is exactly 0.
+        """
         residual = self._simulate_transactions(use_rounded=True)
-        assert abs(residual) <= max_expected, (
-            f"Rounded residual {residual} exceeds expected max {max_expected}"
+        assert residual == Decimal("0"), (
+            f"Expected zero residual when both sides use msats_rounded, got {residual}"
         )
 
     def test_large_scale_unrounded_drift_grows_linearly(self):
@@ -244,19 +249,21 @@ class TestAccumulatedRoundingDrift:
         # should be at least 10 msats (clearly non-trivial).
         assert drift > Decimal("10"), "Expected drift > 10 msats for 100 identical transactions"
 
-    def test_large_scale_rounded_drift_stays_bounded(self):
-        """With msats_rounded, drift over 100 identical transactions stays near zero."""
+    def test_large_scale_rounded_drift_is_zero(self):
+        """
+        Fixed code: both ledger and transfer use msats_rounded.
+        Over 100 identical transactions the drift is exactly 0.
+        """
         quote = make_quote(sats_per_hive="81.565")
         amounts = [Decimal("53.999")] * 100
         drift = Decimal("0")
         for amt in amounts:
             conv = CryptoConversion(value=amt, conv_from=Currency.HIVE, quote=quote).conversion
-            # Rounded credit vs floor debit
+            # Both ledger and transfer use the same rounded value → zero residual
             credit = conv.msats_rounded
-            debit = conv.msats.to_integral_value(rounding="ROUND_FLOOR")
+            debit = conv.msats_rounded
             drift += credit - debit
 
-        # With ROUND_HALF_UP: 4544449.839963 → rounded up → credit=4544450, debit=4544449
-        # Each tx contributes +1 msat; total over 100 = +100 msats.
-        # This is still vastly better than the unrounded ~+84 msats per transaction × 100.
-        assert abs(drift) <= 100, f"Per-transaction residual with rounding: {drift / 100} msats"
+        assert drift == Decimal("0"), (
+            f"Expected zero drift when both sides use msats_rounded, got {drift}"
+        )

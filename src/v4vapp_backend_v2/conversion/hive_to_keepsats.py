@@ -248,7 +248,7 @@ async def conversion_hive_to_keepsats(
     transfer = KeepsatsTransfer(
         from_account=server_id,
         to_account=cust_id,
-        msats=int(conv_result.to_convert_conv.msats),
+        msats=int(conv_result.to_convert_conv.msats_rounded),
         memo=memo,
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
