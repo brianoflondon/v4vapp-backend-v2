@@ -406,16 +406,6 @@ async def one_account_balance(
             sub=account,
         )
 
-    # Special case, force use of checkpoints.
-    logger.info(f"{account} {as_of_date=} {age=} {use_cache=} {use_checkpoints=}")
-    if account.sub == InternalConfig().server_id:
-        if account.name == "VSC Liability":
-            logger.info(
-                f"{account} {use_checkpoints=} forced True, {use_cache=} forced True for server account balance"
-            )
-            use_checkpoints = True
-            use_cache = True
-
     # --- Cache lookup ---
     if use_cache:
         cached_result = await get_cached_balance(
@@ -1683,6 +1673,9 @@ async def keepsats_balance(
 
     if line_items or notifications:
         # Full per-transaction history is needed (transactions=True or notifications requested).
+        logger.info(
+            f"FULL.  balance for {cust_id} keepsats_balance (line items or notifications requested)"
+        )
         async with asyncio.TaskGroup() as task_group:
             magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
             account_balance_task = task_group.create_task(
@@ -1698,6 +1691,9 @@ async def keepsats_balance(
         # Balance-only path (transactions=False): use the lightweight summary aggregation.
         # all_account_balances_summary runs a simple $group (no O(n) running-total window)
         # which is significantly faster for high-volume accounts like the operator account.
+        logger.info(
+            f"Summary balance for {cust_id} keepsats_balance (no line items, no notifications)"
+        )
         async with asyncio.TaskGroup() as task_group:
             magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
             summary_task = task_group.create_task(
