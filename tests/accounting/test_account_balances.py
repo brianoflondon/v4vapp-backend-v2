@@ -87,21 +87,19 @@ async def load_ledger_events():
 
     # Add a notification record for the test customer so we can validate that
     # keepsats_balance correctly includes notification history when requested.
-    await InternalConfig.db["hive_ops"].insert_one(
-        {
-            "cust_id": "v4vapp.qrc",
-            "trx_id": "testtrxid123",
-            "short_id": "0000_test",
-            "timestamp": datetime(2026, 1, 1, tzinfo=timezone.utc),
-            "json": {
-                "notification": True,
-                "memo": "Test notification",
-                "parent_id": "parent123",
-                "hive_accname_to": "v4vapp.qrc",
-                "hive_accname_from": "devser.v4vapp",
-            },
-        }
-    )
+    await InternalConfig.db["hive_ops"].insert_one({
+        "cust_id": "v4vapp.qrc",
+        "trx_id": "testtrxid123",
+        "short_id": "0000_test",
+        "timestamp": datetime(2026, 1, 1, tzinfo=timezone.utc),
+        "json": {
+            "notification": True,
+            "memo": "Test notification",
+            "parent_id": "parent123",
+            "hive_accname_to": "v4vapp.qrc",
+            "hive_accname_from": "devser.v4vapp",
+        },
+    })
 
 
 async def test_list_all_accounts():
@@ -285,40 +283,64 @@ async def test_all_account_balances():
 
 
 async def test_all_account_balances_summary():
-    """Test that the summary function produces the same final totals as the full pipeline."""
+    """Test that the summary function produces the same final totals as the full pipeline.
+
+    all_account_balances_summary merges contra and non-contra groups for each
+    (account_type, name, sub) into a single entry (contra=False) so that the net
+    balance is correct.  The full pipeline returns them separately; we build a merged
+    view of the full results using the same key before comparing.
+    """
     full = await all_account_balances()
     summary = await all_account_balances_summary()
 
     assert isinstance(summary, AccountBalances)
     assert len(summary.root) > 0
 
-    # Build lookup from the full results keyed by (account_type, name, sub, contra)
-    full_map = {(a.account_type, a.name, a.sub, a.contra): a for a in full.root}
+    # Merge full results by (account_type, name, sub) — same as the summary does —
+    # so contra and non-contra variants are summed before comparison.
+    from decimal import Decimal as _D
+
+    full_merged: dict[tuple, dict] = {}
+    for a in full.root:
+        key = (a.account_type, a.name, a.sub)
+        if key not in full_merged:
+            full_merged[key] = {
+                "sats": _D(0),
+                "msats": _D(0),
+                "hive": _D(0),
+                "hbd": _D(0),
+                "conv_usd": _D(0),
+                "conv_sats": _D(0),
+            }
+        m = full_merged[key]
+        m["sats"] += a.sats
+        m["msats"] += a.msats
+        m["hive"] += a.hive
+        m["hbd"] += a.hbd
+        m["conv_usd"] += a.conv_total.usd
+        m["conv_sats"] += a.conv_total.sats
 
     for s_acct in summary.root:
-        key = (s_acct.account_type, s_acct.name, s_acct.sub, s_acct.contra)
-        f_acct = full_map.get(key)
-        assert f_acct is not None, f"Summary account {key} not found in full results"
+        key = (s_acct.account_type, s_acct.name, s_acct.sub)
+        f = full_merged.get(key)
+        assert f is not None, f"Summary account {key} not found in full results"
 
-        # Final balances must match
-        assert s_acct.sats == f_acct.sats, (
-            f"sats mismatch for {key}: summary={s_acct.sats} full={f_acct.sats}"
+        assert s_acct.sats == f["sats"], (
+            f"sats mismatch for {key}: summary={s_acct.sats} full={f['sats']}"
         )
-        assert s_acct.msats == f_acct.msats, (
-            f"msats mismatch for {key}: summary={s_acct.msats} full={f_acct.msats}"
+        assert s_acct.msats == f["msats"], (
+            f"msats mismatch for {key}: summary={s_acct.msats} full={f['msats']}"
         )
-        assert abs(s_acct.hive - f_acct.hive) <= Decimal("0.001"), (
-            f"hive mismatch for {key}: summary={s_acct.hive} full={f_acct.hive}"
+        assert abs(s_acct.hive - f["hive"]) <= Decimal("0.001"), (
+            f"hive mismatch for {key}: summary={s_acct.hive} full={f['hive']}"
         )
-        assert abs(s_acct.hbd - f_acct.hbd) <= Decimal("0.001"), (
-            f"hbd mismatch for {key}: summary={s_acct.hbd} full={f_acct.hbd}"
+        assert abs(s_acct.hbd - f["hbd"]) <= Decimal("0.001"), (
+            f"hbd mismatch for {key}: summary={s_acct.hbd} full={f['hbd']}"
         )
-
-        # Converted totals should match within tolerance
-        assert abs(s_acct.conv_total.usd - f_acct.conv_total.usd) <= Decimal("0.01"), (
+        assert abs(s_acct.conv_total.usd - f["conv_usd"]) <= Decimal("0.01"), (
             f"conv_total.usd mismatch for {key}"
         )
-        assert abs(s_acct.conv_total.sats - f_acct.conv_total.sats) <= Decimal("1"), (
+        assert abs(s_acct.conv_total.sats - f["conv_sats"]) <= Decimal("1"), (
             f"conv_total.sats mismatch for {key}"
         )
 

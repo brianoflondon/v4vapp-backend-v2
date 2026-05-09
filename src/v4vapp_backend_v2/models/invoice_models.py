@@ -305,7 +305,7 @@ class Invoice(TrackedBaseModel):
 
         self.conv = CryptoConversion(
             conv_from=Currency.MSATS,
-            value=float(amount_msat),
+            value=int(amount_msat),
             quote=quote,
         ).conversion
 

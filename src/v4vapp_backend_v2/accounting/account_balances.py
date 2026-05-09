@@ -24,7 +24,11 @@ from v4vapp_backend_v2.accounting.in_progress_results_class import (
     InProgressResults,
     all_held_msats,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    AccountType,
+    LedgerAccount,
+    LiabilityAccount,
+)
 from v4vapp_backend_v2.accounting.ledger_cache import (
     HISTORICAL_TTL_SECONDS,
     LIVE_TTL_SECONDS,
@@ -253,24 +257,46 @@ async def all_account_balances_summary(
     results = convert_decimal128_to_decimal(results)
     _t1 = timer()
 
-    # Group rows by (account_type, name, sub, contra) — same grouping as the
-    # full pipeline so contra variants stay separate.
+    # Group rows by (account_type, name, sub), merging contra and non-contra
+    # variants into a single entry — mirroring the merge that one_account_balance
+    # performs after its pipeline.  The contra sign is already baked into
+    # amount_signed / conv_signed by the time the pipeline emits a row, so
+    # summing across contra variants gives the correct net balance.
     account_groups: dict[tuple, dict] = {}
     for row in results:
-        key = (row["account_type"], row["name"], row["sub"], row.get("contra", False))
+        key = (row["account_type"], row["name"], row["sub"])
         if key not in account_groups:
             account_groups[key] = {
                 "account_type": row["account_type"],
                 "name": row["name"],
                 "sub": row["sub"],
-                "contra": row.get("contra", False),
+                "contra": False,  # merged view is always non-contra
                 "units": {},
                 "max_timestamp": None,
                 "total_count": 0,
                 "has_non_opening": False,
             }
         group = account_groups[key]
-        group["units"][row["unit"]] = row
+        unit = row["unit"]
+        if unit in group["units"]:
+            # Accumulate amounts from contra variant into the existing unit row.
+            existing = group["units"][unit]
+            existing["total_amount"] += row["total_amount"]
+            existing["total_conv_hive"] += row["total_conv_hive"]
+            existing["total_conv_hbd"] += row["total_conv_hbd"]
+            existing["total_conv_usd"] += row["total_conv_usd"]
+            existing["total_conv_sats"] += row["total_conv_sats"]
+            existing["total_conv_msats"] += row["total_conv_msats"]
+            existing["count"] = existing.get("count", 0) + row.get("count", 0)
+            if row.get("has_non_opening"):
+                existing["has_non_opening"] = True
+            ts_unit = row.get("max_timestamp")
+            if ts_unit and (
+                existing.get("max_timestamp") is None or ts_unit > existing["max_timestamp"]
+            ):
+                existing["max_timestamp"] = ts_unit
+        else:
+            group["units"][unit] = dict(row)  # copy — we may mutate it above
         ts = row.get("max_timestamp")
         if ts and (group["max_timestamp"] is None or ts > group["max_timestamp"]):
             group["max_timestamp"] = ts
@@ -1654,20 +1680,48 @@ async def keepsats_balance(
         sub=cust_id,
         contra=False,
     )
-    # NOTE: we set use_checkpoints=False here to ensure we get the full transaction history needed to compute the balance,
-    async with asyncio.TaskGroup() as task_group:
-        magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
-        account_balance_task = task_group.create_task(
-            one_account_balance(
-                account=account,
-                as_of_date=as_of_date,
-                age=None,
-                use_checkpoints=True,
+
+    if line_items or notifications:
+        # Full per-transaction history is needed (transactions=True or notifications requested).
+        async with asyncio.TaskGroup() as task_group:
+            magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
+            account_balance_task = task_group.create_task(
+                one_account_balance(
+                    account=account,
+                    as_of_date=as_of_date,
+                    age=None,
+                    use_checkpoints=True,
+                )
             )
-        )
+        account_balance = account_balance_task.result()
+    else:
+        # Balance-only path (transactions=False): use the lightweight summary aggregation.
+        # all_account_balances_summary runs a simple $group (no O(n) running-total window)
+        # which is significantly faster for high-volume accounts like the operator account.
+        async with asyncio.TaskGroup() as task_group:
+            magi_balance_task = task_group.create_task(get_magi_btc_balance_by_account(cust_id))
+            summary_task = task_group.create_task(
+                all_account_balances_summary(
+                    account_name="VSC Liability",
+                    cust_ids={cust_id},
+                    as_of_date=as_of_date,
+                )
+            )
+        summary = summary_task.result()
+        # Extract the non-contra VSC Liability entry for this customer.
+        # Note: avoid passing a constructed default to next() — it would be
+        # evaluated eagerly even when a match is found.
+        _match = next((a for a in summary.root if a.sub == cust_id and not a.contra), None)
+        if _match is not None:
+            account_balance = _match
+        else:
+            account_balance = LedgerAccountDetails(
+                name="VSC Liability",
+                account_type=AccountType.LIABILITY,
+                sub=cust_id,
+            )
 
     magi_balance = magi_balance_task.result()
-    account_balance = account_balance_task.result()
     account_balance.magi_btc_sats = magi_balance.balance_sats
     account_balance.magi_btc_msats = magi_balance.balance_msats
 
