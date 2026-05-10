@@ -1673,7 +1673,7 @@ async def keepsats_balance(
 
     if line_items:
         # Full per-transaction history is needed (transactions=True or notifications requested).
-        logger.info(
+        logger.debug(
             f"FULL.  balance for {cust_id} keepsats_balance (line items or notifications requested)"
         )
         async with asyncio.TaskGroup() as task_group:
@@ -1691,7 +1691,7 @@ async def keepsats_balance(
         # Balance-only path (transactions=False): use the lightweight summary aggregation.
         # all_account_balances_summary runs a simple $group (no O(n) running-total window)
         # which is significantly faster for high-volume accounts like the operator account.
-        logger.info(
+        logger.debug(
             f"Summary balance for {cust_id} keepsats_balance (no line items, no notifications)"
         )
         async with asyncio.TaskGroup() as task_group:
@@ -1730,7 +1730,9 @@ async def keepsats_balance(
         net_msats = Decimal(0)
     end = timer()
     num_lines = len(account_balance.combined_balance) if account_balance.combined_balance else 0
-    logger.info(f"{end - start:.3f}s {cust_id} keepsats_balance {num_lines:,} lines")
+    logger.debug(
+        f"{end - start:.3f}s {cust_id} keepsats_balance {account_balance.sats:,.0f} sats {account_balance.magi_btc_sats:,.0f} MAGI sats {num_lines:,} lines"
+    )
     return net_msats, account_balance
 
 

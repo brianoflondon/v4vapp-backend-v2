@@ -62,7 +62,7 @@ async def get_magi_btc_balance_by_account(
 
             balances = result.get("data", {}).get("btc_mapping_balances", [])
             if not balances:
-                logger.info(f"{ICON} No MAGI BTC balance {account_str} at {attempt_endpoint}")
+                logger.debug(f"{ICON} No MAGI BTC balance {account_str} at {attempt_endpoint}")
                 return MagiBTCBalance(account=account_str, balance_sats=Decimal(0))
             balance_record = balances[0]
 
