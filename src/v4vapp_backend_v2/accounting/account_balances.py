@@ -356,7 +356,7 @@ async def all_account_balances_summary(
     account_balances = AccountBalances(root=details_list)
 
     logger.info(
-        f"{account_name or 'ALL ACCOUNTS'}: "
+        f"{cust_ids or 'ALL ACCOUNTS'}: "
         f"aggregate={(_t1 - _t0):.3f}s, "
         f"held_msats={(_t3 - _t2):.3f}s, "
         f"total={(_t4 - _t0):.3f}s "
