@@ -353,13 +353,9 @@
         if (loadEl) loadEl.textContent = elapsed + ' s';
     }
 
-    // --- Staggered fetch: wave 1 (fast) then wave 2 (heavy) ---
-    //
-    // Wave 1: hive-balances, lnd-info, financial-summary
-    //   These are relatively fast and warm the ledger cache.
-    // Wave 2: sanity (heaviest, benefits from warm cache)
-    //   Starts after lnd-info completes so its ledger queries can
-    //   hit cached results instead of competing for cold DB reads.
+    // --- Parallel fetch phase: load all dashboard sections concurrently ---
+    // Sanity checks are slower, but they can run in parallel with the other
+    // dashboard queries rather than waiting until the page shell is built.
 
     const hivePromise = fetch('/admin/api/dashboard/hive-balances')
         .then(r => r.json())
@@ -398,17 +394,14 @@
                 + escHtml(String(err)) + '</div>';
         });
 
-    // Wave 2: start sanity only after lnd-info finishes (ledger cache warm)
-    lndPromise.finally(() => {
-        fetch('/admin/api/dashboard/sanity')
-            .then(r => r.json())
-            .then(renderSanity)
-            .catch(err => {
-                const checkEl = document.getElementById('server-balance-check');
-                if (checkEl) checkEl.textContent = '⚠️';
-                const loadEl = document.getElementById('load-time');
-                if (loadEl) loadEl.textContent = 'error';
-            });
-    });
+    const sanityPromise = fetch('/admin/api/dashboard/sanity')
+        .then(r => r.json())
+        .then(renderSanity)
+        .catch(err => {
+            const checkEl = document.getElementById('server-balance-check');
+            if (checkEl) checkEl.textContent = '⚠️';
+            const loadEl = document.getElementById('load-time');
+            if (loadEl) loadEl.textContent = 'error';
+        });
 </script>
 {% endblock %}

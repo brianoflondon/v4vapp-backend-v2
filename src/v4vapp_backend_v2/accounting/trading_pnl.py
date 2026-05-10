@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -42,13 +43,18 @@ async def generate_trading_pnl_report(
         "total_trading_pnl_usd": 0.0,
     }
 
-    for sub in subs:
-        # Ensure we pass a LedgerAccount (AssetAccount) to one_account_balance —
-        # calling code sometimes passes a plain sub string.
-        account_obj = AssetAccount(name="Exchange Holdings", sub=sub or "")
+    balance_tasks: dict[str, asyncio.Task] = {}
+    async with asyncio.TaskGroup() as tg:
+        # We can fetch all account balances in parallel, which is a big speedup if there are many subs.
+        for sub in subs:
+            account_obj = AssetAccount(name="Exchange Holdings", sub=sub)
+            balance_tasks[sub] = tg.create_task(
+                one_account_balance(account=account_obj, as_of_date=as_of_date, age=age)
+            )
 
-        # Fetch account balance details for this sub
-        acct = await one_account_balance(account=account_obj, as_of_date=as_of_date, age=age)
+    for sub in subs:
+        # Use the already fetched account balance details for this sub
+        acct = balance_tasks[sub].result()
 
         hive_lines: List[AccountBalanceLine] = acct.balances.get("hive", [])
         # Filter exchange conversion trades
