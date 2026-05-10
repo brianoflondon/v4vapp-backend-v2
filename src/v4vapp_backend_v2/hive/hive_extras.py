@@ -23,7 +23,6 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.decorators import async_time_decorator, time_decorator
 from v4vapp_backend_v2.config.setup import HIVE_API_ENDPOINTS, HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_not_development_accounts,
@@ -580,7 +579,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         return HiveInternalQuote(error=message)
 
 
-@async_time_decorator
+# @async_time_decorator
 async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amount | str]:
     """
     Asynchronously retrieves the current HIVE and HBD balances for the given account.
@@ -618,7 +617,7 @@ async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amoun
     return balance
 
 
-@time_decorator
+# @time_decorator
 def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     """
     Retrieves the current HIVE and HBD balances for the given account.
