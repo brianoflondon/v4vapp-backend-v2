@@ -29,8 +29,8 @@ from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 ICON = "🧪"  # Test Tube
 
-SANITY_CHECK_TIMEOUT_SECONDS = 40.0  # per-check timeout for sanity checks
-SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 45.0  # overall timeout for running all checks
+SANITY_CHECK_TIMEOUT_SECONDS = 60.0  # per-check timeout for sanity checks
+SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 65.0  # overall timeout for running all checks
 
 SANITY_REDIS_CACHE_KEY = "sanity_check_results_cache"
 SANITY_REDIS_TIMEOUT_SECONDS = 180
@@ -183,7 +183,7 @@ async def _safe_one_account_balance(account_name: str, in_progress: InProgressRe
         return e
 
 
-@async_time_decorator
+# @async_time_decorator
 async def server_account_balances(in_progress: InProgressResults) -> SanityCheckResult:
     """Asynchronously verify that server-related accounts have near-zero balances.
 
@@ -248,7 +248,7 @@ async def server_account_balances(in_progress: InProgressResults) -> SanityCheck
     )
 
 
-@async_time_decorator
+# @async_time_decorator
 async def server_account_hive_balances(in_progress: InProgressResults) -> SanityCheckResult:
     """
     Verify that the server's Hive blockchain account balances match the recorded customer deposits.
@@ -332,7 +332,6 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 extra={"notification": False},
             )
             raise
-
 
         deposits_details = tasks["deposits_details"].result()
         traded_deposits_details = tasks["traded_deposits_details"].result()
@@ -525,9 +524,15 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
                 # each individual check gets its own shorter timeout so we can tell which hung
                 async with asyncio.timeout(SANITY_CHECK_TIMEOUT_SECONDS):
                     return await coro
-            except Exception as exc:  # including TimeoutError or CancelledError
+            except asyncio.TimeoutError:
                 logger.warning(
-                    f"sanity check '{name}' raised {exc!r}",
+                    f"sanity check '{name}' timed out after {SANITY_CHECK_TIMEOUT_SECONDS} seconds",
+                    extra={"notification": False},
+                )
+                raise
+            except Exception as exc:  # including CancelledError and other failures
+                logger.warning(
+                    f"sanity check '{name}' failed with exception: {exc!r}",
                     extra={"notification": False},
                 )
                 raise
@@ -546,8 +551,17 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
             # if we hit the outer timeout, log the state of each task so we can
             # tell which one(s) were still pending/cancelled.
             if isinstance(e, TimeoutError):
+                logger.warning(
+                    f"overall sanity check timeout after {SANITY_ALL_CHECKS_TIMEOUT_SECONDS} seconds",
+                    extra={"notification": False},
+                )
                 for name, t in task_list:
-                    status = ("done" if t.done() else "pending",)
+                    if t.cancelled():
+                        status = "cancelled"
+                    elif t.done():
+                        status = "done"
+                    else:
+                        status = "pending"
                     logger.warning(
                         f"sanity check '{name}' status on overall timeout: {status}",
                         extra={"notification": False},

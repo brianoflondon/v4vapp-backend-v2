@@ -1,9 +1,7 @@
 from v4vapp_backend_v2.accounting.account_balances import list_all_accounts
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-from v4vapp_backend_v2.config.decorators import async_time_decorator
 
 
-@async_time_decorator
 async def get_accounts_by_type_for_selector() -> dict[str, list[LedgerAccount]]:
     """Load all accounts, fallback to demo data, group and sort by account type."""
     try:
