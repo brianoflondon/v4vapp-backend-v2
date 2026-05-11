@@ -465,7 +465,7 @@ async def create_checkpoint(
     if not force:
         existing_checkpoint = await get_checkpoint_by_id(account, period_type, period_end)
         if existing_checkpoint is not None:
-            logger.info(
+            logger.debug(
                 f"{ICON} Checkpoint already exists for {account} at {period_end} ({period_type}); skipping. (took {timer() - start:.2f}s)",
                 extra={"notification": False},
             )
