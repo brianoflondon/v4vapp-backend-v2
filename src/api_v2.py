@@ -159,9 +159,7 @@ def _magisats_fee_response(receive_sats: int, include_forwarding: bool = True) -
         "receive_sats": receive_sats,
         "fee_sats": int(fee_msats / Decimal(1000)),
         "fee_msats": int(fee_msats),
-        "forwarding_fee_estimate_sats": int(
-            forwarding_fee_estimate_msats / Decimal(1000)
-        ),
+        "forwarding_fee_estimate_sats": int(forwarding_fee_estimate_msats / Decimal(1000)),
         "forwarding_fee_estimate_msats": int(forwarding_fee_estimate_msats),
         "total_to_send_sats": total_to_send_sats,
     }

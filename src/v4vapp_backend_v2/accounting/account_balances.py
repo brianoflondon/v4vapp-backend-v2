@@ -355,8 +355,14 @@ async def all_account_balances_summary(
 
     account_balances = AccountBalances(root=details_list)
 
+    cust_id_str = None
+    if cust_ids:
+        if len(cust_ids) == 1:
+            cust_id_str = cust_ids.pop()
+        else:
+            cust_id_str = f"{len(cust_ids)} cust_ids"
     logger.info(
-        f"{cust_ids or 'ALL ACCOUNTS'}: "
+        f"{cust_id_str or 'ALL ACCOUNTS'}: "
         f"aggregate={(_t1 - _t0):.3f}s, "
         f"held_msats={(_t3 - _t2):.3f}s, "
         f"total={(_t4 - _t0):.3f}s "

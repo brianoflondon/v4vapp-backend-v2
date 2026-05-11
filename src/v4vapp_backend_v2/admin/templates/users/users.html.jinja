@@ -102,7 +102,9 @@
                                     <th scope="col" class="sortable" data-sort="user">User <i
                                             class="bi bi-chevron-expand"></i></th>
                                     {% for entry in limit_entries %}
-                                    <th scope="col" class="text-center">{{ entry.label }} (%)</th>
+                                    <th scope="col" class="sortable text-center" data-sort="limit-{{ loop.index0 }}">
+                                        {{ entry.label }} (%) <i class="bi bi-chevron-expand"></i>
+                                    </th>
                                     {% endfor %}
                                     <th scope="col" class="sortable text-end" data-sort="balance">Balance (<span
                                             id="balance-currency-label">SATS</span>) <i
@@ -138,7 +140,7 @@
         const displayCurrencySelect = document.getElementById('display-currency');
         const balanceCurrencyLabel = document.getElementById('balance-currency-label');
 
-        let currentSort = { column: 'user', direction: 'asc' };
+        let currentSort = { column: 'age', direction: 'asc' };
         let usersData = [];
         let currentNow = null;
         let currentCurrency = 'SATS'; // Default currency
@@ -169,8 +171,9 @@
                 usersData = data.users_data;
                 currentNow = new Date(data.now);
 
-                // Populate the table
-                populateTable(usersData);
+                // Sort by current selection and populate table
+                sortRows(currentSort.column, currentSort.direction);
+                updateSortIcons();
 
                 // Update summaries
                 updateSummaries();
@@ -247,6 +250,8 @@
                 row.setAttribute('data-last-transaction', user.last_transaction_date || '');
                 row.setAttribute('data-last-transaction-age', user.last_transaction_date ? Math.floor((currentNow - new Date(user.last_transaction_date)) / (1000 * 60 * 60 * 24)) : 999999);
 
+                const ageDisplay = user.last_transaction_date ? formatAge(user.last_transaction_date) : 'Never';
+
                 row.innerHTML = `
                     <td>
                         <strong>
@@ -275,9 +280,7 @@
                         '<span class="text-warning">Error</span>'}
                     </td>
                     <td class="text-end">
-                        ${user.last_transaction_date ?
-                        `${Math.floor((currentNow - new Date(user.last_transaction_date)) / (1000 * 60 * 60 * 24))} days` :
-                        'Never'}
+                        ${ageDisplay}
                     </td>
                     <td class="text-center">
                         ${user.error ?
@@ -308,6 +311,28 @@
             }
         }
 
+        function formatAge(lastTransactionDate) {
+            const ageMs = currentNow - new Date(lastTransactionDate);
+            const ageHours = Math.max(1, Math.floor(ageMs / (1000 * 60 * 60)));
+            const ageDays = Math.floor(ageHours / 24);
+
+            if (ageDays === 0) {
+                return `${ageHours} hours`;
+            }
+
+            return `${ageDays} days`;
+        }
+
+        function updateSortIcons() {
+            document.querySelectorAll('.sortable i').forEach(icon => {
+                icon.className = 'bi bi-chevron-expand';
+            });
+            const header = document.querySelector(`.sortable[data-sort="${currentSort.column}"] i`);
+            if (header) {
+                header.className = currentSort.direction === 'asc' ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
+            }
+        }
+
         function sortRows(column, direction) {
             if (!usersData.length) return;
 
@@ -319,9 +344,13 @@
                 } else if (column === 'balance') {
                     aVal = currentCurrency === 'SATS' ? (a.balance_sats || 0) : (a.balance_usd || 0);
                     bVal = currentCurrency === 'SATS' ? (b.balance_sats || 0) : (b.balance_usd || 0);
+                } else if (column.startsWith('limit-')) {
+                    const index = parseInt(column.split('-')[1], 10);
+                    aVal = a.limit_percents ? (a.limit_percents[index] || 0) : 0;
+                    bVal = b.limit_percents ? (b.limit_percents[index] || 0) : 0;
                 } else if (column === 'age') {
-                    aVal = a.last_transaction_date ? Math.floor((currentNow - new Date(a.last_transaction_date)) / (1000 * 60 * 60 * 24)) : 999999;
-                    bVal = b.last_transaction_date ? Math.floor((currentNow - new Date(b.last_transaction_date)) / (1000 * 60 * 60 * 24)) : 999999;
+                    aVal = a.last_transaction_date ? (currentNow - new Date(a.last_transaction_date)) : Number.MAX_SAFE_INTEGER;
+                    bVal = b.last_transaction_date ? (currentNow - new Date(b.last_transaction_date)) : Number.MAX_SAFE_INTEGER;
                 }
 
                 if (direction === 'asc') {
