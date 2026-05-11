@@ -247,7 +247,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
         "Note: Unit lines represent values converted into each unit; they are NOT additive across columns. "
         "Intra-account exchange trades may show gross (both sides) and will net to zero in totals — only fees and net flows remain."
     )
-    output.append(f"{'Account':<40} {'Sub':<17} {'SATS':>10} {'HIVE':>12} {'HBD':>12} {'USD':>12}")
+    output.append(f"{'Account':<40} {'Sub':<17} {'SATS':>14} {'HIVE':>12} {'HBD':>12} {'USD':>12}")
     output.append("-" * max_width)
 
     for category in ["Assets", "Liabilities", "Equity"]:
@@ -285,10 +285,10 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
                     output.append(
                         f"{truncate_text(dynamic_label, 40):<40} "
                         f"{truncate_text(sub, 17):<17} "
-                        f"{balance.get('sats', 0):>10,.0f} "
-                        f"{balance.get('hive', 0):>12,.3f} "
-                        f"{balance.get('hbd', 0):>12,.3f} "
-                        f"{balance.get('usd', 0):>12,.3f}"
+                        f"{balance.get('sats', 0):>14,.0f} "
+                        f"{balance.get('hive', 0):>12,.0f} "
+                        f"{balance.get('hbd', 0):>12,.0f} "
+                        f"{balance.get('usd', 0):>12,.0f}"
                     )
             if "Total" not in sub_accounts:
                 total_usd = sum(
@@ -332,10 +332,10 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
             output.append(
                 f"{total_label:<40} "
                 f"{'':<17} "
-                f"{total.get('sats', 0):>10,.0f} "
-                f"{total.get('hive', 0):>12,.3f} "
-                f"{total.get('hbd', 0):>12,.3f} "
-                f"{total.get('usd', 0):>12,.3f}"
+                f"{total.get('sats', 0):>14,.0f} "
+                f"{total.get('hive', 0):>12,.0f} "
+                f"{total.get('hbd', 0):>12,.0f} "
+                f"{total.get('usd', 0):>12,.0f}"
             )
             output.append(f"{'-' * max_width}")
         total = balance_sheet[category]["Total"]
@@ -343,10 +343,10 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
         output.append(
             f"{'   Total ' + category:<40} "
             f"{'':<17} "
-            f"{total.get('sats', 0):>10,.0f} "
-            f"{total.get('hive', 0):>12,.3f} "
-            f"{total.get('hbd', 0):>12,.3f} "
-            f"{total.get('usd', 0):>12,.3f}"
+            f"{total.get('sats', 0):>14,.0f} "
+            f"{total.get('hive', 0):>12,.0f} "
+            f"{total.get('hbd', 0):>12,.0f} "
+            f"{total.get('usd', 0):>12,.0f}"
         )
         output.append("=" * max_width)
 
@@ -355,10 +355,10 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
     output.append(
         f"{'Total Liabilities & Equity':<40} "
         f"{'':<17} "
-        f"{total.get('sats', 0):>10,.0f} "
-        f"{total.get('hive', 0):>12,.3f} "
-        f"{total.get('hbd', 0):>12,.3f} "
-        f"{total.get('usd', 0):>12,.3f}"
+        f"{total.get('sats', 0):>14,.0f} "
+        f"{total.get('hive', 0):>12,.0f} "
+        f"{total.get('hbd', 0):>12,.0f} "
+        f"{total.get('usd', 0):>12,.0f}"
     )
 
     if balance_sheet["is_balanced"]:
