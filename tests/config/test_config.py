@@ -142,3 +142,12 @@ def test_alternate_config_file():
     except Exception as e:
         print(e)
         assert False
+
+
+def test_exchange_config_all_hive_exchange_accounts():
+    InternalConfig()
+    exchange_config = InternalConfig().config.exchange_config
+    exchange_accounts = exchange_config.all_hive_exchange_accounts()
+    assert exchange_accounts is not None
+    assert "bdhivesteem" in exchange_accounts
+    assert "binance-hot2" in exchange_accounts

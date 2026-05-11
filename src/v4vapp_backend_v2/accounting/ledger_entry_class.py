@@ -197,6 +197,7 @@ class LedgerEntry(BaseModel):
     extra_data: List[Any] = Field(
         default_factory=list, description="Additional data related to the ledger entry"
     )
+    notes: str = Field("", description="Additional notes for the ledger entry")
 
     @field_validator("debit_conv", "credit_conv", "credit_amount", "debit_amount", mode="before")
     @classmethod
