@@ -327,8 +327,12 @@ async def process_transfer_op(
         ledger_entry.ledger_type = LedgerType.EXCHANGE_TO_TREASURY
 
     # MARK: Expense Payments
-    elif hive_transfer.to_account in expense_accounts:
+    elif (
+        hive_transfer.from_account in treasury_accounts
+        and hive_transfer.to_account in expense_accounts
+    ):
         expense_account = hive_config.hive_accs.get(hive_transfer.to_account, None)
+        # Need to check from account but all expenses must be paid from Treasury account.
         if not expense_account:
             raise LedgerEntryCreationException(
                 f"Expense account {hive_transfer.to_account} not found in configuration."
