@@ -82,7 +82,7 @@ async def _connect_and_stream(
                 )
                 for event in events:
                     transfer = MagiBTCTransferEvent(**event)
-                    logger.info(transfer.log_str)
+                    logger.debug(transfer.log_str)
                     yield transfer
 
             elif msg_type == "complete":

@@ -4,6 +4,7 @@ from random import shuffle
 import httpx
 
 from v4vapp_backend_v2.config.setup import HIVE_API_ENDPOINTS, InternalConfig, logger
+from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
 
 ICON = "🔍"
@@ -25,6 +26,92 @@ def fix_witness_at_root(answer: dict) -> dict:
     if "witness_name" in answer:
         return {"witness": answer}
     return answer
+
+
+def _parse_vest_value(value: str | int | float | None) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _convert_vests_to_vote_power(hive, raw_vests: str | int | float | None) -> float:
+    """Convert raw vesting share values into Hive Power using the Hive client."""
+    parsed_vests = _parse_vest_value(raw_vests)
+    if parsed_vests is None:
+        return 0.0
+    return hive.vests_to_token_power(parsed_vests)
+
+
+def _enhance_witness_voter_with_total_value(voter: dict, hive) -> dict:
+    if not isinstance(voter, dict):
+        return voter
+
+    # The Hive voter API returns vesting amounts in raw vest shares.
+    # Convert those raw vest values into Hive Power (HP) for display.
+    vest_value = voter.get("vests") or voter.get("account_vests")
+    proxy_vest_value = voter.get("proxied_vests") or voter.get("proxy_vests")
+    vote_value = 0.0
+    proxy_value = 0.0
+
+    if hive is not None:
+        try:
+            vote_value = _convert_vests_to_vote_power(hive, vest_value)
+            proxy_value = _convert_vests_to_vote_power(hive, proxy_vest_value)
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Failed to calculate total value for voter {voter.get('voter_name', voter.get('account'))}: {e}",
+                extra={"notification": False, "error": e},
+            )
+
+    voter["vote_value"] = vote_value
+    voter["proxy_value"] = proxy_value
+    voter["total_value"] = vote_value + proxy_value
+    return voter
+
+
+def _get_witness_voter_key(voter: dict) -> str | None:
+    if not isinstance(voter, dict):
+        return None
+    return voter.get("voter_name") or voter.get("account")
+
+
+def _normalize_witness_voter(voter: dict) -> dict:
+    if not isinstance(voter, dict):
+        return voter
+    if "vote_value" not in voter:
+        voter["vote_value"] = 0.0
+    if "proxy_value" not in voter:
+        voter["proxy_value"] = 0.0
+    if "total_value" not in voter:
+        voter["total_value"] = voter["vote_value"] + voter["proxy_value"]
+    return voter
+
+
+def _build_witness_voter_map(voters: list[dict] | dict) -> dict[str, dict]:
+    if isinstance(voters, dict):
+        return {
+            key: _normalize_witness_voter(value)
+            for key, value in voters.items()
+            if isinstance(value, dict)
+        }
+
+    voter_map: dict[str, dict] = {}
+    for voter in voters:
+        normalized = _normalize_witness_voter(voter)
+        key = _get_witness_voter_key(normalized)
+        if key:
+            voter_map[key] = normalized
+    return voter_map
 
 
 async def get_hive_witness_details(
@@ -158,6 +245,137 @@ async def get_hive_witness_details(
     return None
 
 
+async def get_witness_voters(
+    witness_name: str,
+    page_size: int = 1000,
+    ignore_cache: bool = False,
+) -> dict[str, dict] | None:
+    """
+    Fetches and caches the full map of voters for a given witness.
+
+    Args:
+        witness_name (str): The witness whose voters should be downloaded.
+        page_size (int): Number of voters to request per page.
+        ignore_cache (bool): If True, bypasses Redis and fetches fresh data.
+
+    Returns:
+        dict[str, dict] | None: A map of voter account name to voter record, or None if the request fails.
+    """
+    cache_key = f"witness:{witness_name}:voters"
+    if not ignore_cache:
+        try:
+            cached_data = InternalConfig.redis_decoded.get(cache_key)
+            if cached_data:
+                cached_voters = json.loads(cached_data)
+                return _build_witness_voter_map(cached_voters)
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Failed to read cached voters for {witness_name}: {e}",
+                extra={"notification": False, "error": e},
+            )
+
+    shuffled_endpoints = HIVE_API_ENDPOINTS[:]
+    shuffle(shuffled_endpoints)
+    hive = None
+    try:
+        hive = get_hive_client()
+    except Exception as e:
+        logger.warning(
+            f"{ICON} Unable to create Hive client for voter power calculation: {e}",
+            extra={"notification": False, "error": e},
+        )
+
+    for api_url in shuffled_endpoints:
+        voters: dict[str, dict] = {}
+        page = 1
+        url = "not set"
+        try:
+            while True:
+                url = (
+                    f"{api_url}hafbe-api/witnesses/{witness_name}/voters"
+                    f"?page={page}&page-size={page_size}&sort=vests&direction=desc"
+                )
+                timeout = httpx.Timeout(5.0, connect=5.0)
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await fetch_witness_details(client, url)
+                    response.raise_for_status()
+                    answer = response.json()
+
+                if isinstance(answer, dict):
+                    page_voters = answer.get("voters", [])
+                else:
+                    page_voters = answer
+
+                if not isinstance(page_voters, list):
+                    logger.warning(
+                        f"{ICON} Unexpected voter payload for {witness_name} from {url}",
+                        extra={"notification": False},
+                    )
+                    return None
+
+                enhanced_voters = [
+                    _enhance_witness_voter_with_total_value(voter, hive) for voter in page_voters
+                ]
+                for voter in enhanced_voters:
+                    key = _get_witness_voter_key(voter)
+                    if key:
+                        voters[key] = voter
+                if len(page_voters) < page_size:
+                    break
+                page += 1
+
+            try:
+                InternalConfig.redis_decoded.setex(
+                    name=cache_key,
+                    value=json.dumps(voters),
+                    time=1800,  # Cache for 30 minutes
+                )
+            except Exception as redis_error:
+                logger.warning(
+                    f"{ICON} Failed to cache voters for {witness_name}: {redis_error}",
+                    extra={"notification": False, "error": redis_error},
+                )
+
+            return voters
+        except httpx.HTTPStatusError as e:
+            logger.warning(
+                f"{ICON} API returned status {e.response.status_code} for {url}",
+                extra={"notification": False, "error": e},
+            )
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            logger.error(
+                f"{ICON} Connection failed to {url}: {e}",
+                extra={"notification": False, "error": e},
+            )
+        except ValueError as e:
+            logger.warning(
+                f"{ICON} Failed to parse JSON response from {url}, trying again...",
+                extra={"notification": False, "error": e},
+            )
+        except Exception as e:
+            logger.exception(
+                f"{ICON} Unexpected error fetching voters for {witness_name} from {url}: {e}",
+                extra={"notification": False, "error": e},
+            )
+
+    try:
+        cached_data = InternalConfig.redis_decoded.get(cache_key)
+        if cached_data:
+            cached_voters = json.loads(cached_data)
+            return _build_witness_voter_map(cached_voters)
+    except Exception as e:
+        logger.warning(
+            f"{ICON} Failed to read cached voters for {witness_name}: {e}",
+            extra={"notification": False, "error": e},
+        )
+
+    logger.warning(
+        f"{ICON} Failed to fetch voters for {witness_name} from all API endpoints",
+        extra={"notification": False},
+    )
+    return None
+
+
 async def check_witness_vote(hive_accname: str, witness_name: str) -> bool:
     """
     Checks if a Hive account has voted for a specific witness.
@@ -169,7 +387,7 @@ async def check_witness_vote(hive_accname: str, witness_name: str) -> bool:
     Returns:
         bool: True if the account has voted for the witness, False otherwise.
     """
-    cache_key = f"witness_vote_{hive_accname}_votes_for_{witness_name}"
+    cache_key = f"witness:{witness_name}:witness_vote_{hive_accname}_votes_for_{witness_name}"
     cache_result = InternalConfig.redis_decoded.get(cache_key)
     if cache_result is not None and cache_result in ["True", "False"]:
         return cache_result == "True"
