@@ -163,6 +163,22 @@ def mock_db(mocker):
         return_value=[],
     )
 
+    class FakeCursor:
+        def __init__(self, docs):
+            self.docs = docs
+
+        async def to_list(self, length=None):
+            return self.docs
+
+    class FakeCollection:
+        async def aggregate(self, pipeline):
+            return FakeCursor([])
+
+    mocker.patch(
+        "v4vapp_backend_v2.admin.routers.users.LedgerEntry.collection",
+        return_value=FakeCollection(),
+    )
+
 
 @pytest.fixture
 def mock_user_data():
