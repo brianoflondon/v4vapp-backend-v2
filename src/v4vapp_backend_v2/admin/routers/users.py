@@ -27,7 +27,7 @@ from v4vapp_backend_v2.accounting.pipelines.fee_aggregation_pipelines import (
 )
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults
 from v4vapp_backend_v2.admin.navigation import NavigationManager
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive.witness_details import get_witness_voters
@@ -82,9 +82,14 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
             This significantly speeds up the response for large account sets.
     """
     start = timer()
-    witness_voters_task = asyncio.create_task(
-        get_witness_voters(witness_name="brianoflondon")
-    )  # Start fetching witness voters in the background
+    watch_witness = InternalConfig().config.hive_config.watch_witnesses
+    if watch_witness:
+        watch_witness_name = watch_witness[0]  # Currently only supports one witness
+        witness_voters_task = asyncio.create_task(
+            get_witness_voters(witness_name=watch_witness_name)
+        )  # Start fetching witness voters in the background
+    else:
+        witness_voters_task = None
 
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
@@ -128,7 +133,11 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
         check_hive_conversion_limits(cust_id=account.sub) for account in vsc_liability_balances
     ]
 
-    witness_voters = await witness_voters_task
+    if witness_voters_task:
+        witness_voters = await witness_voters_task
+    else:
+        witness_voters = None
+
     if not witness_voters:
         logger.warning("No witness voters found for brianoflondon")
         witness_voter_names = set()
