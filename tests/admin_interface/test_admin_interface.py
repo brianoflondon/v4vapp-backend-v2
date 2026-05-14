@@ -352,6 +352,66 @@ class TestAdminTemplates:
         # the net sats should equal the sum of the two groups (10000)
         assert rows[0]["balance_sats"] == 10000
 
+    def test_users_data_api_includes_total_fees(self, admin_client, mocker):
+        """The users API should include the aggregated Total Fees value."""
+        from decimal import Decimal
+
+        from v4vapp_backend_v2.accounting.accounting_classes import (
+            AccountBalances,
+            LedgerAccountDetails,
+        )
+        from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
+
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.users.list_active_account_subs",
+            return_value=["duplicate_user"],
+        )
+        merged = LedgerAccountDetails(
+            name="VSC Liability",
+            account_type="Liability",
+            sub="duplicate_user",
+            balances={},
+        )
+        merged.msats = Decimal(10000000)
+        merged.sats = Decimal(10000)
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.users.all_account_balances_summary",
+            return_value=AccountBalances(root=[merged]),
+        )
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.users.check_hive_conversion_limits",
+            return_value=LimitCheckResult(cust_id="duplicate_user"),
+        )
+
+        class FakeCursor:
+            def __init__(self, docs):
+                self.docs = docs
+
+            async def to_list(self, length=None):
+                return self.docs
+
+        class FakeCollection:
+            async def aggregate(self, pipeline):
+                return FakeCursor([
+                    {
+                        "cust_id": "duplicate_user",
+                        "total_sats": 12345,
+                        "total_usd": Decimal("0.12"),
+                        "count": 1,
+                    }
+                ])
+
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.users.LedgerEntry.collection",
+            return_value=FakeCollection(),
+        )
+
+        response = admin_client.get("/admin/users/data")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["users_data"][0]["total_fees"] == 12345
+        assert data["users_data"][0]["total_fees_fmt"] == "12,345"
+
     def test_dashboard_template_elements(self, admin_client):
         """Test dashboard template contains all expected elements"""
         response = admin_client.get("/admin")

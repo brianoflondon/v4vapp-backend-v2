@@ -99,14 +99,16 @@
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th scope="col" class="sortable" data-sort="user">User <i
+                                    <th scope="col" class="sortable" data-sort="user" style="width: 15%;">User <i
                                             class="bi bi-chevron-expand"></i></th>
                                     {% for entry in limit_entries %}
                                     <th scope="col" class="sortable text-center" data-sort="limit-{{ loop.index0 }}">
                                         {{ entry.label }} (%) <i class="bi bi-chevron-expand"></i>
                                     </th>
                                     {% endfor %}
-                                    <th scope="col" class="sortable text-end" data-sort="balance">Balance (<span
+                                    <th scope="col" class="sortable text-end" data-sort="fees">Total Fees <i
+                                            class="bi bi-chevron-expand"></i></th>
+                                    <th scope="col" class="sortable text-end" data-sort="balance">Bal (<span
                                             id="balance-currency-label">SATS</span>) <i
                                             class="bi bi-chevron-expand"></i></th>
                                     <th scope="col" class="sortable text-end" data-sort="age">Age <i
@@ -265,7 +267,14 @@
                             <span class="me-2">${percent}%</span>
                             <small class="text-muted">${user.limit_sats ? user.limit_sats[index] : ''}</small>
                         </td>
-                    `).join('') : '<td colspan="4" class="text-center">-</td>'}
+                    `).join('') : '<td colspan="5" class="text-center">-</td>'}
+                    <td class="text-end">
+                        ${user.total_fees !== null && user.total_fees !== undefined ?
+                            (user.total_fees > 0 ? `<span class="text-info fw-bold">${user.total_fees_fmt}</span>` :
+                                user.total_fees < 0 ? `<span class="text-danger fw-bold">${user.total_fees_fmt}</span>` :
+                                    `<span class="text-muted">${user.total_fees_fmt}</span>`) :
+                            '<span class="text-warning">0</span>'}
+                    </td>
                     <td class="text-end">
                         ${user.balance_sats !== null && user.balance_sats !== undefined ?
                         (currentCurrency === 'SATS' ?
@@ -317,9 +326,14 @@
             const ageDays = Math.floor(ageHours / 24);
 
             if (ageDays === 0) {
-                return `${ageHours} hours`;
+                if (ageHours === 1) {
+                    return `1 hr`;
+                }
+                return `${ageHours} hrs`;
             }
-
+            if (ageDays == 1) {
+                return `1 day`;
+            }
             return `${ageDays} days`;
         }
 
@@ -341,6 +355,9 @@
                 if (column === 'user') {
                     aVal = a.sub.toLowerCase();
                     bVal = b.sub.toLowerCase();
+                } else if (column === 'fees') {
+                    aVal = a.total_fees || 0;
+                    bVal = b.total_fees || 0;
                 } else if (column === 'balance') {
                     aVal = currentCurrency === 'SATS' ? (a.balance_sats || 0) : (a.balance_usd || 0);
                     bVal = currentCurrency === 'SATS' ? (b.balance_sats || 0) : (b.balance_usd || 0);

@@ -19,10 +19,16 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     list_active_account_subs,
 )
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
+from v4vapp_backend_v2.accounting.pipelines.fee_aggregation_pipelines import (
+    FeeAggregationResult,
+    fee_aggregation_pipeline,
+)
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -94,6 +100,21 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
     vsc_liability_balances = account_balances.root
     vsc_liability_balances.sort(key=lambda x: x.sub)
 
+    # Aggregate fee totals for the users returned by the balance summary
+    fee_docs = []
+    if vsc_liability_balances:
+        fee_cursor = await LedgerEntry.collection().aggregate(
+            pipeline=fee_aggregation_pipeline([account.sub for account in vsc_liability_balances])
+        )
+        fee_docs = await fee_cursor.to_list(length=None)
+        fee_docs = convert_decimal128_to_decimal(fee_docs)
+
+    fee_map: dict[str, FeeAggregationResult] = {
+        doc["cust_id"]: FeeAggregationResult.model_validate(doc)
+        for doc in fee_docs
+        if doc.get("cust_id")
+    }
+
     # Get balances for each account
     users_data: List[dict[str, Any]] = []
 
@@ -125,44 +146,53 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
             else:
                 balance_sats_fmt = "0"
 
-            users_data.append(
-                {
-                    "sub": account.sub,
-                    "balance_sats": int(balance_sats),
-                    "balance_sats_fmt": balance_sats_fmt,
-                    "balance_usd": int(balance_usd),
-                    "balance_usd_fmt": balance_usd_fmt,
-                    "has_transactions": account.has_transactions,
-                    "last_transaction_date": account.last_transaction_date.isoformat()
-                    if account.last_transaction_date
-                    else None,
-                    "limit_percents": check_limits.percents,
-                    "limit_ok": check_limits.limit_ok,
-                    "limit_sats": check_limits.sats_list_str,
-                    "next_limit_expiry": check_limits.next_limit_expiry.isoformat()
-                    if check_limits.next_limit_expiry
-                    and isinstance(check_limits.next_limit_expiry, datetime)
-                    else check_limits.next_limit_expiry,
-                    # "age": format_time_delta(
-                    #     time_now - account.last_transaction_date, just_days_or_hours=True
-                    # ),
-                }
+            fee_summary = fee_map.get(
+                account.sub,
+                FeeAggregationResult(cust_id=account.sub),
             )
+            fee_total = int(fee_summary.total_sats)
+            fee_total_fmt = f"{fee_total:,.0f}" if fee_total else "0"
+
+            users_data.append({
+                "sub": account.sub,
+                "balance_sats": int(balance_sats),
+                "balance_sats_fmt": balance_sats_fmt,
+                "balance_usd": int(balance_usd),
+                "balance_usd_fmt": balance_usd_fmt,
+                "total_fees": fee_total,
+                "total_fees_fmt": fee_total_fmt,
+                "fee_total_usd": fee_summary.total_usd,
+                "has_transactions": account.has_transactions,
+                "last_transaction_date": account.last_transaction_date.isoformat()
+                if account.last_transaction_date
+                else None,
+                "limit_percents": check_limits.percents,
+                "limit_ok": check_limits.limit_ok,
+                "limit_sats": check_limits.sats_list_str,
+                "next_limit_expiry": check_limits.next_limit_expiry.isoformat()
+                if check_limits.next_limit_expiry
+                and isinstance(check_limits.next_limit_expiry, datetime)
+                else check_limits.next_limit_expiry,
+                # "age": format_time_delta(
+                #     time_now - account.last_transaction_date, just_days_or_hours=True
+                # ),
+            })
         except Exception as e:
             logger.exception(
                 f"Exception processing account {account.sub}: {e}", extra={"notification": False}
             )
             # If balance lookup fails, still show the user but with error
-            users_data.append(
-                {
-                    "sub": account.sub,
-                    "balance_sats": None,
-                    "balance_sats_fmt": "Error",
-                    "has_transactions": False,
-                    "last_transaction_date": None,
-                    "error": str(e),
-                }
-            )
+            users_data.append({
+                "sub": account.sub,
+                "balance_sats": None,
+                "balance_sats_fmt": "Error",
+                "total_fees": 0,
+                "total_fees_fmt": "0",
+                "fee_total_usd": Decimal(0),
+                "has_transactions": False,
+                "last_transaction_date": None,
+                "error": str(e),
+            })
 
     # Calculate summary statistics
     total_users = len(users_data)
@@ -206,7 +236,8 @@ async def users_page(request: Request):
     nav_items = nav_manager.get_navigation_items("/admin/users")
 
     # Return page with empty data - actual data will be loaded via JavaScript
-    return templates.TemplateResponse(request,
+    return templates.TemplateResponse(
+        request,
         "users/users.html.jinja",
         {
             "request": request,
