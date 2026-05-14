@@ -3827,7 +3827,7 @@ requires-dist = [
     { name = "binance-connector", specifier = ">=3.12.0,<4.0.0" },
     { name = "colorama", specifier = ">=0.4.6,<1.0.0" },
     { name = "colorlog", specifier = ">=6.8.2,<7.0.0" },
-    { name = "fastapi", extras = ["standard"], specifier = ">=0.136.0" },
+    { name = "fastapi", extras = ["standard"], specifier = ">=0.136.1" },
     { name = "googleapis-common-protos", specifier = ">=1.62.0" },
     { name = "grpcio", specifier = ">=1.74.0" },
     { name = "grpcio-tools", specifier = ">=1.74.0" },
