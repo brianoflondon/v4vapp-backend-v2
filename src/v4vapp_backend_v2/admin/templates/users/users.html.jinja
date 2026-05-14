@@ -258,7 +258,8 @@
                     <td>
                         <strong>
                             <a href="/admin/accounts/balance/user/${user.sub}" class="text-decoration-none">
-                                ${user.sub}
+                                ${user.sub} ${user.witness_voter ? '<i class="bi bi-check-circle-fill text-success ms-1" title="Witness Voter"></i>' : ''}
+                                ${user.witness_vote_value_str}
                             </a>
                         </strong>
                     </td>
@@ -301,7 +302,7 @@
                     <td class="text-center">
                         <a href="/admin/accounts/balance/user/${user.sub}" class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-eye me-1"></i>
-                            View Details
+                            Det
                         </a>
                     </td>
                 `;

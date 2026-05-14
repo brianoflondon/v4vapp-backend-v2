@@ -3,7 +3,7 @@ from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
-MARGIN_SPREAD = Decimal(0.002)
+MARGIN_SPREAD = Decimal(0.0)
 
 
 class V4VMinimumInvoice(ValueError):

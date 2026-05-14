@@ -8,8 +8,10 @@ import pytest
 
 from v4vapp_backend_v2.hive.witness_details import (
     HIVE_API_ENDPOINTS,
+    check_witness_vote,
     fix_witness_at_root,
     get_hive_witness_details,
+    get_witness_voters,
 )
 
 
@@ -188,6 +190,90 @@ async def test_get_hive_witness_details_mock_empty(mocker):
 
 
 @pytest.mark.asyncio
+async def test_get_witness_voters_pagination_and_cache(mocker):
+    mock_httpx_get = mocker.patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    mock_redis_instance = mocker.patch(
+        "v4vapp_backend_v2.config.setup.InternalConfig.redis_decoded"
+    )
+    mock_hive = Mock()
+    mock_hive.vests_to_token_power.side_effect = lambda value: float(value) / 1e9
+    mocker.patch(
+        "v4vapp_backend_v2.hive.witness_details.get_hive_client",
+        return_value=mock_hive,
+    )
+
+    first_page = Mock()
+    first_page.status_code = 200
+    first_page.raise_for_status = Mock()
+    first_page.json = Mock(
+        return_value={
+            "voters": [
+                {
+                    "voter_name": "voter1",
+                    "vests": "1000000000",
+                    "proxied_vests": "200000000",
+                }
+            ]
+            * 1000
+        }
+    )
+
+    second_page = Mock()
+    second_page.status_code = 200
+    second_page.raise_for_status = Mock()
+    second_page.json = Mock(
+        return_value={
+            "voters": [
+                {
+                    "voter_name": "voter1001",
+                    "vests": "1001000000",
+                    "proxied_vests": "300000000",
+                }
+            ]
+        }
+    )
+
+    mock_httpx_get.side_effect = [first_page, second_page]
+    mock_redis_instance.get = Mock(return_value=None)
+    mock_redis_instance.setex = Mock(return_value=None)
+
+    voters = await get_witness_voters("brianoflondon")
+
+    assert voters is not None
+    assert len(voters) == 2
+    assert "voter1" in voters
+    assert "voter1001" in voters
+    assert voters["voter1"]["total_value"] == mock_hive.vests_to_token_power(
+        1000000000
+    ) + mock_hive.vests_to_token_power(200000000)
+    assert voters["voter1001"]["total_value"] == mock_hive.vests_to_token_power(
+        1001000000
+    ) + mock_hive.vests_to_token_power(300000000)
+    mock_redis_instance.setex.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_witness_voters_from_cache(mocker):
+    mock_httpx_get = mocker.patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    mock_redis_instance = mocker.patch(
+        "v4vapp_backend_v2.config.setup.InternalConfig.redis_decoded"
+    )
+
+    cached_voters = [{"account": "cached-voter"}]
+    mock_redis_instance.get = Mock(return_value=json.dumps(cached_voters))
+
+    voters = await get_witness_voters("brianoflondon")
+
+    assert voters is not None
+    assert "cached-voter" in voters
+    assert voters["cached-voter"]["account"] == "cached-voter"
+    assert voters["cached-voter"]["vote_value"] == 0.0
+    assert voters["cached-voter"]["proxy_value"] == 0.0
+    assert voters["cached-voter"]["total_value"] == 0.0
+    mock_httpx_get.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_get_hive_witness_details_mock_error(mocker):
     # Mock the httpx.AsyncClient.get method
     mock_httpx_get = mocker.patch("httpx.AsyncClient.get", new_callable=AsyncMock)
@@ -227,7 +313,6 @@ async def test_get_hive_witness_details_mock_error(mocker):
 
 
 async def test_check_witness_vote_no_cache(mocker):
-    from v4vapp_backend_v2.hive.witness_details import check_witness_vote
 
     # Mock the Redis context manager
     mock_redis_instance = mocker.patch(
@@ -244,7 +329,6 @@ async def test_check_witness_vote_no_cache(mocker):
 
 
 async def test_check_witness_vote_with_cache(mocker):
-    from v4vapp_backend_v2.hive.witness_details import check_witness_vote
 
     is_voting = await check_witness_vote("brianoflondon", "brianoflondon")
     assert is_voting is True

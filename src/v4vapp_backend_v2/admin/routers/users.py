@@ -30,6 +30,7 @@ from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.hive.witness_details import get_witness_voters
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 router = APIRouter()
@@ -81,6 +82,10 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
             This significantly speeds up the response for large account sets.
     """
     start = timer()
+    witness_voters_task = asyncio.create_task(
+        get_witness_voters(witness_name="brianoflondon")
+    )  # Start fetching witness voters in the background
+
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
 
@@ -123,9 +128,14 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
         check_hive_conversion_limits(cust_id=account.sub) for account in vsc_liability_balances
     ]
 
+    witness_voters = await witness_voters_task
+    if not witness_voters:
+        logger.warning("No witness voters found for brianoflondon")
+        witness_voter_names = set()
+    else:
+        witness_voter_names = set(witness_voters)
     # Run all limit checks concurrently
     limit_check_results = await asyncio.gather(*limit_check_tasks, return_exceptions=True)
-
     for i, account in enumerate(vsc_liability_balances):
         try:
             balance_sats = account.sats  # Convert msats to sats
@@ -151,7 +161,20 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
                 FeeAggregationResult(cust_id=account.sub),
             )
             fee_total = int(fee_summary.total_sats)
-            fee_total_fmt = f"{fee_total:,.0f}" if fee_total else "0"
+            fee_total_fmt = f"{fee_total:,}" if fee_total else "0"
+
+            if witness_voters and account.sub in witness_voter_names:
+                witness_voter = True
+                voter_data = witness_voters.get(account.sub, {})
+                witness_vote_value = voter_data.get("vote_value", voter_data.get("total_value", 0))
+                witness_vote_value_str = (
+                    f"({witness_vote_value / 1e6:,.0f})" if witness_vote_value else ""
+                )
+
+            else:
+                witness_voter = False
+                witness_vote_value = 0
+                witness_vote_value_str = ""
 
             users_data.append({
                 "sub": account.sub,
@@ -163,6 +186,9 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
                 "total_fees_fmt": fee_total_fmt,
                 "fee_total_usd": fee_summary.total_usd,
                 "has_transactions": account.has_transactions,
+                "witness_voter": witness_voter,
+                "witness_vote_value": witness_vote_value,
+                "witness_vote_value_str": witness_vote_value_str,
                 "last_transaction_date": account.last_transaction_date.isoformat()
                 if account.last_transaction_date
                 else None,
