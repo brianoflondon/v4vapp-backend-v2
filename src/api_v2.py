@@ -669,6 +669,7 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
     app.include_router(crypto_v1_router, tags=["legacy"])
     app.include_router(lightning_v1_router, tags=["lightning"])
     app.include_router(notifications_router, tags=["notifications"])
+    app.include_router(dev_router, tags=["dev"])
 
     return app
 
