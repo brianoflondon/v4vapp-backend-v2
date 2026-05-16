@@ -11,7 +11,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, TrackedTransferWithCustomJson
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import ICON, InternalConfig, logger
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -311,7 +311,7 @@ async def follow_on_transfer(
                 fee_limit_ppm=lnd_config.lightning_fee_limit_ppm,
             )
             logger.info(
-                f"Lightning payment sent for § {tracked_op.short_id} Payment: {payment.short_id}",
+                f"{ICON} Lightning payment sent for § {tracked_op.short_id}  {payment.value_sat_rounded:,.0f} sats, Payment: {payment.short_id}",
                 extra={
                     "notification": True,
                     **tracked_op.log_extra,
