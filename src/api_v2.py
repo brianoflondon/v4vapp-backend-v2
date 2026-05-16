@@ -66,6 +66,34 @@ crypto_v2_router = APIRouter(prefix="/v2/crypto")
 crypto_v1_router = APIRouter(prefix="/cryptoprices")
 lightning_v1_router = APIRouter(prefix="/lightning")
 notifications_router = APIRouter(prefix="/send_notification")
+dev_router = APIRouter(prefix="/dev")
+
+
+@dev_router.get("/user_list/")
+async def get_user_list():
+    """
+    Get the list of development users.
+
+    This endpoint is only available in development mode. It returns a list of
+    allowed Hive accounts for development purposes.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the list of development users under the key "dev_users".
+
+    Raises
+    ------
+    HTTPException
+        If the endpoint is accessed outside of development mode.
+    """
+    if InternalConfig().config.development.enabled:
+        return {"dev_users": InternalConfig().config.development.allowed_hive_accounts}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User list endpoint is only available in development mode",
+        )
 
 
 @notifications_router.get("/")
