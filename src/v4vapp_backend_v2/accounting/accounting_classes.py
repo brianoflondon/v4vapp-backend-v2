@@ -508,4 +508,3 @@ class LedgerAccountDetails(LedgerAccount):
 
 class AccountBalances(RootModel):
     root: List[LedgerAccountDetails]
-

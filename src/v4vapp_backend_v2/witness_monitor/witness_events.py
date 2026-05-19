@@ -103,22 +103,31 @@ async def check_witness_heartbeat(
         return False
 
     primary_failure = False
+    witness_disabled = False
     primary_machine = ""
     failures = 0
     signing_key = witness_signing_key(witness_name)
 
+    if signing_key == "STM1111111111111111111111111111111114T1Anm":
+        witness_disabled = True
+        logger.critical(
+            f"{ICON} 🚨 Witness {witness_name} is currently DISABLED trying to restart",
+            extra={"notification": True},
+        )
+
     # Loop through each witness machine and check its status
     for machine in witness_config.witness_machines:
+        log_func = logger.warning if witness_disabled else logger.debug
         if signing_key == machine.signing_key:
             machine.primary = True
-            logger.debug(
+            log_func(
                 f"{ICON}{Fore.YELLOW} Witness {witness_name} signing key held by {machine.name}. {Style.RESET_ALL}",
                 extra={"notification": False},
             )
             primary_machine = machine.name
         else:
             machine.primary = False
-            logger.debug(
+            log_func(
                 f"{ICON} Backup {witness_name} on {machine.name}.",
                 extra={"notification": False},
             )
@@ -129,7 +138,7 @@ async def check_witness_heartbeat(
             # Failure is detected
             machine.working = False
             failures += 1
-            if machine.primary:
+            if machine.primary or witness_disabled:
                 msg = (
                     f"🚨 PRIMARY Witness {witness_name} machine {machine.name} is down. {machine}"
                 )
@@ -167,9 +176,10 @@ async def check_witness_heartbeat(
         machine.execution_time for machine in witness_config.witness_machines
     ) / len(witness_config.witness_machines)
 
-    if primary_failure:
+    if primary_failure or witness_disabled:
+        down_or_disabled = "DISABLED" if witness_disabled else "DOWN"
         logger.error(
-            f"{ICON} 🚨 PRIMARY Witness {witness_name} is DOWN! Immediate attention required!",
+            f"{ICON} 🚨 PRIMARY Witness {witness_name} is {down_or_disabled}! Immediate attention required!",
             extra={"notification": True},
         )
         working_machines = [
@@ -484,6 +494,10 @@ async def update_witness_properties_switch_machine(
 
     if machine_name == "":
         new_signing_key = "STM1111111111111111111111111111111114T1Anm"  # Disable witness
+        logger.error(
+            f"{ICON} 🚨🚨🚨🚨  No working machines available. Disabling witness {witness_name}.",
+            extra={"notification": True},
+        )
     else:
         new_signing_key = ""
         for machine in (
