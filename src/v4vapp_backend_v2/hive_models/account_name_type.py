@@ -4,6 +4,10 @@ from typing import Annotated
 
 from pydantic import AfterValidator
 
+EVM_DID_PREFIX = "did:pkh:eip155:1:"
+BTC_DID_PREFIX = "did:pkh:bip122:"
+BTC_MAINNET_CHAIN_REF = "000000000019d6689c085ae165831e93"
+
 
 class AccName(str):
     @property
@@ -33,6 +37,24 @@ class AccName(str):
         return False
 
     @property
+    def is_btc(self) -> bool:
+        if self.startswith(BTC_DID_PREFIX):
+            parts = self.split(":", 4)
+            if len(parts) != 5:
+                return False
+            return AccName._is_btc_address(parts[4])
+
+        return AccName._is_btc_address(self)
+
+    @staticmethod
+    def _is_btc_address(address: str) -> bool:
+        if address.startswith("bc1") and 14 <= len(address) <= 74:
+            return True
+        if (address.startswith("1") or address.startswith("3")) and 26 <= len(address) <= 35:
+            return True
+        return False
+
+    @property
     def is_contract(self) -> bool:
         if self.startswith("contract:"):
             return True
@@ -47,8 +69,13 @@ class AccName(str):
         """
         if self.startswith("hive:"):
             return self[5:]
-        if self.startswith("did:pkh:eip155:1:"):
+        if self.startswith(EVM_DID_PREFIX):
             return self[18:]
+        if self.startswith(BTC_DID_PREFIX):
+            parts = self.split(":", 4)
+            if len(parts) == 5:
+                return parts[4]
+            return self
         if self.startswith("contract:"):
             return self[9:]
         return self
@@ -70,14 +97,20 @@ class AccName(str):
         if raw_account.startswith("hive:"):
             return raw_account
 
-        if raw_account.startswith("did:pkh:eip155:1:"):
+        if raw_account.startswith(EVM_DID_PREFIX):
+            return raw_account
+
+        if raw_account.startswith(BTC_DID_PREFIX):
             return raw_account
 
         if AccName(raw_account).is_hive:
             return f"hive:{raw_account.lower()}"
 
         if AccName(raw_account).is_evm:
-            return f"did:pkh:eip155:1:{raw_account.lower()}"
+            return f"{EVM_DID_PREFIX}{raw_account.lower()}"
+
+        if AccName(raw_account).is_btc:
+            return f"{BTC_DID_PREFIX}{BTC_MAINNET_CHAIN_REF}:{raw_account}"
 
         if AccName(raw_account).is_contract:
             return f"contract:{raw_account[9:].lower()}"
