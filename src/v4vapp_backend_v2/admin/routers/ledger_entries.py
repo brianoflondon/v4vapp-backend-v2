@@ -244,7 +244,8 @@ async def ledger_entries_data(
 
     # Fetch paginated documents
     cursor = (
-        LedgerEntry.collection()
+        LedgerEntry
+        .collection()
         .find(filter=query)
         .sort([("timestamp", -1)])
         .skip(offset)
@@ -306,47 +307,45 @@ async def ledger_entries_data(
     for e in ledger_entries:
         debit = acct_to_dict(getattr(e, "debit", None))
         credit = acct_to_dict(getattr(e, "credit", None))
-        entries.append(
-            {
-                "group_id": e.group_id,
-                "short_id": e.short_id,
-                "timestamp": e.timestamp.isoformat() if getattr(e, "timestamp", None) else None,
-                "ledger_type": e.ledger_type.name if getattr(e, "ledger_type", None) else None,
-                "ledger_type_str": getattr(e, "ledger_type", None).printout
-                if getattr(e, "ledger_type", None)
-                else None,
-                "description": e.description,
-                "link": getattr(e, "link", ""),
-                "cust_id": getattr(e, "cust_id", ""),
-                "cust_id_from": getattr(e, "cust_id_from", ""),
-                "cust_id_to": getattr(e, "cust_id_to", ""),
-                "debit": {
-                    **debit,
-                    "amount": str(getattr(e, "debit_amount", None)),
-                    "unit": getattr(e, "debit_unit", "").value
-                    if getattr(e, "debit_unit", None)
-                    else "",
-                    "conv": conv_to_dict(getattr(e, "debit_conv", None)),
-                },
-                "credit": {
-                    **credit,
-                    "amount": str(getattr(e, "credit_amount", None)),
-                    "unit": getattr(e, "credit_unit", "").value
-                    if getattr(e, "credit_unit", None)
-                    else "",
-                    "conv": conv_to_dict(getattr(e, "credit_conv", None)),
-                },
-                "conversion": {
-                    "debit": conv_to_dict(getattr(e, "debit_conv", None)),
-                    "credit": conv_to_dict(getattr(e, "credit_conv", None)),
-                },
-                # Provide the textual journal for reference (not used for primary rendering)
-                "user_memo": getattr(e, "user_memo", ""),
-                "journal": e.print_journal_entry() if hasattr(e, "print_journal_entry") else None,
-                "reversed": e.reversed.isoformat() if getattr(e, "reversed", None) else None,
-                "op_type": getattr(e, "op_type", ""),
-            }
-        )
+        entries.append({
+            "group_id": e.group_id,
+            "short_id": e.short_id,
+            "timestamp": e.timestamp.isoformat() if getattr(e, "timestamp", None) else None,
+            "ledger_type": e.ledger_type.name if getattr(e, "ledger_type", None) else None,
+            "ledger_type_str": getattr(e, "ledger_type", None).printout
+            if getattr(e, "ledger_type", None)
+            else None,
+            "description": e.description,
+            "link": getattr(e, "link", ""),
+            "cust_id": getattr(e, "cust_id", ""),
+            "cust_id_from": getattr(e, "cust_id_from", ""),
+            "cust_id_to": getattr(e, "cust_id_to", ""),
+            "debit": {
+                **debit,
+                "amount": str(getattr(e, "debit_amount", None)),
+                "unit": getattr(e, "debit_unit", "").value
+                if getattr(e, "debit_unit", None)
+                else "",
+                "conv": conv_to_dict(getattr(e, "debit_conv", None)),
+            },
+            "credit": {
+                **credit,
+                "amount": str(getattr(e, "credit_amount", None)),
+                "unit": getattr(e, "credit_unit", "").value
+                if getattr(e, "credit_unit", None)
+                else "",
+                "conv": conv_to_dict(getattr(e, "credit_conv", None)),
+            },
+            "conversion": {
+                "debit": conv_to_dict(getattr(e, "debit_conv", None)),
+                "credit": conv_to_dict(getattr(e, "credit_conv", None)),
+            },
+            # Provide the textual journal for reference (not used for primary rendering)
+            "user_memo": getattr(e, "user_memo", ""),
+            "journal": e.print_journal_entry() if hasattr(e, "print_journal_entry") else None,
+            "reversed": e.reversed.isoformat() if getattr(e, "reversed", None) else None,
+            "op_type": getattr(e, "op_type", ""),
+        })
 
     return JSONResponse({"count": total, "entries": entries, "totals": totals})
 
