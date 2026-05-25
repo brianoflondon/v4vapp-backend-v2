@@ -587,7 +587,8 @@ async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amoun
     # get a random api endpoint
     if not hive_accname:
         hive_accname = InternalConfig().server_id
-    url = random.choice(HIVE_API_ENDPOINTS) + f"balance-api/accounts/{hive_accname}/balances"
+    random_endpoint = random.choice(HIVE_API_ENDPOINTS)
+    url = random_endpoint + f"balance-api/accounts/{hive_accname}/balances"
     try:
         timeout = httpx.Timeout(1.0, connect=1.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -609,9 +610,17 @@ async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amoun
                     "HBD_fmt": f"{balances[1].amount:,.3f}",
                 }
     except Exception as e:
+        try:
+            HIVE_API_ENDPOINTS.remove(random_endpoint)
+        except ValueError:
+            pass
         logger.warning(
-            f"Balance API unavailable, falling back to Hive RPC: {e}",
-            extra={"hive_accname": hive_accname, "notification": False},
+            f"Balance API unavailable removing {random_endpoint}, falling back to Hive RPC: {e}",
+            extra={
+                "hive_accname": hive_accname,
+                "notification": False,
+                "hive_api_endpoints": HIVE_API_ENDPOINTS,
+            },
         )
     balance = await asyncio.to_thread(account_hive_balances, hive_accname)
     return balance

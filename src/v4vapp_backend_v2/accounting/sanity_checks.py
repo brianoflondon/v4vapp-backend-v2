@@ -29,8 +29,8 @@ from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 ICON = "🧪"  # Test Tube
 
-SANITY_CHECK_TIMEOUT_SECONDS = 60.0  # per-check timeout for sanity checks
-SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 65.0  # overall timeout for running all checks
+SANITY_CHECK_TIMEOUT_SECONDS = 120.0  # per-check timeout for sanity checks
+SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 125.0  # overall timeout for running all checks
 
 SANITY_REDIS_CACHE_KEY = "sanity_check_results_cache"
 SANITY_REDIS_TIMEOUT_SECONDS = 180
@@ -515,6 +515,26 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
         # Will hold (check_name, Task) pairs created inside the TaskGroup
         task_list: List[Tuple[str, asyncio.Task]] = []
 
+        def _root_exception_message(exc: BaseException) -> str:
+            """Return a concise string for the most relevant underlying exception."""
+            if isinstance(exc, ExceptionGroup):
+                flattened: list[str] = []
+                stack = list(exc.exceptions)
+                while stack:
+                    current = stack.pop()
+                    if isinstance(current, ExceptionGroup):
+                        stack.extend(current.exceptions)
+                        continue
+                    flattened.append(f"{type(current).__name__}: {current}")
+                return "; ".join(flattened) if flattened else str(exc)
+
+            chain: list[str] = []
+            current: BaseException | None = exc
+            while current is not None:
+                chain.append(f"{type(current).__name__}: {current}")
+                current = current.__cause__
+            return " <- caused by ".join(chain)
+
         # wrapper that logs the start/finish of each check and applies a per-check timeout
         async def _run_check(
             name: str, coro: Coroutine[Any, Any, SanityCheckResult]
@@ -525,17 +545,27 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
                 async with asyncio.timeout(SANITY_CHECK_TIMEOUT_SECONDS):
                     return await coro
             except asyncio.TimeoutError:
+                timeout_message = f"Timed out after {SANITY_CHECK_TIMEOUT_SECONDS} seconds"
                 logger.warning(
                     f"sanity check '{name}' timed out after {SANITY_CHECK_TIMEOUT_SECONDS} seconds",
                     extra={"notification": False},
                 )
-                raise
-            except Exception as exc:  # including CancelledError and other failures
+                return SanityCheckResult(
+                    name=name,
+                    is_valid=False,
+                    details=timeout_message,
+                )
+            except Exception as exc:
+                root_message = _root_exception_message(exc)
                 logger.warning(
-                    f"sanity check '{name}' failed with exception: {exc!r}",
+                    f"sanity check '{name}' failed with exception: {root_message}",
                     extra={"notification": False},
                 )
-                raise
+                return SanityCheckResult(
+                    name=name,
+                    is_valid=False,
+                    details=f"{type(exc).__name__}: {root_message}",
+                )
             finally:
                 logger.debug(f"completed sanity check {name}")
 
@@ -577,7 +607,11 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
             try:
                 sanity_result = task.result()
             except Exception as e:
-                sanity_result = SanityCheckResult(name=check_name, is_valid=False, details=str(e))
+                sanity_result = SanityCheckResult(
+                    name=check_name,
+                    is_valid=False,
+                    details=f"{type(e).__name__}: {_root_exception_message(e)}",
+                )
             if sanity_result.is_valid:
                 passed.append((check_name, sanity_result))
             else:
