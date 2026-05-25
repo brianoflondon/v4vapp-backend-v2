@@ -80,6 +80,7 @@ async def ledger_entries_data(
     sub_filter: Optional[str] = None,
     short_id: Optional[str] = None,
     group_id: Optional[str] = None,
+    op_type: Optional[str] = None,
     from_date_str: Optional[str] = None,
     to_date_str: Optional[str] = None,
     ledger_type: Optional[str] = None,
@@ -151,6 +152,9 @@ async def ledger_entries_data(
         sub_account=(None if account else sub_filter),
         age=age,
     )
+
+    if op_type:
+        query = {"$and": [query, {"op_type": op_type}]}
 
     # If a general_search term was provided, add an ANDed $or regex condition
     if general_search:
@@ -387,6 +391,7 @@ async def ledger_entries_page(
     sub_filter: Optional[str] = None,
     short_id: Optional[str] = None,
     group_id: Optional[str] = None,
+    op_type: Optional[str] = None,
     from_date_str: Optional[str] = None,
     to_date_str: Optional[str] = None,
     ledger_type: Optional[str] = None,
@@ -537,23 +542,33 @@ async def ledger_entries_page(
     ledger_entries = []
     t5 = timer()
 
-    nav_items = nav_manager.get_navigation_items("/admin/ledger-entries")
+    nav_items = nav_manager.get_navigation_items(request.url.path)
     sanity_results = await sanity_results_task
 
     t6 = timer()
     logger.info(f"Completed sanity checks in {t6 - t5:.3f} s")
+    is_limit_order_create_page = request.url.path.endswith("/limit-order-create")
+    page_title = "Ledger Entries"
+    breadcrumb_name = "Ledger Entries"
+    breadcrumb_url = "/admin/ledger-entries"
+    if is_limit_order_create_page:
+        page_title = "Limit Order Create Entries"
+        breadcrumb_name = "Limit Order Creates"
+        breadcrumb_url = "/admin/ledger-entries/limit-order-create"
+
     return templates.TemplateResponse(
         request,
         "ledger_entries/entries.html.jinja",
         {
             "request": request,
-            "title": "Ledger Entries",
+            "title": page_title,
             "nav_items": nav_items,
             "accounts_by_type": accounts_by_type,
             "sub_filter": sub_filter or "",
             "entries": ledger_entries,
             "short_id": short_id or "",
             "group_id": group_id or "",
+            "op_type": op_type or "",
             "account_string": account_string or "",
             "from_date_str": from_date_str or "",
             "to_date_str": to_date_str or "",
@@ -564,8 +579,37 @@ async def ledger_entries_page(
             "pending_transactions": await PendingTransaction.list_all_str(),
             "breadcrumbs": [
                 {"name": "Admin", "url": "/admin"},
-                {"name": "Ledger Entries", "url": "/admin/ledger-entries"},
+                {"name": breadcrumb_name, "url": breadcrumb_url},
             ],
             "sanity_results": sanity_results,
         },
+    )
+
+
+@router.get("/limit-order-create", response_class=HTMLResponse)
+async def ledger_entries_limit_order_create_page(
+    request: Request,
+    account_string: Optional[str] = None,
+    sub_filter: Optional[str] = None,
+    short_id: Optional[str] = None,
+    group_id: Optional[str] = None,
+    from_date_str: Optional[str] = None,
+    to_date_str: Optional[str] = None,
+    ledger_type: Optional[str] = None,
+    general_search: Optional[str] = None,
+    age_hours: Optional[int] = 0,
+):
+    """Render the ledger entries page with op_type pre-selected to limit_order_create."""
+    return await ledger_entries_page(
+        request=request,
+        account_string=account_string,
+        sub_filter=sub_filter,
+        short_id=short_id,
+        group_id=group_id,
+        op_type="limit_order_create",
+        from_date_str=from_date_str,
+        to_date_str=to_date_str,
+        ledger_type=ledger_type,
+        general_search=general_search,
+        age_hours=age_hours,
     )

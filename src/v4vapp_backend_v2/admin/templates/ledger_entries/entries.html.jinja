@@ -41,6 +41,7 @@
     </h3>
 
     <form method="get" class="needs-validation" novalidate>
+        <input type="hidden" name="op_type" id="op_type" value="{{ op_type or '' }}" />
         <div class="row">
             <div class="col-md-4">
                 <div class="mb-3">
@@ -646,6 +647,7 @@
         const from_date = getFieldValue('from_date_str')
         const to_date = getFieldValue('to_date_str')
         const ledger_type = getFieldValue('ledger_type')
+        const op_type = getFieldValue('op_type')
         const general_search = getFieldValue('general_search')
         const age_hours = getFieldValue('age_hours')
 
@@ -674,6 +676,7 @@
         if (from_date) params.append("from_date_str", localWithTz(from_date))
         if (to_date) params.append("to_date_str", localWithTz(to_date))
         if (ledger_type) params.append("ledger_type", ledger_type)
+        if (op_type) params.append("op_type", op_type)
         if (general_search) params.append("general_search", general_search)
         if (age_hours) params.append("age_hours", age_hours)
 
