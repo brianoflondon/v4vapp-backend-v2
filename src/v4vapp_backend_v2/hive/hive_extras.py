@@ -23,12 +23,17 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.setup import HIVE_API_ENDPOINTS, HiveRoles, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_not_development_accounts,
     get_bad_hive_accounts,
 )
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_to_float_or_int
+from v4vapp_backend_v2.hive.hive_api_endpoints import (
+    get_hive_api_endpoints,
+    mark_hive_api_endpoint_failed,
+    mark_hive_api_endpoint_healthy,
+)
 from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.hive_models.pending_transaction_class import (
     PendingCustomJson,
@@ -584,44 +589,45 @@ async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amoun
     """
     Asynchronously retrieves the current HIVE and HBD balances for the given account.
     """
-    # get a random api endpoint
     if not hive_accname:
         hive_accname = InternalConfig().server_id
-    random_endpoint = random.choice(HIVE_API_ENDPOINTS)
-    url = random_endpoint + f"balance-api/accounts/{hive_accname}/balances"
-    try:
-        timeout = httpx.Timeout(1.0, connect=1.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.get(url)
-        response.raise_for_status()
-        data = response.json()
-        if isinstance(data, dict):
-            hive_balance = data.get("hive_balance")
-            hbd_balance = data.get("hbd_balance")
-            if hive_balance is not None and hbd_balance is not None:
-                balances = [
-                    Amount(f"{Decimal(hive_balance) / Decimal(1000):.3f} HIVE"),
-                    Amount(f"{Decimal(hbd_balance) / Decimal(1000):.3f} HBD"),
-                ]
-                return {
-                    "HIVE": balances[0],
-                    "HBD": balances[1],
-                    "HIVE_fmt": f"{balances[0].amount:,.3f}",
-                    "HBD_fmt": f"{balances[1].amount:,.3f}",
-                }
-    except Exception as e:
+
+    candidate_endpoints = get_hive_api_endpoints(shuffle_endpoints=True)
+    for endpoint in candidate_endpoints:
+        url = endpoint + f"balance-api/accounts/{hive_accname}/balances"
         try:
-            HIVE_API_ENDPOINTS.remove(random_endpoint)
-        except ValueError:
-            pass
-        logger.warning(
-            f"Balance API unavailable removing {random_endpoint}, falling back to Hive RPC: {e}",
-            extra={
-                "hive_accname": hive_accname,
-                "notification": False,
-                "hive_api_endpoints": HIVE_API_ENDPOINTS,
-            },
-        )
+            timeout = httpx.Timeout(1.0, connect=1.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict):
+                hive_balance = data.get("hive_balance")
+                hbd_balance = data.get("hbd_balance")
+                if hive_balance is not None and hbd_balance is not None:
+                    mark_hive_api_endpoint_healthy(endpoint)
+                    balances = [
+                        Amount(f"{Decimal(hive_balance) / Decimal(1000):.3f} HIVE"),
+                        Amount(f"{Decimal(hbd_balance) / Decimal(1000):.3f} HBD"),
+                    ]
+                    return {
+                        "HIVE": balances[0],
+                        "HBD": balances[1],
+                        "HIVE_fmt": f"{balances[0].amount:,.3f}",
+                        "HBD_fmt": f"{balances[1].amount:,.3f}",
+                    }
+            mark_hive_api_endpoint_failed(endpoint, error="invalid balance payload")
+        except Exception as e:
+            mark_hive_api_endpoint_failed(endpoint, error=e)
+            logger.warning(
+                f"Balance API unavailable for {endpoint}, trying next endpoint: {e}",
+                extra={
+                    "hive_accname": hive_accname,
+                    "notification": False,
+                    "hive_api_endpoints": candidate_endpoints,
+                },
+            )
+
     balance = await asyncio.to_thread(account_hive_balances, hive_accname)
     return balance
 

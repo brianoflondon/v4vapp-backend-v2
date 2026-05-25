@@ -23,6 +23,12 @@ from yaml import safe_load
 
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.error_code_manager import ErrorCodeManager
+# from v4vapp_backend_v2.hive.hive_api_endpoints import (
+#     HIVE_API_ENDPOINTS as BASE_HIVE_API_ENDPOINTS,
+# )
+# from v4vapp_backend_v2.hive.hive_api_endpoints import (
+#     working_api_endpoints as probe_working_api_endpoints,
+# )
 
 load_dotenv()
 MIN_CONFIG_VERSION = "0.4.4"
@@ -35,12 +41,9 @@ DEFAULT_CONFIG_FILENAME = "config.yaml"
 
 BASE_DISPLAY_LOG_LEVEL = logging.INFO  # Default log level for stdout
 
-HIVE_API_ENDPOINTS = [
-    # "https://hiveapi.actifit.io/",
-    "https://api.dev.openhive.network/",
-    "https://api.syncad.com/",
-    "https://techcoderx.com/",
-]
+# # Backward-compatible re-exports for existing imports.
+# HIVE_API_ENDPOINTS = BASE_HIVE_API_ENDPOINTS
+# working_api_endpoints = probe_working_api_endpoints
 
 
 def _parse_log_level(level: str | int | None, fallback: int) -> int:

@@ -1,9 +1,14 @@
 import json
-from random import shuffle
 
 import httpx
 
-from v4vapp_backend_v2.config.setup import HIVE_API_ENDPOINTS, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive.hive_api_endpoints import (
+    HIVE_API_ENDPOINTS,
+    get_hive_api_endpoints,
+    mark_hive_api_endpoint_failed,
+    mark_hive_api_endpoint_healthy,
+)
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
 
@@ -154,8 +159,9 @@ async def get_hive_witness_details(
     failure = False
     url: str = "not set"
     try:
-        shuffled_endpoints = HIVE_API_ENDPOINTS[:]
-        shuffle(shuffled_endpoints)
+        shuffled_endpoints = (
+            get_hive_api_endpoints(shuffle_endpoints=True) or HIVE_API_ENDPOINTS[:]
+        )
         for api_url in shuffled_endpoints:
             url = (
                 f"{api_url}hafbe-api/witnesses/{hive_accname}"
@@ -169,6 +175,7 @@ async def get_hive_witness_details(
                     response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
                     answer = response.json()
                     answer = fix_witness_at_root(answer)
+                    mark_hive_api_endpoint_healthy(api_url)
                     # Cache the result in Redis
                     try:
                         InternalConfig.redis_decoded.setex(
@@ -185,18 +192,21 @@ async def get_hive_witness_details(
 
                     return WitnessDetails.model_validate(answer)
             except httpx.HTTPStatusError as e:
+                mark_hive_api_endpoint_failed(api_url, error=e)
                 logger.warning(
                     f"{ICON} API returned status {e.response.status_code} for {url}",
                     extra={"notification": False, "error": e},
                 )
                 failure = True
             except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+                mark_hive_api_endpoint_failed(api_url, error=e)
                 logger.error(
                     f"{ICON} Connection failed to {url}: {e}",
                     extra={"notification": False, "error": e},
                 )
                 failure = True
             except ValueError as e:
+                mark_hive_api_endpoint_failed(api_url, error=e)
                 logger.warning(
                     f"{ICON} Failed to parse JSON response from {url}, trying again...",
                     extra={"notification": False, "error": e},
@@ -274,8 +284,7 @@ async def get_witness_voters(
                 extra={"notification": False, "error": e},
             )
 
-    shuffled_endpoints = HIVE_API_ENDPOINTS[:]
-    shuffle(shuffled_endpoints)
+    shuffled_endpoints = get_hive_api_endpoints(shuffle_endpoints=True) or HIVE_API_ENDPOINTS[:]
     hive = None
     try:
         hive = get_hive_client()
@@ -300,6 +309,7 @@ async def get_witness_voters(
                     response = await fetch_witness_details(client, url)
                     response.raise_for_status()
                     answer = response.json()
+                mark_hive_api_endpoint_healthy(api_url)
 
                 if isinstance(answer, dict):
                     page_voters = answer.get("voters", [])
@@ -338,16 +348,19 @@ async def get_witness_voters(
 
             return voters
         except httpx.HTTPStatusError as e:
+            mark_hive_api_endpoint_failed(api_url, error=e)
             logger.warning(
                 f"{ICON} API returned status {e.response.status_code} for {url}",
                 extra={"notification": False, "error": e},
             )
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            mark_hive_api_endpoint_failed(api_url, error=e)
             logger.error(
                 f"{ICON} Connection failed to {url}: {e}",
                 extra={"notification": False, "error": e},
             )
         except ValueError as e:
+            mark_hive_api_endpoint_failed(api_url, error=e)
             logger.warning(
                 f"{ICON} Failed to parse JSON response from {url}, trying again...",
                 extra={"notification": False, "error": e},
@@ -392,8 +405,7 @@ async def check_witness_vote(hive_accname: str, witness_name: str) -> bool:
     if cache_result is not None and cache_result in ["True", "False"]:
         return cache_result == "True"
 
-    shuffled_endpoints = HIVE_API_ENDPOINTS[:]
-    shuffle(shuffled_endpoints)
+    shuffled_endpoints = get_hive_api_endpoints(shuffle_endpoints=True) or HIVE_API_ENDPOINTS[:]
     for api_url in shuffled_endpoints:
         url = f"{api_url}hafbe-api/accounts/{hive_accname}"
         try:
@@ -402,6 +414,7 @@ async def check_witness_vote(hive_accname: str, witness_name: str) -> bool:
                 response = await fetch_witness_details(client, url)
                 response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
                 answer = response.json()
+                mark_hive_api_endpoint_healthy(api_url)
                 witness_votes = answer.get("witness_votes", [])
                 if witness_name in witness_votes:
                     InternalConfig.redis_decoded.setex(name=cache_key, value="True", time=600)
@@ -410,16 +423,19 @@ async def check_witness_vote(hive_accname: str, witness_name: str) -> bool:
                 return False
 
         except httpx.HTTPStatusError as e:
+            mark_hive_api_endpoint_failed(api_url, error=e)
             logger.warning(
                 f"{ICON} API returned status {e.response.status_code} for {url}",
                 extra={"notification": False, "error": e},
             )
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            mark_hive_api_endpoint_failed(api_url, error=e)
             logger.error(
                 f"{ICON} Connection failed to {url}: {e}",
                 extra={"notification": False, "error": e},
             )
         except ValueError as e:
+            mark_hive_api_endpoint_failed(api_url, error=e)
             logger.warning(
                 f"{ICON} Failed to parse JSON response from {url}, trying again...",
                 extra={"notification": False, "error": e},
