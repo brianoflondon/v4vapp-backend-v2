@@ -70,6 +70,14 @@ class NavigationManager:
                 badge_color="secondary",
             ),
             NavigationItem(
+                name="Limit Order Creates",
+                url="/admin/ledger-entries/limit-order-create",
+                icon="📒",
+                description="Ledger entries filtered to op_type limit_order_create",
+                badge="Ledger",
+                badge_color="secondary",
+            ),
+            NavigationItem(
                 name="Ledger Editor",
                 url="/admin/ledger-editor",
                 icon="✏️",
@@ -99,16 +107,26 @@ class NavigationManager:
         ]
 
     def get_navigation_items(self, current_path: str = "") -> List[NavigationItem]:
-        """Get navigation items with active state"""
+        """Get navigation items with active state."""
+
+        def _is_match(path: str, url: str) -> bool:
+            return path == url or path.startswith(url + "/")
+
+        matching_urls = [
+            item.url for item in self._navigation_items if _is_match(current_path, item.url)
+        ]
+        best_match_length = max((len(url) for url in matching_urls), default=0)
+
         items = []
         for item in self._navigation_items:
             # Create a copy to avoid modifying the original
+            is_active = _is_match(current_path, item.url) and len(item.url) == best_match_length
             nav_item = NavigationItem(
                 name=item.name,
                 url=item.url,
                 icon=item.icon,
                 description=item.description,
-                active=current_path.startswith(item.url),
+                active=is_active,
                 badge=item.badge,
                 badge_color=item.badge_color,
             )
