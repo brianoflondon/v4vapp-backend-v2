@@ -4,6 +4,8 @@ from typing import Annotated
 
 from pydantic import AfterValidator
 
+HIVE_PREFIX = "hive:"
+CONTRACT_PREFIX = "contract:"
 EVM_DID_PREFIX = "did:pkh:eip155:1:"
 BTC_DID_PREFIX = "did:pkh:bip122:"
 BTC_MAINNET_CHAIN_REF = "000000000019d6689c085ae165831e93"
@@ -67,17 +69,17 @@ class AccName(str):
          For example, "hive:alice" becomes "alice", and "did:pkh:eip155:1:0bob123" becomes "0xbabc123".
          If the account name does not have a known prefix, it is returned unchanged.
         """
-        if self.startswith("hive:"):
-            return self[5:]
+        if self.startswith(HIVE_PREFIX):
+            return self[len(HIVE_PREFIX) :]
         if self.startswith(EVM_DID_PREFIX):
-            return self[18:]
+            return self[len(EVM_DID_PREFIX) :]
         if self.startswith(BTC_DID_PREFIX):
             parts = self.split(":", 4)
             if len(parts) == 5:
                 return parts[4]
             return self
-        if self.startswith("contract:"):
-            return self[9:]
+        if self.startswith(CONTRACT_PREFIX):
+            return self[len(CONTRACT_PREFIX) :]
         return self
 
     @property
@@ -113,7 +115,7 @@ class AccName(str):
             return f"{BTC_DID_PREFIX}{BTC_MAINNET_CHAIN_REF}:{raw_account}"
 
         if AccName(raw_account).is_contract:
-            return f"contract:{raw_account[9:].lower()}"
+            return f"contract:{raw_account[len('contract:') :].lower()}"
 
         return raw_account  # fallback to original string if it doesn't match known patterns
 

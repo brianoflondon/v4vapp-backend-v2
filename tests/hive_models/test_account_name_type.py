@@ -78,6 +78,11 @@ def test_acc_name_no_prefix_for_prefixed_btc():
     assert AccName(did_btc).no_prefix == "bc1q44gq7ygzxs76rt8nrlsjql8t79m035mhgvycpc"
 
 
+def test_acc_name_no_prefix_for_prefixed_evm():
+    evm_did = "did:pkh:eip155:1:0x0123456789abcdef0123456789abcdef01234567"
+    assert AccName(evm_did).no_prefix == "0x0123456789abcdef0123456789abcdef01234567"
+
+
 def test_acc_name_magi_prefix_raises_for_invalid_value():
     # Behaviour changed.
     invalid_name = AccName(
