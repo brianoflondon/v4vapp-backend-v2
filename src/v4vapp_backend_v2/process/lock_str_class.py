@@ -233,6 +233,13 @@ class LockStr(AccName):
                         logger.debug(f"{ICON} Lock acquired for object {self}")
                         logger.debug(f"{ICON} {request_details if request_details else ''}")
                         return True
+                    if blocking_timeout is not None and (time.time() - start_time) >= blocking_timeout:
+                        await _unregister_waiter(str(self), request_id)
+                        raise CustIDLockException(
+                            f"Failed to acquire lock for {self} after {blocking_timeout} seconds"
+                        )
+                    await asyncio.sleep(LOOK_POLLING_SLEEP_TIME)
+                    continue
                 except asyncio.TimeoutError:
                     # Per-object deduped wait warning
                     should_log, preview, oldest = await LockStr._should_log_wait(str(self))

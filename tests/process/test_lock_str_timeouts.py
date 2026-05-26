@@ -73,6 +73,30 @@ class _FakeRedisLock:
         self._LOCKS.pop(self.name, None)
 
 
+class _FalseOnAcquireRedisLock:
+    def __init__(
+        self,
+        _redis,
+        name: str,
+        timeout: int | float | None = None,
+        sleep: float = 0.01,
+        blocking: bool = True,
+        blocking_timeout: int | float | None = None,
+    ) -> None:
+        self.name = name
+        self.timeout = timeout
+        self.sleep = sleep
+        self.blocking = blocking
+        self.blocking_timeout = blocking_timeout
+
+    async def acquire(self):
+        await asyncio.sleep(self.sleep)
+        return False
+
+    async def release(self):
+        return None
+
+
 @pytest.mark.asyncio
 async def test_acquire_lock_respects_blocking_timeout(monkeypatch: pytest.MonkeyPatch):
     mod = _import_lock_module_fresh()
@@ -88,6 +112,21 @@ async def test_acquire_lock_respects_blocking_timeout(monkeypatch: pytest.Monkey
     acquired = await lock_name.acquire_lock(timeout=None, blocking_timeout=0.2)
     assert acquired is True
 
+    with pytest.raises(mod.CustIDLockException, match="Failed to acquire lock"):
+        await lock_name.acquire_lock(timeout=None, blocking_timeout=0.1)
+
+
+@pytest.mark.asyncio
+async def test_acquire_lock_raises_when_lock_acquire_returns_false(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mod = _import_lock_module_fresh()
+
+    monkeypatch.setattr(mod, "RedisLock", _FalseOnAcquireRedisLock)
+    monkeypatch.setattr(mod, "start_lock_reporter", lambda: None)
+    mod.InternalConfig.redis_async = object()
+
+    lock_name = mod.LockStr("timeout_false")
     with pytest.raises(mod.CustIDLockException, match="Failed to acquire lock"):
         await lock_name.acquire_lock(timeout=None, blocking_timeout=0.1)
 
