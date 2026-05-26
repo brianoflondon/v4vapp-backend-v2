@@ -61,6 +61,18 @@ VSC_PROCESSED_DICT = {
     "rc_limit": 1000,
 }
 
+VSC_BTC_DID_TRANSFER_DICT = {
+    "net_id": "vsc-mainnet",
+    "caller": "did:pkh:bip122:000000000019d6689c085ae165831e93:bc1q44gq7ygzxs76rt8nrlsjql8t79m035mhgvycpc",
+    "contract_id": "vsc1BdrQ6EtbQ64rq2PkPd21x4MaLnVRcJj85d",
+    "action": "transfer",
+    "payload": {
+        "amount": "25",
+        "to": "did:pkh:bip122:000000000019d6689c085ae165831e93:3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",
+    },
+    "rc_limit": 1000,
+}
+
 # A full custom_json Hive operation envelope for vsc.call (transfer with memo)
 VSC_CALL_OP = {
     "_id": "aabbccdd11223344aabbccdd11223344aabbccdd",
@@ -369,6 +381,16 @@ def test_vsc_call_processed_no_prefix():
     assert call.from_account == "v4vapp-test"
     assert call.to_account == "devser.v4vapp"
     assert call.amount == "25"
+
+
+def test_vsc_call_btc_did_from_account_stripped_to_address():
+    call = VSCCall.model_validate(VSC_BTC_DID_TRANSFER_DICT)
+    assert call.from_account == "bc1q44gq7ygzxs76rt8nrlsjql8t79m035mhgvycpc"
+
+
+def test_vsc_call_btc_did_to_account_stripped_to_address():
+    call = VSCCall.model_validate(VSC_BTC_DID_TRANSFER_DICT)
+    assert call.to_account == "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
 
 
 # ---------------------------------------------------------------------------
