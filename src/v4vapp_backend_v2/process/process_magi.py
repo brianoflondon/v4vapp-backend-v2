@@ -514,6 +514,8 @@ async def magisats_inbound(
     exchange_sub = magi_exchange_adapter().exchange_name
     if vsc_call and vsc_payload:
         processed_memo = ProcessedMemo(vsc_payload.memo)
+    elif magi_transfer.d_memo:
+        processed_memo = ProcessedMemo(magi_transfer.d_memo)
     else:
         processed_memo = ProcessedMemo("EVM or BTC transfer with no memo")
 
