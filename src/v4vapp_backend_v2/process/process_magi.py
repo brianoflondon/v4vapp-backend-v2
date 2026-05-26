@@ -130,6 +130,14 @@ async def process_magi_btc_transfer_event(
                             ledger_entries = await magisats_inbound(
                                 magi_transfer=magi_transfer, vsc_call=vsc_call
                             )
+        # No Custom Json in the case of a transfer signed by EVM or BTC.
+        if not magi_transfer.custom_jsons:
+            if magi_transfer.to_addr == AccName(server_id).magi_prefix:
+                logger.info(
+                    f"{ICON} Processing incoming transfer to {server_id} for Magi transfer event {magi_transfer.short_id}",
+                )
+                ledger_entries = await magisats_inbound(magi_transfer=magi_transfer, vsc_call=None)
+
     except AssertionError as e:
         logger.error(
             f"{ICON} Assertion error while processing Magi BTC transfer event {magi_transfer.short_id}: {e}",
@@ -418,7 +426,7 @@ async def magisats_outbound(
 
 
 async def magisats_inbound(
-    magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
+    magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall | None = None
 ) -> List[LedgerEntry]:
     """
     Record accounting entries when sats arrive at the server's Magi address from a customer.
@@ -476,11 +484,14 @@ async def magisats_inbound(
         List of `LedgerEntry` objects saved (one or two entries), or an empty list on error.
     """
     # Now we transfer the amount_to_send_sats to the
-    vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
-    assert vsc_payload.amount, "Amount is missing in VSC payload"
-    assert magi_transfer.amount == Decimal(vsc_payload.amount), (
-        "Amount in VSC payload does not match Magi transfer event amount"
-    )
+    vsc_payload = None
+    if vsc_call:
+        vsc_payload = VSCCallPayload.model_validate(vsc_call.payload)
+        assert vsc_payload.amount, "Amount is missing in VSC payload"
+        assert magi_transfer.amount == Decimal(vsc_payload.amount), (
+            "Amount in VSC payload does not match Magi transfer event amount"
+        )
+
     assert magi_transfer.conv and not magi_transfer.conv.is_unset(), (
         "Conversion details are missing in Magi transfer event"
     )
@@ -501,7 +512,10 @@ async def magisats_inbound(
     )
 
     exchange_sub = magi_exchange_adapter().exchange_name
-    processed_memo = ProcessedMemo(vsc_payload.memo)
+    if vsc_call and vsc_payload:
+        processed_memo = ProcessedMemo(vsc_payload.memo)
+    else:
+        processed_memo = ProcessedMemo("EVM or BTC transfer with no memo")
 
     # Takes the cust_id (i.e. the destination) from either the sender of the transaction or the memo if there is one.
     cust_id = processed_memo.cust_id or magi_transfer.cust_id

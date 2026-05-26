@@ -403,7 +403,8 @@ class MagiBTCTransferEvent(TrackedBaseModel):
         operation index in the transaction, and realm.
         This is used to determine the key in the database where the operation
         """
-        return f"{self.trx_id[:8]}_m"
+        # make this the last 8 chars of the trx_id plus _m for magi, to ensure it's unique but not too long to be unwieldy in logs and such.
+        return f"{self.trx_id[-8:]}_m"
 
     @property
     def short_id_p(self) -> str:
