@@ -25,6 +25,7 @@ from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import dashboard_api, v4vconfig
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.process.hold_release_keepsats import (
     archive_old_hold_release_keepsats_entries,
 )
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
     # Access config_filename from app.state
     config_filename = app.state.config_filename
     InternalConfig(config_filename=config_filename)
+    _ = V4VConfig()
     db_conn = DBConn()
     await db_conn.setup_database()
     logger.info("Admin Interface and API started", extra={"notification": False})

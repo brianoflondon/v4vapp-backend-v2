@@ -51,16 +51,16 @@ class V4VConfigData(BaseModel):
         Decimal(0.002), description="Fee for returning Hive transactions."
     )
     conv_fee_percent: Decimal = Field(
-        Decimal(0.015), description="Conversion fee percentage for transactions."
+        Decimal(0.019), description="Conversion fee percentage for transactions."
     )
     conv_fee_sats: Decimal = Field(
         Decimal(50), description="Conversion fee in satoshis for transactions."
     )
     minimum_invoice_payment_sats: Decimal = Field(
-        Decimal(250), description="Minimum invoice payment in satoshis."
+        Decimal(1), description="Minimum invoice payment in satoshis."
     )
     maximum_invoice_payment_sats: Decimal = Field(
-        Decimal(100_000), description="Maximum invoice payment in satoshis."
+        Decimal(155_000), description="Maximum invoice payment in satoshis."
     )
     # Used by `reply_with_hive` when a lightning payment is being returned.  If the
     # received sats amount is below this threshold we prefer to send a custom_json
@@ -82,7 +82,7 @@ class V4VConfigData(BaseModel):
     v4v_frontend_iri: str = Field("", description="IRI for the V4V frontend.")
     v4v_api_iri: str = Field("", description="IRI for the V4V API.")
     v4v_fees_streaming_sats_to_hive_percent: Decimal = Field(
-        Decimal(0.03), description="Fee percentage for streaming sats to Hive."
+        Decimal(0.019), description="Fee percentage for streaming sats to Hive."
     )
     lightning_rate_limits: List[V4VConfigRateLimits] = Field(
         default_factory=lambda: [
@@ -369,7 +369,7 @@ class V4VConfig:
             ValueError: If the `posting_json_metadata` cannot be parsed as valid JSON.
         """
         """Get the posting metadata for the current account"""
-        acc = Account(self.server_accname, blockchain_instance=self.hive, lazy=True)
+        acc = Account(account=self.server_accname, blockchain_instance=self.hive, lazy=False)
         try:
             # Important to use the [] method not get() to avoid lazy loading problems
             posting_json_metadata = acc["posting_json_metadata"]
