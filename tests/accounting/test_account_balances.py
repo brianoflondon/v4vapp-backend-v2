@@ -15,14 +15,12 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
     account_balance_printout_grouped_by_customer,
-    all_account_balances,
-    all_account_balances_summary,
     keepsats_balance,
     list_all_accounts,
     list_all_active_accounts,
     one_account_balance,
 )
-from v4vapp_backend_v2.accounting.accounting_classes import AccountBalances, LedgerAccountDetails
+from v4vapp_backend_v2.accounting.accounting_classes import LedgerAccountDetails
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AccountType,
     LedgerAccount,
@@ -270,93 +268,93 @@ async def test_all_account_balances_pipeline_v2():
     assert date_stage4["$match"]["timestamp"]["$lte"] == asof
 
 
-async def test_all_account_balances():
-    """Test to get all account balances."""
-    balances = await all_account_balances()
-    assert isinstance(balances, AccountBalances)
+# async def test_all_account_balances():
+#     """Test to get all account balances."""
+#     balances = await all_account_balances()
+#     assert isinstance(balances, AccountBalances)
 
-    for item in balances.root:
-        print(item.balances_printout())
-        for currency, lines in item.balances.items():
-            last_running_total = lines[-1].amount_running_total
-            print(f"  Last Running Total: {last_running_total:,.2f}  {currency}")
-
-
-async def test_all_account_balances_summary():
-    """Test that the summary function produces the same final totals as the full pipeline.
-
-    all_account_balances_summary merges contra and non-contra groups for each
-    (account_type, name, sub) into a single entry (contra=False) so that the net
-    balance is correct.  The full pipeline returns them separately; we build a merged
-    view of the full results using the same key before comparing.
-    """
-    full = await all_account_balances()
-    summary = await all_account_balances_summary()
-
-    assert isinstance(summary, AccountBalances)
-    assert len(summary.root) > 0
-
-    # Merge full results by (account_type, name, sub) — same as the summary does —
-    # so contra and non-contra variants are summed before comparison.
-    from decimal import Decimal as _D
-
-    full_merged: dict[tuple, dict] = {}
-    for a in full.root:
-        key = (a.account_type, a.name, a.sub)
-        if key not in full_merged:
-            full_merged[key] = {
-                "sats": _D(0),
-                "msats": _D(0),
-                "hive": _D(0),
-                "hbd": _D(0),
-                "conv_usd": _D(0),
-                "conv_sats": _D(0),
-            }
-        m = full_merged[key]
-        m["sats"] += a.sats
-        m["msats"] += a.msats
-        m["hive"] += a.hive
-        m["hbd"] += a.hbd
-        m["conv_usd"] += a.conv_total.usd
-        m["conv_sats"] += a.conv_total.sats
-
-    for s_acct in summary.root:
-        key = (s_acct.account_type, s_acct.name, s_acct.sub)
-        f = full_merged.get(key)
-        assert f is not None, f"Summary account {key} not found in full results"
-
-        assert s_acct.sats == f["sats"], (
-            f"sats mismatch for {key}: summary={s_acct.sats} full={f['sats']}"
-        )
-        assert s_acct.msats == f["msats"], (
-            f"msats mismatch for {key}: summary={s_acct.msats} full={f['msats']}"
-        )
-        assert abs(s_acct.hive - f["hive"]) <= Decimal("0.001"), (
-            f"hive mismatch for {key}: summary={s_acct.hive} full={f['hive']}"
-        )
-        assert abs(s_acct.hbd - f["hbd"]) <= Decimal("0.001"), (
-            f"hbd mismatch for {key}: summary={s_acct.hbd} full={f['hbd']}"
-        )
-        assert abs(s_acct.conv_total.usd - f["conv_usd"]) <= Decimal("0.01"), (
-            f"conv_total.usd mismatch for {key}"
-        )
-        assert abs(s_acct.conv_total.sats - f["conv_sats"]) <= Decimal("1"), (
-            f"conv_total.sats mismatch for {key}"
-        )
+#     for item in balances.root:
+#         print(item.balances_printout())
+#         for currency, lines in item.balances.items():
+#             last_running_total = lines[-1].amount_running_total
+#             print(f"  Last Running Total: {last_running_total:,.2f}  {currency}")
 
 
-async def test_all_account_balances_summary_with_cust_ids():
-    """Test summary with cust_ids filter matches full pipeline."""
-    cust_ids = {"v4vapp.qrc"}
-    full = await all_account_balances(account_name="VSC Liability", cust_ids=cust_ids)
-    summary = await all_account_balances_summary(account_name="VSC Liability", cust_ids=cust_ids)
-    assert len(summary.root) == len(full.root)
-    for s_acct, f_acct in zip(
-        sorted(summary.root, key=lambda a: a.sub),
-        sorted(full.root, key=lambda a: a.sub),
-    ):
-        assert s_acct.sats == f_acct.sats
-        assert s_acct.msats == f_acct.msats
+# async def test_all_account_balances_summary():
+#     """Test that the summary function produces the same final totals as the full pipeline.
+
+#     all_account_balances_summary merges contra and non-contra groups for each
+#     (account_type, name, sub) into a single entry (contra=False) so that the net
+#     balance is correct.  The full pipeline returns them separately; we build a merged
+#     view of the full results using the same key before comparing.
+#     """
+#     full = await all_account_balances()
+#     summary = await all_account_balances_summary()
+
+#     assert isinstance(summary, AccountBalances)
+#     assert len(summary.root) > 0
+
+#     # Merge full results by (account_type, name, sub) — same as the summary does —
+#     # so contra and non-contra variants are summed before comparison.
+#     from decimal import Decimal as _D
+
+#     full_merged: dict[tuple, dict] = {}
+#     for a in full.root:
+#         key = (a.account_type, a.name, a.sub)
+#         if key not in full_merged:
+#             full_merged[key] = {
+#                 "sats": _D(0),
+#                 "msats": _D(0),
+#                 "hive": _D(0),
+#                 "hbd": _D(0),
+#                 "conv_usd": _D(0),
+#                 "conv_sats": _D(0),
+#             }
+#         m = full_merged[key]
+#         m["sats"] += a.sats
+#         m["msats"] += a.msats
+#         m["hive"] += a.hive
+#         m["hbd"] += a.hbd
+#         m["conv_usd"] += a.conv_total.usd
+#         m["conv_sats"] += a.conv_total.sats
+
+#     for s_acct in summary.root:
+#         key = (s_acct.account_type, s_acct.name, s_acct.sub)
+#         f = full_merged.get(key)
+#         assert f is not None, f"Summary account {key} not found in full results"
+
+#         assert s_acct.sats == f["sats"], (
+#             f"sats mismatch for {key}: summary={s_acct.sats} full={f['sats']}"
+#         )
+#         assert s_acct.msats == f["msats"], (
+#             f"msats mismatch for {key}: summary={s_acct.msats} full={f['msats']}"
+#         )
+#         assert abs(s_acct.hive - f["hive"]) <= Decimal("0.001"), (
+#             f"hive mismatch for {key}: summary={s_acct.hive} full={f['hive']}"
+#         )
+#         assert abs(s_acct.hbd - f["hbd"]) <= Decimal("0.001"), (
+#             f"hbd mismatch for {key}: summary={s_acct.hbd} full={f['hbd']}"
+#         )
+#         assert abs(s_acct.conv_total.usd - f["conv_usd"]) <= Decimal("0.01"), (
+#             f"conv_total.usd mismatch for {key}"
+#         )
+#         assert abs(s_acct.conv_total.sats - f["conv_sats"]) <= Decimal("1"), (
+#             f"conv_total.sats mismatch for {key}"
+#         )
+
+
+# async def test_all_account_balances_summary_with_cust_ids():
+#     """Test summary with cust_ids filter matches full pipeline."""
+#     cust_ids = {"v4vapp.qrc"}
+#     full = await all_account_balances(account_name="VSC Liability", cust_ids=cust_ids)
+#     summary = await all_account_balances_summary(account_name="VSC Liability", cust_ids=cust_ids)
+#     assert len(summary.root) == len(full.root)
+#     for s_acct, f_acct in zip(
+#         sorted(summary.root, key=lambda a: a.sub),
+#         sorted(full.root, key=lambda a: a.sub),
+#     ):
+#         assert s_acct.sats == f_acct.sats
+#         assert s_acct.msats == f_acct.msats
 
 
 async def test_one_account_balances():

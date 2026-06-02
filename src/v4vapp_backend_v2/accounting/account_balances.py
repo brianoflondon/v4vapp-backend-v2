@@ -490,9 +490,7 @@ async def one_account_balance(
         extra={"notification": False},
     )
     try:
-        cursor = await LedgerEntry.collection().aggregate(
-            pipeline=pipeline, batchSize=5000, allowDiskUse=True
-        )
+        cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
         logger.info(
             f"{account_label} one_account_balance cursor ready in {timer() - _t1:.3f}s",
             extra={"notification": False},
