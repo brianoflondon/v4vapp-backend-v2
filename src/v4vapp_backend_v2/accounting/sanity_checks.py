@@ -655,10 +655,7 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
             cause_exc = exc
             while cause_exc is not None:
                 chain.append(f"{type(cause_exc).__name__}: {cause_exc}")
-                next_cause = cause_exc.__cause__
-                if next_cause is None:
-                    break
-                cause_exc = next_cause
+                cause_exc = cause_exc.__cause__
             return " <- caused by ".join(chain)
 
         # wrapper that logs the start/finish of each check and applies a per-check timeout
