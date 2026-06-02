@@ -7,11 +7,11 @@ from typing import Any, List, Mapping, Set, Tuple
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     account_notifications_pipeline,
     active_account_subs_pipeline,
-    all_account_balances_pipeline,
     all_account_balances_summary_pipeline,
     list_all_accounts_pipeline,
     list_all_active_accounts_pipeline,
     list_all_ledger_types_pipeline,
+    one_account_transactions_pipeline,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalanceLine,
@@ -146,87 +146,87 @@ def _merge_duplicate_accounts(account_balances: AccountBalances) -> AccountBalan
     return account_balances
 
 
-@async_time_decorator
-async def all_account_balances(
-    account: LedgerAccount | None = None,
-    account_name: str | None = None,
-    sub: str | None = None,
-    as_of_date: datetime | None = None,
-    age: timedelta | None = None,
-    filter: Mapping[str, Any] | None = None,
-    cust_ids: Set[str] | None = None,
-) -> AccountBalances:
-    """
-    Retrieve all account balances as of a specified date, optionally aged by a given timedelta.
-    The order of precedence for filtering is: `account` > `account_name` > `sub`. If none are provided, the pipeline will include all accounts.
-    Args:
-        account (LedgerAccount, optional): An instance of LedgerAccount to filter the transactions. If provided, the pipeline will match transactions for this specific account.
-        account_name (str, optional): The name of the account to filter transactions. Used if `account` is not provided.
-        sub (str, optional): The sub identifier to filter transactions. Used if `account` and `account_name` are not provided.
-        as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
-        age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
-        cust_ids (Set[str] | None, optional): If provided, pre-filters ledger entries by cust_id (indexed) before the expensive aggregation. Used for restricting to active accounts.
+# @async_time_decorator
+# async def all_account_balances(
+#     account: LedgerAccount | None = None,
+#     account_name: str | None = None,
+#     sub: str | None = None,
+#     as_of_date: datetime | None = None,
+#     age: timedelta | None = None,
+#     filter: Mapping[str, Any] | None = None,
+#     cust_ids: Set[str] | None = None,
+# ) -> AccountBalances:
+#     """
+#     Retrieve all account balances as of a specified date, optionally aged by a given timedelta.
+#     The order of precedence for filtering is: `account` > `account_name` > `sub`. If none are provided, the pipeline will include all accounts.
+#     Args:
+#         account (LedgerAccount, optional): An instance of LedgerAccount to filter the transactions. If provided, the pipeline will match transactions for this specific account.
+#         account_name (str, optional): The name of the account to filter transactions. Used if `account` is not provided.
+#         sub (str, optional): The sub identifier to filter transactions. Used if `account` and `account_name` are not provided.
+#         as_of_date (datetime, optional): The end date for the balance calculation. Defaults to the current UTC datetime.
+#         age (timedelta | None, optional): If provided, limits the results to transactions within the specified age (time window) ending at `as_of_date`.
+#         cust_ids (Set[str] | None, optional): If provided, pre-filters ledger entries by cust_id (indexed) before the expensive aggregation. Used for restricting to active accounts.
 
-    Returns:
-        AccountBalances: An object containing the validated account balances.
-    Raises:
-        ValidationError: If the results cannot be validated into AccountBalances.
-    """
+#     Returns:
+#         AccountBalances: An object containing the validated account balances.
+#     Raises:
+#         ValidationError: If the results cannot be validated into AccountBalances.
+#     """
 
-    if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
-    _t0 = timer()
-    pipeline = all_account_balances_pipeline(
-        account=account,
-        account_name=account_name,
-        sub=sub,
-        as_of_date=as_of_date,
-        age=age,
-        filter=filter,
-        cust_ids=cust_ids,
-    )
-    _t1 = timer()
-    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
-    _t2 = timer()
-    results = await cursor.to_list()
-    _t3 = timer()
-    clean_results = convert_datetime_fields(results)
-    _t4 = timer()
+#     if as_of_date is None:
+#         as_of_date = datetime.now(tz=timezone.utc)
+#     _t0 = timer()
+#     pipeline = all_account_balances_pipeline_v2(
+#         account=account,
+#         account_name=account_name,
+#         sub=sub,
+#         as_of_date=as_of_date,
+#         age=age,
+#         filter=filter,
+#         cust_ids=cust_ids,
+#     )
+#     _t1 = timer()
+#     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+#     _t2 = timer()
+#     results = await cursor.to_list()
+#     _t3 = timer()
+#     clean_results = convert_datetime_fields(results)
+#     _t4 = timer()
 
-    account_balances = AccountBalances.model_validate(clean_results)
-    # # -- merge any duplicate root entries caused by contra flags --
-    # account_balances = _merge_duplicate_accounts(account_balances)
-    _t5 = timer()
-    all_held_result = await all_held_msats()
-    _t6 = timer()
-    in_progress = InProgressResults(results=all_held_result)
-    _t7 = timer()
+#     account_balances = AccountBalances.model_validate(clean_results)
+#     # # -- merge any duplicate root entries caused by contra flags --
+#     # account_balances = _merge_duplicate_accounts(account_balances)
+#     _t5 = timer()
+#     all_held_result = await all_held_msats()
+#     _t6 = timer()
+#     in_progress = InProgressResults(results=all_held_result)
+#     _t7 = timer()
 
-    # Find the most recent transaction date
-    for account in account_balances.root:
-        max_timestamp = datetime.min.replace(tzinfo=timezone.utc)
-        if account.balances:
-            for items in account.balances.values():
-                if items:
-                    last_item = items[-1]
-                    max_timestamp = max(max_timestamp, last_item.timestamp or max_timestamp)
-        account.in_progress_msats = in_progress.get(account.sub).net_held
-        account.last_transaction_date = max_timestamp
-    _t8 = timer()
+#     # Find the most recent transaction date
+#     for account in account_balances.root:
+#         max_timestamp = datetime.min.replace(tzinfo=timezone.utc)
+#         if account.balances:
+#             for items in account.balances.values():
+#                 if items:
+#                     last_item = items[-1]
+#                     max_timestamp = max(max_timestamp, last_item.timestamp or max_timestamp)
+#         account.in_progress_msats = in_progress.get(account.sub).net_held
+#         account.last_transaction_date = max_timestamp
+#     _t8 = timer()
 
-    logger.info(
-        f"aggregate={(_t2 - _t1):.3f}s, "
-        # f"to_list={(_t3 - _t2):.3f}s, "
-        # f"validate={(_t5 - _t4):.3f}s, "
-        f"held_msats={(_t6 - _t5):.3f}s, "
-        # f"in_progress={(_t7 - _t6):.3f}s, "
-        # f"post_process={(_t8 - _t7):.3f}s, "
-        f"total={(_t8 - _t0):.3f}s "
-        f"all_account_balances timing "
-        f"({len(account_balances.root)} accounts, {len(results)} result docs)"
-    )
+#     logger.info(
+#         f"aggregate={(_t2 - _t1):.3f}s, "
+#         # f"to_list={(_t3 - _t2):.3f}s, "
+#         # f"validate={(_t5 - _t4):.3f}s, "
+#         f"held_msats={(_t6 - _t5):.3f}s, "
+#         # f"in_progress={(_t7 - _t6):.3f}s, "
+#         # f"post_process={(_t8 - _t7):.3f}s, "
+#         f"total={(_t8 - _t0):.3f}s "
+#         f"all_account_balances timing "
+#         f"({len(account_balances.root)} accounts, {len(results)} result docs)"
+#     )
 
-    return account_balances
+#     return account_balances
 
 
 async def all_account_balances_summary(
@@ -412,11 +412,25 @@ async def one_account_balance(
             name="VSC Liability",
             sub=account,
         )
+    account_label = f"{account.name}:{account.sub}"
+    logger.debug(
+        f"{account_label} one_account_balance start as_of={as_of_date} age={age} use_cache={use_cache} use_checkpoints={use_checkpoints}",
+        extra={"notification": False},
+    )
 
     # --- Cache lookup ---
     if use_cache:
+        cache_lookup_start = timer()
+        logger.debug(
+            f"{account_label} one_account_balance cache lookup start for {account_label}",
+            extra={"notification": False},
+        )
         cached_result = await get_cached_balance(
             account, as_of_date, age, use_checkpoints=use_checkpoints
+        )
+        logger.debug(
+            f"{account_label} one_account_balance cache lookup done in {timer() - cache_lookup_start:.3f}s hit={cached_result is not None}",
+            extra={"notification": False},
         )
         if cached_result is not None:
             # Always refresh in_progress_msats (changes independently of ledger)
@@ -424,6 +438,10 @@ async def one_account_balance(
                 all_held_result = await all_held_msats()
                 in_progress = InProgressResults(results=all_held_result)
             cached_result.in_progress_msats = in_progress.get_net_held(account.sub)
+            logger.debug(
+                f"{account_label} one_account_balance cache hit return total={timer() - _t0:.3f}s",
+                extra={"notification": False},
+            )
             return cached_result
 
     # --- Checkpoint lookup (only for explicit historical queries without an age window) ---
@@ -433,10 +451,19 @@ async def one_account_balance(
         from v4vapp_backend_v2.accounting.ledger_checkpoints import get_latest_checkpoint_before
 
         try:
+            checkpoint_lookup_start = timer()
+            logger.debug(
+                f"{account_label} one_account_balance checkpoint lookup start for {account_label}",
+                extra={"notification": False},
+            )
             checkpoint = await get_latest_checkpoint_before(account, as_of_date)
+            logger.debug(
+                f"{account_label} one_account_balance checkpoint lookup done in {timer() - checkpoint_lookup_start:.3f}s found={checkpoint is not None}",
+                extra={"notification": False},
+            )
             if checkpoint is not None:
                 from_date = checkpoint.period_end
-                logger.info(
+                logger.debug(
                     f"📌 Using checkpoint for {account.name}:{account.sub} "
                     f"@ {checkpoint.period_end.date()} → delta from {from_date.date()} to {as_of_date.date()}",
                     extra={"notification": False},
@@ -444,27 +471,56 @@ async def one_account_balance(
             else:
                 from_date = None
         except Exception as e:
-            logger.info(
+            logger.debug(
                 f"Checkpoint lookup failed for {account.name}:{account.sub}: {e}",
                 extra={"notification": False},
             )
             checkpoint = None
             from_date = None
 
-    pipeline = all_account_balances_pipeline(
+    pipeline = one_account_transactions_pipeline(
         account=account,
         as_of_date=as_of_date,
         age=age,
         from_date=from_date,
     )
     _t1 = timer()
-    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
-    results = await cursor.to_list()
+    logger.debug(
+        f"{account_label} one_account_balance start from_date={from_date}",
+        extra={"notification": False},
+    )
+    try:
+        cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+        logger.debug(
+            f"{account_label} one_account_balance cursor ready in {timer() - _t1:.3f}s",
+            extra={"notification": False},
+        )
+        to_list_start = timer()
+        results = await cursor.to_list()
+        logger.debug(
+            f"{account_label} one_account_balance to_list done in {timer() - to_list_start:.3f}s docs={len(results)}",
+            extra={"notification": False},
+        )
+    except asyncio.CancelledError:
+        logger.warning(
+            f"{account_label} one_account_balance cancelled during aggregate/to_list after {timer() - _t0:.3f}s",
+            extra={"notification": False},
+        )
+        raise
     clean_results = convert_datetime_fields(results)
     _t2 = timer()
+    logger.debug(
+        f"{account_label} one_account_balance datetime conversion done in {(_t2 - to_list_start):.3f}s",
+        extra={"notification": False},
+    )
     account_balance = AccountBalances.model_validate(clean_results)
     _t3 = timer()
+    logger.debug(
+        f"{account_label} one_account_balance model validate done in {(_t3 - _t2):.3f}s root={len(account_balance.root)}",
+        extra={"notification": False},
+    )
     # If there are multiple entries (e.g., contra and non-contra groups), merge them so both show up
+    merge_start = timer()
     if account_balance.root and len(account_balance.root) > 0:
         if len(account_balance.root) == 1:
             merged_balances = {
@@ -607,6 +663,10 @@ async def one_account_balance(
             contra=account.contra,
         )
     _t4 = timer()
+    logger.debug(
+        f"{account_label} one_account_balance merge/build details done in {(_t4 - merge_start):.3f}s",
+        extra={"notification": False},
+    )
     # Find the most recent transaction date
     if ledger_details.balances:
         max_timestamp = None
@@ -621,8 +681,13 @@ async def one_account_balance(
         ledger_details.last_transaction_date = max_timestamp
 
     if in_progress is None:
+        held_start = timer()
         all_held_result = await all_held_msats()
         in_progress = InProgressResults(results=all_held_result)
+        logger.debug(
+            f"{account_label} one_account_balance aggregate in_progress fetch done in {timer() - held_start:.3f}s",
+            extra={"notification": False},
+        )
     ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
     _t5 = timer()
 
@@ -630,6 +695,11 @@ async def one_account_balance(
     try:
         ttl = LIVE_TTL_SECONDS if as_of_date is None else HISTORICAL_TTL_SECONDS
         # pass the original intent (None for live) so key doesn't drift
+        cache_set_start = timer()
+        logger.debug(
+            f"{account_label} one_account_balance cache set start ttl={ttl}",
+            extra={"notification": False},
+        )
         await set_cached_balance(
             account,
             as_of_date,
@@ -639,9 +709,23 @@ async def one_account_balance(
             use_checkpoints=use_checkpoints,
             report_time=_t5 - _t0,
         )
+        logger.debug(
+            f"{account_label} one_account_balance cache set done in {timer() - cache_set_start:.3f}s",
+            extra={"notification": False},
+        )
+    except asyncio.CancelledError:
+        logger.warning(
+            f"{account_label} one_account_balance cancelled during cache set after {timer() - _t0:.3f}s",
+            extra={"notification": False},
+        )
+        raise
     except Exception as e:
         logger.warning(f"Failed to set cache for {account.name}:{account.sub}: {e}")
 
+    logger.info(
+        f"{account_label} one_account_balance done total={timer() - _t0:.3f}s",
+        extra={"notification": False},
+    )
     return ledger_details
 
 

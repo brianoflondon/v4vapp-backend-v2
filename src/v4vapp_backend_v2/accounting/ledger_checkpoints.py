@@ -415,17 +415,33 @@ async def latest_period_create_checkpoint(
 
     """
     period_start: datetime | None = None
+    start = timer()
     now = datetime.now(tz=timezone.utc)
     period_start = last_completed_period_end(period_type, now)
     age = now - period_start
+    account_label = f"{account.name}:{account.sub}"
+    logger.info(
+        f"{ICON} latest_period_create_checkpoint start for {account_label} period={period_type} period_end={period_start.isoformat()}",
+        extra={"notification": False},
+    )
     try:
         checkpoint, created = await create_checkpoint(account, period_type, period_start)
+    except asyncio.CancelledError:
+        logger.warning(
+            f"{ICON} latest_period_create_checkpoint cancelled for {account_label} after {timer() - start:.3f}s",
+            extra={"notification": False},
+        )
+        raise
     except ValueError as e:
         logger.warning(
             f"⚠️  Could not create checkpoint for latest completed {period_type} period: {e}",
             extra={"notification": False},
         )
         return None, False, age, period_start
+    logger.info(
+        f"{ICON} latest_period_create_checkpoint done for {account_label} created={created} took {timer() - start:.3f}s",
+        extra={"notification": False},
+    )
     return checkpoint, created, age, period_start
 
 
@@ -458,12 +474,26 @@ async def create_checkpoint(
 
     """
     start = timer()
+    account_label = f"{account.name}:{account.sub}"
+    logger.info(
+        f"{ICON} create_checkpoint start for {account_label} period={period_type} period_end={period_end.isoformat()} force={force} use_cache={use_cache}",
+        extra={"notification": False},
+    )
     # all_accounts = await list_all_active_accounts()
     # if account not in all_accounts:
     #     raise ValueError(f"Account {account} is not active; cannot create checkpoint.")
 
     if not force:
+        lookup_start = timer()
+        logger.info(
+            f"{ICON} create_checkpoint lookup existing start for {account_label}",
+            extra={"notification": False},
+        )
         existing_checkpoint = await get_checkpoint_by_id(account, period_type, period_end)
+        logger.info(
+            f"{ICON} create_checkpoint lookup existing done for {account_label} in {timer() - lookup_start:.3f}s found={existing_checkpoint is not None}",
+            extra={"notification": False},
+        )
         if existing_checkpoint is not None:
             logger.debug(
                 f"{ICON} Checkpoint already exists for {account} at {period_end} ({period_type}); skipping. (took {timer() - start:.2f}s)",
@@ -471,11 +501,27 @@ async def create_checkpoint(
             )
             return existing_checkpoint, False
 
-    ledger_details = await one_account_balance(
-        account=account,
-        as_of_date=period_end,
-        use_cache=use_cache,
-        use_checkpoints=False,
+    balance_start = timer()
+    logger.info(
+        f"{ICON} create_checkpoint one_account_balance start for {account_label}",
+        extra={"notification": False},
+    )
+    try:
+        ledger_details = await one_account_balance(
+            account=account,
+            as_of_date=period_end,
+            use_cache=use_cache,
+            use_checkpoints=False,
+        )
+    except asyncio.CancelledError:
+        logger.warning(
+            f"{ICON} create_checkpoint one_account_balance cancelled for {account_label} after {timer() - balance_start:.3f}s",
+            extra={"notification": False},
+        )
+        raise
+    logger.info(
+        f"{ICON} create_checkpoint one_account_balance done for {account_label} in {timer() - balance_start:.3f}s",
+        extra={"notification": False},
     )
 
     balances_net: Dict[str, Decimal] = {}
@@ -500,7 +546,16 @@ async def create_checkpoint(
         conv_totals=conv_totals,
         last_transaction_date=ledger_details.last_transaction_date,
     )
+    save_start = timer()
+    logger.info(
+        f"{ICON} create_checkpoint save start for {account_label}",
+        extra={"notification": False},
+    )
     await checkpoint.save()
+    logger.info(
+        f"{ICON} create_checkpoint save done for {account_label} in {timer() - save_start:.3f}s",
+        extra={"notification": False},
+    )
     logger.info(
         f"{ICON} Created checkpoint for {account} at {period_end} ({period_type}) (took {timer() - start:.2f}s)"
     )

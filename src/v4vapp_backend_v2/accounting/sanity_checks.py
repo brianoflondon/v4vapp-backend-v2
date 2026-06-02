@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from logging import Logger
+from time import monotonic
 from typing import Any, Callable, Coroutine, List, Tuple
 
 from nectar.amount import Amount
@@ -29,11 +30,11 @@ from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 ICON = "🧪"  # Test Tube
 
-SANITY_CHECK_TIMEOUT_SECONDS = 120.0  # per-check timeout for sanity checks
-SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 125.0  # overall timeout for running all checks
+SANITY_CHECK_TIMEOUT_SECONDS = 60.0  # per-check timeout for sanity checks
+SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 65.0  # overall timeout for running all checks
 
 SANITY_REDIS_CACHE_KEY = "sanity_check_results_cache"
-SANITY_REDIS_TIMEOUT_SECONDS = 180
+SANITY_REDIS_TIMEOUT_SECONDS = 200
 
 
 class SanityCheckResult(BaseModel):
@@ -119,7 +120,7 @@ class SanityCheckResults(BaseModel):
         return {"sanity_check_results": self.model_dump()}
 
 
-async def _get_cached_sanity_check_results() -> "SanityCheckResults" | None:
+async def _get_cached_sanity_check_results() -> "SanityCheckResults | None":
     """Attempt to retrieve cached sanity check results from Redis.
 
     Returns:
@@ -167,17 +168,65 @@ async def _set_cached_sanity_check_results(results: "SanityCheckResults") -> Non
 # MARK: Individual sanity check tests
 
 
+def _describe_task_state(task: asyncio.Task | None) -> str:
+    if task is None:
+        return "missing"
+    if task.cancelled():
+        return "cancelled"
+    if task.done():
+        try:
+            result = task.result()
+        except Exception as exc:
+            return f"failed({type(exc).__name__})"
+        return f"done({type(result).__name__})"
+    return "pending"
+
+
+def _log_named_task_states(check_name: str, tasks: dict[str, asyncio.Task]) -> None:
+    task_states = ", ".join(
+        f"{task_name}={_describe_task_state(task)}" for task_name, task in tasks.items()
+    )
+    logger.warning(
+        f"{check_name} task states: {task_states}",
+        extra={"notification": False},
+    )
+
+
 async def _safe_one_account_balance(account_name: str, in_progress: InProgressResults):
+    started_at = monotonic()
     try:
         # age = timedelta(days=1)
         account = LiabilityAccount(
             name="VSC Liability",
             sub=account_name,
         )
+        logger.info(
+            f"server_account_balances starting checkpoint for {account.name}:{account.sub}",
+            extra={"notification": False},
+        )
         await latest_period_create_checkpoint(account=account, period_type=PeriodType.DAILY)
-        return await one_account_balance(
+        checkpoint_elapsed = monotonic() - started_at
+        logger.info(
+            f"server_account_balances checkpoint finished for {account.name}:{account.sub} in {checkpoint_elapsed:.3f}s",
+            extra={"notification": False},
+        )
+        balance_started_at = monotonic()
+        balance = await one_account_balance(
             account=account, as_of_date=datetime.now(timezone.utc), in_progress=in_progress
         )
+        balance_elapsed = monotonic() - balance_started_at
+        total_elapsed = monotonic() - started_at
+        logger.info(
+            f"server_account_balances balance finished for {account.name}:{account.sub} in {balance_elapsed:.3f}s total={total_elapsed:.3f}s",
+            extra={"notification": False},
+        )
+        return balance
+    except asyncio.CancelledError:
+        logger.warning(
+            f"server_account_balances cancelled while checking VSC Liability:{account_name} after {monotonic() - started_at:.3f}s",
+            extra={"notification": False},
+        )
+        raise
     except Exception as e:
         logger.error(e, extra={"notification": False})
         return e
@@ -219,11 +268,15 @@ async def server_account_balances(in_progress: InProgressResults) -> SanityCheck
     results: List[str] = []
 
     tasks: dict[str, asyncio.Task] = {}
-    async with asyncio.TaskGroup() as tg:
-        for account in accounts_to_check:
-            tasks[account] = tg.create_task(
-                _safe_one_account_balance(account_name=account, in_progress=in_progress)
-            )
+    try:
+        async with asyncio.TaskGroup() as tg:
+            for account in accounts_to_check:
+                tasks[account] = tg.create_task(
+                    _safe_one_account_balance(account_name=account, in_progress=in_progress)
+                )
+    except asyncio.CancelledError:
+        _log_named_task_states("server_account_balances", tasks)
+        raise
 
     for account, task in tasks.items():
         res = task.result()
@@ -280,16 +333,81 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
         @async_time_decorator
         async def _fetch_balances() -> dict:
             """Run the blocking hive call in a thread with its own timeout and logs."""
+            started_at = monotonic()
             try:
                 # give the hive client its own generous timeout but still bounded
                 async with asyncio.timeout(SANITY_CHECK_TIMEOUT_SECONDS - 5):
+                    logger.info(
+                        f"Fetching Hive balances for server_id {server_id}...",
+                        extra={"notification": False},
+                    )
                     balances = await account_hive_balances_async(server_id)
+                    logger.info(
+                        f"Fetched Hive balances for server_id {server_id} in {monotonic() - started_at:.3f}s",
+                        extra={"notification": False},
+                    )
                     return balances
+            except asyncio.CancelledError:
+                logger.warning(
+                    f"hive balance fetch cancelled for server_id {server_id} after {monotonic() - started_at:.3f}s",
+                    extra={"notification": False},
+                )
+                raise
             except Exception as exc:
                 # this will include CancelledError/TimeoutError when the outer
                 # group is torn down due to our per-check timeout or a shutdown
                 logger.warning(
-                    f"hive balance fetch failed: {exc!r}",
+                    f"hive balance fetch failed for server_id {server_id} after {monotonic() - started_at:.3f}s: {exc!r}",
+                    extra={"notification": False},
+                )
+                raise
+
+        async def _timed_account_balance(
+            task_name: str,
+            account: AssetAccount,
+            as_of_date: datetime,
+        ):
+            started_at = monotonic()
+            try:
+                logger.info(
+                    f"server_account_hive_balances starting {task_name} for {account.name}:{account.sub}",
+                    extra={"notification": False},
+                )
+                result = await one_account_balance(
+                    account=account,
+                    as_of_date=as_of_date,
+                    in_progress=in_progress,
+                )
+                logger.info(
+                    f"server_account_hive_balances finished {task_name} for {account.name}:{account.sub} in {monotonic() - started_at:.3f}s",
+                    extra={"notification": False},
+                )
+                return result
+            except asyncio.CancelledError:
+                logger.warning(
+                    f"server_account_hive_balances cancelled {task_name} for {account.name}:{account.sub} after {monotonic() - started_at:.3f}s",
+                    extra={"notification": False},
+                )
+                raise
+
+        async def _timed_checkpoint(task_name: str, account: AssetAccount):
+            started_at = monotonic()
+            try:
+                logger.info(
+                    f"server_account_hive_balances starting {task_name} for {account.name}:{account.sub}",
+                    extra={"notification": False},
+                )
+                result = await latest_period_create_checkpoint(
+                    account=account, period_type=PeriodType.DAILY
+                )
+                logger.info(
+                    f"server_account_hive_balances finished {task_name} for {account.name}:{account.sub} in {monotonic() - started_at:.3f}s",
+                    extra={"notification": False},
+                )
+                return result
+            except asyncio.CancelledError:
+                logger.warning(
+                    f"server_account_hive_balances cancelled {task_name} for {account.name}:{account.sub} after {monotonic() - started_at:.3f}s",
                     extra={"notification": False},
                 )
                 raise
@@ -298,35 +416,38 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
             as_of_date = datetime.now(tz=timezone.utc)
             async with asyncio.TaskGroup() as tg:
                 tasks["deposits_checkpoint"] = tg.create_task(
-                    latest_period_create_checkpoint(
-                        account=customer_deposits_account, period_type=PeriodType.DAILY
+                    _timed_checkpoint(
+                        task_name="deposits_checkpoint",
+                        account=customer_deposits_account,
                     )
                 )
                 tasks["traded_deposits_checkpoint"] = tg.create_task(
-                    latest_period_create_checkpoint(
-                        account=traded_deposits_account, period_type=PeriodType.DAILY
+                    _timed_checkpoint(
+                        task_name="traded_deposits_checkpoint",
+                        account=traded_deposits_account,
                     )
                 )
 
             async with asyncio.TaskGroup() as tg:
                 tasks["deposits_details"] = tg.create_task(
-                    one_account_balance(
+                    _timed_account_balance(
+                        task_name="deposits_details",
                         account=customer_deposits_account,
                         as_of_date=as_of_date,
-                        in_progress=in_progress,
                     )
                 )
                 tasks["traded_deposits_details"] = tg.create_task(
-                    one_account_balance(
+                    _timed_account_balance(
+                        task_name="traded_deposits_details",
                         account=traded_deposits_account,
                         as_of_date=as_of_date,
-                        in_progress=in_progress,
                     )
                 )
                 tasks["balances"] = tg.create_task(_fetch_balances())
         except asyncio.CancelledError:
             # make sure we log cancellation separately before letting outer wrapper
             # convert it to TimeoutError
+            _log_named_task_states("server_account_hive_balances", tasks)
             logger.warning(
                 "server_account_hive_balances was cancelled during inner taskgroup",
                 extra={"notification": False},
@@ -517,22 +638,24 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
 
         def _root_exception_message(exc: BaseException) -> str:
             """Return a concise string for the most relevant underlying exception."""
+            def _flatten_exception_group(group: ExceptionGroup) -> list[str]:
+                flattened_messages: list[str] = []
+                for group_exc in group.exceptions:
+                    if isinstance(group_exc, ExceptionGroup):
+                        flattened_messages.extend(_flatten_exception_group(group_exc))
+                    else:
+                        flattened_messages.append(f"{type(group_exc).__name__}: {group_exc}")
+                return flattened_messages
+
             if isinstance(exc, ExceptionGroup):
-                flattened: list[str] = []
-                stack = list(exc.exceptions)
-                while stack:
-                    current = stack.pop()
-                    if isinstance(current, ExceptionGroup):
-                        stack.extend(current.exceptions)
-                        continue
-                    flattened.append(f"{type(current).__name__}: {current}")
+                flattened = _flatten_exception_group(exc)
                 return "; ".join(flattened) if flattened else str(exc)
 
             chain: list[str] = []
-            current: BaseException | None = exc
-            while current is not None:
-                chain.append(f"{type(current).__name__}: {current}")
-                current = current.__cause__
+            cause_exc = exc
+            while cause_exc is not None:
+                chain.append(f"{type(cause_exc).__name__}: {cause_exc}")
+                cause_exc = cause_exc.__cause__
             return " <- caused by ".join(chain)
 
         # wrapper that logs the start/finish of each check and applies a per-check timeout
