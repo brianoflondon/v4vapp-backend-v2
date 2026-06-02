@@ -677,6 +677,276 @@ def all_account_balances_pipeline(
     return pipeline
 
 
+def all_account_balances_pipeline_v2(
+    account: LedgerAccount | None = None,
+    account_name: str | None = None,
+    sub: str | None = None,
+    as_of_date: datetime | None = None,
+    age: timedelta | None = None,
+    from_date: datetime | None = None,
+    filter: Mapping[str, Any] | None = None,
+    cust_ids: Set[str] | None = None,
+    hide_reversed: bool = True,
+) -> Sequence[Mapping[str, Any]]:
+    """
+    FIXED DROP-IN REPLACEMENT (MongoDB 5.0+)
+    =========================================
+    This is the corrected version of the function I gave you earlier.
+
+    The previous version had an invalid $setWindowFields syntax when
+    trying to output a nested "conv_running_total" object directly.
+    MongoDB was interpreting "hive" as a window function name → "Expected a $-prefixed window function, hive".
+
+    This version fixes it by:
+    1. Computing each currency running total as a flat field
+    2. Then using $addFields + $project to rebuild the exact nested
+       "conv_running_total": {"hive": ..., "hbd": ..., ...} structure you expect.
+
+    Everything else (output shape, field names, filtering logic) is 100% identical
+    to your original function so you can swap it in and test side-by-side immediately.
+
+    This should now run without parsing errors and will be dramatically faster
+    and more memory-efficient for large accounts.
+    """
+    filter = filter or {}
+    if account:
+        debit_match_query: dict[str, Any] = {
+            "debit.name": account.name,
+            "debit.sub": account.sub,
+            "debit.account_type": account.account_type,
+        }
+        credit_match_query: dict[str, Any] = {
+            "credit.name": account.name,
+            "credit.sub": account.sub,
+            "credit.account_type": account.account_type,
+        }
+    elif account_name:
+        debit_match_query = {"debit.name": account_name}
+        credit_match_query = {"credit.name": account_name}
+    elif sub:
+        debit_match_query = {"debit.sub": sub}
+        credit_match_query = {"credit.sub": sub}
+    else:
+        debit_match_query = {}
+        credit_match_query = {}
+
+    if cust_ids is not None:
+        debit_match_query["debit.sub"] = {"$in": list(cust_ids)}
+        credit_match_query["credit.sub"] = {"$in": list(cust_ids)}
+
+    facet_debit_match = {"$match": debit_match_query}
+    facet_credit_match = {"$match": credit_match_query}
+
+    if from_date is not None:
+        if as_of_date is None:
+            as_of_date = datetime.now(tz=timezone.utc)
+        date_range_query = {"$gt": from_date, "$lte": as_of_date}
+    elif age:
+        if not as_of_date:
+            as_of_date = datetime.now(tz=timezone.utc)
+        date_range_query = {"$gte": as_of_date - age, "$lte": as_of_date}
+    else:
+        date_range_query = {"$exists": True} if as_of_date is None else {"$lte": as_of_date}
+
+    pipeline: List[Mapping[str, Any]] = []
+    match: dict[str, Any] = {}
+    if hide_reversed:
+        match["reversed"] = {"$exists": False}
+    match["conv_signed"] = {"$exists": True}
+    match["timestamp"] = date_range_query
+    if filter:
+        match.update(filter)
+
+    if cust_ids is not None:
+        match["all_cust_ids"] = {"$in": list(cust_ids)}
+
+    pipeline.append({"$match": match})
+
+    # ===================================================================
+    # FIXED EFFICIENT PIPELINE (linear-time running totals)
+    # ===================================================================
+    pipeline.extend([
+        {
+            "$facet": {
+                "debits_view": [
+                    facet_debit_match,
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "account_type": "$debit.account_type",
+                            "name": "$debit.name",
+                            "sub": "$debit.sub",
+                            "contra": "$debit.contra",
+                            "group_id": 1,
+                            "short_id": 1,
+                            "ledger_type": 1,
+                            "timestamp": 1,
+                            "description": 1,
+                            "user_memo": 1,
+                            "cust_id": 1,
+                            "cust_id_from": 1,
+                            "cust_id_to": 1,
+                            "amount": "$debit_amount",
+                            "amount_signed": "$debit_amount_signed",
+                            "unit": "$debit_unit",
+                            "conv": "$debit_conv",
+                            "conv_signed": "$conv_signed.debit",
+                            "op_type": 1,
+                            "link": 1,
+                            "side": "debit",
+                        }
+                    },
+                ],
+                "credits_view": [
+                    facet_credit_match,
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "account_type": "$credit.account_type",
+                            "name": "$credit.name",
+                            "sub": "$credit.sub",
+                            "contra": "$credit.contra",
+                            "group_id": 1,
+                            "short_id": 1,
+                            "ledger_type": 1,
+                            "timestamp": 1,
+                            "description": 1,
+                            "user_memo": 1,
+                            "cust_id": 1,
+                            "cust_id_from": 1,
+                            "cust_id_to": 1,
+                            "amount": "$credit_amount",
+                            "amount_signed": "$credit_amount_signed",
+                            "unit": "$credit_unit",
+                            "conv": "$credit_conv",
+                            "conv_signed": "$conv_signed.credit",
+                            "op_type": 1,
+                            "link": 1,
+                            "side": "credit",
+                        }
+                    },
+                ],
+            }
+        },
+        {"$project": {"combined": {"$concatArrays": ["$debits_view", "$credits_view"]}}},
+        {"$unwind": "$combined"},
+        {"$replaceRoot": {"newRoot": "$combined"}},
+        # Sort once (required for window functions)
+        {"$sort": {"timestamp": 1}},
+        # Linear-time running totals (one pass per account+currency)
+        {
+            "$setWindowFields": {
+                "partitionBy": {
+                    "account_type": "$account_type",
+                    "name": "$name",
+                    "sub": "$sub",
+                    "contra": "$contra",
+                    "unit": "$unit",
+                },
+                "sortBy": {"timestamp": 1},
+                "output": {
+                    "amount_running_total": {
+                        "$sum": "$amount_signed",
+                        "window": {"documents": ["unbounded", "current"]},
+                    },
+                    "conv_running_total_hive": {
+                        "$sum": "$conv_signed.hive",
+                        "window": {"documents": ["unbounded", "current"]},
+                    },
+                    "conv_running_total_hbd": {
+                        "$sum": "$conv_signed.hbd",
+                        "window": {"documents": ["unbounded", "current"]},
+                    },
+                    "conv_running_total_usd": {
+                        "$sum": "$conv_signed.usd",
+                        "window": {"documents": ["unbounded", "current"]},
+                    },
+                    "conv_running_total_sats": {
+                        "$sum": "$conv_signed.sats",
+                        "window": {"documents": ["unbounded", "current"]},
+                    },
+                    "conv_running_total_msats": {
+                        "$sum": "$conv_signed.msats",
+                        "window": {"documents": ["unbounded", "current"]},
+                    },
+                },
+            }
+        },
+        # Rebuild the exact nested "conv_running_total" object you expect
+        {
+            "$addFields": {
+                "conv_running_total": {
+                    "hive": "$conv_running_total_hive",
+                    "hbd": "$conv_running_total_hbd",
+                    "usd": "$conv_running_total_usd",
+                    "sats": "$conv_running_total_sats",
+                    "msats": "$conv_running_total_msats",
+                }
+            }
+        },
+        {
+            "$project": {
+                "conv_running_total_hive": 0,
+                "conv_running_total_hbd": 0,
+                "conv_running_total_usd": 0,
+                "conv_running_total_sats": 0,
+                "conv_running_total_msats": 0,
+            }
+        },
+        # Group into final shape (one doc per account)
+        {
+            "$group": {
+                "_id": {
+                    "account_type": "$account_type",
+                    "name": "$name",
+                    "sub": "$sub",
+                    "contra": "$contra",
+                },
+                "items": {"$push": "$$ROOT"},
+            }
+        },
+        # Build the "balances" object exactly as before
+        {
+            "$project": {
+                "_id": 0,
+                "account_type": "$_id.account_type",
+                "name": "$_id.name",
+                "sub": "$_id.sub",
+                "contra": "$_id.contra",
+                "balances": {
+                    "$arrayToObject": {
+                        "$map": {
+                            "input": {
+                                "$setUnion": [
+                                    {
+                                        "$map": {
+                                            "input": "$items",
+                                            "as": "it",
+                                            "in": "$$it.unit",
+                                        }
+                                    }
+                                ]
+                            },
+                            "as": "unit",
+                            "in": {
+                                "k": "$$unit",
+                                "v": {
+                                    "$filter": {
+                                        "input": "$items",
+                                        "as": "item",
+                                        "cond": {"$eq": ["$$item.unit", "$$unit"]},
+                                    }
+                                },
+                            },
+                        }
+                    }
+                },
+            }
+        },
+        {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
+    ])
+    return pipeline
+
 def all_account_balances_summary_pipeline(
     account_name: str | None = None,
     cust_ids: Set[str] | None = None,

@@ -7,7 +7,7 @@ from typing import Any, List, Mapping, Set, Tuple
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     account_notifications_pipeline,
     active_account_subs_pipeline,
-    all_account_balances_pipeline,
+    all_account_balances_pipeline_v2,
     all_account_balances_summary_pipeline,
     list_all_accounts_pipeline,
     list_all_active_accounts_pipeline,
@@ -176,7 +176,7 @@ async def all_account_balances(
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
     _t0 = timer()
-    pipeline = all_account_balances_pipeline(
+    pipeline = all_account_balances_pipeline_v2(
         account=account,
         account_name=account_name,
         sub=sub,
@@ -478,7 +478,7 @@ async def one_account_balance(
             checkpoint = None
             from_date = None
 
-    pipeline = all_account_balances_pipeline(
+    pipeline = all_account_balances_pipeline_v2(
         account=account,
         as_of_date=as_of_date,
         age=age,
@@ -490,16 +490,15 @@ async def one_account_balance(
         extra={"notification": False},
     )
     try:
-        cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline, batchSize=100, allowDiskUse=True)
+        cursor = await LedgerEntry.collection().aggregate(
+            pipeline=pipeline, batchSize=5000, allowDiskUse=True
+        )
         logger.info(
             f"{account_label} one_account_balance cursor ready in {timer() - _t1:.3f}s",
             extra={"notification": False},
         )
         to_list_start = timer()
-        # results = await cursor.to_list()
-        results = []
-        async for doc in cursor:
-            results.append(doc)
+        results = await cursor.to_list()
 
         logger.info(
             f"{account_label} one_account_balance to_list done in {timer() - to_list_start:.3f}s docs={len(results)}",
