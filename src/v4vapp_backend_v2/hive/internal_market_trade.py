@@ -19,6 +19,14 @@ from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 ORDER_BOOK_CACHE: Dict[str, Any] = {}
 ICON = "📈"
 
+# ===================================================================
+# SLIPPAGE CONFIGURATION
+# ===================================================================
+SLIPPAGE_TOLERANCE = 0.01  # 1% slippage
+#   • Increase this value if you still see orders resting (e.g. 0.02 = 2%)
+#   • Decrease if you want to be as close as possible to the book price
+# ===================================================================
+
 
 @dataclass
 class HiveQuote:
@@ -226,7 +234,12 @@ def check_order_book(
     order_book_limit: int = 500,
 ) -> HiveQuote:
     """
-    Check the order book for the given amount and return the best price.
+    Check the order book for the given amount and return the best price,
+    with a small slippage tolerance applied to the marginal price.
+
+    This makes the returned limit price slightly more aggressive so the
+    subsequent market.buy()/market.sell() is far more likely to fill
+    immediately instead of resting on the book.
 
     Args:
         amount (Amount): The amount of the asset to check in the order book.
@@ -235,25 +248,11 @@ def check_order_book(
         use_cache (bool, optional): Whether to use the cached order book data. Defaults to False.
 
     Returns:
-        HiveQuote: An object containing the amount, the best price, and the minimum amount.
+        HiveQuote: An object containing the amount, the best (slipped) price,
+                   and the minimum amount (calculated with slippage).
 
     Raises:
         ValueError: If the amount is negative or if there is not enough volume in the order book.
-
-    Note:
-        The underlying Nectar `Market.orderbook` returns a shared book that is
-        *always* denominated with HIVE as the base asset.  In other words, even
-        when we ask for ``Market(base="HBD", quote="HIVE")`` the returned
-        ``bids``/``asks`` arrays still contain ``base`` amounts expressed in
-        HIVE and ``quote`` in HBD.  This quirk is why the logic below has to
-        flip sides when we are actually trading HBD.
-
-        To keep prices meaningful to callers, the returned ``Price`` object is
-        always expressed with ``amount.symbol`` as the base asset, and the
-        opposite token as the quote asset.  During a negative-HBD trade we
-        therefore select the bid side of the HIVE book (i.e. the best price we
-        will receive when selling HIVE) and still return the numeric price in
-        HIVE/HBD so that ``market_trade`` can continue to invert it as before.
     """
 
     global ORDER_BOOK_CACHE
@@ -341,9 +340,44 @@ def check_order_book(
     if final_price is None:
         raise ValueError("Not enough volume in the order book")
 
-    logger.debug(f"{ICON} Best price for {amount} is {final_price}")
+    # ===================================================================
+    # APPLY SLIPPAGE TOLERANCE TO MAKE THE LIMIT ORDER MORE AGGRESSIVE
+    # ===================================================================
+    price_float = float(final_price["price"])
+
+    if base_asset == "HIVE":
+        # HIVE trades: sell → lower price, buy → higher price
+        if sign > 0:  # selling
+            adjusted_price = price_float * (1 - SLIPPAGE_TOLERANCE)
+        else:  # buying
+            adjusted_price = price_float * (1 + SLIPPAGE_TOLERANCE)
+    else:
+        # HBD trades: the inversion in market_trade() reverses the direction
+        if sign > 0:  # selling HBD
+            adjusted_price = price_float * (1 + SLIPPAGE_TOLERANCE)
+        else:  # buying HBD
+            adjusted_price = price_float * (1 - SLIPPAGE_TOLERANCE)
+
+    # Re-create the Price object using exactly the same constructor
+    # logic that was used in the loop (this keeps the base/quote orientation
+    # identical so market_trade() continues to work unchanged).
+    if sign > 0:
+        if base_asset == "HIVE":
+            final_price = Price(str(adjusted_price), base_asset, quote_asset)  # type: ignore[arg-type]
+        else:
+            final_price = Price(str(adjusted_price), quote_asset, base_asset)  # type: ignore[arg-type]
+    else:
+        if base_asset == "HIVE":
+            final_price = Price(str(adjusted_price), base_asset, quote_asset)  # type: ignore[arg-type]
+        else:
+            final_price = Price(str(adjusted_price), quote_asset, base_asset)  # type: ignore[arg-type]
+
+    logger.debug(
+        f"{ICON} Best price for {amount} (with {SLIPPAGE_TOLERANCE * 100:.1f}% slippage) is {final_price}"
+    )
 
     # minimum amount expressed in quote asset (cost when buying, proceeds when selling)
+    # We use the *adjusted* price so the caller sees the true worst-case outcome.
     if base_asset == "HIVE":
         min_amt = abs_amount.amount * float(final_price["price"])
     else:
@@ -351,7 +385,7 @@ def check_order_book(
 
     minimum_amount = Amount(min_amt, quote_asset)
 
-    logger.debug(f"{ICON} Minimum amount: {minimum_amount}")
+    logger.debug(f"{ICON} Minimum amount (with slippage): {minimum_amount}")
 
     hive_quote = HiveQuote(abs_amount, final_price, minimum_amount)
     return hive_quote

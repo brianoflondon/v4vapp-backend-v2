@@ -3,7 +3,7 @@ from nectar.amount import Amount
 from nectar.market import Market
 
 from v4vapp_backend_v2.config.setup import HiveAccountConfig
-from v4vapp_backend_v2.hive.internal_market_trade import check_order_book, market_trade
+from v4vapp_backend_v2.hive.internal_market_trade import check_order_book, market_trade, SLIPPAGE_TOLERANCE
 
 
 def fake_orderbook(self, limit=None):
@@ -20,24 +20,44 @@ def patch_market(monkeypatch):
 
 
 def test_check_order_book_sell_and_buy():
-    # positive amount should select bid side, price 1.0
+    # ===================================================================
+    # NOTE: check_order_book now applies SLIPPAGE_TOLERANCE (currently 1%)
+    #       The price returned is deliberately adjusted to be more
+    #       aggressive so the limit order placed by market_trade()
+    #       fills immediately.
+    #
+    #       We import SLIPPAGE_TOLERANCE directly so the test stays
+    #       in sync if you ever change the value in internal_market_trade.py
+    # ===================================================================
+
+    # Raw marginal prices from the (mocked) order book used by this test
+    RAW_SELL_HIVE_PRICE = 1.0  # positive HIVE → bid side
+    RAW_BUY_HIVE_PRICE = 1.2  # negative HIVE → ask side
+    RAW_BUY_HBD_PRICE = 1.0  # negative HBD → bid side
+    RAW_SELL_HBD_PRICE = 1.2  # positive HBD → ask side
+
+    # positive amount (sell HIVE) → hits bids → slipped lower
     sell_quote = check_order_book(Amount("10 HIVE"), use_cache=False)
-    assert float(sell_quote.price["price"]) == 1.0
+    expected_sell_hive = RAW_SELL_HIVE_PRICE * (1 - SLIPPAGE_TOLERANCE)
+    assert float(sell_quote.price["price"]) == expected_sell_hive
 
-    # negative amount should select ask side, price 1.2
+    # negative amount (buy HIVE) → hits asks → slipped higher
     buy_quote = check_order_book(Amount("-10 HIVE"), use_cache=False)
-    assert float(buy_quote.price["price"]) == 1.2
+    expected_buy_hive = RAW_BUY_HIVE_PRICE * (1 + SLIPPAGE_TOLERANCE)
+    assert float(buy_quote.price["price"]) == expected_buy_hive
 
-    # buying HBD (negative amount) should use the bid side (we're selling
-    # HIVE) and therefore the lower price from our fake book
+    # buying HBD (negative amount) → hits bids → slipped lower
     buy_hbd_quote = check_order_book(Amount("-5 HBD"), use_cache=False)
-    assert float(buy_hbd_quote.price["price"]) == 1.0
+    expected_buy_hbd = RAW_BUY_HBD_PRICE * (1 - SLIPPAGE_TOLERANCE)
+    assert float(buy_hbd_quote.price["price"]) == expected_buy_hbd
 
-    # selling HBD (positive amount) should hit asks (buying HIVE with HBD)
+    # selling HBD (positive amount) → hits asks → slipped higher
     sell_hbd_quote = check_order_book(Amount("5 HBD"), use_cache=False)
-    assert float(sell_hbd_quote.price["price"]) == 1.2
+    expected_sell_hbd = RAW_SELL_HBD_PRICE * (1 + SLIPPAGE_TOLERANCE)
+    assert float(sell_hbd_quote.price["price"]) == expected_sell_hbd
 
     # verify minimum amounts make sense
+    # (symbols are unchanged; values now reflect the slipped price)
     assert sell_quote.minimum_amount.symbol == "HBD"
     assert buy_quote.minimum_amount.symbol == "HBD"
     assert buy_hbd_quote.minimum_amount.symbol == "HIVE"
