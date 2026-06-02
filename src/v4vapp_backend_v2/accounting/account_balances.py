@@ -510,7 +510,7 @@ async def one_account_balance(
     clean_results = convert_datetime_fields(results)
     _t2 = timer()
     logger.debug(
-        f"{account_label} one_account_balance datetime conversion done in {(_t2 - _t1):.3f}s",
+        f"{account_label} one_account_balance datetime conversion done in {(_t2 - to_list_start):.3f}s",
         extra={"notification": False},
     )
     account_balance = AccountBalances.model_validate(clean_results)
