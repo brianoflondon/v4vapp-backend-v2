@@ -30,8 +30,8 @@ from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 ICON = "🧪"  # Test Tube
 
-SANITY_CHECK_TIMEOUT_SECONDS = 180.0  # per-check timeout for sanity checks
-SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 200.0  # overall timeout for running all checks
+SANITY_CHECK_TIMEOUT_SECONDS = 60.0  # per-check timeout for sanity checks
+SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 65.0  # overall timeout for running all checks
 
 SANITY_REDIS_CACHE_KEY = "sanity_check_results_cache"
 SANITY_REDIS_TIMEOUT_SECONDS = 200

@@ -9,8 +9,8 @@ import pytest
 from bson import json_util
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
-    all_account_balances_pipeline_v2,
     list_all_active_accounts_pipeline,
+    one_account_transactions_pipeline,
 )
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
@@ -159,7 +159,7 @@ async def test_account_details_pipeline():
     Test the account details pipeline.
     """
     account = LiabilityAccount(name="VSC Liability", sub="v4vapp.dev")
-    pipeline = all_account_balances_pipeline_v2(account)
+    pipeline = one_account_transactions_pipeline(account)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
     for unit_result in results:
@@ -169,18 +169,18 @@ async def test_account_details_pipeline():
                 print(f"  {line['timestamp']} {line['amount_running_total']} {line['unit']}")
 
 
-async def test_all_account_balances_pipeline_v2():
+async def test_one_account_transactions_pipeline():
     """
     Test the account details pipeline.
     """
     account = LiabilityAccount(name="Keepsats Hold", sub="keepsats")
     # call without specifying date (should default to "now", handled inside)
-    pipeline = all_account_balances_pipeline_v2(account=account)
+    pipeline = one_account_transactions_pipeline(account)
     assert isinstance(pipeline, list)
     assert len(pipeline) > 0
 
     # same call with explicit None should behave identically
-    pipeline_none = all_account_balances_pipeline_v2(account=account, as_of_date=None)
+    pipeline_none = one_account_transactions_pipeline(account=account, as_of_date=None)
     assert isinstance(pipeline_none, list)
     assert len(pipeline_none) == len(pipeline)
 
@@ -224,7 +224,7 @@ async def test_all_account_balances_pipeline_v2():
     from datetime import datetime, timedelta, timezone
 
     now = datetime.now(timezone.utc)
-    pipeline_date = all_account_balances_pipeline_v2(account=account, as_of_date=now, age=None)
+    pipeline_date = one_account_transactions_pipeline(account=account, as_of_date=now, age=None)
     date_stage2 = next(
         (
             s
@@ -238,7 +238,7 @@ async def test_all_account_balances_pipeline_v2():
 
     # providing only age should return a range with both $gte and $lte
     one_week = timedelta(days=7)
-    pipeline_age = all_account_balances_pipeline_v2(account=account, as_of_date=None, age=one_week)
+    pipeline_age = one_account_transactions_pipeline(account=account, as_of_date=None, age=one_week)
     date_stage3 = next(
         (
             s
@@ -254,7 +254,7 @@ async def test_all_account_balances_pipeline_v2():
     # age plus explicit as_of_date should use the provided end date
     asof = datetime(2025, 1, 1, tzinfo=timezone.utc)
     age = timedelta(days=30)
-    pipeline_age2 = all_account_balances_pipeline_v2(account=account, as_of_date=asof, age=age)
+    pipeline_age2 = one_account_transactions_pipeline(account=account, as_of_date=asof, age=age)
     date_stage4 = next(
         (
             s
