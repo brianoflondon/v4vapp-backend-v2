@@ -221,6 +221,8 @@ async def update_v4vconfig_form(
 
     except ValidationError as e:
         logger.error(f"{ICON} V4V config form validation error: {e}")
+        if not templates or not nav_manager:
+            raise RuntimeError("Templates and navigation not initialized")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
         return templates.TemplateResponse(
             request,
@@ -237,6 +239,9 @@ async def update_v4vconfig_form(
         )
     except Exception as e:
         logger.error(f"{ICON} V4V config form update error: {e}")
+        if not templates or not nav_manager:
+            logger.error(f"{ICON} Templates and navigation not initialized, cannot render error page")
+            raise HTTPException(status_code=500, detail=f"Configuration update failed: {e}")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
         return templates.TemplateResponse(
             request,
