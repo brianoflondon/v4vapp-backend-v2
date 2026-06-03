@@ -80,14 +80,24 @@ async def get_channel_name(
 
         return LndChannelName(channel_id=channel_id, name=node_info.node.alias)
     except LNDConnectionError as e:
+        # Extract the original RPC error from the wrapped LNDConnectionError
+        rpc_err = e.args[1] if len(e.args) > 1 else None
+        details = ""
         try:
-            if "edge not found" in str(e.details()).lower():
-                logger.warning(
-                    f"{lnd_client.icon} get_channel_name: channel {channel_id} not found"
-                )
-                return LndChannelName(channel_id=channel_id, name="Unknown")
+            if rpc_err and hasattr(rpc_err, "details"):
+                details = rpc_err.details()
+            else:
+                details = getattr(rpc_err, "_details", "") or str(rpc_err)
         except Exception:
-            pass
+            details = str(rpc_err)
+
+        # For newly opened channels, the edge info may not be available yet
+        if "edge not found" in str(details).lower():
+            logger.warning(
+                f"{lnd_client.icon} Channel {channel_id} edge not found (likely new channel)"
+            )
+            return LndChannelName(channel_id=channel_id, name="Unknown")
+
         logger.exception(e)
         return LndChannelName(channel_id=channel_id, name="Unknown")
     except Exception as e:
