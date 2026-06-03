@@ -6,8 +6,7 @@ FastAPI router for managing V4VApp configuration settings.
 
 import json
 from decimal import Decimal
-from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -22,9 +21,16 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTrans
 
 # Setup router and templates
 router = APIRouter()
-templates_dir = Path(__file__).parent.parent / "templates"
-templates = Jinja2Templates(directory=str(templates_dir))
-nav_manager = NavigationManager()
+templates: Optional[Jinja2Templates] = None
+nav_manager: Optional[NavigationManager] = None
+
+
+def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
+    """Set the shared templates and navigation manager."""
+    global templates, nav_manager
+    templates = tmpl
+    nav_manager = nav
+
 
 # Global config instance - will be set by the admin app
 _admin_config: InternalConfig | None = None
@@ -53,6 +59,9 @@ def get_v4v_config() -> V4VConfig:
 @router.get("/", response_class=HTMLResponse)
 async def v4vconfig_dashboard(request: Request):
     """V4V Configuration dashboard"""
+    if not templates or not nav_manager:
+        raise RuntimeError("Templates and navigation not initialized")
+
     try:
         config = get_v4v_config()
         config.check()  # Ensure we have fresh data
@@ -60,7 +69,8 @@ async def v4vconfig_dashboard(request: Request):
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
         breadcrumbs = nav_manager.get_breadcrumbs(str(request.url.path))
         sanity_results = await run_all_sanity_checks()
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(
+            request,
             "v4vconfig/dashboard.html.jinja",
             {
                 "request": request,
@@ -211,8 +221,11 @@ async def update_v4vconfig_form(
 
     except ValidationError as e:
         logger.error(f"{ICON} V4V config form validation error: {e}")
+        if not templates or not nav_manager:
+            raise RuntimeError("Templates and navigation not initialized")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(
+            request,
             "error.html.jinja",
             {
                 "request": request,
@@ -226,8 +239,14 @@ async def update_v4vconfig_form(
         )
     except Exception as e:
         logger.error(f"{ICON} V4V config form update error: {e}")
+        if not templates or not nav_manager:
+            logger.error(
+                f"{ICON} Templates and navigation not initialized, cannot render error page"
+            )
+            raise HTTPException(status_code=500, detail=f"Configuration update failed: {e}")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(
+            request,
             "error.html.jinja",
             {
                 "request": request,

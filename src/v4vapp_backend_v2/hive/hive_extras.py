@@ -8,7 +8,6 @@ from uuid import uuid4
 
 import backoff
 import httpx
-from ecdsa import MalformedPointError  # type: ignore
 from nectar.account import Account
 from nectar.amount import Amount
 from nectar.blockchain import Blockchain
@@ -751,7 +750,7 @@ def decode_memo(
         # Memo is not encrypted
         logger.info(f"Memo is not encrypted: {e}")
         return memo
-    except (MissingKeyError, MalformedPointError) as e:
+    except MissingKeyError as e:
         logger.debug(f"MissingKeyError: {e}")
         return memo
 

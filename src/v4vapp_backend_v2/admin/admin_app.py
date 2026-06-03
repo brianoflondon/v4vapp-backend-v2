@@ -126,6 +126,7 @@ class AdminApp:
         """Setup all admin routers"""
         # Set the admin config for the v4vconfig router
         v4vconfig.set_admin_config(self.config)
+        v4vconfig.set_templates_and_nav(self.templates, self.nav_manager)
 
         # V4V Config router
         self.app.include_router(
