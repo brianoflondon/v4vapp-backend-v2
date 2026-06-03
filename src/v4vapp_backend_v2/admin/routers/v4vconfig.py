@@ -222,7 +222,8 @@ async def update_v4vconfig_form(
     except ValidationError as e:
         logger.error(f"{ICON} V4V config form validation error: {e}")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(
+            request,
             "error.html.jinja",
             {
                 "request": request,
@@ -237,7 +238,8 @@ async def update_v4vconfig_form(
     except Exception as e:
         logger.error(f"{ICON} V4V config form update error: {e}")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(
+            request,
             "error.html.jinja",
             {
                 "request": request,
