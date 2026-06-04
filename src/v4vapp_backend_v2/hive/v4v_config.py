@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
+from time import sleep
 from typing import List
 
 import httpx
@@ -86,9 +87,9 @@ class V4VConfigData(BaseModel):
     )
     lightning_rate_limits: List[V4VConfigRateLimits] = Field(
         default_factory=lambda: [
-            V4VConfigRateLimits(hours=4, sats=Decimal(200_000 * 2)),
-            V4VConfigRateLimits(hours=72, sats=Decimal(200_000 * 4)),
-            V4VConfigRateLimits(hours=168, sats=Decimal(200_000 * 6)),
+            V4VConfigRateLimits(hours=4, sats=Decimal(600_000)),
+            V4VConfigRateLimits(hours=72, sats=Decimal(1_200_000)),
+            V4VConfigRateLimits(hours=168, sats=Decimal(2_000_000)),
         ],
         description="Rate limits for Lightning transactions.",
     )
@@ -236,9 +237,10 @@ class V4VConfig:
                 metadata = {}
                 logger.warning(
                     f"{ICON} No settings found in Hive. {self.server_accname}",
+                    extra={**self.log_extra},
                 )
                 self.data = V4VConfigData()
-                return False
+            return False
         except Exception as ex:
             self.data = V4VConfigData()
             logger.warning(
@@ -369,22 +371,63 @@ class V4VConfig:
             ValueError: If the `posting_json_metadata` cannot be parsed as valid JSON.
         """
         """Get the posting metadata for the current account"""
-        acc = Account(account=self.server_accname, blockchain_instance=self.hive, lazy=False)
-        try:
-            # Important to use the [] method not get() to avoid lazy loading problems
-            posting_json_metadata = acc["posting_json_metadata"]
-        except KeyError:
-            posting_json_metadata = None
-        if posting_json_metadata:
+        shuffled_endpoints = ["https://api.syncad.com/"]
+        shuffled_endpoints = []
+        for endpoint in shuffled_endpoints:
             try:
-                metadata = json.loads(posting_json_metadata)
-                return metadata
-            except ValueError as e:
+                url = f"{endpoint}hafsql/accounts/by-names?names={self.server_accname}"
+                timeout = httpx.Timeout(1.0, connect=1.0)
+                response = httpx.get(url, timeout=timeout)
+                response.raise_for_status()
+                data = response.json()
+                if data and isinstance(data, list) and len(data) > 0:
+                    account_data = data[0]
+                    posting_metadata = account_data.get("posting_metadata")
+                    if posting_metadata:
+                        return posting_metadata
+                else:
+                    logger.warning(
+                        f"{ICON} No account data found at {endpoint}",
+                        extra={**self.log_extra},
+                    )
+                    continue  # Try the next endpoint
+            except httpx.HTTPError as e:
                 logger.error(
-                    f"{ICON} Error parsing posting_json_metadata: {e}",
+                    f"{ICON} HTTP error while fetching metadata from {endpoint}: {e}",
                     extra={**self.log_extra},
                 )
-                raise ValueError("Error parsing posting_json_metadata. Invalid JSON format.")
+                continue  # Try the next endpoint
+            except Exception as e:
+                logger.error(
+                    f"{ICON} Error while fetching metadata from {endpoint}: {e}",
+                    extra={**self.log_extra},
+                )
+                continue  # Try the next endpoint
+        retries = 0
+        while retries < 5:
+            hive_client = get_hive_client()
+            acc = Account(account=self.server_accname, hive_instance=hive_client, lazy=False)
+            try:
+                # Important to use the [] method not get() to avoid lazy loading problems
+                posting_json_metadata = acc["posting_json_metadata"]
+            except KeyError:
+                posting_json_metadata = None
+            if posting_json_metadata:
+                try:
+                    metadata = json.loads(posting_json_metadata)
+                    return metadata
+                except ValueError as e:
+                    logger.error(
+                        f"{ICON} Error parsing posting_json_metadata: {e}",
+                        extra={**self.log_extra},
+                    )
+                    raise ValueError("Error parsing posting_json_metadata. Invalid JSON format.")
+            retries += 1
+            sleep(2)  # Wait before retrying
+        logger.error(
+            f"{ICON} Failed to fetch posting metadata after {retries} attempts for account {self.server_accname}",
+            extra={**self.log_extra},
+        )
         return None
 
 
