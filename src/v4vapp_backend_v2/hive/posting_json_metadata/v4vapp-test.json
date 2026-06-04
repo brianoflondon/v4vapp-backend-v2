@@ -1,0 +1,39 @@
+{
+    "profile": {
+        "name": "V4VAPP Test",
+        "about": "Testing account for the @v4vapp service",
+        "website": "https://v4v.app",
+        "profile_image": "https://files.peakd.com/file/peakd-hive/v4vapp-test/v4vapp-test-avatar.png",
+        "version": 2
+    },
+    "v4vapp_hiveconfig": {
+        "hive_return_fee": 0.002,
+        "conv_fee_percent": 0.015,
+        "conv_fee_sats": 50,
+        "minimum_invoice_payment_sats": 784,
+        "maximum_invoice_payment_sats": 100000,
+        "force_custom_json_payment_sats": 500,
+        "max_acceptable_lnd_fee_msats": 500000,
+        "closed_get_lnd": false,
+        "closed_get_hive": false,
+        "v4v_frontend_iri": "",
+        "v4v_api_iri": "",
+        "v4v_fees_streaming_sats_to_hive_percent": 0.03,
+        "lightning_rate_limits": [
+            {
+                "hours": 4,
+                "sats": 0
+            },
+            {
+                "hours": 72,
+                "sats": 0
+            },
+            {
+                "hours": 168,
+                "sats": 0
+            }
+        ],
+        "dynamic_fees_url": "",
+        "dynamic_fees_permlink": ""
+    }
+}
