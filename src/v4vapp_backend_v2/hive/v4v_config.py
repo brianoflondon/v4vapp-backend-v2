@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from time import sleep
 from typing import List
 
@@ -128,6 +129,7 @@ class V4VConfigData(BaseModel):
 class V4VConfig:
     _instance = None
     data: V4VConfigData = V4VConfigData()
+    profile: dict | None = None
     hive: Hive | None = None
     server_accname: str | None = None
     timestamp: datetime | None = None
@@ -222,8 +224,20 @@ class V4VConfig:
                 self.data = V4VConfigData()
                 return False
 
-            metadata = self._get_posting_metadata()
+            metadata = self._fetch_metadata_from_hive()
             if metadata:
+                self.profile = metadata.get("profile", {})
+                if not self.profile:
+                    backup_metadata = self._load_profile_from_disk() or {}
+                    if backup_metadata.get("profile"):
+                        self.profile = backup_metadata["profile"]
+                        logger.warning(
+                            f"{ICON} {self.server_accname}No profile found in Hive metadata, but found in local file. Using local profile.",
+                            extra={
+                                "server_accname": self.server_accname,
+                                "backup_profile": self.profile,
+                            },
+                        )
                 existing_hive_config_raw = metadata.get(CONFIG_ROOT_KEY)
                 if existing_hive_config_raw:
                     self.data = V4VConfigData.model_validate(existing_hive_config_raw)
@@ -273,9 +287,9 @@ class V4VConfig:
         else:
             server_id = self.server_accname or InternalConfig().server_id
         acc = Account(server_id, blockchain_instance=hive_client, lazy=True)
-        existing_metadata = self._get_posting_metadata()
-        if not existing_metadata:
-            existing_metadata = {}
+        existing_metadata = self._fetch_metadata_from_hive()
+        if not existing_metadata or not self.profile or "profile" not in existing_metadata.keys():
+            existing_metadata = self._load_profile_from_disk() or {}
         existing_hive_config_raw = existing_metadata.get(CONFIG_ROOT_KEY)
         if existing_hive_config_raw:
             existing_hive_config = V4VConfigData(**existing_hive_config_raw)
@@ -333,6 +347,43 @@ class V4VConfig:
             )
             return
 
+    def _load_profile_from_disk(self) -> dict | None:
+        """
+        Load the Hive profile from a local JSON file if it exists.
+
+        Looks for a JSON file in src/v4vapp_backend_v2/hive/posting_json_metadata/
+        named {self.server_accname}.json
+
+        Returns:
+            dict | None: The posting metadata dictionary if the file exists, otherwise None.
+        """
+        # Build the path to the JSON file
+        json_dir = Path(__file__).parent / "posting_json_metadata"
+        json_file = json_dir / f"{self.server_accname}.json"
+
+        # Check if the file exists
+        if json_file.exists():
+            try:
+                with open(json_file, "r") as f:
+                    metadata = json.load(f)
+                logger.debug(
+                    f"{ICON} Loaded profile from local file: {json_file}",
+                    extra={"server_accname": self.server_accname},
+                )
+                return metadata
+            except Exception as e:
+                logger.error(
+                    f"{ICON} Error loading profile from {json_file}: {e}",
+                    extra={"server_accname": self.server_accname},
+                )
+                return None
+        else:
+            logger.warning(
+                f"{ICON} No local profile file found: {json_file}",
+                extra={"server_accname": self.server_accname},
+            )
+            return None
+
     async def _update_public_api_server(self) -> None:
         """
         Asynchronously triggers a configuration reload on the public API server.
@@ -355,7 +406,7 @@ class V4VConfig:
             except httpx.HTTPError as e:
                 logger.error(f"{ICON} Error updating public API server: {e}")
 
-    def _get_posting_metadata(self) -> dict | None:
+    def _fetch_metadata_from_hive(self) -> dict | None:
         """
         Retrieves the posting metadata for the current account.
 
@@ -372,7 +423,6 @@ class V4VConfig:
         """
         """Get the posting metadata for the current account"""
         shuffled_endpoints = ["https://api.syncad.com/"]
-        shuffled_endpoints = []
         for endpoint in shuffled_endpoints:
             try:
                 url = f"{endpoint}hafsql/accounts/by-names?names={self.server_accname}"
@@ -406,7 +456,7 @@ class V4VConfig:
         retries = 0
         while retries < 5:
             hive_client = get_hive_client()
-            acc = Account(account=self.server_accname, hive_instance=hive_client, lazy=False)
+            acc = Account(account=self.server_accname, blockchain_instance=hive_client, lazy=False)
             try:
                 # Important to use the [] method not get() to avoid lazy loading problems
                 posting_json_metadata = acc["posting_json_metadata"]

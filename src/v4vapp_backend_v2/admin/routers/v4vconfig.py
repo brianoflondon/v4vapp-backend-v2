@@ -82,6 +82,7 @@ async def v4vconfig_dashboard(request: Request):
                 "server_account": config.server_accname,
                 "pending_transactions": await PendingTransaction.list_all_str(),
                 "sanity_results": sanity_results,
+                "profile": config.profile,
             },
         )
 

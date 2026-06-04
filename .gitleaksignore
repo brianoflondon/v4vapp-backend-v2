@@ -4,3 +4,5 @@ tests/data/config/config.yaml:generic-api-key:227
 tests/data/config/config.yaml:generic-api-key:228
 tests/data/config/config.yaml:generic-api-key:229
 tests/data/config/config.yaml:generic-api-key:247
+src/v4vapp_backend_v2/hive/posting_json_metadata/devser.v4vapp.json:generic-api-key:15
+src/v4vapp_backend_v2/hive/posting_json_metadata/v4vapp.json:generic-api-key:15

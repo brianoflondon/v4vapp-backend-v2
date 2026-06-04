@@ -1,0 +1,50 @@
+{
+    "profile": {
+        "is_public": true,
+        "redirect_uris": [
+            "https://v4v.app/hivesigner/"
+        ],
+        "type": "app",
+        "name": "DevServer V4V.app",
+        "profile_image": "https://files.peakd.com/file/peakd-hive/v4vapp/v4vapp-v002.png",
+        "cover_image": "https://files.peakd.com/file/peakd-hive/v4vapp/v4vapp-artspam-logo4.png",
+        "about": "Hive to Lightning Bridge\nValue for Value system in Hive",
+        "website": "https://v4v.app",
+        "location": "Israel",
+        "creator": "brianoflondon",
+        "secret": "c885814e852591459eb9ccd363b22de72163e3c4a9f1597fe54f843d13a684b8",
+        "version": 2,
+        "lightning": "0266ad2656c7a19a219d37e82b280046660f4d7f3ae0c00b64a1629de4ea567668",
+        "nostr": "10f21ac1447fb6c6db90a41f3f0311dc5043665ab030c46e68754f46844c5516"
+    },
+    "v4vapp_hiveconfig": {
+        "hive_return_fee": 0,
+        "conv_fee_percent": 0.019,
+        "conv_fee_sats": 50,
+        "minimum_invoice_payment_sats": 1,
+        "maximum_invoice_payment_sats": 100000,
+        "force_custom_json_payment_sats": 250,
+        "max_acceptable_lnd_fee_msats": 500000,
+        "closed_get_lnd": false,
+        "closed_get_hive": false,
+        "v4v_frontend_iri": "",
+        "v4v_api_iri": "https://devapi.v4v.app",
+        "v4v_fees_streaming_sats_to_hive_percent": 0.03,
+        "lightning_rate_limits": [
+            {
+                "hours": 4,
+                "sats": 400000
+            },
+            {
+                "hours": 72,
+                "sats": 2000000
+            },
+            {
+                "hours": 168,
+                "sats": 4000000
+            }
+        ],
+        "dynamic_fees_url": "@devser.v4vapp/hive-to-lightning-gateway-fees",
+        "dynamic_fees_permlink": "hive-to-lightning-gateway-fees"
+    }
+}
