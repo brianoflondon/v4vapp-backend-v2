@@ -722,7 +722,7 @@ async def one_account_balance(
     except Exception as e:
         logger.warning(f"Failed to set cache for {account.name}:{account.sub}: {e}")
 
-    logger.info(
+    logger.debug(
         f"{account_label} one_account_balance done total={timer() - _t0:.3f}s",
         extra={"notification": False},
     )

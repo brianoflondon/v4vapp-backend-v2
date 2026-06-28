@@ -200,13 +200,13 @@ async def _safe_one_account_balance(account_name: str, in_progress: InProgressRe
             name="VSC Liability",
             sub=account_name,
         )
-        logger.info(
+        logger.debug(
             f"server_account_balances starting checkpoint for {account.name}:{account.sub}",
             extra={"notification": False},
         )
         await latest_period_create_checkpoint(account=account, period_type=PeriodType.DAILY)
         checkpoint_elapsed = monotonic() - started_at
-        logger.info(
+        logger.debug(
             f"server_account_balances checkpoint finished for {account.name}:{account.sub} in {checkpoint_elapsed:.3f}s",
             extra={"notification": False},
         )
@@ -216,7 +216,7 @@ async def _safe_one_account_balance(account_name: str, in_progress: InProgressRe
         )
         balance_elapsed = monotonic() - balance_started_at
         total_elapsed = monotonic() - started_at
-        logger.info(
+        logger.debug(
             f"server_account_balances balance finished for {account.name}:{account.sub} in {balance_elapsed:.3f}s total={total_elapsed:.3f}s",
             extra={"notification": False},
         )
@@ -337,12 +337,12 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
             try:
                 # give the hive client its own generous timeout but still bounded
                 async with asyncio.timeout(SANITY_CHECK_TIMEOUT_SECONDS - 5):
-                    logger.info(
+                    logger.debug(
                         f"Fetching Hive balances for server_id {server_id}...",
                         extra={"notification": False},
                     )
                     balances = await account_hive_balances_async(server_id)
-                    logger.info(
+                    logger.debug(
                         f"Fetched Hive balances for server_id {server_id} in {monotonic() - started_at:.3f}s",
                         extra={"notification": False},
                     )
@@ -369,7 +369,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
         ):
             started_at = monotonic()
             try:
-                logger.info(
+                logger.debug(
                     f"server_account_hive_balances starting {task_name} for {account.name}:{account.sub}",
                     extra={"notification": False},
                 )
@@ -378,7 +378,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                     as_of_date=as_of_date,
                     in_progress=in_progress,
                 )
-                logger.info(
+                logger.debug(
                     f"server_account_hive_balances finished {task_name} for {account.name}:{account.sub} in {monotonic() - started_at:.3f}s",
                     extra={"notification": False},
                 )
@@ -393,14 +393,14 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
         async def _timed_checkpoint(task_name: str, account: AssetAccount):
             started_at = monotonic()
             try:
-                logger.info(
+                logger.debug(
                     f"server_account_hive_balances starting {task_name} for {account.name}:{account.sub}",
                     extra={"notification": False},
                 )
                 result = await latest_period_create_checkpoint(
                     account=account, period_type=PeriodType.DAILY
                 )
-                logger.info(
+                logger.debug(
                     f"server_account_hive_balances finished {task_name} for {account.name}:{account.sub} in {monotonic() - started_at:.3f}s",
                     extra={"notification": False},
                 )

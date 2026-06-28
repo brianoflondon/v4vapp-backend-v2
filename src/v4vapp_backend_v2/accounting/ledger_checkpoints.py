@@ -420,7 +420,7 @@ async def latest_period_create_checkpoint(
     period_start = last_completed_period_end(period_type, now)
     age = now - period_start
     account_label = f"{account.name}:{account.sub}"
-    logger.info(
+    logger.debug(
         f"{ICON} latest_period_create_checkpoint start for {account_label} period={period_type} period_end={period_start.isoformat()}",
         extra={"notification": False},
     )
@@ -438,7 +438,7 @@ async def latest_period_create_checkpoint(
             extra={"notification": False},
         )
         return None, False, age, period_start
-    logger.info(
+    logger.debug(
         f"{ICON} latest_period_create_checkpoint done for {account_label} created={created} took {timer() - start:.3f}s",
         extra={"notification": False},
     )
@@ -475,7 +475,7 @@ async def create_checkpoint(
     """
     start = timer()
     account_label = f"{account.name}:{account.sub}"
-    logger.info(
+    logger.debug(
         f"{ICON} create_checkpoint start for {account_label} period={period_type} period_end={period_end.isoformat()} force={force} use_cache={use_cache}",
         extra={"notification": False},
     )
@@ -485,12 +485,12 @@ async def create_checkpoint(
 
     if not force:
         lookup_start = timer()
-        logger.info(
+        logger.debug(
             f"{ICON} create_checkpoint lookup existing start for {account_label}",
             extra={"notification": False},
         )
         existing_checkpoint = await get_checkpoint_by_id(account, period_type, period_end)
-        logger.info(
+        logger.debug(
             f"{ICON} create_checkpoint lookup existing done for {account_label} in {timer() - lookup_start:.3f}s found={existing_checkpoint is not None}",
             extra={"notification": False},
         )
@@ -502,7 +502,7 @@ async def create_checkpoint(
             return existing_checkpoint, False
 
     balance_start = timer()
-    logger.info(
+    logger.debug(
         f"{ICON} create_checkpoint one_account_balance start for {account_label}",
         extra={"notification": False},
     )
@@ -519,7 +519,7 @@ async def create_checkpoint(
             extra={"notification": False},
         )
         raise
-    logger.info(
+    logger.debug(
         f"{ICON} create_checkpoint one_account_balance done for {account_label} in {timer() - balance_start:.3f}s",
         extra={"notification": False},
     )
@@ -547,16 +547,16 @@ async def create_checkpoint(
         last_transaction_date=ledger_details.last_transaction_date,
     )
     save_start = timer()
-    logger.info(
+    logger.debug(
         f"{ICON} create_checkpoint save start for {account_label}",
         extra={"notification": False},
     )
     await checkpoint.save()
-    logger.info(
+    logger.debug(
         f"{ICON} create_checkpoint save done for {account_label} in {timer() - save_start:.3f}s",
         extra={"notification": False},
     )
-    logger.info(
+    logger.debug(
         f"{ICON} Created checkpoint for {account} at {period_end} ({period_type}) (took {timer() - start:.2f}s)"
     )
     return checkpoint, True
@@ -593,7 +593,7 @@ async def build_checkpoints_for_period(
             filter={}, sort=[("timestamp", ASCENDING)]
         )
         if first_doc is None:
-            logger.info(
+            logger.debug(
                 f"{ICON} No ledger entries found; skipping checkpoint build. (took {timer() - start:.2f}s)"
             )
             return 0
@@ -603,7 +603,7 @@ async def build_checkpoints_for_period(
 
     period_ends = completed_period_ends_since(period_type, since, until)
     if not period_ends:
-        logger.info(
+        logger.debug(
             f"{ICON} No completed {period_type} periods to checkpoint. (took {timer() - start:.2f}s)"
         )
         return 0
@@ -631,7 +631,7 @@ async def build_checkpoints_for_period(
 
         total += sum(t.result() for t in tasks)
 
-    logger.info(
+    logger.debug(
         f"{ICON} Built {total} {period_type} checkpoints "
         f"({len(accounts)} accounts x {len(period_ends)} periods). (took {timer() - start:.2f}s)",
         extra={"notification": False},
