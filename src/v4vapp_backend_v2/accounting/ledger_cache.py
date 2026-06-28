@@ -30,8 +30,6 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from colorama import Fore
-
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 if TYPE_CHECKING:
@@ -219,10 +217,10 @@ async def get_cached_balance(
         data: str | None = await InternalConfig.redis_async.get(key)
         if data is not None:
             result = LedgerAccountDetails.model_validate_json(data)
-            logger.info(f"{Fore.GREEN}HIT: {key}{Fore.RESET}")
+            logger.debug(f"HIT: {key}")
             return result
     except Exception as e:
-        logger.info(f"{Fore.RED}miss/error: {e}{Fore.RESET}")
+        logger.warning(f"miss/error: {e}", extra={"notification": False})
     return None
 
 
@@ -249,13 +247,13 @@ async def set_cached_balance(
         await InternalConfig.redis_async.setex(key, ttl, data)
         if report_time is not None:
             report_time_str = f"{report_time:.3f}s"
-            logger.info(f"SET: {key} (ttl={ttl}s in {report_time_str})")
+            logger.debug(f"SET: {key} (ttl={ttl}s in {report_time_str})")
             if report_time > 1.0:
                 logger.warning(
                     f"Slow cache set: {report_time_str} for key {key}",
                     extra={"notification": False},
                 )
         else:
-            logger.info(f"SET: {key} (ttl={ttl}s)")
+            logger.debug(f"SET: {key} (ttl={ttl}s)")
     except Exception as e:
         logger.warning(f"Failed to set ledger cache: {e}", extra={"notification": True})

@@ -722,7 +722,7 @@ async def one_account_balance(
     except Exception as e:
         logger.warning(f"Failed to set cache for {account.name}:{account.sub}: {e}")
 
-    logger.info(
+    logger.debug(
         f"{account_label} one_account_balance done total={timer() - _t0:.3f}s",
         extra={"notification": False},
     )
@@ -1105,7 +1105,7 @@ async def account_balance_printout(
     return output_text, ledger_account_details
 
 
-@async_time_decorator
+# @async_time_decorator
 async def account_balance_printout_grouped_by_customer(
     account: LedgerAccount | str,
     line_items: bool = True,
@@ -1555,7 +1555,7 @@ async def list_all_active_accounts() -> List[LedgerAccount]:
     return accounts
 
 
-@async_time_decorator
+# @async_time_decorator
 async def list_all_ledger_types() -> List[LedgerType]:
     """
     Lists all unique ledger types in the ledger.

@@ -154,7 +154,7 @@ class NodeBalances(BaseModel):
         return None
 
 
-@async_time_decorator
+# @async_time_decorator
 async def fetch_balances(node: str = "", lnd_client: LNDClient | None = None) -> NodeBalances:
     """Fetch the current Wallet and Channel balances from the default configured LND node.
 
