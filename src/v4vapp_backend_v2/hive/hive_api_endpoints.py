@@ -82,7 +82,7 @@ def mark_hive_api_endpoint_healthy(endpoint: str) -> None:
 
     try:
         redis_client.delete(_endpoint_redis_key(endpoint))
-        logger.info(
+        logger.debug(
             f"{ICON} Marked endpoint healthy: {endpoint}",
             extra={"notification": False, "endpoint": endpoint},
         )

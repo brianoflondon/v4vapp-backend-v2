@@ -136,7 +136,7 @@ async def dashboard_lnd_info() -> JSONResponse:
     node_name = InternalConfig().node_name
     nb = NodeBalances(node=node_name)
 
-    @async_time_decorator
+    # @async_time_decorator
     async def _safe_fetch(nb_obj):
         try:
             await nb_obj.fetch_balances()
@@ -144,7 +144,7 @@ async def dashboard_lnd_info() -> JSONResponse:
             logger.warning(f"LND fetch failed: {e}", extra={"notification": False})
         return nb_obj
 
-    @async_time_decorator
+    # @async_time_decorator
     async def _safe_ledger(asset: AssetAccount):
         try:
             await latest_period_create_checkpoint(account=asset, period_type=PeriodType.DAILY)

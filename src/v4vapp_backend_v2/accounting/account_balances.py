@@ -1105,7 +1105,7 @@ async def account_balance_printout(
     return output_text, ledger_account_details
 
 
-@async_time_decorator
+# @async_time_decorator
 async def account_balance_printout_grouped_by_customer(
     account: LedgerAccount | str,
     line_items: bool = True,
@@ -1555,7 +1555,7 @@ async def list_all_active_accounts() -> List[LedgerAccount]:
     return accounts
 
 
-@async_time_decorator
+# @async_time_decorator
 async def list_all_ledger_types() -> List[LedgerType]:
     """
     Lists all unique ledger types in the ledger.
