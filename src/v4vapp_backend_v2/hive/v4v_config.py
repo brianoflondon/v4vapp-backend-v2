@@ -232,7 +232,7 @@ class V4VConfig:
                     if backup_metadata.get("profile"):
                         self.profile = backup_metadata["profile"]
                         logger.warning(
-                            f"{ICON} {self.server_accname}No profile found in Hive metadata, but found in local file. Using local profile.",
+                            f"{ICON} {self.server_accname} No profile found in Hive metadata, but found in local file. Using local profile.",
                             extra={
                                 "server_accname": self.server_accname,
                                 "backup_profile": self.profile,
