@@ -392,7 +392,7 @@ async def follow_on_transfer(
     except Exception as e:
         # Unexpected error, log it but will not return Hive.
         return_details.action = ReturnAction.HOLD
-        return_details.reason_str = f"Unexpected error occurred: {e}"
+        return_details.reason_str = f"Unexpected error occurred: {e} {tracked_op.short_id}"
         logger.exception(
             return_details.reason_str,
             extra={
@@ -557,7 +557,7 @@ async def decode_incoming_and_checks(
         return None
 
     except Exception as e:
-        message = f"Unexpected error decoding Lightning invoice: {e}"
+        message = f"Unexpected error decoding Lightning invoice: {e} {tracked_op.short_id}"
         logger.exception(
             f"{message}",
             extra={"notification": False, **tracked_op.log_extra},
@@ -615,7 +615,7 @@ async def check_amount_sent(
             raise HiveTransferError("Conversion not set in operation.")
 
     if pay_req.is_zero_value:
-        if tracked_op.conv.in_limits():
+        if tracked_op.conv.in_limits:
             return ""
         else:
             return "Payment request has zero value, but conversion limits exceeded."
