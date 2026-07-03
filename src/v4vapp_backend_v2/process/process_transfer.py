@@ -615,7 +615,7 @@ async def check_amount_sent(
             raise HiveTransferError("Conversion not set in operation.")
 
     if pay_req.is_zero_value:
-        if tracked_op.conv.in_limits:
+        if tracked_op.conv.in_limits:   # Computed field, treat like a property.
             return ""
         else:
             return "Payment request has zero value, but conversion limits exceeded."
