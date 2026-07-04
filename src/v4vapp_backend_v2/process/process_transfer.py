@@ -98,7 +98,7 @@ async def follow_on_transfer(
                 logger.debug(f"Ignoring {reply.reply_type} {reply.reply_id}.")
         if reply_messages:
             logger.warning(
-                f"Operation {tracked_op.group_id} already has replies: {', '.join(reply_messages)}",
+                f"Operation {tracked_op.short_id} {tracked_op.group_id} already has replies: {', '.join(reply_messages)}",
                 extra={"notification": False, **tracked_op.log_extra},
             )
             raise HiveTransferError(f"Operation already has replies: {', '.join(reply_messages)}")
@@ -131,7 +131,7 @@ async def follow_on_transfer(
     # Only process if the operation is directed to the server account
     if tracked_op.to_account != server_id:
         logger.info(
-            f"Operation is not directed to the server account: {server_id}",
+            f"Operation is not directed to the server account: {server_id} {tracked_op.short_id}",
             extra={"notification": False},
         )
         return
@@ -415,7 +415,7 @@ async def follow_on_transfer(
                     # Arriving here we are usually returning the full amount sent.
                     trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
                     logger.info(
-                        f"{Fore.WHITE}Reply with Hive transfer successful after payment failure{Style.RESET_ALL}",
+                        f"{Fore.WHITE}Reply with Hive transfer successful after payment failure {tracked_op.short_id} {Style.RESET_ALL}",
                         extra={
                             "notification": False,
                             "trx": trx,
@@ -432,7 +432,7 @@ async def follow_on_transfer(
                         server_has = server_balance[return_amount.symbol]
                         shortfall = return_amount - server_has
                         logger.warning(
-                            f"🚨🚨🚨 Not enough {return_amount.symbol}: {server_id} Shortfall: {shortfall} 🚨🚨🚨",
+                            f"🚨🚨🚨 Not enough {return_amount.symbol}: {server_id} {tracked_op.short_id} Shortfall: {shortfall} 🚨🚨🚨",
                             extra={
                                 "notification": True,
                                 "error": str(e),
@@ -446,7 +446,7 @@ async def follow_on_transfer(
 
                 except Exception as e:
                     logger.exception(
-                        f"Error returning Hive transfer: {e}",
+                        f"Error returning Hive transfer: {e} {tracked_op.short_id}",
                         extra={
                             "notification": False,
                             **tracked_op.log_extra,
@@ -470,7 +470,7 @@ async def follow_on_transfer(
                     )
                 except Exception as e:
                     logger.exception(
-                        f"Error returning Magisats transfer: {e}",
+                        f"Error returning Magisats transfer: {e} {tracked_op.short_id}",
                         extra={
                             "notification": False,
                             **tracked_op.log_extra,
@@ -504,13 +504,13 @@ async def decode_incoming_and_checks(
     """
     if tracked_op.conv is None or tracked_op.conv.is_unset():
         logger.warning(
-            f"Conversion details missing for operation: {tracked_op.d_memo}",
+            f"Conversion details missing for operation: {tracked_op.short_id} {tracked_op.d_memo}",
             extra={"notification": False, **tracked_op.log_extra},
         )
         await tracked_op.update_conv()
     if not tracked_op.conv:
         logger.error(
-            "Conversion details not found for operation, failed to update conversion.",
+            f"Conversion details not found for operation {tracked_op.short_id}, failed to update conversion.",
             extra={"notification": False, **tracked_op.log_extra},
         )
         raise HiveTransferError("Conversion details not found for operation")
@@ -520,7 +520,7 @@ async def decode_incoming_and_checks(
             tracked_op.conv.limit_test()
         except (V4VMinimumInvoice, V4VMaximumInvoice) as e:
             logger.error(
-                f"Conversion limits exceeded for operation {tracked_op.group_id_p}: {e}",
+                f"Conversion limits exceeded for operation {tracked_op.short_id} {tracked_op.group_id_p}: {e}",
                 extra={"notification": False, **tracked_op.log_extra},
             )
             raise HiveTransferError(f"Conversion limits: {e}")
@@ -549,7 +549,7 @@ async def decode_incoming_and_checks(
         if tracked_op.paywithsats_amount:
             pass
 
-        message = f"Lightning Invoice not found or error, processing as a Keepsats withdrawal or rejecting Lightning decode error: {e}"
+        message = f"Lightning Invoice not found or error, processing as a Keepsats withdrawal or rejecting Lightning decode error: {e} {tracked_op.short_id}"
         logger.warning(
             f"{message}",
             extra={"notification": False, **tracked_op.log_extra},
@@ -615,7 +615,7 @@ async def check_amount_sent(
             raise HiveTransferError("Conversion not set in operation.")
 
     if pay_req.is_zero_value:
-        if tracked_op.conv.in_limits:   # Computed field, treat like a property.
+        if tracked_op.conv.in_limits:  # Computed field, treat like a property.
             return ""
         else:
             return "Payment request has zero value, but conversion limits exceeded."
