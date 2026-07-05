@@ -60,11 +60,13 @@ async def rebalance_queue_task(
             transaction_id=str(tracked_op.short_id),
         )
         logger.info(
-            f"{rebalance_result.log_str}",
+            f"{tracked_op.short_id} {rebalance_result.log_str}",
             extra={
                 "notification": True,
                 "group_id": tracked_op.group_id,
+                "short_id": tracked_op.short_id,
                 **rebalance_result.log_extra,
+                **tracked_op.log_extra,
             },
         )
 

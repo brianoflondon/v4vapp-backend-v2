@@ -327,7 +327,7 @@ async def follow_on_transfer(
         server_has = server_balance[sending_amount.symbol]
         shortfall = sending_amount - server_has
         logger.warning(
-            f"🚨🚨🚨 Not enough {sending_amount.symbol}: {server_id} Shortfall: {shortfall} 🚨🚨🚨",
+            f"🚨🚨🚨 Not enough {sending_amount.symbol}: {server_id} Shortfall: {shortfall} {tracked_op.short_id} 🚨🚨🚨",
             extra={
                 "notification": True,
                 "server_balance": server_balance,
@@ -353,7 +353,7 @@ async def follow_on_transfer(
         else:
             original_amount = getattr(tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE")))
             return_details.amount = original_amount
-        return_details.reason_str = f"Suspicious account transaction: {e}"
+        return_details.reason_str = f"Suspicious account transaction: {e} {tracked_op.short_id}"
         logger.warning(
             return_details.reason_str, extra={"notification": True, **tracked_op.log_extra}
         )
@@ -372,7 +372,7 @@ async def follow_on_transfer(
             return_details.amount = getattr(
                 tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
             )
-        return_details.reason_str = f"Processing error: {e}"
+        return_details.reason_str = f"Processing error: {e} {tracked_op.short_id}"
         logger.error(
             return_details.reason_str,
             extra={"notification": False, **tracked_op.log_extra},

@@ -245,7 +245,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             )
             return_amount_msat = 0  # Custom JSON does not have a return amount in msats
             logger.info(
-                f"Notification (forced: {details.force_custom_json}) {notification.log_str}",
+                f"Notification {details.tracked_op.short_id} (forced: {details.force_custom_json}) {notification.log_str}",
                 extra={"notification": False, **notification.log_extra},
             )
         except CustomJsonSendError as e:
