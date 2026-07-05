@@ -1359,7 +1359,7 @@ async def main_async_start(connection_name: str) -> None:
             )
             startup_complete_event.set()
             print(
-                f"[DIAG] {len(running_tasks)} tasks created, "
+                f"[DIAG] {len(running_tasks)} tasks created, (outside logging process)"
                 f"shutdown_event.is_set()={shutdown_event.is_set()}, "
                 f"awaiting shutdown_event.wait()...",
                 flush=True,
