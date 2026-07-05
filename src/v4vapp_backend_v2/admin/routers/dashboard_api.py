@@ -23,7 +23,6 @@ from v4vapp_backend_v2.accounting.ledger_checkpoints import (
 from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, log_all_sanity_checks
 from v4vapp_backend_v2.accounting.trading_pnl import generate_trading_pnl_report
-from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances_async
