@@ -300,7 +300,6 @@ async def server_account_balances(in_progress: InProgressResults) -> SanityCheck
     )
 
 
-# @async_time_decorator
 async def server_account_hive_balances(in_progress: InProgressResults) -> SanityCheckResult:
     """
     Verify that the server's Hive blockchain account balances match the recorded customer deposits.
