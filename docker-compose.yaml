@@ -41,6 +41,7 @@ services:
     command: [
       "python", "src/hive_monitor_v2.py",
       "--config", "devdocker.config.yaml",
+      # "--start-block", "-1"  # The block number to start from. Default or 0 will start from the last good block
     ]
     restart: on-failure:3
     stop_grace_period: 20s
