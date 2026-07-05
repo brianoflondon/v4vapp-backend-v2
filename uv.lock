@@ -3769,7 +3769,7 @@ wheels = [
 
 [[package]]
 name = "v4vapp-backend-v2"
-version = "2.9.5"
+version = "2.9.6"
 source = { editable = "." }
 dependencies = [
     { name = "aiocache" },
