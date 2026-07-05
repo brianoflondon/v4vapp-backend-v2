@@ -31,7 +31,6 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers.helper_functions import get_accounts_by_type_for_selector
-from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import parse_dt_with_tz
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
@@ -74,7 +73,7 @@ async def get_ledger_entries(
 
 
 @router.get("/data")
-@async_time_stats_decorator()
+# @async_time_stats_decorator()
 async def ledger_entries_data(
     account_string: Optional[str] = None,
     sub_filter: Optional[str] = None,

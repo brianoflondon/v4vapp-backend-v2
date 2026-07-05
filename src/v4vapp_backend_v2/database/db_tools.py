@@ -5,8 +5,6 @@ from typing import Any, Dict, Mapping, Optional
 from bson import Decimal128, ObjectId
 from pymongo.asynchronous.collection import AsyncCollection
 
-from v4vapp_backend_v2.config.decorators import async_time_decorator
-
 
 def convert_decimal128_to_decimal(value: Any) -> Any:
     """

@@ -21,7 +21,6 @@ from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     PeriodType,
     latest_period_create_checkpoint,
 )
-from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -301,7 +300,6 @@ async def server_account_balances(in_progress: InProgressResults) -> SanityCheck
     )
 
 
-# @async_time_decorator
 async def server_account_hive_balances(in_progress: InProgressResults) -> SanityCheckResult:
     """
     Verify that the server's Hive blockchain account balances match the recorded customer deposits.
@@ -330,7 +328,6 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
 
         tasks: dict[str, asyncio.Task] = {}
 
-        @async_time_decorator
         async def _fetch_balances() -> dict:
             """Run the blocking hive call in a thread with its own timeout and logs."""
             started_at = monotonic()
@@ -638,6 +635,7 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
 
         def _root_exception_message(exc: BaseException) -> str:
             """Return a concise string for the most relevant underlying exception."""
+
             def _flatten_exception_group(group: ExceptionGroup) -> list[str]:
                 flattened_messages: list[str] = []
                 for group_exc in group.exceptions:

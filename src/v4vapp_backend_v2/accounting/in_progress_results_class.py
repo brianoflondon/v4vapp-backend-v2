@@ -4,7 +4,6 @@ from typing import Any, List, Mapping
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import all_held_msats_balance_pipeline
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
-from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 

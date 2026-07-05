@@ -368,9 +368,9 @@ async def db_store_payment(
 
         ans = await payment_pyd.save()
         logger.info(
-            f"{lnd_client.icon}{DATABASE_ICON} "
-            f"Storing payment: {htlc_event.payment_index} "
-            f"{payment_pyd.route_str}",
+            f"{lnd_client.icon}{DATABASE_ICON} {htlc_event.payment_index} "
+            f"Storing payment: "
+            f"{payment_pyd.route_str} {payment_pyd.short_id}",
             extra={"db_ans": ans.raw_result, **payment_pyd.log_extra},
         )
 
@@ -1339,8 +1339,10 @@ async def main_async_start(connection_name: str) -> None:
                 asyncio.create_task(status_api.start(), name="status_api"),
             ]
             critical_tasks = [
-                t for t in running_tasks
-                if t.get_name() in {"invoices_loop", "payments_loop", "htlc_events_loop", "channel_events_loop"}
+                t
+                for t in running_tasks
+                if t.get_name()
+                in {"invoices_loop", "payments_loop", "htlc_events_loop", "channel_events_loop"}
             ]
             running_tasks.append(
                 asyncio.create_task(
@@ -1357,7 +1359,7 @@ async def main_async_start(connection_name: str) -> None:
             )
             startup_complete_event.set()
             print(
-                f"[DIAG] {len(running_tasks)} tasks created, "
+                f"[DIAG] {len(running_tasks)} tasks created, (outside logging process) "
                 f"shutdown_event.is_set()={shutdown_event.is_set()}, "
                 f"awaiting shutdown_event.wait()...",
                 flush=True,
