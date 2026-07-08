@@ -5,6 +5,7 @@ from typing import Any, AsyncIterable, Callable, Iterator, TypeVar
 
 from asgiref.sync import sync_to_async as _sync_to_async
 from nectar.exceptions import NectarException
+from nectarapi.exceptions import RPCError
 
 from v4vapp_backend_v2.config.setup import logger
 
@@ -120,6 +121,14 @@ def _next(it: Iterator[T]) -> T:
         else:
             logger.warning(f"_next {e}", extra={"notification": False, "error": e})
             raise StopAsyncIteration
+    except RPCError as e:
+        if "Unable to acquire database lock" in str(e):
+            logger.warning(
+                "_next Hive server Unable to acquire database lock",
+                extra={"notification": False, "error": e},
+            )
+            raise StopAsyncIteration
+        raise
     except Exception as e:
         logger.warning(f"_next {e}", extra={"notification": False, "error": e})
         logger.exception(e, extra={"notification": False})
