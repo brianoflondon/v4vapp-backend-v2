@@ -299,7 +299,7 @@ class LedgerAccountDetails(LedgerAccount):
             self.msats = self.balances[Currency.MSATS][-1].amount_running_total
             self.conv_total += self.balances[Currency.MSATS][-1].conv_running_total
             self.sats = Decimal(self.msats / Decimal(1000)).quantize(
-                Decimal("1"), rounding="ROUND_HALF_UP"
+                Decimal("1"), rounding="ROUND_DOWN"
             )
 
         for currency, balance_lines in self.balances.items():

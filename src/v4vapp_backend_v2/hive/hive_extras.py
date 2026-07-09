@@ -43,7 +43,7 @@ from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
-    "https://api.deathwing.me",
+    # "https://api.deathwing.me",
     "https://hive-api.arcange.eu",
     "https://api.openhive.network",
     "https://techcoderx.com",
