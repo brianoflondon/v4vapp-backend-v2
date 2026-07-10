@@ -378,9 +378,10 @@ async def send_transfer_custom_json(
         return trx
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
     except Exception as e:
+
         logger.exception(
             f"Error sending custom_json transfer: {e} {transfer.log_str}",
-            extra={"notification": False, "id": id, **transfer.log_extra},
+            extra={"notification": False, **transfer.log_extra},
         )
         return {}
 
