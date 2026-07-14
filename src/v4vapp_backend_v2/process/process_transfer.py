@@ -36,6 +36,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     LNDPaymentError,
     LNDPaymentExpired,
+    LNDPaymentStreamError,
     send_lightning_to_pay_req,
 )
 from v4vapp_backend_v2.magi.magi_classes import (
@@ -64,6 +65,7 @@ async def follow_on_transfer(
         - HiveTransferError: Returns the full Hive amount to the sender.
         - LNDPaymentExpired: Returns the full Hive amount to the sender.
         - LNDPaymentError: Returns the full Hive amount to the sender.
+        - LNDPaymentStreamError: Holds funds; payment may still complete via lnd_monitor_v2.
         - Other exceptions: Logs the error and holds the transfer.
     6. Releases Keepsats hold if appropriate and returns Hive to the sender in case of payment failure.
 
@@ -359,6 +361,17 @@ async def follow_on_transfer(
         )
         # We now want to correct the ledger to move the liability from the cust_id to the v4vapp.sus account.
         # This will be done in the #process_hive.py file when we process the server to v4vapp.sus transfer
+
+    except LNDPaymentStreamError as e:
+        return_details.action = ReturnAction.HOLD
+        return_details.reason_str = (
+            f"Lightning payment status uncertain after stream disconnect: {e} {tracked_op.short_id}"
+        )
+        logger.warning(
+            return_details.reason_str,
+            extra={"notification": True, **tracked_op.log_extra},
+        )
+        release_hold = False
 
     except (LNDPaymentError, LNDPaymentExpired, HiveTransferError) as e:
         return_details.action = ReturnAction.REFUND

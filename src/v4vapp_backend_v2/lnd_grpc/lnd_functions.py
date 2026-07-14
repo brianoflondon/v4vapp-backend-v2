@@ -13,7 +13,7 @@ from v4vapp_backend_v2.grpc_models.lnd_events_group import LndChannelName
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
 from v4vapp_backend_v2.models.pay_req import PayReq
-from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
 
 
 class LNDPaymentError(Exception):
@@ -27,6 +27,105 @@ class LNDPaymentExpired(LNDPaymentError):
     """
 
     pass
+
+
+class LNDPaymentStreamError(LNDPaymentError):
+    """
+    Raised when the SendPaymentV2 gRPC stream drops before LND reports a terminal
+    payment status. The payment may still be IN_FLIGHT or may later succeed via
+    lnd_monitor_v2 — callers must not auto-refund on this error.
+    """
+
+    pass
+
+
+STREAM_TRANSPORT_ERROR_MARKERS = (
+    "stream removed",
+    "connection reset by peer",
+    "connection reset",
+    "transport is closing",
+    "eof",
+    "deadline exceeded",
+)
+
+
+def is_lnd_stream_transport_error(error: Exception) -> bool:
+    """True when an exception indicates the payment watch stream died, not LND failure."""
+    if isinstance(error, AioRpcError):
+        message = " ".join(
+            part
+            for part in (
+                str(error.details()),
+                error.debug_error_string(),
+                str(error),
+            )
+            if part
+        )
+    else:
+        message = str(error)
+    message_lower = message.lower()
+    return any(marker in message_lower for marker in STREAM_TRANSPORT_ERROR_MARKERS)
+
+
+async def lookup_outgoing_payment(lnd_client: LNDClient, payment_hash: str) -> Payment | None:
+    """Return the latest LND record for an outgoing payment hash, if present."""
+    if not payment_hash:
+        return None
+
+    request = lnrpc.ListPaymentsRequest(
+        include_incomplete=True,
+        max_payments=500,
+        reversed=True,
+    )
+    response: lnrpc.ListPaymentsResponse = await lnd_client.call(
+        lnd_client.lightning_stub.ListPayments,
+        request,
+    )
+    list_payments = ListPaymentsResponse(response)
+    for payment in list_payments.payments:
+        if payment.payment_hash == payment_hash:
+            return payment
+    return None
+
+
+async def resolve_payment_after_stream_disconnect(
+    lnd_client: LNDClient,
+    pay_req: PayReq,
+    payment_id: str,
+    error: Exception,
+    payment_dict: dict,
+) -> Payment:
+    """
+    Reconcile payment outcome after SendPaymentV2 stream loss.
+
+    Looks up the payment in LND before treating the disconnect as a hard failure.
+    """
+    last_status = payment_dict.get("status", "STATUS_UNSET")
+    payment = await lookup_outgoing_payment(lnd_client, pay_req.payment_hash)
+
+    if payment is None and payment_dict:
+        try:
+            payment = Payment.model_validate(payment_dict)
+        except ValidationError:
+            payment = None
+
+    if payment and payment.status and payment.status.value == "SUCCEEDED":
+        logger.warning(
+            f"{payment_id} SendPaymentV2 stream lost but payment SUCCEEDED in LND",
+            extra={"notification": True, **payment.log_extra},
+        )
+        return payment
+
+    if payment and payment.status and payment.status.value == "FAILED":
+        raise LNDPaymentError(f"{payment_id} Payment failed: {payment.failure_reason}")
+
+    uncertain_status = (
+        payment.status.value if payment and payment.status else last_status or "unknown"
+    )
+    raise LNDPaymentStreamError(
+        f"{payment_id} Payment stream disconnected ({error}); "
+        f"LND status: {uncertain_status}. Awaiting reconciliation."
+    )
 
 
 async def get_channel_name(
@@ -361,6 +460,10 @@ async def send_lightning_to_pay_req(
             failure_reason = payment_dict.get("failure_reason", "Unknown Failure")
 
     except AioRpcError as e:
+        if is_lnd_stream_transport_error(e):
+            return await resolve_payment_after_stream_disconnect(
+                lnd_client, pay_req, payment_id, e, payment_dict
+            )
         error_message = f"{payment_id} Failed to send payment: {e}"
         if e.details() and "invoice expired" in str(e.details()).lower():
             error_message = f"{payment_id} Payment expired: {e.details()}"
@@ -371,6 +474,10 @@ async def send_lightning_to_pay_req(
         raise LNDPaymentError(error_message)
 
     except Exception as e:
+        if is_lnd_stream_transport_error(e):
+            return await resolve_payment_after_stream_disconnect(
+                lnd_client, pay_req, payment_id, e, payment_dict
+            )
         error_message = f"{payment_id} Unexpected problem paying Lightning invoice"
         logger.exception(e)
         raise LNDPaymentError(error_message)
@@ -454,7 +561,7 @@ async def log_payment_in_process(payment_id: str, response_queue: asyncio.Queue)
                     },
                 )
         except asyncio.CancelledError:
-            logger.info(f"{payment_id} Payment logging ended by successful payment")
+            logger.info(f"{payment_id} Payment logging task stopped")
             raise
         except Exception as e:
             logger.error(f"{payment_id} Error logging payment in process: {e}")
