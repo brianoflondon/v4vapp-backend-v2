@@ -322,6 +322,7 @@ def get_good_nodes() -> List[str]:
     good_nodes_json = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
     if good_nodes_json and isinstance(good_nodes_json, str):
         good_nodes = json.loads(good_nodes_json)
+        good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
     if good_nodes:
         logger.warning(
             "Failed to fetch good nodes: using last good nodes.",
@@ -347,6 +348,7 @@ def get_good_nodes() -> List[str]:
             extra={"good_nodes": good_nodes},
         )
         good_nodes = DEFAULT_GOOD_NODES
+        good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
         InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 1800, json.dumps(good_nodes))
     return good_nodes
 
