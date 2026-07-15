@@ -261,6 +261,7 @@ ExpenseAccounts = Literal[
     "Testing Expenses",
     "Testing Expenses LND Payment",
     "Hosting",
+    "Operating Loss",  # Used when fixing an erroneous refund
 ]
 
 
