@@ -257,6 +257,10 @@ class Invoice(TrackedBaseModel):
     expiry_date: datetime | None = Field(
         default=None, description="Expiry date of the invoice (creation_date + expiry)"
     )
+    node_name: str = Field(
+        default="unset",
+        description="LND connection name that produced this invoice (e.g. voltage, umbrel)",
+    )
 
     # Dump field names (not aliases) to MongoDB
     dump_by_alias: ClassVar[bool] = False

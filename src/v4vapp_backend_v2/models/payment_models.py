@@ -149,6 +149,10 @@ class Payment(TrackedBaseModel):
     cust_id: CustIDType | None = Field(
         default=None, description="Customer ID associated with the invoice"
     )
+    node_name: str = Field(
+        default="unset",
+        description="LND connection name that produced this payment (e.g. voltage, umbrel)",
+    )
 
     # Dump field names (not aliases) to MongoDB
     dump_by_alias: ClassVar[bool] = False

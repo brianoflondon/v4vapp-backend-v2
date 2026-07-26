@@ -193,7 +193,12 @@ async def track_events(
             if ans_dict.get("message_type") == "FORWARD" and forward_success:
                 try:
                     forward_event = TrackedForwardEvent.model_validate(ans_dict)
-                    asyncio.create_task(db_store_htlc_event(forward_event=forward_event))
+                    forward_event.node_name = lnd_client.connection.name
+                    asyncio.create_task(
+                        db_store_htlc_event(
+                            forward_event=forward_event, lnd_client=lnd_client
+                        )
+                    )
                 except Exception as e:
                     logger.warning(
                         f"Could not save HTLC event: {e}", extra={"notification": False}
@@ -327,6 +332,7 @@ async def db_store_invoice(
     """
     try:
         invoice_pyd = Invoice(htlc_event)
+        invoice_pyd.node_name = lnd_client.connection.name
         await invoice_pyd.update_conv()
         ans = await invoice_pyd.save()
         logger.info(
@@ -356,6 +362,7 @@ async def db_store_payment(
     """
     try:
         payment_pyd = Payment(htlc_event)
+        payment_pyd.node_name = lnd_client.connection.name
         # Attach invoice description (decoded from payment_request) if available
         await decode_payment_request_and_attach(lnd_client=lnd_client, payment=payment_pyd)
         await update_payment_route_with_alias(
@@ -381,15 +388,21 @@ async def db_store_payment(
 
 async def db_store_htlc_event(
     forward_event: TrackedForwardEvent,
+    lnd_client: LNDClient | None = None,
 ) -> None:
     """
     Asynchronously stores an HTLC event in the MongoDB database.
 
     Args:
-        htlc_event_ans (Dict[str, Any]): The HTLC event data to store as returned to the logger.
+        forward_event: The HTLC forward event to store.
+        lnd_client: Optional LND client used to stamp node_name when not already set.
     Returns:
         None
     """
+    if lnd_client is not None and (
+        not forward_event.node_name or forward_event.node_name == "unset"
+    ):
+        forward_event.node_name = lnd_client.connection.name
     await forward_event.save()
 
 
@@ -954,6 +967,7 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
             index_offset = list_invoices.first_index_offset
             bulk_updates = []
             for invoice in list_invoices.invoices:
+                invoice.node_name = lnd_client.connection.name
                 insert_one = invoice.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv"}
                 )
@@ -1080,6 +1094,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 )
                 await decode_payment_request_and_attach(lnd_client=lnd_client, payment=payment)
 
+                payment.node_name = lnd_client.connection.name
                 insert_one = payment.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
                 )
