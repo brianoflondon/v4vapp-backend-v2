@@ -57,7 +57,7 @@ class LNDClient:
         self.error_state: bool = False
         self.error_code: str | None = None
         self.connection_check_task: asyncio.Task[Any] | None = None
-        # self.get_info: lnrpc.GetInfoResponse | None = None
+        self.get_info: lnrpc.GetInfoResponse | None = None
         self.setup()
 
     async def __aenter__(self):

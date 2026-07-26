@@ -1290,6 +1290,10 @@ async def main_async_start(connection_name: str) -> None:
 
         lnd_events_group = LndEventsGroup()
         async with LNDClient(connection_name) as lnd_client:
+            if lnd_client.get_info is None:
+                raise StartupFailure(
+                    f"Unable to fetch LND node info during startup for connection '{connection_name}'"
+                )
             if lnd_client.get_info:
                 logger.info(
                     f"{lnd_client.icon} Node: {lnd_client.get_info.alias} "

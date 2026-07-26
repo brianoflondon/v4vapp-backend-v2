@@ -15,10 +15,24 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
 os.environ["TESTING"] = "True"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def disable_redis_for_session():
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig.setup_redis",
+        lambda self: None,
+    )
+    yield
+
+
 @pytest.fixture(autouse=True)
 def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
     # Reset the singleton instance before each test
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig.setup_redis",
+        lambda self: None,
+    )
     yield
     # Reset the singleton instance after each test
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
@@ -218,7 +232,13 @@ async def test_context_manager_swallows_get_info_errors(set_base_config_path: No
     async with LNDClient(connection_name="example") as client:
         # client returned and get_info remains None
         assert client is not None
-        assert getattr(client, "get_info", None) is None
+        assert client.get_info is None
+
+
+@pytest.mark.asyncio
+async def test_lnd_client_initializes_get_info_none(set_base_config_path: None):
+    lnd_client = LNDClient(connection_name="example")
+    assert lnd_client.get_info is None
 
 
 @pytest.mark.asyncio
