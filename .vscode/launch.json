@@ -126,6 +126,22 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "DEV Legion-dev Monitor",
+            "type": "debugpy",
+            "consoleName": "Dev Legion-dev Monitor",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "--config",
+                "legiondev.config.yaml"
+            ],
+            "console": "integratedTerminal",
+            "env": {
+                "HEALTH_CHECK_PORT": "6001"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Production Admin Interface",
             "type": "debugpy",
             "consoleName": "Production Admin Interface",

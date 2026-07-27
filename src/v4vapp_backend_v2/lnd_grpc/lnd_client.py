@@ -92,7 +92,7 @@ class LNDClient:
     def setup(self):
         try:
             logger.info(
-                f"{ICON} Connecting to LND",
+                f"{ICON} Connecting to LND {self.connection.name} at {self.connection.address}",
                 extra={"connection": self.connection.name, "address": self.connection.address},
             )
 
