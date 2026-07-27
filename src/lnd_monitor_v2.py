@@ -967,26 +967,17 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
             index_offset = list_invoices.first_index_offset
             bulk_updates = []
             for invoice in list_invoices.invoices:
+                read_invoice = await Invoice.collection().find_one(
+                    filter={"r_hash": invoice.r_hash},
+                )
+                if read_invoice:
+                    continue
                 invoice.node_name = lnd_client.connection.name
                 insert_one = invoice.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv"}
                 )
-                query = {"r_hash": invoice.r_hash}
-                read_invoice = await Invoice.collection().find_one(
-                    filter=query,
-                )
-                if read_invoice:
-                    continue
-                    # this match is only necessary if running for the first time or filling an empty database
-                    try:
-                        db_invoice = Invoice(**read_invoice)
-                        if db_invoice == invoice:
-                            continue
-                    except Exception as e:
-                        logger.warning(e, extra={"notification": False, "invoice": read_invoice})
-                        pass
                 bulk_updates.append({
-                    "filter": query,
+                    "filter": {"r_hash": invoice.r_hash},
                     "update": {"$set": insert_one},
                     "upsert": True,
                 })
@@ -1094,7 +1085,6 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 )
                 await decode_payment_request_and_attach(lnd_client=lnd_client, payment=payment)
 
-                payment.node_name = lnd_client.connection.name
                 insert_one = payment.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
                 )
@@ -1305,10 +1295,6 @@ async def main_async_start(connection_name: str) -> None:
 
         lnd_events_group = LndEventsGroup()
         async with LNDClient(connection_name) as lnd_client:
-            if lnd_client.get_info is None:
-                raise StartupFailure(
-                    f"Unable to fetch LND node info during startup for connection '{connection_name}'"
-                )
             if lnd_client.get_info:
                 logger.info(
                     f"{lnd_client.icon} Node: {lnd_client.get_info.alias} "
