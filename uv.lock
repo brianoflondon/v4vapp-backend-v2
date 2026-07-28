@@ -855,7 +855,7 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.140.7"
+version = "0.140.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
@@ -864,9 +864,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e1/33/e0dfa29ccce4eb8c9a073f9e557b0d6bacbb3aa32e7ad595f678de4d036a/fastapi-0.140.7.tar.gz", hash = "sha256:09a640af2d29006345e1f28e4f031fa60f89b1a75d29f26070f3afa677d66cce", size = 422051, upload-time = "2026-07-27T17:34:45.908Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/50/8e/38f68681027334d7d841190b38f3635874114f1f337c950878969970524c/fastapi-0.140.8.tar.gz", hash = "sha256:c166580b6a1f96d0feda536830dbaef56962f66e9a3a87054c34906b6339390b", size = 422608, upload-time = "2026-07-28T10:31:25.838Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7b/0e/00cddd6b8668884e9c7588ab0eeb73becbd1efa3eaead34397f2e9a8de49/fastapi-0.140.7-py3-none-any.whl", hash = "sha256:960bb9696d8fd19dff488aa4f67f276364542cfcce9f7e68a82fe49dce126626", size = 131085, upload-time = "2026-07-27T17:34:47.036Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/46/965f78a06fbbfb7ff072f592fb9b28e99022f77a50a9104206763132040a/fastapi-0.140.8-py3-none-any.whl", hash = "sha256:66d65922ff010d99548db624beec4d705f731c29e58a163207f5a0a83974a3d1", size = 131097, upload-time = "2026-07-28T10:31:24.422Z" },
 ]
 
 [package.optional-dependencies]
@@ -1169,7 +1169,7 @@ wheels = [
 
 [[package]]
 name = "hive-nectar"
-version = "1.0.3"
+version = "1.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "asn1crypto" },
@@ -1181,9 +1181,9 @@ dependencies = [
     { name = "prettytable" },
     { name = "ruamel-yaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6c/05/49cb41339408390b6949642474ca4ce690289f04839a621a3024f2c8b472/hive_nectar-1.0.3.tar.gz", hash = "sha256:655008af7a6db1cd3e72fddab7b88f6c492e84034a4b197a5f14b03fb1d93d7c", size = 438489, upload-time = "2026-07-16T14:53:50.888Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/e9/9caf90562913feaff575ba00ec8f6b768ad7e254d480e4c3d01ba9d6046b/hive_nectar-1.0.4.tar.gz", hash = "sha256:1356eff1f8bf6de44a7a4d4818c08e9e4bd157c0943828fe02fe6c23d646bd94", size = 438640, upload-time = "2026-07-28T11:25:00.399Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/73/e7/612b5431028b5740e6b9da2a574d7886e907422654ac61ae9b5a007e9889/hive_nectar-1.0.3-py3-none-any.whl", hash = "sha256:9336e9e92dbd68ff59baacbda37391d3c5100d4e5961f0a55ad2bbb61e60a1a5", size = 483016, upload-time = "2026-07-16T14:53:49.276Z" },
+    { url = "https://files.pythonhosted.org/packages/51/bd/c280d81216805a06d3cfd0064e61573f132dd27844ec6e9fedb745808c24/hive_nectar-1.0.4-py3-none-any.whl", hash = "sha256:f545cf3588fc9e0f91d23ef995f15d06b43000e48d8f2882195af66dd786e5ca", size = 483137, upload-time = "2026-07-28T11:24:58.933Z" },
 ]
 
 [[package]]
@@ -3773,7 +3773,7 @@ wheels = [
 
 [[package]]
 name = "v4vapp-backend-v2"
-version = "2.10.5"
+version = "2.10.6"
 source = { editable = "." }
 dependencies = [
     { name = "aiocache" },
@@ -3846,7 +3846,7 @@ requires-dist = [
     { name = "googleapis-common-protos", specifier = ">=1.62.0" },
     { name = "grpcio", specifier = ">=1.74.0" },
     { name = "grpcio-tools", specifier = ">=1.74.0" },
-    { name = "hive-nectar", specifier = ">=1.0.3,<2.0.0" },
+    { name = "hive-nectar", specifier = ">=1.0.4,<2.0.0" },
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "packaging", specifier = ">=25.0" },
     { name = "pandas", specifier = ">=3.0.0" },

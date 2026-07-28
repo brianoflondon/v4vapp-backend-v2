@@ -1,6 +1,6 @@
 [project]
 name = "v4vapp-backend-v2"
-version = "2.10.5"
+version = "2.10.6"
 description = "Back End for the V4V.app bridge from Hive to Lightning"
 authors = [{name = "Brian of London (home imac)", email = "brian@v4v.app"}]
 license = {text = "MIT"}
@@ -32,7 +32,7 @@ dependencies = [
     "types-tabulate>=0.9.0.20241207",
     "aiocache>=0.12.3",
     "pymongo>=4.15.5",
-    "hive-nectar>=1.0.3,<2.0.0",
+    "hive-nectar>=1.0.4,<2.0.0",
     "aiofiles>=25.1.0",
     "pandas>=3.0.0",
 ]
@@ -108,5 +108,6 @@ asyncio_default_test_loop_scope = "module"
 exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a single regex pattern
 
 [tool.uv.sources]
+# hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git", rev="288d2313a8e9ec8f401a5e3e7e4a01bac73a17cd" }
 # hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git" , branch="main" }
 # hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git" , rev="6ea6cb801e388cd856a40dd47bcf05ffd6a530d3" }
