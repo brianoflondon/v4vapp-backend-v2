@@ -1582,6 +1582,7 @@ async def _background_sync(lnd_client: LNDClient) -> None:
 
 
 EXPIRED_INVOICE_PRUNE_INTERVAL_SECONDS = 3600  # 1 hour
+TIMEDELTA_RETAIN_AFTER_EXPIRY = timedelta(days=1)  # Retain expired invoices for 1 day
 
 
 async def expired_invoices_maintenance_loop(
@@ -1600,7 +1601,7 @@ async def expired_invoices_maintenance_loop(
     while not shutdown_event.is_set():
         try:
             count = await delete_expired_unsettled_invoices(
-                collection=Invoice.collection(), retain_after_expiry=timedelta(seconds=0)
+                collection=Invoice.collection(), retain_after_expiry=TIMEDELTA_RETAIN_AFTER_EXPIRY
             )
             if count > 0:
                 logger.info(
