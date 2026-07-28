@@ -1589,9 +1589,9 @@ async def expired_invoices_maintenance_loop(
     interval_seconds: int = EXPIRED_INVOICE_PRUNE_INTERVAL_SECONDS,
 ) -> None:
     """
-    Periodically find expired, unsettled invoices past the retention window.
+    Periodically delete expired, unsettled invoices past the retention window.
 
-    Find-only for now (no deletes). Runs once at start, then every ``interval_seconds``.
+    Deletes expired invoices. Runs once at start, then every ``interval_seconds``.
     """
     logger.info(
         f"{lnd_client.icon} expired_invoices_maintenance_loop started "
