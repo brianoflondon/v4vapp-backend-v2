@@ -379,7 +379,7 @@ async def stream_ops_async(
             else:
                 logger.warning(
                     f"{ICON} {start_block:,} NectarException in block_stream: {e} restarting",
-                    extra={"notification": True, "error_code": "stream_restart", "error": e},
+                    extra={"notification": False, "error_code": "stream_restart", "error": e},
                 )
             await asyncio.sleep(2)
 
@@ -394,7 +394,7 @@ async def stream_ops_async(
             logger.exception(
                 f"{ICON} {start_block:,} | Error in block_stream: {e} restarting {rpc_url}",
                 extra={
-                    "notification": True,
+                    "notification": False,
                     "error": e,
                     "error_code": "stream_restart",
                 },
