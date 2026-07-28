@@ -1093,11 +1093,10 @@ async def send_transfer(
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
         hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
-    if hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
+    if hive_client and hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
         raise ValueError("nobroadcast is not set to the same value as hive_client")
-    from nectar.account import Account as NectarAccount
 
-    account: NectarAccount = NectarAccount(from_account, blockchain_instance=hive_client)
+    account: Account = Account(from_account, blockchain_instance=hive_client)
     if not account:
         raise ValueError("Invalid account")
     try:
