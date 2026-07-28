@@ -6,7 +6,7 @@ from typing import AsyncGenerator
 from nectar.blockchain import Blockchain
 from nectar.exceptions import NectarException
 from nectar.hive import Hive
-from nectarapi.exceptions import NumRetriesReached, UnhandledRPCError
+from nectarapi.exceptions import NumRetriesReached, UnhandledRPCError, WorkingNodeMissing
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
@@ -29,6 +29,16 @@ ICON = "🔗"
 # of several blocks are normal.  30 s (~10 blocks) avoids false restarts
 # while still detecting genuinely dead nodes promptly.
 STREAM_TIMEOUT = 15
+MAX_RESTART_BACKOFF_SECONDS = 8
+
+
+def _prioritize_nodes(good_nodes: list[str], current_node: str) -> list[str]:
+    """Return nodes with current node moved to the end to encourage real rotation."""
+    if not good_nodes:
+        return []
+    return [node for node in good_nodes if node != current_node] + [
+        node for node in good_nodes if node == current_node
+    ]
 
 
 class SwitchToLiveStream(Exception):
@@ -118,6 +128,7 @@ async def stream_ops_async(
         stop_block = stop or (2**31) - 1  # Maximum value for a 32-bit signed integer
 
     last_block = start_block or 1
+    restart_count = 0
     while last_block is not None and stop_block is not None and last_block < stop_block:
         await TrackedBaseModel.update_quote()
         rpc_url = str(hive.rpc.url) if hive and hive.rpc else "No RPC"
@@ -151,6 +162,7 @@ async def stream_ops_async(
                     hive_event = await asyncio.wait_for(
                         async_iter.__anext__(), timeout=current_timeout
                     )
+                    restart_count = 0
                 except StopAsyncIteration:
                     break
                 except asyncio.TimeoutError:
@@ -216,7 +228,8 @@ async def stream_ops_async(
                 last_block = op_base.block_num
                 yield op_base
         except SwitchToLiveStream as e:
-            logger.info(f"{ICON} {start_block:,} | {e} {last_block:,} {hive.rpc.url} no_preview")
+            switch_rpc_url = str(hive.rpc.url) if hive and hive.rpc else "No RPC"
+            logger.info(f"{ICON} {start_block:,} | {e} {last_block:,} {switch_rpc_url} no_preview")
             continue
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
             logger.info(f"{ICON} Async streamer received signal to stop. Exiting... {e}")
@@ -226,7 +239,7 @@ async def stream_ops_async(
             # was already logged above.  Sleep briefly then let the
             # finally block switch to the next RPC node.
             await asyncio.sleep(0.1)
-        except (NectarException, NumRetriesReached, UnhandledRPCError) as e:
+        except (NectarException, NumRetriesReached, UnhandledRPCError, WorkingNodeMissing) as e:
             if re.search(r"Block \d+ does not exist", str(e)):
                 logger.info(f"{ICON} {start_block:,} Refetch {last_block:,}. Try Again. {rpc_url}")
             else:
@@ -263,14 +276,46 @@ async def stream_ops_async(
                 logger.info(
                     f"{ICON} {start_block:,} Stream restarting from {last_block=:,} {rpc_url}"
                 )
+            restart_count += 1
             current_node = rpc_url
             if hive and hive.rpc:
-                hive.rpc.next()
-                if current_node == hive.rpc.url:
-                    good_nodes = get_good_nodes()
+                rpc = hive.rpc
+                try:
+                    rpc.next()
+                except Exception as e:
+                    logger.warning(
+                        f"{ICON} {start_block:,} Failed to advance RPC node from {current_node}: {e}",
+                        extra={"notification": False, "error": e},
+                    )
+
+                next_node = str(rpc.url)
+                if current_node == next_node:
+                    good_nodes = _prioritize_nodes(get_good_nodes(), current_node)
                     hive.set_default_nodes(good_nodes)
+                    # Rebuild blockchain so subsequent stream calls use the refreshed RPC config.
                     blockchain = get_blockchain_instance(hive_instance=hive)
-                rpc_url = str(hive.rpc.url)
+                    rpc = hive.rpc
+                    # Try to rotate away from the failing node on the refreshed list.
+                    if rpc:
+                        rotation_attempts = max(1, len(good_nodes))
+                        for _ in range(rotation_attempts):
+                            try:
+                                rpc.next()
+                            except Exception:
+                                break
+                            if str(rpc.url) != current_node:
+                                break
+                        next_node = str(rpc.url)
+
+                rpc_url = next_node
+
+            if current_node == rpc_url:
+                backoff_seconds = min(MAX_RESTART_BACKOFF_SECONDS, 0.5 * restart_count)
+                logger.warning(
+                    f"{ICON} {start_block:,} Node switch remained on {current_node}; sleeping {backoff_seconds:.1f}s before retry",
+                    extra={"notification": False, "error_code": "stream_restart"},
+                )
+                await asyncio.sleep(backoff_seconds)
 
             logger.info(
                 f"{ICON} {start_block:,} Switching {current_node} -> {rpc_url}",
@@ -296,7 +341,7 @@ def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
 
 # Example usage
 async def main() -> None:
-    opNames = []
+    opNames: list[str] = []
     count = 0
     hive = get_hive_client(nodes=["https://rpc.podping.org"])
     async for op in stream_ops_async(

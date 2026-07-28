@@ -13,6 +13,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
     snake_case,
 )
+from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids
 from v4vapp_backend_v2.hive_models.op_base_extras import (
     OP_TRACKED,
@@ -453,7 +454,7 @@ class OpBase(TrackedBaseModel):
                 last_good_block = int(ans["block_num"])
             else:
                 try:
-                    hive = Hive()
+                    hive = get_hive_client()
                     global_properties = hive.get_dynamic_global_properties()
                     if not global_properties:
                         raise Exception("Could not get global properties from hive client")
