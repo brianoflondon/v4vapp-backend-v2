@@ -36,6 +36,8 @@ BLOCK_BEHIND_COOLDOWN_SECONDS = 45
 PROBE_CACHE_TTL_SECONDS = 20
 MAX_PROBE_NODES_PER_RESTART = 4
 NODE_PROBE_CACHE: dict[str, tuple[datetime, int]] = {}
+QUOTE_REFRESH_MIN_INTERVAL_SECONDS = 30
+QUOTE_REFRESH_MIN_INTERVAL_RESTART_SECONDS = 120
 
 
 def _prioritize_nodes(good_nodes: list[str], current_node: str) -> list[str]:
@@ -226,8 +228,26 @@ async def stream_ops_async(
 
     last_block = start_block or 1
     restart_count = 0
-    while last_block is not None and stop_block is not None and last_block < stop_block:
+    last_quote_refresh_at: datetime | None = None
+
+    async def maybe_refresh_quote() -> None:
+        """Refresh quote at a bounded rate to avoid RPC bursts during failover."""
+        nonlocal last_quote_refresh_at
+        now = datetime.now(tz=timezone.utc)
+        min_interval = (
+            QUOTE_REFRESH_MIN_INTERVAL_RESTART_SECONDS
+            if restart_count > 0
+            else QUOTE_REFRESH_MIN_INTERVAL_SECONDS
+        )
+        if last_quote_refresh_at and (now - last_quote_refresh_at) < timedelta(
+            seconds=min_interval
+        ):
+            return
         await TrackedBaseModel.update_quote()
+        last_quote_refresh_at = now
+
+    while last_block is not None and stop_block is not None and last_block < stop_block:
+        await maybe_refresh_quote()
         rpc_url = str(hive.rpc.url) if hive and hive.rpc else "No RPC"
         try:
             op_in_trx_counter = OpInTrxCounter()
