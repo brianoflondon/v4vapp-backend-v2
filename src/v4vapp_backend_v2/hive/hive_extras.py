@@ -22,6 +22,7 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
+from v4vapp_backend_v2.config.decorators import time_decorator
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_not_development_accounts,
@@ -181,7 +182,7 @@ class HiveDevelopmentAccountError(HiveTransferError):
     pass
 
 
-# TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
+@time_decorator
 def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs) -> Hive:
     """
     Creates and returns a Hive client instance, selecting a working node from a list of available nodes.
@@ -866,8 +867,8 @@ async def send_custom_json(
 async def perform_transfer_checks(
     from_account: AccName | str,
     to_account: AccName | str,
-    amount: Amount = Amount(amount="0.000 HIVE"),
-    nobroadcast: bool = False,
+    # amount: Amount = Amount(amount="0.000 HIVE"),
+    # nobroadcast: bool = False,
 ) -> bool:
     """
     Perform full validations, raise errors if a failure
