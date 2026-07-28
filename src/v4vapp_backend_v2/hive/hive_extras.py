@@ -297,13 +297,13 @@ def get_good_nodes() -> List[str]:
             response = httpx.get(url, params=params, timeout=5, follow_redirects=True)
             response.raise_for_status()
             nodes = response.json()
-            logger.debug(
+            logger.info(
                 "Fetched good nodes Last good nodes",
                 extra={"beacon_response": nodes, "error_code_clear": "beacon_nodes_fail"},
             )
             good_nodes = [node["endpoint"] for node in nodes if node["score"] >= 80]
             good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
-            logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
+            logger.info(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
             try:
                 InternalConfig.redis_decoded.setex(
                     REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes)
