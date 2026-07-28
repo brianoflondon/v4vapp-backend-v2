@@ -33,6 +33,9 @@ MAX_RESTART_BACKOFF_SECONDS = 8
 NODE_COOLDOWN_SECONDS = 180
 NODE_COOLDOWN_UNTIL: dict[str, datetime] = {}
 BLOCK_BEHIND_COOLDOWN_SECONDS = 45
+PROBE_CACHE_TTL_SECONDS = 20
+MAX_PROBE_NODES_PER_RESTART = 4
+NODE_PROBE_CACHE: dict[str, tuple[datetime, int]] = {}
 
 
 def _prioritize_nodes(good_nodes: list[str], current_node: str) -> list[str]:
@@ -67,17 +70,48 @@ def _exclude_cooldown_nodes(nodes: list[str]) -> list[str]:
     return [node for node in nodes if NODE_COOLDOWN_UNTIL.get(node, now) <= now]
 
 
+def _get_cached_head_block(node: str) -> int | None:
+    """Return cached head block for a node if probe is still fresh."""
+    cached = NODE_PROBE_CACHE.get(node)
+    if not cached:
+        return None
+    checked_at, head_block = cached
+    if datetime.now(tz=timezone.utc) - checked_at > timedelta(seconds=PROBE_CACHE_TTL_SECONDS):
+        NODE_PROBE_CACHE.pop(node, None)
+        return None
+    return head_block
+
+
+def _cache_head_block(node: str, head_block: int) -> None:
+    """Store a short-lived head block cache to avoid repeated node probes."""
+    NODE_PROBE_CACHE[node] = (datetime.now(tz=timezone.utc), head_block)
+
+
 def _nodes_caught_up(nodes: list[str], required_block: int, memo_keys: list[str]) -> list[str]:
     """Return nodes whose head block is close enough to the required stream block."""
     if required_block <= 0:
         return nodes
 
     caught_up_nodes: list[str] = []
-    for node in nodes:
+    for idx, node in enumerate(nodes):
+        # Keep probe cost bounded during rapid restart loops.
+        if idx >= MAX_PROBE_NODES_PER_RESTART:
+            caught_up_nodes.extend(nodes[idx:])
+            break
+
+        cached_head_block = _get_cached_head_block(node)
+        if cached_head_block is not None:
+            if cached_head_block + 2 >= required_block:
+                caught_up_nodes.append(node)
+            else:
+                _mark_node_cooldown(node, seconds=BLOCK_BEHIND_COOLDOWN_SECONDS)
+            continue
+
         try:
             hive_for_probe = get_hive_client(node=[node], keys=memo_keys)
             blockchain = get_blockchain_instance(hive_instance=hive_for_probe)
             head_block = blockchain.get_current_block_num()
+            _cache_head_block(node, head_block)
             # Allow a tiny skew to avoid needlessly rejecting near-head nodes.
             if head_block + 2 >= required_block:
                 caught_up_nodes.append(node)
@@ -304,7 +338,11 @@ async def stream_ops_async(
             await asyncio.sleep(0.1)
         except (NectarException, NumRetriesReached, UnhandledRPCError, WorkingNodeMissing) as e:
             error_text = str(e)
-            if "429" in error_text or "Too Many Requests" in error_text:
+            if (
+                isinstance(e, NumRetriesReached)
+                or "429" in error_text
+                or "Too Many Requests" in error_text
+            ):
                 cooldown_node = _extract_node_from_error(e) or rpc_url
                 _mark_node_cooldown(cooldown_node)
                 logger.warning(

@@ -5,7 +5,7 @@ from typing import Any, AsyncIterable, Callable, Iterator, TypeVar
 
 from asgiref.sync import sync_to_async as _sync_to_async
 from nectar.exceptions import NectarException
-from nectarapi.exceptions import RPCError, WorkingNodeMissing
+from nectarapi.exceptions import NumRetriesReached, RPCError, WorkingNodeMissing
 
 from v4vapp_backend_v2.config.setup import logger
 
@@ -65,6 +65,8 @@ async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]
         while True:
             try:
                 yield await next_async(sync_iterator)
+            except NumRetriesReached:
+                raise
             except WorkingNodeMissing:
                 raise
             except StopAsyncIteration:
@@ -76,6 +78,8 @@ async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]
                 )
                 return
     except Exception as e:
+        if isinstance(e, NumRetriesReached):
+            raise
         if isinstance(e, WorkingNodeMissing):
             raise
         try:
@@ -98,6 +102,12 @@ def _next(it: Iterator[T]) -> T:
         return next(it)
     except StopIteration:
         raise StopAsyncIteration
+    except NumRetriesReached as e:
+        logger.warning(
+            f"_next {type(e).__name__}: {e}",
+            extra={"notification": False, "error": e},
+        )
+        raise
     except WorkingNodeMissing as e:
         logger.warning(
             f"_next {e}",
@@ -105,6 +115,9 @@ def _next(it: Iterator[T]) -> T:
         )
         raise
     except NectarException as e:
+        if "Block " in str(e) and "does not exist" in str(e):
+            # Let stream-level retry logic handle lagging nodes consistently.
+            raise
         logger.warning(
             f"Nectar Error in _next {e}",
             extra={
