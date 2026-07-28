@@ -70,7 +70,7 @@
                 // "2",
                 // "103814300"
             ],
-            "justMyCode": true,
+            "justMyCode": false,
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
