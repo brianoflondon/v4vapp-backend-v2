@@ -66,6 +66,12 @@ def test_post_init_with_current_block():
     assert counter.id == "test "  # Appends space to id
 
 
+def test_post_init_preserves_injected_hive_client():
+    injected_client = MockHive()
+    counter = BlockCounter(last_good_block=50, hive_client=injected_client)
+    assert counter.hive_client is injected_client
+
+
 def test_inc_new_block_and_marker(mock_dependencies):
     mock_check_time_diff, mock_logger = mock_dependencies
     counter = BlockCounter(last_good_block=100, hive_client=MockHive())

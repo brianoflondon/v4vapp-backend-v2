@@ -42,19 +42,21 @@ def sync_to_async(
     if is_gen:
 
         @wraps(sync_fn)
-        async def wrapper(*args: Any, **kwargs: Any) -> AsyncIterable[Any]:
+        async def wrapper_gen(*args: Any, **kwargs: Any) -> AsyncIterable[Any]:
             sync_iterable: Iterator[Any] = await async_fn(*args, **kwargs)
             async_iterable: AsyncIterable[Any] = sync_to_async_iterable(sync_iterable)
             async for item in async_iterable:
                 yield item
 
+        return wrapper_gen
+
     else:
 
         @wraps(sync_fn)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def wrapper_fn(*args: Any, **kwargs: Any) -> Any:
             return await async_fn(*args, **kwargs)
 
-    return wrapper
+        return wrapper_fn
 
 
 async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]:
@@ -140,7 +142,10 @@ def _next(it: Iterator[T]) -> T:
             raise StopAsyncIteration
         raise
     except Exception as e:
-        logger.warning(f"_next {e}", extra={"notification": False, "error": e})
+        logger.warning(
+            f"_next {type(e).__name__}: {e}",
+            extra={"notification": False, "error": e},
+        )
         logger.exception(e, extra={"notification": False})
         raise StopAsyncIteration
 

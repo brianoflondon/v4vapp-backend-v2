@@ -30,6 +30,9 @@ ICON = "🔗"
 # while still detecting genuinely dead nodes promptly.
 STREAM_TIMEOUT = 15
 MAX_RESTART_BACKOFF_SECONDS = 8
+NODE_COOLDOWN_SECONDS = 180
+NODE_COOLDOWN_UNTIL: dict[str, datetime] = {}
+BLOCK_BEHIND_COOLDOWN_SECONDS = 45
 
 
 def _prioritize_nodes(good_nodes: list[str], current_node: str) -> list[str]:
@@ -41,10 +44,63 @@ def _prioritize_nodes(good_nodes: list[str], current_node: str) -> list[str]:
     ]
 
 
-def _build_stream_hive_client(current_node: str) -> Hive:
-    """Create a fresh Hive client for streaming with current node deprioritized."""
+def _extract_node_from_error(error: Exception) -> str | None:
+    """Extract a URL from an exception string when available."""
+    match = re.search(r"https?://[^\s'\"]+", str(error))
+    return match.group(0) if match else None
+
+
+def _mark_node_cooldown(node: str | None, seconds: int = NODE_COOLDOWN_SECONDS) -> None:
+    """Temporarily avoid a node after transport/rate-limit failures."""
+    if not node:
+        return
+    NODE_COOLDOWN_UNTIL[node] = datetime.now(tz=timezone.utc) + timedelta(seconds=seconds)
+
+
+def _exclude_cooldown_nodes(nodes: list[str]) -> list[str]:
+    """Filter out nodes currently in cooldown; clear expired cooldown entries."""
+    now = datetime.now(tz=timezone.utc)
+    expired = [node for node, until in NODE_COOLDOWN_UNTIL.items() if until <= now]
+    for node in expired:
+        NODE_COOLDOWN_UNTIL.pop(node, None)
+
+    return [node for node in nodes if NODE_COOLDOWN_UNTIL.get(node, now) <= now]
+
+
+def _nodes_caught_up(nodes: list[str], required_block: int, memo_keys: list[str]) -> list[str]:
+    """Return nodes whose head block is close enough to the required stream block."""
+    if required_block <= 0:
+        return nodes
+
+    caught_up_nodes: list[str] = []
+    for node in nodes:
+        try:
+            hive_for_probe = get_hive_client(node=[node], keys=memo_keys)
+            blockchain = get_blockchain_instance(hive_instance=hive_for_probe)
+            head_block = blockchain.get_current_block_num()
+            # Allow a tiny skew to avoid needlessly rejecting near-head nodes.
+            if head_block + 2 >= required_block:
+                caught_up_nodes.append(node)
+            else:
+                _mark_node_cooldown(node, seconds=BLOCK_BEHIND_COOLDOWN_SECONDS)
+        except Exception:
+            _mark_node_cooldown(node)
+
+    return caught_up_nodes
+
+
+def _build_stream_hive_client(current_node: str, required_block: int = 0) -> Hive:
+    """Create a fresh Hive client for streaming with node health and lag filtering."""
     memo_keys = InternalConfig().config.hive_config.memo_keys
     good_nodes = _prioritize_nodes(get_good_nodes(), current_node)
+    filtered_nodes = _exclude_cooldown_nodes(good_nodes)
+    if filtered_nodes:
+        good_nodes = filtered_nodes
+    caught_up_nodes = _nodes_caught_up(
+        good_nodes, required_block=required_block, memo_keys=memo_keys
+    )
+    if caught_up_nodes:
+        good_nodes = caught_up_nodes
     return get_hive_client(node=good_nodes, keys=memo_keys)
 
 
@@ -247,7 +303,20 @@ async def stream_ops_async(
             # finally block switch to the next RPC node.
             await asyncio.sleep(0.1)
         except (NectarException, NumRetriesReached, UnhandledRPCError, WorkingNodeMissing) as e:
+            error_text = str(e)
+            if "429" in error_text or "Too Many Requests" in error_text:
+                cooldown_node = _extract_node_from_error(e) or rpc_url
+                _mark_node_cooldown(cooldown_node)
+                logger.warning(
+                    f"{ICON} {start_block:,} Cooling down rate-limited node {cooldown_node}",
+                    extra={"notification": False, "error": e},
+                )
+            elif "No working nodes available" in error_text:
+                # The current node is very likely unhealthy for this process right now.
+                _mark_node_cooldown(rpc_url)
+
             if re.search(r"Block \d+ does not exist", str(e)):
+                _mark_node_cooldown(rpc_url, seconds=BLOCK_BEHIND_COOLDOWN_SECONDS)
                 logger.info(f"{ICON} {start_block:,} Refetch {last_block:,}. Try Again. {rpc_url}")
             else:
                 logger.warning(
@@ -285,30 +354,19 @@ async def stream_ops_async(
                 )
             restart_count += 1
             current_node = rpc_url
-            if hive and hive.rpc:
-                rpc = hive.rpc
-                try:
-                    rpc.next()
-                except Exception as e:
-                    logger.warning(
-                        f"{ICON} {start_block:,} Failed to advance RPC node from {current_node}: {e}",
-                        extra={"notification": False, "error": e},
-                    )
+            next_node = current_node
+            try:
+                hive = _build_stream_hive_client(current_node, required_block=last_block)
+                blockchain = get_blockchain_instance(hive_instance=hive)
+                OpBase.hive_inst = hive
+                next_node = str(hive.rpc.url) if hive.rpc else "No RPC"
+            except Exception as e:
+                logger.warning(
+                    f"{ICON} {start_block:,} Failed to rebuild Hive client during node failover: {e}",
+                    extra={"notification": False, "error": e},
+                )
 
-                next_node = str(rpc.url)
-                if current_node == next_node:
-                    try:
-                        hive = _build_stream_hive_client(current_node)
-                        blockchain = get_blockchain_instance(hive_instance=hive)
-                        OpBase.hive_inst = hive
-                        next_node = str(hive.rpc.url) if hive.rpc else "No RPC"
-                    except Exception as e:
-                        logger.warning(
-                            f"{ICON} {start_block:,} Failed to rebuild Hive client during node failover: {e}",
-                            extra={"notification": False, "error": e},
-                        )
-
-                rpc_url = next_node
+            rpc_url = next_node
 
             if current_node == rpc_url:
                 backoff_seconds = min(MAX_RESTART_BACKOFF_SECONDS, 0.5 * restart_count)
