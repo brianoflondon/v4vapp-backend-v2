@@ -133,7 +133,7 @@
             "program": "src/lnd_monitor_v2.py",
             "args": [
                 "--config",
-                "legiondev.config.yaml"
+                "devlegion.config.yaml"
             ],
             "console": "integratedTerminal",
             "env": {

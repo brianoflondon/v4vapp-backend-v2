@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, Mapping, Optional
 
@@ -220,3 +220,95 @@ async def find_nearest_by_timestamp_server_side(
 
     candidate = docs[0]
     return convert_decimal128_to_decimal(candidate)
+
+
+def expired_unsettled_invoice_query(
+    as_of: datetime | None = None,
+    retain_after_expiry: timedelta = timedelta(days=1),
+) -> Dict[str, Any]:
+    """
+    Build the MongoDB filter for expired, unpaid invoices past the retention window.
+
+    Criteria (as used in production pruning):
+      - settle_index == 0
+      - settled is false
+      - expiry_date is strictly before (as_of - retain_after_expiry)
+
+    With the default retain_after_expiry of 1 day, invoices remain eligible only after
+    they have been expired for more than 24 hours (so ~1 day of unpaid history is kept).
+
+    Args:
+        as_of: Reference time (UTC). Defaults to now (UTC).
+        retain_after_expiry: How long after expiry_date to keep the document.
+
+    Returns:
+        A dict suitable for collection.find(filter).
+    """
+    if as_of is None:
+        as_of = datetime.now(tz=timezone.utc)
+    elif as_of.tzinfo is None:
+        as_of = as_of.replace(tzinfo=timezone.utc)
+
+    cutoff = as_of - retain_after_expiry
+    return {
+        "settle_index": 0,
+        "settled": False,
+        "expiry_date": {"$lt": cutoff},
+    }
+
+
+async def find_expired_unsettled_invoices(
+    collection: AsyncCollection,
+    as_of: datetime | None = None,
+    retain_after_expiry: timedelta = timedelta(days=1),
+    limit: int | None = None,
+) -> list[Dict[str, Any]]:
+    """
+    Find unpaid invoices whose expiry_date is older than the retention window.
+
+    Find-only helper for LND monitor maintenance (no deletes). Documents match
+    ``expired_unsettled_invoice_query``.
+
+    Args:
+        collection: MongoDB invoices collection (async).
+        as_of: Reference time (UTC). Defaults to now.
+        retain_after_expiry: Keep unpaid invoices this long after expiry (default 1 day).
+        limit: Optional max number of documents to return.
+
+    Returns:
+        List of matching documents (Decimal128 converted to Decimal).
+    """
+    query = expired_unsettled_invoice_query(
+        as_of=as_of, retain_after_expiry=retain_after_expiry
+    )
+    cursor = collection.find(query).sort("expiry_date", 1)
+    if limit is not None:
+        cursor = cursor.limit(limit)
+    docs = await cursor.to_list(length=limit)
+    return [convert_decimal128_to_decimal(doc) for doc in docs]
+
+
+async def delete_expired_unsettled_invoices(
+    collection: AsyncCollection,
+    as_of: datetime | None = None,
+    retain_after_expiry: timedelta = timedelta(days=1),
+) -> int:
+    """
+    Delete unpaid invoices whose expiry_date is older than the retention window.
+
+    Uses the same filter as ``find_expired_unsettled_invoices`` via
+    ``expired_unsettled_invoice_query`` and ``collection.delete_many``.
+
+    Args:
+        collection: MongoDB invoices collection (async).
+        as_of: Reference time (UTC). Defaults to now.
+        retain_after_expiry: Keep unpaid invoices this long after expiry (default 1 day).
+
+    Returns:
+        Number of documents deleted (``deleted_count`` from DeleteResult).
+    """
+    query = expired_unsettled_invoice_query(
+        as_of=as_of, retain_after_expiry=retain_after_expiry
+    )
+    result = await collection.delete_many(query)
+    return int(getattr(result, "deleted_count", 0))

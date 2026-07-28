@@ -26,6 +26,7 @@ from v4vapp_backend_v2.config.setup import (
     logger,
 )
 from v4vapp_backend_v2.database.db_pymongo import DATABASE_ICON, DBConn
+from v4vapp_backend_v2.database.db_tools import delete_expired_unsettled_invoices
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.grpc_models.lnd_events_group import (
@@ -56,6 +57,71 @@ NOTIFICATION_QUITE_MODE = (
 )
 
 app = typer.Typer()
+
+
+@dataclass(frozen=True)
+class LndIndexFloors:
+    """Exclusive floors for LND sequence indexes (process only values strictly greater)."""
+
+    add_index: int = 0
+    settle_index: int = 0
+    payment_index: int = 0
+
+    @property
+    def has_any(self) -> bool:
+        return self.add_index > 0 or self.settle_index > 0 or self.payment_index > 0
+
+
+def get_lnd_index_floors(connection_name: str | None = None) -> LndIndexFloors:
+    """
+    Load optional index floors from the LND connection config.
+
+    Missing config fields behave as 0 (no floor). When ``start_settle_index`` is
+    omitted but ``start_add_index`` is set, the add-index floor is also used for
+    settle so SubscribeInvoices does not re-emit pre-cutover settles.
+    """
+    lnd_config = InternalConfig().config.lnd_config
+    conn = lnd_config.connection_config(connection_name)
+    if conn is None:
+        return LndIndexFloors()
+
+    add_floor = int(conn.start_add_index or 0)
+    if conn.start_settle_index is not None:
+        settle_floor = int(conn.start_settle_index)
+    else:
+        settle_floor = add_floor
+    payment_floor = int(conn.start_payment_index or 0)
+    return LndIndexFloors(
+        add_index=add_floor,
+        settle_index=settle_floor,
+        payment_index=payment_floor,
+    )
+
+
+def apply_invoice_index_floors(
+    add_index: int | None,
+    settle_index: int | None,
+    floors: LndIndexFloors,
+) -> tuple[int, int]:
+    """Raise subscription cursors so they are never below configured floors."""
+    add = int(add_index or 0)
+    settle = int(settle_index or 0)
+    return max(add, floors.add_index), max(settle, floors.settle_index)
+
+
+def should_ignore_invoice_index(add_index: int | None, floors: LndIndexFloors) -> bool:
+    """True when this invoice's add_index is at or below the configured floor."""
+    if floors.add_index <= 0:
+        return False
+    return int(add_index or 0) <= floors.add_index
+
+
+def should_ignore_payment_index(payment_index: int | None, floors: LndIndexFloors) -> bool:
+    """True when this payment's payment_index is at or below the configured floor."""
+    if floors.payment_index <= 0:
+        return False
+    return int(payment_index or 0) <= floors.payment_index
+
 
 # Define a global flag to track shutdown and startup completion
 startup_complete_event = asyncio.Event()
@@ -195,9 +261,7 @@ async def track_events(
                     forward_event = TrackedForwardEvent.model_validate(ans_dict)
                     forward_event.node_name = lnd_client.connection.name
                     asyncio.create_task(
-                        db_store_htlc_event(
-                            forward_event=forward_event, lnd_client=lnd_client
-                        )
+                        db_store_htlc_event(forward_event=forward_event, lnd_client=lnd_client)
                     )
                 except Exception as e:
                     logger.warning(
@@ -331,6 +395,17 @@ async def db_store_invoice(
         None
     """
     try:
+        floors = get_lnd_index_floors(lnd_client.connection.name)
+        # add_index is on the protobuf event; filter before building the full model
+        raw_add_index = getattr(htlc_event, "add_index", 0)
+        if should_ignore_invoice_index(raw_add_index, floors):
+            logger.debug(
+                f"{lnd_client.icon} Skipping invoice add_index={raw_add_index} "
+                f"(<= floor {floors.add_index})",
+                extra={"notification": False},
+            )
+            return
+
         invoice_pyd = Invoice(htlc_event)
         invoice_pyd.node_name = lnd_client.connection.name
         await invoice_pyd.update_conv()
@@ -361,6 +436,16 @@ async def db_store_payment(
         None
     """
     try:
+        floors = get_lnd_index_floors(lnd_client.connection.name)
+        raw_payment_index = getattr(htlc_event, "payment_index", 0)
+        if should_ignore_payment_index(raw_payment_index, floors):
+            logger.debug(
+                f"{lnd_client.icon} Skipping payment payment_index={raw_payment_index} "
+                f"(<= floor {floors.payment_index})",
+                extra={"notification": False},
+            )
+            return
+
         payment_pyd = Payment(htlc_event)
         payment_pyd.node_name = lnd_client.connection.name
         # Attach invoice description (decoded from payment_request) if available
@@ -567,12 +652,13 @@ async def invoices_loop(
     """
     logger.info(f"{lnd_client.icon} invoices_loop task started")
 
+    floors = get_lnd_index_floors(lnd_client.connection.name)
     try:
         recent_invoice = await asyncio.wait_for(get_most_recent_invoice(), timeout=30)
     except asyncio.TimeoutError:
         logger.warning(
             "Timed out querying DB for most recent invoice in invoices_loop (30s). "
-            "Starting subscription from index 0.",
+            "Starting subscription from index floors or 0.",
             extra={"notification": True},
         )
         recent_invoice = None
@@ -588,6 +674,16 @@ async def invoices_loop(
             return
         except asyncio.TimeoutError:
             pass
+
+    add_index, settle_index = apply_invoice_index_floors(add_index, settle_index, floors)
+    if floors.has_any:
+        logger.info(
+            f"{lnd_client.icon} Invoice subscription floors: "
+            f"add_index>={add_index} settle_index>={settle_index} "
+            f"(config start_add_index={floors.add_index}, "
+            f"start_settle_index={floors.settle_index})",
+            extra={"notification": False},
+        )
 
     request_sub = lnrpc.InvoiceSubscription(
         add_index=int(add_index) if add_index is not None else 0,
@@ -632,6 +728,13 @@ async def invoices_loop(
 
 async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     logger.info(f"{lnd_client.icon} payments_loop task started")
+    floors = get_lnd_index_floors(lnd_client.connection.name)
+    if floors.payment_index > 0:
+        logger.info(
+            f"{lnd_client.icon} Payment store floor: payment_index>{floors.payment_index} "
+            f"(TrackPayments is live-only; pre-floor payments are dropped at store/backfill)",
+            extra={"notification": False},
+        )
     request = routerrpc.TrackPaymentRequest(no_inflight_updates=False)
     while True:
         try:
@@ -949,6 +1052,7 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
         index_offset = 0
         num_max_invoices = 1000
         total_invoices = 0
+        floors = get_lnd_index_floors(lnd_client.connection.name)
         logger.info(f"{lnd_client.icon} Reading all invoices...")
         while True:
             if shutdown_event.is_set():
@@ -967,6 +1071,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
             index_offset = list_invoices.first_index_offset
             bulk_updates = []
             for invoice in list_invoices.invoices:
+                if should_ignore_invoice_index(invoice.add_index, floors):
+                    continue
                 read_invoice = await Invoice.collection().find_one(
                     filter={"r_hash": invoice.r_hash},
                 )
@@ -1036,6 +1142,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
         index_offset = 0
         num_max_payments = 1000
         total_payments = 0
+        floors = get_lnd_index_floors(lnd_client.connection.name)
         logger.info(f"{lnd_client.icon} Reading all payments...")
         while True:
             if shutdown_event.is_set():
@@ -1054,6 +1161,8 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
             index_offset = payments_raw.first_index_offset
             bulk_updates = []
             for payment in list_payments.payments:
+                if should_ignore_payment_index(payment.payment_index, floors):
+                    continue
                 query = {"payment_hash": payment.payment_hash}
                 read_payment = await Payment.collection().find_one(
                     filter=query,
@@ -1341,6 +1450,10 @@ async def main_async_start(connection_name: str) -> None:
                     _background_sync(lnd_client),
                     name="synchronize_db",
                 ),
+                asyncio.create_task(
+                    expired_invoices_maintenance_loop(lnd_client=lnd_client),
+                    name="expired_invoices_maintenance",
+                ),
                 asyncio.create_task(status_api.start(), name="status_api"),
             ]
             critical_tasks = [
@@ -1466,6 +1579,58 @@ async def _background_sync(lnd_client: LNDClient) -> None:
             f"Background sync failed: {e}",
             extra={"notification": False},
         )
+
+
+EXPIRED_INVOICE_PRUNE_INTERVAL_SECONDS = 3600  # 1 hour
+TIMEDELTA_RETAIN_AFTER_EXPIRY = timedelta(days=1)  # Retain expired invoices for 1 day
+
+
+async def expired_invoices_maintenance_loop(
+    lnd_client: LNDClient,
+    interval_seconds: int = EXPIRED_INVOICE_PRUNE_INTERVAL_SECONDS,
+) -> None:
+    """
+    Periodically delete expired, unsettled invoices past the retention window.
+
+    Deletes expired invoices. Runs once at start, then every ``interval_seconds``.
+    """
+    logger.info(
+        f"{lnd_client.icon} expired_invoices_maintenance_loop started "
+        f"(interval={interval_seconds}s)"
+    )
+    while not shutdown_event.is_set():
+        try:
+            count = await delete_expired_unsettled_invoices(
+                collection=Invoice.collection(), retain_after_expiry=TIMEDELTA_RETAIN_AFTER_EXPIRY
+            )
+            if count > 0:
+                logger.info(
+                    f"{lnd_client.icon}{DATABASE_ICON} Expired unsettled invoices "
+                    f"eligible for prune: {count}",
+                    extra={
+                        "notification": False,
+                        "expired_unsettled_invoice_count": count,
+                    },
+                )
+            else:
+                logger.debug(
+                    f"{lnd_client.icon}{DATABASE_ICON} No expired unsettled invoices found for prune",
+                    extra={"notification": False},
+                )
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            logger.info(f"{lnd_client.icon} expired_invoices_maintenance_loop cancelled")
+            return
+        except Exception as e:
+            logger.warning(
+                f"{lnd_client.icon} expired invoice maintenance find failed: {e}",
+                extra={"notification": False},
+            )
+
+        try:
+            await asyncio.wait_for(shutdown_event.wait(), timeout=interval_seconds)
+            return
+        except asyncio.TimeoutError:
+            pass
 
 
 async def pause_for_database_sync() -> bool:

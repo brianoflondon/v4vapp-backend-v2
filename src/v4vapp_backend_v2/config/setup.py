@@ -177,6 +177,29 @@ class LndConnectionConfig(BaseConfig):
     macaroon_filename: str = ""
     cert_filename: str = ""
     use_proxy: str = ""
+    # Optional exclusive floors for this node's LND sequences (ignore index <= floor).
+    # When omitted, existing behaviour is unchanged (resume from Mongo / start at 0).
+    start_add_index: int | None = Field(
+        default=None,
+        description=(
+            "Ignore invoices with add_index <= this value. Also used as the minimum "
+            "SubscribeInvoices add_index cursor (max of this and the DB watermark)."
+        ),
+    )
+    start_settle_index: int | None = Field(
+        default=None,
+        description=(
+            "Optional settle_index floor for SubscribeInvoices. If omitted but "
+            "start_add_index is set, start_add_index is used as the settle floor too."
+        ),
+    )
+    start_payment_index: int | None = Field(
+        default=None,
+        description=(
+            "Ignore payments with payment_index <= this value (TrackPayments has no "
+            "resume cursor; filtering is applied when storing / backfilling)."
+        ),
+    )
 
 
 class LndConfig(BaseConfig):
@@ -185,6 +208,13 @@ class LndConfig(BaseConfig):
     lightning_fee_limit_ppm: int = 5000
     lightning_fee_estimate_ppm: int = 1000
     lightning_fee_base_msats: int = 50000
+
+    def connection_config(self, name: str | None = None) -> LndConnectionConfig | None:
+        """Return the named connection config, or the default connection if name is None."""
+        conn_name = name or self.default
+        if not conn_name:
+            return None
+        return self.connections.get(conn_name)
 
 
 class TailscaleConfig(BaseConfig):
