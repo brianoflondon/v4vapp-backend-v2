@@ -177,6 +177,11 @@ class TrackedForwardEvent(BaseModel):
     ledger_entry_id: str | None = Field(
         None, description="The ID of the ledger entry associated with this forward event, if any."
     )
+    node_name: str = Field(
+        default="unset",
+        description="LND connection name that produced this HTLC event (e.g. voltage, umbrel)",
+    )
+
 
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 

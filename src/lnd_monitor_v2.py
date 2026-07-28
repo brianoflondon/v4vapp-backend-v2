@@ -193,7 +193,12 @@ async def track_events(
             if ans_dict.get("message_type") == "FORWARD" and forward_success:
                 try:
                     forward_event = TrackedForwardEvent.model_validate(ans_dict)
-                    asyncio.create_task(db_store_htlc_event(forward_event=forward_event))
+                    forward_event.node_name = lnd_client.connection.name
+                    asyncio.create_task(
+                        db_store_htlc_event(
+                            forward_event=forward_event, lnd_client=lnd_client
+                        )
+                    )
                 except Exception as e:
                     logger.warning(
                         f"Could not save HTLC event: {e}", extra={"notification": False}
@@ -327,6 +332,7 @@ async def db_store_invoice(
     """
     try:
         invoice_pyd = Invoice(htlc_event)
+        invoice_pyd.node_name = lnd_client.connection.name
         await invoice_pyd.update_conv()
         ans = await invoice_pyd.save()
         logger.info(
@@ -356,6 +362,7 @@ async def db_store_payment(
     """
     try:
         payment_pyd = Payment(htlc_event)
+        payment_pyd.node_name = lnd_client.connection.name
         # Attach invoice description (decoded from payment_request) if available
         await decode_payment_request_and_attach(lnd_client=lnd_client, payment=payment_pyd)
         await update_payment_route_with_alias(
@@ -381,15 +388,21 @@ async def db_store_payment(
 
 async def db_store_htlc_event(
     forward_event: TrackedForwardEvent,
+    lnd_client: LNDClient | None = None,
 ) -> None:
     """
     Asynchronously stores an HTLC event in the MongoDB database.
 
     Args:
-        htlc_event_ans (Dict[str, Any]): The HTLC event data to store as returned to the logger.
+        forward_event: The HTLC forward event to store.
+        lnd_client: Optional LND client used to stamp node_name when not already set.
     Returns:
         None
     """
+    if lnd_client is not None and (
+        not forward_event.node_name or forward_event.node_name == "unset"
+    ):
+        forward_event.node_name = lnd_client.connection.name
     await forward_event.save()
 
 
@@ -954,25 +967,17 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
             index_offset = list_invoices.first_index_offset
             bulk_updates = []
             for invoice in list_invoices.invoices:
-                insert_one = invoice.model_dump(
-                    exclude_none=True, exclude_unset=True, exclude={"conv"}
-                )
-                query = {"r_hash": invoice.r_hash}
                 read_invoice = await Invoice.collection().find_one(
-                    filter=query,
+                    filter={"r_hash": invoice.r_hash},
                 )
                 if read_invoice:
                     continue
-                    # this match is only necessary if running for the first time or filling an empty database
-                    try:
-                        db_invoice = Invoice(**read_invoice)
-                        if db_invoice == invoice:
-                            continue
-                    except Exception as e:
-                        logger.warning(e, extra={"notification": False, "invoice": read_invoice})
-                        pass
+                invoice.node_name = lnd_client.connection.name
+                insert_one = invoice.model_dump(
+                    exclude_none=True, exclude_unset=True, exclude={"conv"}
+                )
                 bulk_updates.append({
-                    "filter": query,
+                    "filter": {"r_hash": invoice.r_hash},
                     "update": {"$set": insert_one},
                     "upsert": True,
                 })
@@ -1290,10 +1295,6 @@ async def main_async_start(connection_name: str) -> None:
 
         lnd_events_group = LndEventsGroup()
         async with LNDClient(connection_name) as lnd_client:
-            if lnd_client.get_info is None:
-                raise StartupFailure(
-                    f"Unable to fetch LND node info during startup for connection '{connection_name}'"
-                )
             if lnd_client.get_info:
                 logger.info(
                     f"{lnd_client.icon} Node: {lnd_client.get_info.alias} "

@@ -17,7 +17,7 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker:/app/logs
-    command: ["python", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
+    command: ["python", "src/lnd_monitor_v2.py", "--config", "${DOCKER_COMPOSE_CONFIG:-devdocker.config.yaml}"]
     restart: on-failure:3
     stop_grace_period: 20s
     env_file:
@@ -38,11 +38,13 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker:/app/logs
-    command: [
-      "python", "src/hive_monitor_v2.py",
-      "--config", "devdocker.config.yaml",
-      # "--start-block", "-1"  # The block number to start from. Default or 0 will start from the last good block
-    ]
+    command:
+      - "python"
+      - "src/hive_monitor_v2.py"
+      - "--config"
+      - "${DOCKER_COMPOSE_CONFIG:-devdocker.config.yaml}"
+      # - "--start-block"
+      # - "-1"  # The block number to start from. Default or 0 will start from the last good block
     restart: on-failure:3
     stop_grace_period: 20s
     networks:
@@ -67,7 +69,7 @@ services:
       - ./logs_docker:/app/logs
     command: [
       "python", "src/db_monitor.py", "--overwatch",
-      "--config", "devdocker.config.yaml",
+      "--config", "${DOCKER_COMPOSE_CONFIG:-devdocker.config.yaml}",
     ]
     restart: on-failure:3
     stop_grace_period: 20s
@@ -93,7 +95,7 @@ services:
       - ./logs_docker:/app/logs
     command: [
       "python", "src/magi_monitor.py",
-      "--config", "devdocker.config.yaml",
+      "--config", "${DOCKER_COMPOSE_CONFIG:-devdocker.config.yaml}",
     ]
     restart: on-failure:3
     stop_grace_period: 20s
@@ -121,7 +123,7 @@ services:
     volumes:
       - ./config:/app/config
       - ./logs_docker:/app/logs
-    command: ["python", "src/api_v2.py", "--config", "devdocker.config.yaml"]
+    command: ["python", "src/api_v2.py", "--config", "${DOCKER_COMPOSE_CONFIG:-devdocker.config.yaml}"]
     restart: on-failure:3
     stop_grace_period: 20s
     networks:
@@ -153,7 +155,7 @@ services:
       "python", "src/v4vapp_backend_v2/admin/run_admin.py",
       "--host", "0.0.0.0",
       "--port", "8080",
-      "--config", "devdocker.config.yaml",
+      "--config", "${DOCKER_COMPOSE_CONFIG:-devdocker.config.yaml}",
       "--log-level", "debug"
     ]
     restart: on-failure:3
