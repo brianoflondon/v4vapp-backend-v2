@@ -159,7 +159,8 @@ def _next(it: Iterator[T]) -> T:
             f"_next {type(e).__name__}: {e}",
             extra={"notification": False, "error": e},
         )
-        logger.exception(e, extra={"notification": False})
+        logger.error(e, extra={"notification": False})
+        sleep(0.1)  # Avoid tight loop on unexpected errors
         raise StopAsyncIteration
 
 
