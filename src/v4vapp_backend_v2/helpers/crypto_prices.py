@@ -22,7 +22,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     convert_decimals_for_mongodb,
     format_time_delta,
 )
-from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
+
 
 ALL_PRICES_COINGECKO = (
     "https://api.coingecko.com/api/v3/simple"
@@ -1175,6 +1175,7 @@ class HiveInternalMarket(QuoteService):
         # cached_quote = await self.check_cache(use_cache=use_cache)
         # if cached_quote:
         #     return cached_quote
+        from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
         try:
             hive_quote = await call_hive_internal_market()
             if hive_quote.error:
