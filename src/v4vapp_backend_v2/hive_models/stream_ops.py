@@ -9,7 +9,7 @@ from nectar.hive import Hive
 from nectarapi.exceptions import NumRetriesReached, UnhandledRPCError, WorkingNodeMissing
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import (
     get_blockchain_instance,
@@ -39,6 +39,13 @@ def _prioritize_nodes(good_nodes: list[str], current_node: str) -> list[str]:
     return [node for node in good_nodes if node != current_node] + [
         node for node in good_nodes if node == current_node
     ]
+
+
+def _build_stream_hive_client(current_node: str) -> Hive:
+    """Create a fresh Hive client for streaming with current node deprioritized."""
+    memo_keys = InternalConfig().config.hive_config.memo_keys
+    good_nodes = _prioritize_nodes(get_good_nodes(), current_node)
+    return get_hive_client(node=good_nodes, keys=memo_keys)
 
 
 class SwitchToLiveStream(Exception):
@@ -290,22 +297,16 @@ async def stream_ops_async(
 
                 next_node = str(rpc.url)
                 if current_node == next_node:
-                    good_nodes = _prioritize_nodes(get_good_nodes(), current_node)
-                    hive.set_default_nodes(good_nodes)
-                    # Rebuild blockchain so subsequent stream calls use the refreshed RPC config.
-                    blockchain = get_blockchain_instance(hive_instance=hive)
-                    rpc = hive.rpc
-                    # Try to rotate away from the failing node on the refreshed list.
-                    if rpc:
-                        rotation_attempts = max(1, len(good_nodes))
-                        for _ in range(rotation_attempts):
-                            try:
-                                rpc.next()
-                            except Exception:
-                                break
-                            if str(rpc.url) != current_node:
-                                break
-                        next_node = str(rpc.url)
+                    try:
+                        hive = _build_stream_hive_client(current_node)
+                        blockchain = get_blockchain_instance(hive_instance=hive)
+                        OpBase.hive_inst = hive
+                        next_node = str(hive.rpc.url) if hive.rpc else "No RPC"
+                    except Exception as e:
+                        logger.warning(
+                            f"{ICON} {start_block:,} Failed to rebuild Hive client during node failover: {e}",
+                            extra={"notification": False, "error": e},
+                        )
 
                 rpc_url = next_node
 

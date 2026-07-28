@@ -63,6 +63,8 @@ async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]
         while True:
             try:
                 yield await next_async(sync_iterator)
+            except WorkingNodeMissing:
+                raise
             except StopAsyncIteration:
                 return
             except AttributeError as log_error:
@@ -72,6 +74,8 @@ async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]
                 )
                 return
     except Exception as e:
+        if isinstance(e, WorkingNodeMissing):
+            raise
         try:
             logger.warning(
                 f"sync_to_async_iterable {e}", extra={"notification": False, "error": e}
