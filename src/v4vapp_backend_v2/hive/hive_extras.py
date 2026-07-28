@@ -864,8 +864,8 @@ async def send_custom_json(
 
 
 async def perform_transfer_checks(
-    from_account: AccName,
-    to_account: AccName,
+    from_account: AccName | str,
+    to_account: AccName | str,
     amount: Amount = Amount(amount="0.000 HIVE"),
     nobroadcast: bool = False,
 ) -> bool:
@@ -1094,7 +1094,9 @@ async def send_transfer(
         hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
     if hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
         raise ValueError("nobroadcast is not set to the same value as hive_client")
-    account: Account = Account(from_account, blockchain_instance=hive_client)
+    from nectar.account import Account as NectarAccount
+
+    account: NectarAccount = NectarAccount(from_account, blockchain_instance=hive_client)
     if not account:
         raise ValueError("Invalid account")
     try:
