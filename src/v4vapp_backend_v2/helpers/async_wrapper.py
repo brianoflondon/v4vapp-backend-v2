@@ -1,6 +1,7 @@
 import inspect
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
+from time import sleep
 from typing import Any, AsyncIterable, Callable, Iterator, TypeVar
 
 from asgiref.sync import sync_to_async as _sync_to_async
