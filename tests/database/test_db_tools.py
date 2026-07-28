@@ -5,6 +5,9 @@ import pytest
 from bson import Decimal128
 
 from v4vapp_backend_v2.database.db_tools import (
+    delete_expired_unsettled_invoices,
+    expired_unsettled_invoice_query,
+    find_expired_unsettled_invoices,
     find_nearest_by_timestamp,
     find_nearest_by_timestamp_server_side,
 )
@@ -305,3 +308,184 @@ async def test_find_nearest_only_before_or_after_server_side():
     res2 = await find_nearest_by_timestamp_server_side(coll2, target)
     assert res2 is not None
     assert res2["hive_usd"] == Decimal("2.0")
+
+
+# ---- Expired unsettled invoices (prune candidate finder) ----
+
+
+class _FakeDeleteResult:
+    def __init__(self, deleted_count: int):
+        self.deleted_count = deleted_count
+
+
+class FakeInvoiceCollection:
+    """Minimal async collection supporting find + sort + limit + delete_many for prune tests."""
+
+    def __init__(self, docs):
+        self.docs = list(docs)
+
+    def _matches(self, d, flt) -> bool:
+        for k, v in flt.items():
+            if isinstance(v, dict):
+                if "$lt" in v:
+                    field_val = d.get(k)
+                    if field_val is None or not (field_val < v["$lt"]):
+                        return False
+                elif "$lte" in v:
+                    field_val = d.get(k)
+                    if field_val is None or not (field_val <= v["$lte"]):
+                        return False
+                else:
+                    return False
+            else:
+                if d.get(k) != v:
+                    return False
+        return True
+
+    def find(self, flt):
+        matched = [d.copy() for d in self.docs if self._matches(d, flt)]
+        return FakeCursor(matched)
+
+    async def delete_many(self, flt):
+        keep = []
+        deleted = 0
+        for d in self.docs:
+            if self._matches(d, flt):
+                deleted += 1
+            else:
+                keep.append(d)
+        self.docs = keep
+        return _FakeDeleteResult(deleted)
+
+
+def test_expired_unsettled_invoice_query_cutoff():
+    as_of = datetime(2026, 7, 28, 12, 0, 0, tzinfo=timezone.utc)
+    q = expired_unsettled_invoice_query(as_of=as_of, retain_after_expiry=timedelta(days=1))
+    assert q["settle_index"] == 0
+    assert q["settled"] is False
+    assert q["expiry_date"]["$lt"] == datetime(2026, 7, 27, 12, 0, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_find_expired_unsettled_invoices_filters_correctly():
+    as_of = datetime(2026, 7, 28, 12, 0, 0, tzinfo=timezone.utc)
+    # Cutoff = as_of - 1 day = 2026-07-27 12:00 UTC
+    old_expired = {
+        "r_hash": "old",
+        "settle_index": 0,
+        "settled": False,
+        "expiry_date": datetime(2026, 7, 26, 0, 0, 0, tzinfo=timezone.utc),
+        "memo": "keep candidate",
+    }
+    recently_expired = {
+        "r_hash": "recent",
+        "settle_index": 0,
+        "settled": False,
+        "expiry_date": datetime(2026, 7, 27, 18, 0, 0, tzinfo=timezone.utc),  # within 24h
+        "memo": "too new",
+    }
+    settled = {
+        "r_hash": "paid",
+        "settle_index": 5,
+        "settled": True,
+        "expiry_date": datetime(2026, 7, 20, 0, 0, 0, tzinfo=timezone.utc),
+        "memo": "settled",
+    }
+    unsettled_but_settled_flag = {
+        "r_hash": "weird",
+        "settle_index": 0,
+        "settled": True,  # inconsistent but must not match
+        "expiry_date": datetime(2026, 7, 20, 0, 0, 0, tzinfo=timezone.utc),
+    }
+    not_expired_yet = {
+        "r_hash": "open",
+        "settle_index": 0,
+        "settled": False,
+        "expiry_date": datetime(2026, 7, 29, 0, 0, 0, tzinfo=timezone.utc),
+        "memo": "still valid",
+    }
+
+    coll = FakeInvoiceCollection([
+        old_expired,
+        recently_expired,
+        settled,
+        unsettled_but_settled_flag,
+        not_expired_yet,
+    ])
+
+    found = await find_expired_unsettled_invoices(
+        coll, as_of=as_of, retain_after_expiry=timedelta(days=1)
+    )
+    assert len(found) == 1
+    assert found[0]["r_hash"] == "old"
+
+
+@pytest.mark.asyncio
+async def test_find_expired_unsettled_invoices_respects_limit_and_sort():
+    as_of = datetime(2026, 7, 28, 12, 0, 0, tzinfo=timezone.utc)
+    docs = [
+        {
+            "r_hash": "b",
+            "settle_index": 0,
+            "settled": False,
+            "expiry_date": datetime(2026, 7, 25, 0, 0, 0, tzinfo=timezone.utc),
+        },
+        {
+            "r_hash": "a",
+            "settle_index": 0,
+            "settled": False,
+            "expiry_date": datetime(2026, 7, 24, 0, 0, 0, tzinfo=timezone.utc),
+        },
+        {
+            "r_hash": "c",
+            "settle_index": 0,
+            "settled": False,
+            "expiry_date": datetime(2026, 7, 26, 0, 0, 0, tzinfo=timezone.utc),
+        },
+    ]
+    coll = FakeInvoiceCollection(docs)
+    found = await find_expired_unsettled_invoices(
+        coll, as_of=as_of, retain_after_expiry=timedelta(days=1), limit=2
+    )
+    assert len(found) == 2
+    # sorted by expiry_date ascending
+    assert found[0]["r_hash"] == "a"
+    assert found[1]["r_hash"] == "b"
+
+
+@pytest.mark.asyncio
+async def test_delete_expired_unsettled_invoices():
+    as_of = datetime(2026, 7, 28, 12, 0, 0, tzinfo=timezone.utc)
+    coll = FakeInvoiceCollection([
+        {
+            "r_hash": "old",
+            "settle_index": 0,
+            "settled": False,
+            "expiry_date": datetime(2026, 7, 26, 0, 0, 0, tzinfo=timezone.utc),
+        },
+        {
+            "r_hash": "recent",
+            "settle_index": 0,
+            "settled": False,
+            "expiry_date": datetime(2026, 7, 27, 18, 0, 0, tzinfo=timezone.utc),
+        },
+        {
+            "r_hash": "paid",
+            "settle_index": 5,
+            "settled": True,
+            "expiry_date": datetime(2026, 7, 20, 0, 0, 0, tzinfo=timezone.utc),
+        },
+    ])
+
+    deleted = await delete_expired_unsettled_invoices(
+        coll, as_of=as_of, retain_after_expiry=timedelta(days=1)
+    )
+    assert deleted == 1
+    remaining = {d["r_hash"] for d in coll.docs}
+    assert remaining == {"recent", "paid"}
+
+    # Second pass should delete nothing more
+    deleted_again = await delete_expired_unsettled_invoices(
+        coll, as_of=as_of, retain_after_expiry=timedelta(days=1)
+    )
+    assert deleted_again == 0

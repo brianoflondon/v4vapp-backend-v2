@@ -36,6 +36,10 @@ lnd_config:
       macaroon_filename: info-read.safe-macaroon
       cert_filename: tls-fake.safe-cert
       # use_proxy: http://proxy.example.com:8888
+      # Optional exclusive index floors (ignore index <= value):
+      # start_add_index: 10
+      # start_settle_index: 5
+      # start_payment_index: 3
 
     example2:
       address: example.com:10009
@@ -45,6 +49,8 @@ lnd_config:
       macaroon_filename: info-read.safe-macaroon
       cert_filename: tls-fake.safe-cert
       use_proxy: http://proxy.example.com:8888
+      start_add_index: 42
+      start_payment_index: 7
 
 ########### TEST CONFIG NO SECRETS #################
 
