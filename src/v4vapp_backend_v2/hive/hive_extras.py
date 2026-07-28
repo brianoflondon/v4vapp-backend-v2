@@ -564,7 +564,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         The function logs the last node used by the Hive blockchain instance and any
         errors encountered.
     """
-    hive = get_hive_client()
+    hive = get_hive_client(node=["https://hapi.ecency.com", "https://api.hive.blog"])
     market = Market("HBD:HIVE", hive=hive)
     try:
         ticker = market.ticker()
