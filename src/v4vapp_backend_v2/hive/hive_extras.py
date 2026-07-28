@@ -867,8 +867,8 @@ async def send_custom_json(
 async def perform_transfer_checks(
     from_account: AccName | str,
     to_account: AccName | str,
-    # amount: Amount = Amount(amount="0.000 HIVE"),
-    # nobroadcast: bool = False,
+    amount: Amount = Amount(amount="0.000 HIVE"),
+    nobroadcast: bool = False,
 ) -> bool:
     """
     Perform full validations, raise errors if a failure
@@ -1104,8 +1104,8 @@ async def send_transfer(
         await perform_transfer_checks(
             from_account=from_account,
             to_account=to_account,
-            amount=amount,
-            nobroadcast=nobroadcast,
+            # amount=amount,
+            # nobroadcast=nobroadcast,
         )
     except HiveDevelopmentAccountError as e:
         logger.error(f"HiveDevelopmentAccountError: {e}")
