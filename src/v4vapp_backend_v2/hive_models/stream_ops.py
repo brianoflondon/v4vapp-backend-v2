@@ -85,9 +85,7 @@ async def stream_ops_async(
     use_threading = False
     max_batch_size: int | None = 180
 
-    good_nodes = get_good_nodes()
     hive = get_hive_client() if hive is None else hive
-    # hive.set_default_nodes(good_nodes)
     blockchain = get_blockchain_instance(hive_instance=hive)
     # This ensures the Transaction class has a hive instance with memo keys
     OpBase.hive_inst = hive

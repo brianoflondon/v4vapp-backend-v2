@@ -43,10 +43,10 @@ from v4vapp_backend_v2.process.lock_str_class import CustIDType
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 DEFAULT_GOOD_NODES = [
-    # "https://api.hive.blog",
-    # "https://api.deathwing.me",
+    "https://api.hive.blog",
+    "https://api.deathwing.me",
     "https://hive-api.arcange.eu",
-    # "https://api.openhive.network",
+    "https://api.openhive.network",
     "https://techcoderx.com",
     "https://api.c0ff33a.uk",
     "https://hiveapi.actifit.io",
@@ -57,10 +57,10 @@ BLOCK_STREAM_ONLY = ["https://rpc.podping.org/"]
 
 EXCLUDE_NODES = [
     # "https://rpc.mahdiyari.info",
-    "https://api.hive.blog",
-    "https://api.deathwing.me",
+    # "https://api.hive.blog",
+    # "https://api.deathwing.me",
     # "https://hive-api.arcange.eu",
-    "https://api.openhive.network",
+    # "https://api.openhive.network",
     # "https://techcoderx.com",
     # "https://api.c0ff33a.uk",
     # "https://hiveapi.actifit.io",
