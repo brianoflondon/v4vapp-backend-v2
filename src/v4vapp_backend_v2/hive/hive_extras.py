@@ -42,7 +42,7 @@ from v4vapp_backend_v2.process.lock_str_class import CustIDType
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 DEFAULT_GOOD_NODES = [
-    "https://api.hive.blog",
+    # "https://api.hive.blog",
     # "https://api.deathwing.me",
     "https://hive-api.arcange.eu",
     "https://api.openhive.network",
@@ -56,7 +56,7 @@ BLOCK_STREAM_ONLY = ["https://rpc.podping.org/"]
 
 EXCLUDE_NODES = [
     # "https://rpc.mahdiyari.info",
-    # "https://api.hive.blog",
+    "https://api.hive.blog",
     "https://api.deathwing.me",
     # "https://hive-api.arcange.eu",
     # "https://api.openhive.network",
