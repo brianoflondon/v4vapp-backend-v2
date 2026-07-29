@@ -116,11 +116,15 @@ def _next(it: Iterator[T]) -> T:
         )
         raise
     except NectarException as e:
-        if "Block " in str(e) and "does not exist" in str(e):
+        err = str(e)
+        if "Block " in err and "does not exist" in err:
             # Let stream-level retry logic handle lagging nodes consistently.
             raise
-        if "429" in str(e) or "Too Many Requests" in str(e):
+        if "429" in err or "Too Many Requests" in err:
             # Propagate so stream_ops can cooldown the node and rebuild.
+            raise
+        if "batched calls" in err.lower() or "BatchedCallsNotSupported" in type(e).__name__:
+            # Node cannot use max_batch_size — stream_ops should disable batching.
             raise
         logger.warning(
             f"Nectar Error in _next {e}",

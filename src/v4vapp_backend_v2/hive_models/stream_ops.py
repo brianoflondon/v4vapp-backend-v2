@@ -69,6 +69,16 @@ def _is_rate_limit_error(error: BaseException) -> bool:
     return "429" in text or "Too Many Requests" in text
 
 
+def _is_batch_not_supported_error(error: BaseException) -> bool:
+    """True when the RPC node rejects Nectar max_batch_size catch-up mode."""
+    text = str(error).lower()
+    return (
+        "batched calls" in text
+        or "batchedcallsnotsupported" in type(error).__name__.lower()
+        or "does not support batch" in text
+    )
+
+
 def _mark_node_cooldown(node: str | None, seconds: int = NODE_COOLDOWN_SECONDS) -> None:
     """Temporarily avoid a node after transport/rate-limit failures."""
     if not node:
@@ -242,6 +252,10 @@ async def stream_ops_async(
     # 180 was aggressive enough to 429 public nodes during multi-hour catch-up.
     max_batch_size: int | None = CATCHUP_BATCH_SIZE
     rate_limited_this_cycle = False
+    # Once any node rejects batch RPC, keep single-block mode for this stream
+    # session so we don't doom-loop re-enabling max_batch_size on restart.
+    batch_disabled = False
+    nodes_without_batch: set[str] = set()
 
     hive = get_hive_client() if hive is None else hive
     blockchain = get_blockchain_instance(hive_instance=hive)
@@ -408,7 +422,23 @@ async def stream_ops_async(
         except (NectarException, NumRetriesReached, UnhandledRPCError, WorkingNodeMissing) as e:
             error_text = str(e)
             sleep_for = 2.0
-            if _is_rate_limit_error(e) or isinstance(e, NumRetriesReached):
+            if _is_batch_not_supported_error(e):
+                # Runtime adaptation for catch-up: node rejects max_batch_size.
+                # Disable batching for the rest of this stream session and
+                # briefly deprioritize the node so failover can prefer others.
+                bad_batch_node = _extract_node_from_error(e) or rpc_url
+                nodes_without_batch.add(bad_batch_node)
+                _mark_node_cooldown(bad_batch_node, seconds=BLOCK_BEHIND_COOLDOWN_SECONDS)
+                batch_disabled = True
+                max_batch_size = None
+                logger.warning(
+                    f"{ICON} {start_block:,} {bad_batch_node} doesn't support batched calls; "
+                    f"disabling max_batch_size for this catch-up session "
+                    f"(no-batch nodes: {sorted(nodes_without_batch)})",
+                    extra={"notification": False, "error": e},
+                )
+                sleep_for = 0.2
+            elif _is_rate_limit_error(e) or isinstance(e, NumRetriesReached):
                 rate_limited_this_cycle = True
                 cooldown_node = _extract_node_from_error(e) or rpc_url
                 _mark_node_cooldown(cooldown_node, seconds=RATE_LIMIT_COOLDOWN_SECONDS)
@@ -448,7 +478,18 @@ async def stream_ops_async(
             logger.warning(f"{ICON} {start_block:,} TypeError in block_stream: {e} restarting")
             logger.exception(e)
         except Exception as e:
-            if _is_rate_limit_error(e):
+            if _is_batch_not_supported_error(e):
+                bad_batch_node = _extract_node_from_error(e) or rpc_url
+                nodes_without_batch.add(bad_batch_node)
+                _mark_node_cooldown(bad_batch_node, seconds=BLOCK_BEHIND_COOLDOWN_SECONDS)
+                batch_disabled = True
+                max_batch_size = None
+                logger.warning(
+                    f"{ICON} {start_block:,} {bad_batch_node} doesn't support batched calls; "
+                    f"disabling batch catch-up",
+                    extra={"notification": False, "error": e},
+                )
+            elif _is_rate_limit_error(e):
                 rate_limited_this_cycle = True
                 cooldown_node = _extract_node_from_error(e) or rpc_url
                 _mark_node_cooldown(cooldown_node, seconds=RATE_LIMIT_COOLDOWN_SECONDS)
@@ -473,26 +514,29 @@ async def stream_ops_async(
                 )
                 break
             else:
-                # Keep batched catch-up, but throttle after rate limits.
-                max_batch_size = (
-                    CATCHUP_BATCH_SIZE_AFTER_RATE_LIMIT
-                    if rate_limited_this_cycle
-                    else CATCHUP_BATCH_SIZE
-                )
+                # Resume batch policy: never re-enable after batch_disabled.
+                if batch_disabled:
+                    max_batch_size = None
+                elif rate_limited_this_cycle:
+                    max_batch_size = CATCHUP_BATCH_SIZE_AFTER_RATE_LIMIT
+                else:
+                    max_batch_size = CATCHUP_BATCH_SIZE
                 # Resume from the last successfully processed block, not the
                 # original session start (which would re-scan a large range).
                 if last_block and last_block > start_block:
                     start_block = last_block
                 logger.info(
-                    f"{ICON} {start_block:,} Stream restarting from {last_block=:,} {rpc_url}"
+                    f"{ICON} {start_block:,} Stream restarting from {last_block=:,} "
+                    f"batch={max_batch_size} {rpc_url}"
                 )
             restart_count += 1
             current_node = rpc_url
             next_node = current_node
             try:
-                if rate_limited_this_cycle:
-                    # Always rebuild after rate-limit / empty pool: drop
-                    # cooldowned nodes so Nectar cannot pick least-bad 429 host.
+                # Rebuild when rate-limited OR when current node can't batch
+                # (so we rotate to a node that might still support batch).
+                need_rebuild = rate_limited_this_cycle or bool(nodes_without_batch)
+                if need_rebuild:
                     hive = _build_stream_hive_client(current_node, required_block=last_block)
                     rate_limited_this_cycle = False
                 else:
@@ -513,7 +557,7 @@ async def stream_ops_async(
 
             rpc_url = next_node
 
-            if current_node == rpc_url:
+            if current_node == rpc_url and not batch_disabled:
                 backoff_seconds = min(MAX_RESTART_BACKOFF_SECONDS, 0.5 * restart_count)
                 logger.warning(
                     f"{ICON} {start_block:,} Still on {current_node}; sleeping {backoff_seconds:.1f}s before retry",
@@ -522,7 +566,8 @@ async def stream_ops_async(
                 await asyncio.sleep(backoff_seconds)
 
             logger.info(
-                f"{ICON} {start_block:,} Resuming stream via {rpc_url} (was {current_node})",
+                f"{ICON} {start_block:,} Resuming stream via {rpc_url} (was {current_node}) "
+                f"batch={max_batch_size}",
                 extra={"notification": False},
             )
 
