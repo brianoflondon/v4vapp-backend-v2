@@ -527,7 +527,8 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
         # Exit loop on cancellation
         return
     except Exception as e:
-        logger.exception(f"{ICON} {e}", extra={"notification": False, "exc_info": True})
+        # Do not put exc_info in extra — logger.exception already sets it (LogRecord reserved).
+        logger.exception(f"{ICON} {e}", extra={"notification": False})
         raise e
     finally:
         logger.info(
@@ -553,7 +554,7 @@ async def witness_check_startup() -> None:
     except Exception as e:
         logger.exception(
             f"{ICON} Error in Witness Check startup {e}",
-            extra={"notification": False, "exc_info": True},
+            extra={"notification": False},
         )
         raise e
 
@@ -834,7 +835,8 @@ async def all_ops_loop(
             )
         except Exception as e:
             loop_error = True
-            logger.exception(f"{ICON} {e}", extra={"notification": False, "exc_info": True})
+            # Do not put exc_info in extra — logger.exception already sets it (LogRecord reserved).
+            logger.exception(f"{ICON} {e}", extra={"notification": False})
             # Do not re-raise: outer loop rebuilds a fresh client and resumes.
         finally:
             # Best-effort close of the async generator (does not stop zombie next() threads).

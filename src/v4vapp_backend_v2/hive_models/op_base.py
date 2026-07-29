@@ -461,10 +461,11 @@ class OpBase(TrackedBaseModel):
                     else:
                         last_good_block = global_properties["head_block_number"]
                 except Exception as e:
-                    logger.exception(f"{e}", extra={"notification": True, "exc_info": True})
+                    # Do not put exc_info in extra — logger.exception already sets it.
+                    logger.exception(f"{e}", extra={"notification": True})
                     last_good_block = 103468945
             return last_good_block
 
         except Exception as e:
-            logger.exception(f"{e}", extra={"notification": True, "exc_info": True})
+            logger.exception(f"{e}", extra={"notification": True})
             raise e
