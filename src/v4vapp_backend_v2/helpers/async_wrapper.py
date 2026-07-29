@@ -60,28 +60,42 @@ def sync_to_async(
         return wrapper_fn
 
 
+def _should_propagate_stream_error(error: BaseException) -> bool:
+    """Errors that stream_ops must see (do not swallow as clean end-of-stream)."""
+    if isinstance(error, (NumRetriesReached, WorkingNodeMissing, NectarException)):
+        return True
+    text = str(error)
+    if "429" in text or "Too Many Requests" in text:
+        return True
+    if "batched calls" in text.lower():
+        return True
+    return False
+
+
 async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]:
     try:
         sync_iterator: Iterator[T] = await iter_async(sync_iterable)
         while True:
             try:
                 yield await next_async(sync_iterator)
-            except NumRetriesReached:
-                raise
-            except WorkingNodeMissing:
-                raise
             except StopAsyncIteration:
                 return
-            except AttributeError as log_error:
-                logger.error(
-                    f"Logging error: {log_error} - problem with str in log level",
-                    extra={"notification": False},
+            except Exception as e:
+                if _should_propagate_stream_error(e):
+                    raise
+                if isinstance(e, AttributeError):
+                    logger.error(
+                        f"Logging error: {e} - problem with str in log level",
+                        extra={"notification": False},
+                    )
+                    return
+                # Unexpected: log and end stream (legacy behaviour).
+                logger.warning(
+                    f"sync_to_async_iterable {e}", extra={"notification": False, "error": e}
                 )
                 return
     except Exception as e:
-        if isinstance(e, NumRetriesReached):
-            raise
-        if isinstance(e, WorkingNodeMissing):
+        if _should_propagate_stream_error(e):
             raise
         try:
             logger.warning(

@@ -312,6 +312,16 @@ async def stream_ops_async(
     while last_block is not None and stop_block is not None and last_block < stop_block:
         await maybe_refresh_quote()
         rpc_url = str(hive.rpc.url) if hive and hive.rpc else "No RPC"
+        # Near head (live / small gap): never use batched get_block_range — some
+        # public nodes reject it and near-head batching buys almost nothing.
+        effective_batch = None if batch_disabled else max_batch_size
+        if effective_batch is not None:
+            try:
+                head_now = blockchain.get_current_block_num()
+                if head_now - start_block < effective_batch:
+                    effective_batch = None
+            except Exception:
+                effective_batch = None
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(
@@ -320,13 +330,13 @@ async def stream_ops_async(
                     stop=stop_block,
                     only_virtual_ops=only_virtual_ops,
                     opNames=opNames,
-                    max_batch_size=max_batch_size,
+                    max_batch_size=effective_batch,
                     threading=use_threading,
                 )
             )
             logger.info(
                 f"{ICON} Starting Hive scanning at {start_block:,} {start_time:%Y-%m-%d %H:%M:%S} Ending at {stop_block:,} "
-                f"using {rpc_url} no_preview",
+                f"using {rpc_url} batch={effective_batch} no_preview",
                 extra={
                     "error_code_clear": "stream_restart",
                     "notification": False,
@@ -367,7 +377,8 @@ async def stream_ops_async(
                             stop=last_block - 1,
                             raw_ops=False,
                             only_virtual_ops=True,
-                            max_batch_size=max_batch_size,
+                            # Single-block virtual fetch never needs batching.
+                            max_batch_size=None,
                             # Very subtle problem with op_in_trx counter if we filter for opNames here.
                             # opNames=opNames,      # we must filter them after updating op_in_trx counter
                             threading=use_threading,
