@@ -216,6 +216,37 @@ def default_hive_nodes(stream_only: bool = False) -> List[str]:
     return nodes
 
 
+# Nectar defaults are timeout=60s and num_retries=100 — a single dead-pool call can
+# block the caller for tens of minutes. Streaming/monitor paths must fail fast so
+# our outer recovery loop can rotate nodes and keep the event loop healthy.
+STREAM_HIVE_TIMEOUT = 12
+STREAM_HIVE_NUM_RETRIES = 5
+STREAM_HIVE_NUM_RETRIES_CALL = 2
+
+
+def stream_hive_kwargs(stream_only: bool = False) -> Dict[str, Any]:
+    """Keyword args for a fail-fast Nectar ``Hive`` used by long-running streams."""
+    return {
+        "node": default_hive_nodes(stream_only=stream_only),
+        "timeout": STREAM_HIVE_TIMEOUT,
+        "num_retries": STREAM_HIVE_NUM_RETRIES,
+        "num_retries_call": STREAM_HIVE_NUM_RETRIES_CALL,
+    }
+
+
+def make_stream_hive(keys: Any = None, stream_only: bool = False) -> Hive:
+    """
+    Build a Hive client for block streaming / hive_monitor.
+
+    Uses short per-request timeouts and few retries so RPC failures surface to
+    stream_ops quickly instead of freezing the process on Nectar's defaults.
+    """
+    kwargs = stream_hive_kwargs(stream_only=stream_only)
+    if keys:
+        kwargs["keys"] = keys
+    return Hive(**kwargs)
+
+
 def get_hive_client(
     stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs
 ) -> Hive:

@@ -4,13 +4,15 @@ Async Hive operation streaming.
 Wraps Nectar's synchronous ``Blockchain.stream`` with async iteration and
 resumes after failures using Nectar's built-in node rotation (``rpc.next()``).
 
-Node health, retries, and working-node selection are left to Nectar
-(``Hive`` + ``default_hive_nodes()``). This module only:
+Critical design notes (learned the hard way):
 
-- computes start/stop block ranges
-- interleaves real and virtual ops
-- validates events into Op models
-- restarts the stream from the last processed block after errors/timeouts
+- Nectar defaults (timeout=60s, num_retries=100) can block a single RPC for
+  tens of minutes. Streaming always uses fail-fast Hive settings.
+- ``asyncio.wait_for`` on stream items does **not** cancel the worker thread
+  that is inside ``next()``. Recovery must not also call Nectar sync RPCs on
+  the event-loop thread, or the process freezes while looking "alive"
+  (quotes/witness heartbeats continue on other tasks only after the block ends).
+- All recovery RPCs run via ``asyncio.to_thread`` with a hard asyncio budget.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import re
 from datetime import datetime, timedelta, timezone
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Callable, TypeVar
 
 from nectar.blockchain import Blockchain
 from nectar.exceptions import NectarException
@@ -29,8 +31,8 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import (
-    default_hive_nodes,
     get_blockchain_instance,
+    make_stream_hive,
 )
 from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_data
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
@@ -41,12 +43,18 @@ ICON = "🔗"
 
 # Hive blocks ~3s; filtered streams can be quiet for several blocks.
 STREAM_TIMEOUT_SECONDS = 15
+# Hard budget for any single sync Nectar call run in a worker thread.
+# Must be > (timeout * small retry count) so real failovers can finish, but
+# far below Nectar's default multi-hour worst case.
+SYNC_RPC_BUDGET_SECONDS = 45
 MAX_RESTART_BACKOFF_SECONDS = 8
 # Catch-up only: far-behind scans may use batched get_block_range when the node
 # supports it. Live / near-head always uses max_batch_size=None.
 CATCHUP_BATCH_SIZE = 50
 CATCHUP_NEAR_HEAD_BLOCKS = 50
 QUOTE_REFRESH_MIN_INTERVAL_SECONDS = 30
+
+T = TypeVar("T")
 
 
 def _is_rate_limit_error(error: BaseException) -> bool:
@@ -107,20 +115,63 @@ def _nectar_rotate_node(hive: Hive | None, *, disable_current: bool = True) -> s
 
 def _rebuild_hive_client(hive: Hive | None) -> tuple[Hive, Blockchain]:
     """
-    Build a fresh Hive client from the good-node list when the current pool is dead.
+    Build a fresh fail-fast Hive client when the current pool is dead.
 
     Preserves memo keys from the previous client when available.
     """
     keys = None
     if hive is not None:
         keys = getattr(hive, "keys", None) or None
-    if keys:
-        new_hive = Hive(keys=keys, node=default_hive_nodes())
-    else:
-        new_hive = Hive(node=default_hive_nodes())
+    new_hive = make_stream_hive(keys=keys)
     blockchain = get_blockchain_instance(hive_instance=new_hive)
     OpBase.hive_inst = new_hive
     return new_hive, blockchain
+
+
+def _ensure_stream_hive(hive: Hive | None) -> Hive:
+    """Use fail-fast settings; rebuild if caller passed a default (slow) client."""
+    if hive is None:
+        return make_stream_hive()
+    timeout = getattr(getattr(hive, "rpc", None), "timeout", None)
+    # Already fail-fast enough — keep connection/pool state.
+    # Non-numeric timeout (mocks/tests): trust the provided client.
+    try:
+        if timeout is not None and float(timeout) <= 20:
+            return hive
+        if timeout is None:
+            # Unknown client shape (tests/mocks) — do not replace.
+            return hive
+    except (TypeError, ValueError):
+        return hive
+    keys = getattr(hive, "keys", None) or None
+    logger.info(
+        f"{ICON} Replacing Hive client (timeout={timeout}) with fail-fast stream settings",
+        extra={"notification": False},
+    )
+    return make_stream_hive(keys=keys)
+
+
+async def _run_sync(
+    fn: Callable[..., T],
+    *args: Any,
+    timeout: float = SYNC_RPC_BUDGET_SECONDS,
+    label: str = "rpc",
+    **kwargs: Any,
+) -> T:
+    """Run a blocking Nectar call off the event loop with a hard timeout."""
+
+    def _call() -> T:
+        return fn(*args, **kwargs)
+
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_call), timeout=timeout)
+    except asyncio.TimeoutError as e:
+        logger.warning(
+            f"{ICON} Sync {label} timed out after {timeout:.0f}s "
+            f"(Nectar was still retrying in a worker thread)",
+            extra={"notification": False, "error_code": "stream_restart"},
+        )
+        raise asyncio.TimeoutError(f"{label} timed out after {timeout:.0f}s") from e
 
 
 class SwitchToLiveStream(Exception):
@@ -143,12 +194,12 @@ async def stream_ops_async(
 
     Failover strategy (intentionally thin):
       1. Prefer ``hive.rpc.next()`` so Nectar's node pool picks the next node.
-      2. On WorkingNodeMissing / exhausted pool, rebuild via Nectar ``Hive``.
+      2. On WorkingNodeMissing / exhausted pool, rebuild via fail-fast ``Hive``.
       3. Resume from the last successfully processed block number.
 
     Virtual ops are streamed per preceding real-op block so op_in_trx counters stay correct.
     """
-    hive = Hive(node=default_hive_nodes()) if hive is None else hive
+    hive = _ensure_stream_hive(hive)
     blockchain = get_blockchain_instance(hive_instance=hive)
     OpBase.hive_inst = hive
 
@@ -158,14 +209,33 @@ async def stream_ops_async(
     else:
         only_virtual_ops = False
 
-    current_block = blockchain.get_current_block_num()
+    try:
+        current_block = await _run_sync(
+            blockchain.get_current_block_num, label="get_current_block_num"
+        )
+    except Exception as e:
+        logger.warning(
+            f"{ICON} get_current_block_num failed at stream start: {e}; rebuilding client",
+            extra={"notification": False, "error": e, "error_code": "stream_restart"},
+        )
+        hive, blockchain = await _run_sync(
+            _rebuild_hive_client, hive, label="rebuild_hive_client"
+        )
+        current_block = await _run_sync(
+            blockchain.get_current_block_num, label="get_current_block_num"
+        )
+
     time_now = datetime.now(tz=timezone.utc)
     start_time = time_now
 
     if look_back:
         start_time = time_now - look_back
         try:
-            start_block = blockchain.get_estimated_block_num(start_time)
+            start_block = await _run_sync(
+                blockchain.get_estimated_block_num,
+                start_time,
+                label="get_estimated_block_num",
+            )
         except Exception as e:
             start_block = current_block - int(look_back.total_seconds() / 3)
             logger.warning(
@@ -196,14 +266,27 @@ async def stream_ops_async(
             seconds=QUOTE_REFRESH_MIN_INTERVAL_SECONDS
         ):
             return
-        await TrackedBaseModel.update_quote()
+        try:
+            await asyncio.wait_for(
+                TrackedBaseModel.update_quote(),
+                timeout=SYNC_RPC_BUDGET_SECONDS,
+            )
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Quote refresh failed (continuing stream): {e}",
+                extra={"notification": False},
+            )
         last_quote_refresh_at = now
 
-    def choose_batch_size() -> int | None:
+    async def choose_batch_size() -> int | None:
         if batch_disabled or only_virtual_ops:
             return None
         try:
-            head_now = blockchain.get_current_block_num()
+            head_now = await _run_sync(
+                blockchain.get_current_block_num,
+                timeout=min(20.0, SYNC_RPC_BUDGET_SECONDS),
+                label="choose_batch_size/head",
+            )
         except Exception:
             return None
         gap = head_now - start_block
@@ -211,13 +294,28 @@ async def stream_ops_async(
             return CATCHUP_BATCH_SIZE
         return None
 
+    async def close_async_stream(agen: Any) -> None:
+        """Best-effort close; abandoned next() threads may still run until Nectar exits."""
+        aclose = getattr(agen, "aclose", None)
+        if aclose is None:
+            return
+        try:
+            await asyncio.wait_for(aclose(), timeout=2.0)
+        except Exception:
+            pass
+
     while last_block is not None and stop_block is not None and last_block < stop_block:
         stream_ended_cleanly = False
         await maybe_refresh_quote()
         rpc_url = _rpc_url(hive)
-        effective_batch = choose_batch_size()
+        try:
+            effective_batch = await choose_batch_size()
+        except asyncio.TimeoutError:
+            effective_batch = None
+        async_stream_real = None
         try:
             op_in_trx_counter = OpInTrxCounter()
+            # blockchain.stream() only builds a generator; first network I/O is on next().
             async_stream_real = sync_to_async_iterable(
                 blockchain.stream(
                     start=start_block,
@@ -252,9 +350,12 @@ async def stream_ops_async(
                 except asyncio.TimeoutError:
                     logger.warning(
                         f"{ICON} {start_block:,} Stream idle >{STREAM_TIMEOUT_SECONDS}s "
-                        f"on {rpc_url}; rotating node",
+                        f"on {rpc_url}; rotating node "
+                        f"(in-flight next() may still retry in a worker thread)",
                         extra={"notification": False, "error_code": "stream_restart"},
                     )
+                    await close_async_stream(async_stream_real)
+                    async_stream_real = None
                     raise
 
                 # Interleave virtual ops for the previous block when the stream advances.
@@ -264,7 +365,7 @@ async def stream_ops_async(
                     and hive_event["block_num"] <= stop_block
                 ):
                     start_block = last_block
-                    async for virtual_event in sync_to_async_iterable(
+                    virtual_stream = sync_to_async_iterable(
                         blockchain.stream(
                             start=last_block - 1,
                             stop=last_block - 1,
@@ -273,24 +374,35 @@ async def stream_ops_async(
                             max_batch_size=None,
                             threading=False,
                         )
-                    ):
-                        last_block = hive_event.get("block_num", start_block)
-                        try:
-                            op_virtual_base = op_any_or_base(virtual_event)
-                        except ValueError as e:
-                            logger.warning(
-                                f"{ICON} ValidationError virtual "
-                                f"{virtual_event.get('block_num')} "
-                                f"{virtual_event.get('trx_id')}: {e}",
-                                extra={
-                                    "notification": True,
-                                    "virtual_event": virtual_event,
-                                },
-                            )
-                            continue
-                        op_in_trx_counter.op_in_trx_inc(op_virtual_base)
-                        if op_virtual_base.op_type in opNames:
-                            yield op_virtual_base
+                    )
+                    try:
+                        async with asyncio.timeout(SYNC_RPC_BUDGET_SECONDS):
+                            async for virtual_event in virtual_stream:
+                                last_block = hive_event.get("block_num", start_block)
+                                try:
+                                    op_virtual_base = op_any_or_base(virtual_event)
+                                except ValueError as e:
+                                    logger.warning(
+                                        f"{ICON} ValidationError virtual "
+                                        f"{virtual_event.get('block_num')} "
+                                        f"{virtual_event.get('trx_id')}: {e}",
+                                        extra={
+                                            "notification": True,
+                                            "virtual_event": virtual_event,
+                                        },
+                                    )
+                                    continue
+                                op_in_trx_counter.op_in_trx_inc(op_virtual_base)
+                                if op_virtual_base.op_type in opNames:
+                                    yield op_virtual_base
+                    except TimeoutError:
+                        logger.warning(
+                            f"{ICON} {start_block:,} Virtual-ops stream timed out "
+                            f"on {_rpc_url(hive)}; continuing with real ops",
+                            extra={"notification": False, "error_code": "stream_restart"},
+                        )
+                    finally:
+                        await close_async_stream(virtual_stream)
 
                 if not filter_custom_json and not custom_json_test_data(hive_event):
                     continue
@@ -397,6 +509,9 @@ async def stream_ops_async(
                 )
                 await asyncio.sleep(1.0)
         finally:
+            if async_stream_real is not None:
+                await close_async_stream(async_stream_real)
+
             if last_block >= stop_block:
                 logger.info(
                     f"{ICON} {start_block:,} Reached stop block {stop_block:,}, stopping."
@@ -418,21 +533,42 @@ async def stream_ops_async(
 
             previous_node = rpc_url
             need_rebuild = False
+            next_url = previous_node
+            logger.info(
+                f"{ICON} {start_block:,} Recovering stream (last_block={last_block:,}, "
+                f"was {previous_node})…",
+                extra={"notification": False},
+            )
             try:
-                # Disable stuck node, then let Nectar pick another.
-                next_url = _nectar_rotate_node(hive, disable_current=True)
+                # Disable stuck node, then let Nectar pick another — off the event loop.
+                next_url = await _run_sync(
+                    _nectar_rotate_node,
+                    hive,
+                    disable_current=True,
+                    timeout=min(20.0, SYNC_RPC_BUDGET_SECONDS),
+                    label="nectar_rotate_node",
+                )
                 working = 0
                 if hive is not None and getattr(hive, "rpc", None) is not None:
                     working = getattr(hive.rpc.nodes, "working_nodes_count", 0) or 0
                 if working == 0 or next_url == previous_node:
                     need_rebuild = True
-            except Exception:
+            except Exception as e:
                 need_rebuild = True
                 next_url = previous_node
+                logger.warning(
+                    f"{ICON} {start_block:,} Rotate failed ({e}); will rebuild client",
+                    extra={"notification": False},
+                )
 
             if need_rebuild:
                 try:
-                    hive, blockchain = _rebuild_hive_client(hive)
+                    hive, blockchain = await _run_sync(
+                        _rebuild_hive_client,
+                        hive,
+                        timeout=SYNC_RPC_BUDGET_SECONDS,
+                        label="rebuild_hive_client",
+                    )
                     next_url = _rpc_url(hive)
                     logger.info(
                         f"{ICON} {start_block:,} Rebuilt Hive client → {next_url}",
@@ -478,7 +614,7 @@ def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
 async def main() -> None:
     opNames: list[str] = []
     count = 0
-    hive = Hive(node=["https://rpc.podping.org"])
+    hive = make_stream_hive()
     async for op in stream_ops_async(
         opNames=opNames, look_back=timedelta(days=1), stop_now=True, hive=hive
     ):
