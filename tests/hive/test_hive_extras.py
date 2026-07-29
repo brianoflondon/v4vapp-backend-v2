@@ -27,6 +27,20 @@ async def mock_pending_custom_json():
         yield mock_class
 
 
+def test_get_blockchain_instance_binds_hive_instance():
+    """Blockchain must use the Hive we pass, not the process-global shared instance."""
+    fake_hive = MagicMock(name="Hive")
+    with patch("v4vapp_backend_v2.hive.hive_extras.Blockchain") as mock_blockchain:
+        mock_blockchain.return_value = MagicMock(blockchain=fake_hive)
+        result = get_blockchain_instance(hive_instance=fake_hive)
+        mock_blockchain.assert_called_once_with(
+            blockchain_instance=fake_hive,
+            mode="head",
+            max_block_wait_repetition=None,
+        )
+        assert result.blockchain is fake_hive
+
+
 @pytest.mark.asyncio
 async def test_call_hive_internal_market():
     answer = await call_hive_internal_market()

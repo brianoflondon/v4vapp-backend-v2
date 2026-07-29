@@ -140,6 +140,39 @@ def _build_stream_hive_client(current_node: str, required_block: int = 0) -> Hiv
     return get_hive_client(node=good_nodes, keys=memo_keys)
 
 
+def _refresh_hive_node_pool(hive: Hive | None) -> bool:
+    """
+    Force Nectar's NodePoolManager to re-probe nodes on an existing Hive client.
+
+    Returns True if a pool manager was found and update_pool() was called.
+    Prefer this over building a new Hive client: Blockchain must stay bound to
+    the same instance via get_blockchain_instance(hive_instance=...).
+    """
+    if hive is None or getattr(hive, "rpc", None) is None:
+        return False
+    nodes = getattr(hive.rpc, "nodes", None)
+    if nodes is None:
+        return False
+    pool_manager = getattr(nodes, "pool_manager", None)
+    if pool_manager is None:
+        return False
+    try:
+        pool_manager.update_pool()
+        working = getattr(nodes, "working_nodes_count", 0) or 0
+        active = pool_manager.get_active_node()
+        logger.info(
+            f"{ICON} Refreshed node pool: working={working} active={getattr(active, 'url', active)}",
+            extra={"notification": False},
+        )
+        return True
+    except Exception as e:
+        logger.warning(
+            f"{ICON} Failed to refresh Hive node pool: {e}",
+            extra={"notification": False, "error": e},
+        )
+        return False
+
+
 class SwitchToLiveStream(Exception):
     """
     Exception to indicate that the stream should switch to live mode.
@@ -369,11 +402,15 @@ async def stream_ops_async(
                     f"{ICON} {start_block:,} Cooling down rate-limited node {cooldown_node}",
                     extra={"notification": False, "error": e},
                 )
-            elif "No working nodes available" in error_text:
-                # The current node is very likely unhealthy for this process right now.
-                _mark_node_cooldown(rpc_url)
-
-            if re.search(r"Block \d+ does not exist", str(e)):
+            elif isinstance(e, WorkingNodeMissing) or "No working nodes available" in error_text:
+                # Prefer reviving the existing client's pool over building throwaway
+                # Hive instances that used to never get bound to Blockchain.
+                _refresh_hive_node_pool(hive)
+                logger.warning(
+                    f"{ICON} {start_block:,} No working nodes on {rpc_url}; refreshed pool",
+                    extra={"notification": False, "error": e, "error_code": "stream_restart"},
+                )
+            elif re.search(r"Block \d+ does not exist", error_text):
                 _mark_node_cooldown(rpc_url, seconds=BLOCK_BEHIND_COOLDOWN_SECONDS)
                 logger.info(f"{ICON} {start_block:,} Refetch {last_block:,}. Try Again. {rpc_url}")
             else:
@@ -407,6 +444,10 @@ async def stream_ops_async(
                 break
             else:
                 max_batch_size = None
+                # Resume from the last successfully processed block, not the
+                # original session start (which would re-scan a large range).
+                if last_block and last_block > start_block:
+                    start_block = last_block
                 logger.info(
                     f"{ICON} {start_block:,} Stream restarting from {last_block=:,} {rpc_url}"
                 )
@@ -414,13 +455,22 @@ async def stream_ops_async(
             current_node = rpc_url
             next_node = current_node
             try:
-                hive = _build_stream_hive_client(current_node, required_block=last_block)
+                # First try: revive the pool on the existing Hive client and
+                # re-bind Blockchain correctly (blockchain_instance=).
+                refreshed = _refresh_hive_node_pool(hive)
+                working = 0
+                if hive is not None and getattr(hive, "rpc", None) is not None:
+                    working = getattr(hive.rpc.nodes, "working_nodes_count", 0) or 0
+                if not refreshed or working == 0:
+                    # Fall back to a new multi-node client only when the pool
+                    # is still empty after a forced health probe.
+                    hive = _build_stream_hive_client(current_node, required_block=last_block)
                 blockchain = get_blockchain_instance(hive_instance=hive)
                 OpBase.hive_inst = hive
                 next_node = str(hive.rpc.url) if hive.rpc else "No RPC"
             except Exception as e:
                 logger.warning(
-                    f"{ICON} {start_block:,} Failed to rebuild Hive client during node failover: {e}",
+                    f"{ICON} {start_block:,} Failed to recover Hive client during failover: {e}",
                     extra={"notification": False, "error": e},
                 )
 
@@ -429,13 +479,13 @@ async def stream_ops_async(
             if current_node == rpc_url:
                 backoff_seconds = min(MAX_RESTART_BACKOFF_SECONDS, 0.5 * restart_count)
                 logger.warning(
-                    f"{ICON} {start_block:,} Node switch remained on {current_node}; sleeping {backoff_seconds:.1f}s before retry",
+                    f"{ICON} {start_block:,} Still on {current_node}; sleeping {backoff_seconds:.1f}s before retry",
                     extra={"notification": False, "error_code": "stream_restart"},
                 )
                 await asyncio.sleep(backoff_seconds)
 
             logger.info(
-                f"{ICON} {start_block:,} Switching {current_node} -> {rpc_url}",
+                f"{ICON} {start_block:,} Resuming stream via {rpc_url} (was {current_node})",
                 extra={"notification": False},
             )
 

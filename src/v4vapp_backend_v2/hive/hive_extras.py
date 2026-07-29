@@ -264,17 +264,31 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
 
 def get_blockchain_instance(*args, **kwargs) -> Blockchain:
     """
-    Create a Blockchain instance.
-    """
-    if "hive_instance" not in kwargs:
-        kwargs["hive"] = get_hive_client(*args, **kwargs)
-        kwargs["mode"] = kwargs.get("mode", "head")
-        blockchain = Blockchain(*args, **kwargs)
-    else:
-        kwargs["mode"] = "head"
-        blockchain = Blockchain(*args, **kwargs)
+    Create a Blockchain instance bound to a Hive client.
 
-    return blockchain
+    Accepts either ``hive_instance=`` or ``hive=`` (or creates a client via
+    ``get_hive_client``). Must pass ``blockchain_instance=`` to Nectar's
+    ``Blockchain`` — ``hive_instance`` is ignored by Nectar and would silently
+    fall back to the process-global shared Hive (whose node pool can be dead
+    while a freshly built client is healthy).
+    """
+    hive = kwargs.pop("hive_instance", None) or kwargs.pop("hive", None)
+    if hive is None:
+        # Avoid passing Blockchain-only kwargs into get_hive_client.
+        hive_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k
+            not in {"mode", "max_block_wait_repetition", "data_refresh_time_seconds"}
+        }
+        hive = get_hive_client(*args, **hive_kwargs)
+    mode = kwargs.pop("mode", "head")
+    max_block_wait_repetition = kwargs.pop("max_block_wait_repetition", None)
+    return Blockchain(
+        blockchain_instance=hive,
+        mode=mode,
+        max_block_wait_repetition=max_block_wait_repetition,
+    )
 
 
 def get_good_nodes() -> List[str]:
