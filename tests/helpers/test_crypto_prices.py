@@ -20,6 +20,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
     HiveInternalMarket,
     QuoteResponse,
 )
+from v4vapp_backend_v2.hive import hive_extras
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +32,10 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
         test_config_logging_path,
     )
+    # Reset in-memory Hive internal market state to keep tests isolated.
+    hive_extras._hive_internal_market_cooldown_until = None
+    hive_extras._hive_internal_market_last_success = None
+    hive_extras._hive_internal_market_last_success_at = None
     yield
     InternalConfig().shutdown()  # Ensure proper cleanup after tests
     # No need to restore the original value, monkeypatch will handle it
