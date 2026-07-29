@@ -1147,7 +1147,7 @@ wheels = [
 [[package]]
 name = "hive-nectar"
 version = "1.0.4"
-source = { git = "https://github.com/brianoflondon/hive-nectar.git?rev=95da569835ec3f31e85d5c2c489dfd101e4cbf85#95da569835ec3f31e85d5c2c489dfd101e4cbf85" }
+source = { git = "https://github.com/brianoflondon/hive-nectar.git?branch=fix%2Fmissing-account-import#fd1199f029227489f0d9f2394c3da9fafa263d11" }
 dependencies = [
     { name = "asn1crypto" },
     { name = "click" },
@@ -3819,7 +3819,7 @@ requires-dist = [
     { name = "googleapis-common-protos", specifier = ">=1.62.0" },
     { name = "grpcio", specifier = ">=1.74.0" },
     { name = "grpcio-tools", specifier = ">=1.74.0" },
-    { name = "hive-nectar", git = "https://github.com/brianoflondon/hive-nectar.git?rev=95da569835ec3f31e85d5c2c489dfd101e4cbf85" },
+    { name = "hive-nectar", git = "https://github.com/brianoflondon/hive-nectar.git?branch=fix%2Fmissing-account-import" },
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "packaging", specifier = ">=25.0" },
     { name = "pandas", specifier = ">=3.0.0" },

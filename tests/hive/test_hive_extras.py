@@ -4,7 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from v4vapp_backend_v2.hive.hive_extras import (
+    EXCLUDE_NODES,
     CustomJsonSendError,
+    _filter_excluded_nodes,
     account_hive_balances,
     account_hive_balances_async,
     call_hive_internal_market,
@@ -39,6 +41,31 @@ def test_get_blockchain_instance_binds_hive_instance():
             max_block_wait_repetition=None,
         )
         assert result.blockchain is fake_hive
+
+
+def test_filter_excluded_nodes_drops_mahdiyari():
+    keep = "https://api.hive.blog"
+    nodes = [keep, *list(EXCLUDE_NODES)]
+    filtered = _filter_excluded_nodes(nodes)
+    for excluded in EXCLUDE_NODES:
+        assert excluded not in filtered
+    assert keep in filtered
+
+
+def test_get_hive_client_filters_explicit_node_list():
+    """Caller-supplied node lists must still honor EXCLUDE_NODES."""
+    # Pair a known-excluded host with a normally-allowed one.
+    excluded = next(iter(EXCLUDE_NODES))
+    keep = "https://api.c0ff33a.uk"
+    assert keep not in EXCLUDE_NODES
+    nodes = [excluded, keep]
+    fake_hive = MagicMock(name="Hive")
+    with patch("v4vapp_backend_v2.hive.hive_extras.Hive", return_value=fake_hive) as mock_hive:
+        result = get_hive_client(node=nodes)
+        assert result is fake_hive
+        used_nodes = mock_hive.call_args.kwargs["node"]
+        assert excluded not in used_nodes
+        assert keep in used_nodes
 
 
 @pytest.mark.asyncio

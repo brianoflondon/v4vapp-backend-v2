@@ -119,6 +119,9 @@ def _next(it: Iterator[T]) -> T:
         if "Block " in str(e) and "does not exist" in str(e):
             # Let stream-level retry logic handle lagging nodes consistently.
             raise
+        if "429" in str(e) or "Too Many Requests" in str(e):
+            # Propagate so stream_ops can cooldown the node and rebuild.
+            raise
         logger.warning(
             f"Nectar Error in _next {e}",
             extra={
@@ -156,6 +159,13 @@ def _next(it: Iterator[T]) -> T:
             raise StopAsyncIteration
         raise
     except Exception as e:
+        # Propagate rate-limits (httpx HTTPStatusError etc.) to stream recovery.
+        if "429" in str(e) or "Too Many Requests" in str(e):
+            logger.warning(
+                f"_next rate limit {type(e).__name__}: {e}",
+                extra={"notification": False, "error": e},
+            )
+            raise
         logger.warning(
             f"_next {type(e).__name__}: {e}",
             extra={"notification": False, "error": e},

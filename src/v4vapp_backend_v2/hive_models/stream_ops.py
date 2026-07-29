@@ -30,7 +30,11 @@ ICON = "🔗"
 # while still detecting genuinely dead nodes promptly.
 STREAM_TIMEOUT = 15
 MAX_RESTART_BACKOFF_SECONDS = 8
+# Rate-limited nodes need a long cooldown; light health probes succeed while
+# heavy stream traffic still gets 429, so re-enabling them immediately is bad.
 NODE_COOLDOWN_SECONDS = 180
+RATE_LIMIT_COOLDOWN_SECONDS = 600
+RATE_LIMIT_BACKOFF_SECONDS = 12
 NODE_COOLDOWN_UNTIL: dict[str, datetime] = {}
 BLOCK_BEHIND_COOLDOWN_SECONDS = 45
 PROBE_CACHE_TTL_SECONDS = 20
@@ -38,6 +42,8 @@ MAX_PROBE_NODES_PER_RESTART = 4
 NODE_PROBE_CACHE: dict[str, tuple[datetime, int]] = {}
 QUOTE_REFRESH_MIN_INTERVAL_SECONDS = 30
 QUOTE_REFRESH_MIN_INTERVAL_RESTART_SECONDS = 120
+CATCHUP_BATCH_SIZE = 50
+CATCHUP_BATCH_SIZE_AFTER_RATE_LIMIT = 20
 
 
 def _prioritize_nodes(good_nodes: list[str], current_node: str) -> list[str]:
@@ -51,8 +57,16 @@ def _prioritize_nodes(good_nodes: list[str], current_node: str) -> list[str]:
 
 def _extract_node_from_error(error: Exception) -> str | None:
     """Extract a URL from an exception string when available."""
-    match = re.search(r"https?://[^\s'\"]+", str(error))
-    return match.group(0) if match else None
+    # Strip trailing punctuation from httpx error messages.
+    match = re.search(r"https?://[^\s'\"<>]+", str(error))
+    if not match:
+        return None
+    return match.group(0).rstrip(".,);]")
+
+
+def _is_rate_limit_error(error: BaseException) -> bool:
+    text = str(error)
+    return "429" in text or "Too Many Requests" in text
 
 
 def _mark_node_cooldown(node: str | None, seconds: int = NODE_COOLDOWN_SECONDS) -> None:
@@ -225,7 +239,9 @@ async def stream_ops_async(
 
     """
     use_threading = False
-    max_batch_size: int | None = 180
+    # 180 was aggressive enough to 429 public nodes during multi-hour catch-up.
+    max_batch_size: int | None = CATCHUP_BATCH_SIZE
+    rate_limited_this_cycle = False
 
     hive = get_hive_client() if hive is None else hive
     blockchain = get_blockchain_instance(hive_instance=hive)
@@ -391,23 +407,27 @@ async def stream_ops_async(
             await asyncio.sleep(0.1)
         except (NectarException, NumRetriesReached, UnhandledRPCError, WorkingNodeMissing) as e:
             error_text = str(e)
-            if (
-                isinstance(e, NumRetriesReached)
-                or "429" in error_text
-                or "Too Many Requests" in error_text
-            ):
+            sleep_for = 2.0
+            if _is_rate_limit_error(e) or isinstance(e, NumRetriesReached):
+                rate_limited_this_cycle = True
                 cooldown_node = _extract_node_from_error(e) or rpc_url
-                _mark_node_cooldown(cooldown_node)
+                _mark_node_cooldown(cooldown_node, seconds=RATE_LIMIT_COOLDOWN_SECONDS)
+                sleep_for = RATE_LIMIT_BACKOFF_SECONDS
                 logger.warning(
-                    f"{ICON} {start_block:,} Cooling down rate-limited node {cooldown_node}",
-                    extra={"notification": False, "error": e},
+                    f"{ICON} {start_block:,} Cooling down rate-limited node {cooldown_node} "
+                    f"for {RATE_LIMIT_COOLDOWN_SECONDS}s",
+                    extra={"notification": False, "error": e, "error_code": "stream_restart"},
                 )
             elif isinstance(e, WorkingNodeMissing) or "No working nodes available" in error_text:
-                # Prefer reviving the existing client's pool over building throwaway
-                # Hive instances that used to never get bound to Blockchain.
-                _refresh_hive_node_pool(hive)
+                # Do NOT only refresh the pool: health probes are light and
+                # re-enable nodes that still 429 under stream load. Rebuild
+                # excluding cooldowned nodes instead.
+                rate_limited_this_cycle = True
+                _mark_node_cooldown(rpc_url, seconds=RATE_LIMIT_COOLDOWN_SECONDS)
+                sleep_for = RATE_LIMIT_BACKOFF_SECONDS
                 logger.warning(
-                    f"{ICON} {start_block:,} No working nodes on {rpc_url}; refreshed pool",
+                    f"{ICON} {start_block:,} No working nodes on {rpc_url}; "
+                    f"will rebuild client excluding cooldowns",
                     extra={"notification": False, "error": e, "error_code": "stream_restart"},
                 )
             elif re.search(r"Block \d+ does not exist", error_text):
@@ -418,7 +438,7 @@ async def stream_ops_async(
                     f"{ICON} {start_block:,} NectarException in block_stream: {e} restarting",
                     extra={"notification": False, "error_code": "stream_restart", "error": e},
                 )
-            await asyncio.sleep(2)
+            await asyncio.sleep(sleep_for)
 
         except StopAsyncIteration as e:
             logger.error(
@@ -428,14 +448,24 @@ async def stream_ops_async(
             logger.warning(f"{ICON} {start_block:,} TypeError in block_stream: {e} restarting")
             logger.exception(e)
         except Exception as e:
-            logger.exception(
-                f"{ICON} {start_block:,} | Error in block_stream: {e} restarting {rpc_url}",
-                extra={
-                    "notification": False,
-                    "error": e,
-                    "error_code": "stream_restart",
-                },
-            )
+            if _is_rate_limit_error(e):
+                rate_limited_this_cycle = True
+                cooldown_node = _extract_node_from_error(e) or rpc_url
+                _mark_node_cooldown(cooldown_node, seconds=RATE_LIMIT_COOLDOWN_SECONDS)
+                logger.warning(
+                    f"{ICON} {start_block:,} Rate limit in block_stream from {cooldown_node}: {e}",
+                    extra={"notification": False, "error": e, "error_code": "stream_restart"},
+                )
+                await asyncio.sleep(RATE_LIMIT_BACKOFF_SECONDS)
+            else:
+                logger.exception(
+                    f"{ICON} {start_block:,} | Error in block_stream: {e} restarting {rpc_url}",
+                    extra={
+                        "notification": False,
+                        "error": e,
+                        "error_code": "stream_restart",
+                    },
+                )
         finally:
             if last_block >= stop_block:
                 logger.info(
@@ -443,7 +473,12 @@ async def stream_ops_async(
                 )
                 break
             else:
-                max_batch_size = None
+                # Keep batched catch-up, but throttle after rate limits.
+                max_batch_size = (
+                    CATCHUP_BATCH_SIZE_AFTER_RATE_LIMIT
+                    if rate_limited_this_cycle
+                    else CATCHUP_BATCH_SIZE
+                )
                 # Resume from the last successfully processed block, not the
                 # original session start (which would re-scan a large range).
                 if last_block and last_block > start_block:
@@ -455,16 +490,18 @@ async def stream_ops_async(
             current_node = rpc_url
             next_node = current_node
             try:
-                # First try: revive the pool on the existing Hive client and
-                # re-bind Blockchain correctly (blockchain_instance=).
-                refreshed = _refresh_hive_node_pool(hive)
-                working = 0
-                if hive is not None and getattr(hive, "rpc", None) is not None:
-                    working = getattr(hive.rpc.nodes, "working_nodes_count", 0) or 0
-                if not refreshed or working == 0:
-                    # Fall back to a new multi-node client only when the pool
-                    # is still empty after a forced health probe.
+                if rate_limited_this_cycle:
+                    # Always rebuild after rate-limit / empty pool: drop
+                    # cooldowned nodes so Nectar cannot pick least-bad 429 host.
                     hive = _build_stream_hive_client(current_node, required_block=last_block)
+                    rate_limited_this_cycle = False
+                else:
+                    refreshed = _refresh_hive_node_pool(hive)
+                    working = 0
+                    if hive is not None and getattr(hive, "rpc", None) is not None:
+                        working = getattr(hive.rpc.nodes, "working_nodes_count", 0) or 0
+                    if not refreshed or working == 0:
+                        hive = _build_stream_hive_client(current_node, required_block=last_block)
                 blockchain = get_blockchain_instance(hive_instance=hive)
                 OpBase.hive_inst = hive
                 next_node = str(hive.rpc.url) if hive.rpc else "No RPC"

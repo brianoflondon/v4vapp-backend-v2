@@ -59,10 +59,10 @@ BLOCK_STREAM_ONLY = ["https://rpc.podping.org/"]
 EXCLUDE_NODES = [
     "https://rpc.mahdiyari.info",
     # "https://api.hive.blog",
-    # "https://api.deathwing.me",
+    "https://api.deathwing.me",
     # "https://hive-api.arcange.eu",
-    # "https://api.openhive.network",
-    "https://techcoderx.com",
+    "https://api.openhive.network",
+    # "https://techcoderx.com",
     # "https://api.c0ff33a.uk",
     # "https://hiveapi.actifit.io",
     # "https://api.syncad.com",
@@ -189,6 +189,20 @@ class HiveDevelopmentAccountError(HiveTransferError):
     pass
 
 
+
+def _filter_excluded_nodes(nodes: List[str]) -> List[str]:
+    """Drop nodes in EXCLUDE_NODES (exact match). Always apply before Hive().
+
+    Redis cache and callers that pass ``node=`` can reintroduce excluded
+    endpoints (e.g. mahdiyari); filtering only inside get_good_nodes is not
+    enough.
+    """
+    if not nodes:
+        return []
+    excluded = set(EXCLUDE_NODES)
+    return [n for n in nodes if n not in excluded]
+
+
 @time_decorator
 def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs) -> Hive:
     """
@@ -218,19 +232,32 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
                 if isinstance(ttl, int) and ttl < 3000:
                     good_nodes = get_good_nodes()
                 else:
-                    good_nodes = json.loads(good_nodes_json)
+                    # Always re-apply EXCLUDE: Redis may predate exclude list changes.
+                    good_nodes = _filter_excluded_nodes(json.loads(good_nodes_json))
         except Exception as e:
             logger.warning(f"Redis not available {e}", extra={"notification": False})
         if not good_nodes:
             good_nodes = get_good_nodes()
         if stream_only:
             good_nodes += BLOCK_STREAM_ONLY
+        good_nodes = _filter_excluded_nodes(good_nodes)
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
+    else:
+        # Caller-supplied list (including rebuild paths) must respect exclude too.
+        node_arg = kwargs["node"]
+        if isinstance(node_arg, str):
+            node_arg = [node_arg]
+        kwargs["node"] = _filter_excluded_nodes(list(node_arg))
+        if not kwargs["node"]:
+            kwargs["node"] = get_good_nodes()
+
     if "nobroadcast" not in kwargs:
         kwargs["nobroadcast"] = nobroadcast
 
     count = len(kwargs["node"])
+    if count == 0:
+        raise ValueError("No working node found: empty node list after EXCLUDE_NODES filter")
     errors = 0
     while errors < count:
         try:
@@ -324,7 +351,7 @@ def get_good_nodes() -> List[str]:
                 extra={"beacon_response": nodes, "error_code_clear": "beacon_nodes_fail"},
             )
             good_nodes = [node["endpoint"] for node in nodes if node["score"] >= 80]
-            good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
+            good_nodes = _filter_excluded_nodes(good_nodes)
             logger.info(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
             try:
                 InternalConfig.redis_decoded.setex(
@@ -343,8 +370,7 @@ def get_good_nodes() -> List[str]:
 
     good_nodes_json = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
     if good_nodes_json and isinstance(good_nodes_json, str):
-        good_nodes = json.loads(good_nodes_json)
-        good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
+        good_nodes = _filter_excluded_nodes(json.loads(good_nodes_json))
     if good_nodes:
         logger.warning(
             "Failed to fetch good nodes: using last good nodes.",
@@ -361,7 +387,7 @@ def get_good_nodes() -> List[str]:
                 "error_code": "beacon_nodes_fail",
             },
         )
-        good_nodes = DEFAULT_GOOD_NODES
+        good_nodes = _filter_excluded_nodes(list(DEFAULT_GOOD_NODES))
         InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes))
 
     if len(good_nodes) < 2:
@@ -369,8 +395,7 @@ def get_good_nodes() -> List[str]:
             f"Too few good nodes found ({len(good_nodes)}), using default nodes.",
             extra={"good_nodes": good_nodes},
         )
-        good_nodes = DEFAULT_GOOD_NODES
-        good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
+        good_nodes = _filter_excluded_nodes(list(DEFAULT_GOOD_NODES))
         InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 1800, json.dumps(good_nodes))
     return good_nodes
 
