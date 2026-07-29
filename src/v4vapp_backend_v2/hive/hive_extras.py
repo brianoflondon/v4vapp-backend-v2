@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import struct
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Tuple
 from uuid import uuid4
@@ -61,7 +62,7 @@ EXCLUDE_NODES = [
     # "https://api.deathwing.me",
     # "https://hive-api.arcange.eu",
     # "https://api.openhive.network",
-    # "https://techcoderx.com",
+    "https://techcoderx.com",
     # "https://api.c0ff33a.uk",
     # "https://hiveapi.actifit.io",
     # "https://api.syncad.com",
@@ -74,6 +75,12 @@ MAX_HIVE_BATCH_SIZE = 25
 HIVE_BLOCK_TIME = 3  # seconds
 
 REDIS_KEY_GOOD_NODES = "good_nodes:"
+HIVE_INTERNAL_MARKET_FAILURE_COOLDOWN_SECONDS = 120
+HIVE_INTERNAL_MARKET_SUCCESS_CACHE_SECONDS = 45
+
+_hive_internal_market_cooldown_until: datetime | None = None
+_hive_internal_market_last_success: "HiveInternalQuote | None" = None
+_hive_internal_market_last_success_at: datetime | None = None
 
 
 class CustomJsonSendError(Exception):
@@ -564,7 +571,21 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         The function logs the last node used by the Hive blockchain instance and any
         errors encountered.
     """
-    hive = get_hive_client(node=["https://hapi.ecency.com", "https://api.hive.blog"])
+    global _hive_internal_market_cooldown_until
+    global _hive_internal_market_last_success
+    global _hive_internal_market_last_success_at
+
+    now = datetime.now(tz=timezone.utc)
+    if _hive_internal_market_last_success and _hive_internal_market_last_success_at:
+        if now - _hive_internal_market_last_success_at < timedelta(
+            seconds=HIVE_INTERNAL_MARKET_SUCCESS_CACHE_SECONDS
+        ):
+            return _hive_internal_market_last_success
+
+    if _hive_internal_market_cooldown_until and now < _hive_internal_market_cooldown_until:
+        return HiveInternalQuote(error="HiveInternalMarket cooldown active")
+
+    hive = get_hive_client()
     market = Market("HBD:HIVE", hive=hive)
     try:
         ticker = market.ticker()
@@ -575,11 +596,17 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         lowest_ask_value = float(lowest_ask["price"])
         hive_hbd = float(((lowest_ask_value - highest_bid_value) / 2) + highest_bid_value)
         answer = HiveInternalQuote(hive_hbd=hive_hbd, raw_response=ticker)
+        _hive_internal_market_last_success = answer
+        _hive_internal_market_last_success_at = now
+        _hive_internal_market_cooldown_until = None
         return answer
     except Exception as ex:
         # logging.exception(ex)
         logger.info(
             f"Calling Market API on Hive: {market['blockchain_instance'].data['last_node']}"
+        )
+        _hive_internal_market_cooldown_until = datetime.now(tz=timezone.utc) + timedelta(
+            seconds=HIVE_INTERNAL_MARKET_FAILURE_COOLDOWN_SECONDS
         )
         message = f"Problem calling Hive Market API {ex}"
         logger.error(message)
