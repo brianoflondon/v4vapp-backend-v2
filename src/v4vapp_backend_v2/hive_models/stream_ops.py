@@ -34,6 +34,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import (
+    close_hive_client,
     get_blockchain_instance,
     make_stream_hive,
 )
@@ -91,11 +92,21 @@ def _rebuild_hive_client(hive: Hive | None) -> tuple[Hive, Blockchain]:
     Build a fresh fail-fast Hive client, abandoning any poisoned pool/session.
 
     Preserves memo keys from the previous client when available.
+    Always closes the old client first so httpx pools / NodePoolMonitor threads
+    are not leaked (production symptom: EMFILE on status API port 6001).
     """
-    new_hive = make_stream_hive(keys=_hive_keys(hive))
+    keys = _hive_keys(hive)
+    close_hive_client(hive)
+    new_hive = make_stream_hive(keys=keys)
     blockchain = get_blockchain_instance(hive_instance=new_hive)
     OpBase.hive_inst = new_hive
     return new_hive, blockchain
+
+
+def _rebuild_virtual_client(keys: Any = None) -> tuple[Hive, Blockchain]:
+    """Fresh dedicated client for virtual-ops only."""
+    new_hive = make_stream_hive(keys=keys)
+    return new_hive, get_blockchain_instance(hive_instance=new_hive)
 
 
 def _ensure_stream_hive(hive: Hive | None) -> Hive:
@@ -188,11 +199,11 @@ async def stream_ops_async(
             f"{ICON} get_current_block_num failed at stream start: {e}; rebuilding client",
             extra={"notification": False, "error": e, "error_code": "stream_restart"},
         )
+        close_hive_client(virtual_hive)
         hive, blockchain = await _run_sync(
             _rebuild_hive_client, hive, label="rebuild_hive_client"
         )
-        virtual_hive = make_stream_hive(keys=_hive_keys(hive))
-        virtual_blockchain = get_blockchain_instance(hive_instance=virtual_hive)
+        virtual_hive, virtual_blockchain = _rebuild_virtual_client(keys=_hive_keys(hive))
         current_block = await _run_sync(
             blockchain.get_current_block_num, label="get_current_block_num"
         )
@@ -307,8 +318,10 @@ async def stream_ops_async(
                 extra={"notification": False, "error_code": "stream_restart"},
             )
             try:
-                virtual_hive = make_stream_hive(keys=_hive_keys(hive))
-                virtual_blockchain = get_blockchain_instance(hive_instance=virtual_hive)
+                close_hive_client(virtual_hive)
+                virtual_hive, virtual_blockchain = _rebuild_virtual_client(
+                    keys=_hive_keys(hive)
+                )
             except Exception as rebuild_err:
                 logger.warning(
                     f"{ICON} Virtual client rebuild failed: {rebuild_err}",
@@ -533,14 +546,17 @@ async def stream_ops_async(
             # Never rpc.next() on the poisoned client: zombie next() workers still
             # hold that session and next()/rotate can contend for minutes.
             try:
+                # Close virtual client first (rebuild of main hive closes old main).
+                close_hive_client(virtual_hive)
                 hive, blockchain = await _run_sync(
                     _rebuild_hive_client,
                     hive,
                     timeout=SYNC_RPC_BUDGET_SECONDS,
                     label="rebuild_hive_client",
                 )
-                virtual_hive = make_stream_hive(keys=_hive_keys(hive))
-                virtual_blockchain = get_blockchain_instance(hive_instance=virtual_hive)
+                virtual_hive, virtual_blockchain = _rebuild_virtual_client(
+                    keys=_hive_keys(hive)
+                )
                 next_url = _rpc_url(hive)
                 logger.info(
                     f"{ICON} {start_block:,} Rebuilt Hive client → {next_url}",
@@ -556,15 +572,16 @@ async def stream_ops_async(
                 )
                 await asyncio.sleep(backoff)
                 try:
-                    # Last resort: construct on a short budget; if this fails, loop again.
+                    close_hive_client(virtual_hive)
                     hive, blockchain = await _run_sync(
                         _rebuild_hive_client,
                         hive,
                         timeout=15.0,
                         label="rebuild_hive_client_retry",
                     )
-                    virtual_hive = make_stream_hive(keys=_hive_keys(hive))
-                    virtual_blockchain = get_blockchain_instance(hive_instance=virtual_hive)
+                    virtual_hive, virtual_blockchain = _rebuild_virtual_client(
+                        keys=_hive_keys(hive)
+                    )
                     next_url = _rpc_url(hive)
                 except Exception as e2:
                     logger.warning(

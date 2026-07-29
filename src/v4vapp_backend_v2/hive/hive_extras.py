@@ -240,11 +240,158 @@ def make_stream_hive(keys: Any = None, stream_only: bool = False) -> Hive:
 
     Uses short per-request timeouts and few retries so RPC failures surface to
     stream_ops quickly instead of freezing the process on Nectar's defaults.
+
+    Background ``NodePoolManager`` health monitors are disabled for stream clients
+    (``monitor_interval=0``). Streaming owns failover via rebuild; each abandoned
+    monitor thread + probe sockets is a major contributor to EMFILE
+    (``Too many open files``) under recovery pressure.
     """
     kwargs = stream_hive_kwargs(stream_only=stream_only)
     if keys:
         kwargs["keys"] = keys
-    return Hive(**kwargs)
+
+    # Nectar starts a 30s NodePoolMonitor on every multi-node Hive. Patch the
+    # constructor for this build only so stream clients never start it.
+    try:
+        from nectarapi.pool import NodePoolManager
+
+        original_init = NodePoolManager.__init__
+
+        def _init_no_monitor(self, node_urls, max_lag: int = 15, monitor_interval=None):
+            original_init(self, node_urls, max_lag=max_lag, monitor_interval=0.0)
+
+        NodePoolManager.__init__ = _init_no_monitor  # type: ignore[method-assign]
+        try:
+            hive = Hive(**kwargs)
+        finally:
+            NodePoolManager.__init__ = original_init  # type: ignore[method-assign]
+    except Exception:
+        hive = Hive(**kwargs)
+        _disarm_node_pool_monitor(hive)
+
+    _disarm_node_pool_monitor(hive)
+    return hive
+
+
+def _disarm_node_pool_monitor(hive: Any) -> None:
+    """
+    Best-effort stop of NodePoolManager's probe loop if one is already running.
+
+    Transport-level mark_failed / get_active_node still work; only background
+    re-probes (and their per-cycle thread fan-out) are disabled.
+    """
+    try:
+        rpc = getattr(hive, "rpc", None)
+        if rpc is None:
+            return
+        nodes = getattr(rpc, "nodes", None)
+        pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
+        if pool_mgr is None:
+            return
+        monitor = getattr(pool_mgr, "_monitor_thread", None)
+        try:
+            if hasattr(pool_mgr, "stop_monitoring"):
+                pool_mgr.stop_monitoring()
+            else:
+                pool_mgr.close()
+        except Exception:
+            pass
+        if monitor is not None and getattr(monitor, "is_alive", lambda: False)():
+            try:
+                monitor.join(timeout=0.5)
+            except Exception:
+                pass
+        try:
+            pool_mgr.monitor_interval = 0.0
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def close_hive_client(hive: Any = None) -> None:
+    """
+    Release Nectar ``Hive`` RPC resources so rebuild/rotate paths do not leak FDs.
+
+    Prefer Nectar's ``GrapheneRPC.close()`` for the per-instance httpx failover
+    session (hive-nectar a461fc5+). That call does **not** stop ``NodePoolManager``'s
+    background monitor, so we still close the pool manager explicitly.
+
+    Safe to call with None or non-Hive objects. Does not close Nectar's process-wide
+    shared httpx client.
+    """
+    if hive is None:
+        return
+    rpc = getattr(hive, "rpc", None)
+    if rpc is None:
+        return
+
+    # 1) Stop NodePoolMonitor first (GrapheneRPC.close does not do this).
+    #    Keep a thread ref: stop_monitoring() nulls _monitor_thread without joining.
+    try:
+        nodes = getattr(rpc, "nodes", None)
+        pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
+        # Also check the session-bound manager tracked since a461fc5.
+        if pool_mgr is None and hasattr(rpc, "__dict__"):
+            pool_mgr = rpc.__dict__.get("_failover_pool_manager")
+        if pool_mgr is not None:
+            monitor_thread = getattr(pool_mgr, "_monitor_thread", None)
+            try:
+                pool_mgr.close()
+            except Exception:
+                pass
+            if monitor_thread is not None and getattr(monitor_thread, "is_alive", lambda: False)():
+                try:
+                    monitor_thread.join(timeout=1.0)
+                except Exception:
+                    pass
+            if nodes is not None:
+                try:
+                    nodes.pool_manager = None  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # 2) Official Nectar session cleanup (failover httpx client).
+    if hasattr(rpc, "close") and callable(rpc.close):
+        try:
+            rpc.close()
+            return
+        except Exception:
+            pass
+
+    # 3) Fallback for older nectar without GrapheneRPC.close().
+    try:
+        shared = None
+        try:
+            from nectarapi import graphenerpc as _grpc
+
+            shared = getattr(_grpc, "_shared_httpx_client", None)
+        except Exception:
+            shared = None
+
+        session = None
+        if hasattr(rpc, "__dict__"):
+            session = rpc.__dict__.get("_failover_session")
+        if session is None:
+            session = getattr(rpc, "session", None)
+
+        if session is not None and session is not shared:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+        if hasattr(rpc, "__dict__"):
+            rpc.__dict__["_failover_session"] = None
+            rpc.__dict__.pop("_failover_pool_manager", None)
+        try:
+            rpc.session = None
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 
 def get_hive_client(
