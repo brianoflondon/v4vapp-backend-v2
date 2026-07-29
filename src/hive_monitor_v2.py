@@ -32,7 +32,8 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
     seconds_only,
 )
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client, send_transfer
+from nectar.hive import Hive
+from v4vapp_backend_v2.hive.hive_extras import default_hive_nodes, send_transfer
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
@@ -233,7 +234,7 @@ async def balance_server_hive_level() -> None:
     try:
         current_target_hive_balance = Amount(server_account.hive_balance)
         nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
-        hive = get_hive_client(keys=server_account.keys, nobroadcast=nobroadcast)
+        hive = Hive(keys=server_account.keys, nobroadcast=nobroadcast, node=default_hive_nodes())
         account = Account(server_account.name, blockchain_instance=hive)
         balance: Dict[str, Amount] = {}
         balance["HIVE"] = account.available_balances[0]
@@ -541,7 +542,7 @@ async def all_ops_loop(
     for witness in watch_witnesses:
         asyncio.create_task(witness_first_run(witness), name=f"witness_first_run_{witness}")
 
-    hive_client = get_hive_client(keys=InternalConfig().config.hive_config.memo_keys)
+    hive_client = Hive(keys=InternalConfig().config.hive_config.memo_keys, node=default_hive_nodes())
     if start_block == 0:
         last_good_block = await OpBase.get_last_good_block() + 1
     elif start_block == -1:
@@ -723,30 +724,42 @@ async def all_ops_loop(
             return
         except Exception as e:
             logger.exception(f"{ICON} {e}", extra={"notification": False, "exc_info": True})
-            # Removing a RAISE here to allow automatic restart of the loop
-            # raise e
+            # Do not re-raise: stream_ops_async resumes from last block; outer loop
+            # restarts the generator after Nectar rotates the RPC node.
         finally:
             # Do not restart if we’re shutting down
             if shutdown_event.is_set():
                 logger.info(f"{ICON} Shutdown requested; exiting all_ops_loop.")
                 return
+            previous_url = getattr(getattr(hive_client, "rpc", None), "url", "unknown")
             logger.warning(
-                f"{ICON} Restarting real_ops_loop after error from {getattr(hive_client.rpc, 'url', 'unknown')} no_preview",
+                f"{ICON} Restarting all_ops_loop after error from {previous_url}",
                 extra={"notification": False},
             )
-            if getattr(hive_client, "rpc", None):
-                rpc = hive_client.rpc
+            # Prefer Nectar rotation (disable stuck node first — next() alone often
+            # re-selects the same "best" node). Rebuild if still stuck / pool empty.
+            new_url = previous_url
+            if getattr(hive_client, "rpc", None) is not None:
                 try:
-                    if rpc:
-                        rpc.next()
+                    nodes = getattr(hive_client.rpc, "nodes", None)
+                    if nodes is not None and hasattr(nodes, "disable_node"):
+                        nodes.disable_node()
+                    hive_client.rpc.next()
+                    new_url = getattr(hive_client.rpc, "url", previous_url)
                 except Exception:
-                    pass
-            else:
+                    new_url = previous_url
+            working = 0
+            try:
+                if getattr(hive_client, "rpc", None) is not None:
+                    working = getattr(hive_client.rpc.nodes, "working_nodes_count", 0) or 0
+            except Exception:
+                working = 0
+            if new_url == previous_url or working == 0:
                 logger.error(
-                    f"{ICON} Hive client not available, re-fetching new hive-client",
+                    f"{ICON} Hive node pool empty or still on {previous_url}; rebuilding client",
                     extra={"notification": False},
                 )
-                hive_client = get_hive_client(keys=InternalConfig().config.hive_config.memo_keys)
+                hive_client = Hive(keys=InternalConfig().config.hive_config.memo_keys, node=default_hive_nodes())
 
 
 async def combined_logging(

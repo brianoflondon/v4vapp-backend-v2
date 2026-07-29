@@ -8,7 +8,7 @@ from nectar.hive import Hive
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, format_time_delta
-from v4vapp_backend_v2.hive.hive_extras import HIVE_BLOCK_TIME, get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import HIVE_BLOCK_TIME, default_hive_nodes
 from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 
 TIME_DIFFERENCE_CHECK = timedelta(seconds=120)
@@ -92,7 +92,7 @@ class BlockCounter:
     def __post_init__(self):
         self.start = timer()
         if self.hive_client is None:
-            self.hive_client = get_hive_client()
+            self.hive_client = Hive(node=default_hive_nodes())
         if self.current_block == 0:
             self.current_block = self.last_good_block
         self.id = self.id + " " if self.id else ""

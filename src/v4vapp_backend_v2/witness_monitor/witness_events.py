@@ -8,8 +8,9 @@ from nectar.witness import Witness as NectarWitness
 
 from v4vapp_backend_v2.actions.tracked_any import TrackedProducer
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from nectar.hive import Hive
 from v4vapp_backend_v2.hive.hive_extras import (
-    get_hive_client,
+    default_hive_nodes,
     get_verified_hive_client_for_accounts,
     witness_signing_key,
 )
@@ -473,7 +474,7 @@ async def update_witness_properties_switch_machine(
         extra={"notification": False},
     )
     # Implementation for updating witness properties goes here
-    hive = get_hive_client()
+    hive = Hive(node=default_hive_nodes())
     hive = await get_verified_hive_client_for_accounts(
         accounts=[witness_name], nobroadcast=nobroadcast
     )

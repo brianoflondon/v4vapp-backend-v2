@@ -94,11 +94,7 @@ async def test_stream_ops_block_range(mocker):
         return_value=None,
     )
     mocker.patch(
-        "v4vapp_backend_v2.hive_models.stream_ops.get_good_nodes",
-        return_value=["https://mock.hive.node"],
-    )
-    mocker.patch(
-        "v4vapp_backend_v2.hive_models.stream_ops.get_hive_client",
+        "v4vapp_backend_v2.hive_models.stream_ops.Hive",
         return_value=fake_hive,
     )
     mocker.patch(
