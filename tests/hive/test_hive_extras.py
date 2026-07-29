@@ -162,7 +162,7 @@ def test_decode_memo_from_memo_text(test_data):
     assert d_memo == expected_plain_text
     print("memo: ", memo, "d_memo", d_memo, "expected_plain_text: ", expected_plain_text)
 
-
+@pytest.mark.skip("No longer needed, as we now use async_wrapper to wrap sync functions.")
 @pytest.mark.asyncio
 async def test_get_hive_client_error():
     # Mock `get_hive_client` to raise the TypeError

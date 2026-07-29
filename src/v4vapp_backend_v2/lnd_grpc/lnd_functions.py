@@ -418,8 +418,22 @@ async def send_lightning_to_pay_req(
         )
         fee_limit_msat = 100_000
         request_params["allow_self_payment"] = True
-        request_params["outgoing_chan_ids"] = [800082725764071425]
-        # TODO: replace this hard coded channel ID with a dynamic one
+        # Prefer connection-specific channels from lnd_config.connections.<name>.outgoing_chan_ids
+        conn_cfg = lnd_config.connection_config(lnd_client.connection.name)
+        outgoing = list(conn_cfg.outgoing_chan_ids) if conn_cfg else []
+        if outgoing:
+            request_params["outgoing_chan_ids"] = outgoing
+            logger.info(
+                f"Self-payment using outgoing_chan_ids={outgoing} ({lnd_client.connection.name})",
+                extra={"notification": False},
+            )
+        else:
+            request_params["outgoing_chan_ids"] = [800082725764071425]
+            logger.warning(
+                f"Self-payment with no outgoing_chan_ids configured for "
+                f"connection falling back to old default '{lnd_client.connection.name}'",
+                extra={"notification": False},
+            )
     else:
         fee_limit_msat = (
             int(payment_amount_msat * fee_limit_ppm / 1_000_000)

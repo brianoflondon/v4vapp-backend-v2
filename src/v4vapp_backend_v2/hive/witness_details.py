@@ -9,7 +9,8 @@ from v4vapp_backend_v2.hive.hive_api_endpoints import (
     mark_hive_api_endpoint_failed,
     mark_hive_api_endpoint_healthy,
 )
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from nectar.hive import Hive
+from v4vapp_backend_v2.hive.hive_extras import default_hive_nodes
 from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
 
 ICON = "🔍"
@@ -287,7 +288,7 @@ async def get_witness_voters(
     shuffled_endpoints = get_hive_api_endpoints(shuffle_endpoints=True) or HIVE_API_ENDPOINTS[:]
     hive = None
     try:
-        hive = get_hive_client()
+        hive = Hive(node=default_hive_nodes())
     except Exception as e:
         logger.warning(
             f"{ICON} Unable to create Hive client for voter power calculation: {e}",

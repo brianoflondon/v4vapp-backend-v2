@@ -65,9 +65,22 @@ def _should_propagate_stream_error(error: BaseException) -> bool:
     if isinstance(error, (NumRetriesReached, WorkingNodeMissing, NectarException)):
         return True
     text = str(error)
+    name = type(error).__name__
     if "429" in text or "Too Many Requests" in text:
         return True
     if "batched calls" in text.lower():
+        return True
+    # Connection / pool failures: must not look like a clean EOS (silent stall).
+    if any(
+        token in text or token in name
+        for token in (
+            "PoolTimeout",
+            "ConnectTimeout",
+            "ReadTimeout",
+            "ConnectError",
+            "RemoteProtocolError",
+        )
+    ):
         return True
     return False
 
@@ -177,10 +190,10 @@ def _next(it: Iterator[T]) -> T:
             raise StopAsyncIteration
         raise
     except Exception as e:
-        # Propagate rate-limits (httpx HTTPStatusError etc.) to stream recovery.
-        if "429" in str(e) or "Too Many Requests" in str(e):
+        # Propagate rate-limits / pool failures so stream_ops can recover.
+        if _should_propagate_stream_error(e):
             logger.warning(
-                f"_next rate limit {type(e).__name__}: {e}",
+                f"_next propagating {type(e).__name__}: {e}",
                 extra={"notification": False, "error": e},
             )
             raise

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 # from helpers.cryptoprices import CryptoConversion, CryptoPrices
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client, get_verified_hive_client
+from v4vapp_backend_v2.hive.hive_extras import default_hive_nodes, get_verified_hive_client
 
 CONFIG_ROOT_KEY = "v4vapp_hiveconfig"
 ICON = "⚙️v"
@@ -146,7 +146,7 @@ class V4VConfig:
             if not server_accname:
                 server_accname = InternalConfig().server_id
             self.server_accname = server_accname
-            self.hive = hive or get_hive_client()
+            self.hive = hive or Hive(node=default_hive_nodes())
             self.fetch()
             logger.info(
                 f"{ICON} V4VConfig initialized {self.server_accname}", extra={**self.log_extra}
@@ -455,7 +455,7 @@ class V4VConfig:
                 continue  # Try the next endpoint
         retries = 0
         while retries < 5:
-            hive_client = get_hive_client()
+            hive_client = Hive(node=default_hive_nodes())
             acc = Account(account=self.server_accname, blockchain_instance=hive_client, lazy=False)
             try:
                 # Important to use the [] method not get() to avoid lazy loading problems

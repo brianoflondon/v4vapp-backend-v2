@@ -1,7 +1,7 @@
 import asyncio
 import json
-import random
 import struct
+import threading
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Tuple
@@ -193,9 +193,7 @@ class HiveDevelopmentAccountError(HiveTransferError):
 def _filter_excluded_nodes(nodes: List[str]) -> List[str]:
     """Drop nodes in EXCLUDE_NODES (exact match). Always apply before Hive().
 
-    Redis cache and callers that pass ``node=`` can reintroduce excluded
-    endpoints (e.g. mahdiyari); filtering only inside get_good_nodes is not
-    enough.
+    Callers that pass ``node=`` can reintroduce excluded endpoints; filter always.
     """
     if not nodes:
         return []
@@ -203,112 +201,265 @@ def _filter_excluded_nodes(nodes: List[str]) -> List[str]:
     return [n for n in nodes if n not in excluded]
 
 
-@time_decorator
-def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs) -> Hive:
+def default_hive_nodes(stream_only: bool = False) -> List[str]:
     """
-    Creates and returns a Hive client instance, selecting a working node from a list of available nodes.
-    If no node is provided in kwargs, retrieves a list of good nodes from Redis cache or regenerates it if necessary.
-    Optionally includes stream-only nodes if `stream_only` is True.
-    Attempts to instantiate a Hive client with each node in the list until successful, or raises an error if all nodes fail.
+    Static default RPC node list for Nectar ``Hive(node=...)``.
 
-    Args:
-        stream_only (bool, optional): If True, includes stream-only nodes in the selection. Defaults to False.
-        nobroadcast (bool, optional): If True, will not broadcast transactions. Defaults to False.
-        *args: Additional positional arguments to pass to the Hive client constructor.
-        **kwargs: Additional keyword arguments to pass to the Hive client constructor. If 'node' is not provided, it will be set internally.
-
-        Hive: An instance of the Hive client connected to a working node.
-
-    Raises:
-        ValueError: If no working node can be found after trying all available nodes.
+    Health probes, retries, and failover after construction are Nectar's job.
+    Beacon/Redis good-node lists are not used for client construction.
     """
-    if "node" not in kwargs:
-        # shuffle good nodes
-        good_nodes: List[str] = []
+    nodes = _filter_excluded_nodes(list(DEFAULT_GOOD_NODES))
+    if stream_only:
+        nodes = nodes + [n for n in BLOCK_STREAM_ONLY if n not in nodes]
+    if not nodes:
+        # Last resort if EXCLUDE_NODES wiped the list
+        nodes = list(DEFAULT_GOOD_NODES)
+    return nodes
+
+
+# Nectar defaults are timeout=60s and num_retries=100 — a single dead-pool call can
+# block the caller for tens of minutes. Streaming/monitor paths must fail fast so
+# our outer recovery loop can rotate nodes and keep the event loop healthy.
+STREAM_HIVE_TIMEOUT = 12
+STREAM_HIVE_NUM_RETRIES = 5
+STREAM_HIVE_NUM_RETRIES_CALL = 2
+
+
+def stream_hive_kwargs(stream_only: bool = False) -> Dict[str, Any]:
+    """Keyword args for a fail-fast Nectar ``Hive`` used by long-running streams."""
+    return {
+        "node": default_hive_nodes(stream_only=stream_only),
+        "timeout": STREAM_HIVE_TIMEOUT,
+        "num_retries": STREAM_HIVE_NUM_RETRIES,
+        "num_retries_call": STREAM_HIVE_NUM_RETRIES_CALL,
+    }
+
+
+# Serialize class-level NodePoolManager.__init__ patch (concurrent make_stream_hive /
+# bare Hive() construction must not race restore of the original constructor).
+_NODE_POOL_MONITOR_PATCH_LOCK = threading.Lock()
+
+
+def make_stream_hive(keys: Any = None, stream_only: bool = False) -> Hive:
+    """
+    Build a Hive client for block streaming / hive_monitor.
+
+    Uses short per-request timeouts and few retries so RPC failures surface to
+    stream_ops quickly instead of freezing the process on Nectar's defaults.
+
+    Background ``NodePoolManager`` health monitors are disabled for stream clients
+    (``monitor_interval=0``). Streaming owns failover via rebuild; each abandoned
+    monitor thread + probe sockets is a major contributor to EMFILE
+    (``Too many open files``) under recovery pressure.
+    """
+    kwargs = stream_hive_kwargs(stream_only=stream_only)
+    if keys:
+        kwargs["keys"] = keys
+
+    # Nectar starts a 30s NodePoolMonitor on every multi-node Hive. Patch the
+    # constructor for this build only so stream clients never start it.
+    # Lock: class-level monkey-patch is process-global (Copilot PR review).
+    try:
+        from nectarapi.pool import NodePoolManager
+
+        with _NODE_POOL_MONITOR_PATCH_LOCK:
+            original_init = NodePoolManager.__init__
+
+            def _init_no_monitor(self, node_urls, max_lag: int = 15, monitor_interval=None):
+                original_init(self, node_urls, max_lag=max_lag, monitor_interval=0.0)
+
+            NodePoolManager.__init__ = _init_no_monitor  # type: ignore[method-assign]
+            try:
+                hive = Hive(**kwargs)
+            finally:
+                NodePoolManager.__init__ = original_init  # type: ignore[method-assign]
+    except Exception:
+        hive = Hive(**kwargs)
+        _disarm_node_pool_monitor(hive)
+
+    _disarm_node_pool_monitor(hive)
+    return hive
+
+
+def _disarm_node_pool_monitor(hive: Any) -> None:
+    """
+    Best-effort stop of NodePoolManager's probe loop if one is already running.
+
+    Transport-level mark_failed / get_active_node still work; only background
+    re-probes (and their per-cycle thread fan-out) are disabled.
+    """
+    try:
+        rpc = getattr(hive, "rpc", None)
+        if rpc is None:
+            return
+        nodes = getattr(rpc, "nodes", None)
+        pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
+        if pool_mgr is None:
+            return
+        monitor = getattr(pool_mgr, "_monitor_thread", None)
         try:
-            good_nodes_json = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
-            if good_nodes_json and isinstance(good_nodes_json, str):
-                ttl = InternalConfig.redis_decoded.ttl(REDIS_KEY_GOOD_NODES)
-                if isinstance(ttl, int) and ttl < 3000:
-                    good_nodes = get_good_nodes()
-                else:
-                    # Always re-apply EXCLUDE: Redis may predate exclude list changes.
-                    good_nodes = _filter_excluded_nodes(json.loads(good_nodes_json))
-        except Exception as e:
-            logger.warning(f"Redis not available {e}", extra={"notification": False})
-        if not good_nodes:
-            good_nodes = get_good_nodes()
-        if stream_only:
-            good_nodes += BLOCK_STREAM_ONLY
-        good_nodes = _filter_excluded_nodes(good_nodes)
-        random.shuffle(good_nodes)
-        kwargs["node"] = good_nodes
+            if hasattr(pool_mgr, "stop_monitoring"):
+                pool_mgr.stop_monitoring()
+            else:
+                pool_mgr.close()
+        except Exception:
+            pass
+        if monitor is not None and getattr(monitor, "is_alive", lambda: False)():
+            try:
+                monitor.join(timeout=0.5)
+            except Exception:
+                pass
+        try:
+            pool_mgr.monitor_interval = 0.0
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def close_hive_client(hive: Any = None) -> None:
+    """
+    Release Nectar ``Hive`` RPC resources so rebuild/rotate paths do not leak FDs.
+
+    Prefer Nectar's ``GrapheneRPC.close()`` for the per-instance httpx failover
+    session (hive-nectar a461fc5+). That call does **not** stop ``NodePoolManager``'s
+    background monitor, so we still close the pool manager explicitly.
+
+    Safe to call with None or non-Hive objects. Does not close Nectar's process-wide
+    shared httpx client.
+    """
+    if hive is None:
+        return
+    rpc = getattr(hive, "rpc", None)
+    if rpc is None:
+        return
+
+    # 1) Stop NodePoolMonitor first (GrapheneRPC.close does not do this).
+    #    Keep a thread ref: stop_monitoring() nulls _monitor_thread without joining.
+    try:
+        nodes = getattr(rpc, "nodes", None)
+        pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
+        # Also check the session-bound manager tracked since a461fc5.
+        if pool_mgr is None and hasattr(rpc, "__dict__"):
+            pool_mgr = rpc.__dict__.get("_failover_pool_manager")
+        if pool_mgr is not None:
+            monitor_thread = getattr(pool_mgr, "_monitor_thread", None)
+            try:
+                pool_mgr.close()
+            except Exception:
+                pass
+            if monitor_thread is not None and getattr(monitor_thread, "is_alive", lambda: False)():
+                try:
+                    monitor_thread.join(timeout=1.0)
+                except Exception:
+                    pass
+            if nodes is not None:
+                try:
+                    nodes.pool_manager = None  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # 2) Official Nectar session cleanup (failover httpx client).
+    if hasattr(rpc, "close") and callable(rpc.close):
+        try:
+            rpc.close()
+            return
+        except Exception:
+            pass
+
+    # 3) Fallback for older nectar without GrapheneRPC.close().
+    try:
+        shared = None
+        try:
+            from nectarapi import graphenerpc as _grpc
+
+            shared = getattr(_grpc, "_shared_httpx_client", None)
+        except Exception:
+            shared = None
+
+        session = None
+        if hasattr(rpc, "__dict__"):
+            session = rpc.__dict__.get("_failover_session")
+        if session is None:
+            session = getattr(rpc, "session", None)
+
+        if session is not None and session is not shared:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+        if hasattr(rpc, "__dict__"):
+            rpc.__dict__["_failover_session"] = None
+            rpc.__dict__.pop("_failover_pool_manager", None)
+        try:
+            rpc.session = None
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def get_hive_client(
+    stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs
+) -> Hive:
+    """
+    Thin factory around Nectar ``Hive``.
+
+    Prefer ``Hive(keys=..., nobroadcast=..., node=default_hive_nodes())`` at call
+    sites. This helper remains for tests/scripts and only:
+
+    - defaults ``nobroadcast``
+    - supplies a static ``node`` list when omitted (bare ``Hive()`` can hang on
+      empty Nectar config defaults)
+    - filters ``EXCLUDE_NODES`` when ``node`` is provided
+
+    Node rotation/failover is entirely Nectar's node pool after construction.
+    """
+    kwargs.setdefault("nobroadcast", nobroadcast)
+
+    if "node" not in kwargs or not kwargs["node"]:
+        kwargs["node"] = default_hive_nodes(stream_only=stream_only)
     else:
-        # Caller-supplied list (including rebuild paths) must respect exclude too.
         node_arg = kwargs["node"]
         if isinstance(node_arg, str):
             node_arg = [node_arg]
-        kwargs["node"] = _filter_excluded_nodes(list(node_arg))
-        if not kwargs["node"]:
-            kwargs["node"] = get_good_nodes()
+        filtered = _filter_excluded_nodes(list(node_arg))
+        kwargs["node"] = filtered or default_hive_nodes(stream_only=stream_only)
 
-    if "nobroadcast" not in kwargs:
-        kwargs["nobroadcast"] = nobroadcast
-
-    count = len(kwargs["node"])
-    if count == 0:
-        raise ValueError("No working node found: empty node list after EXCLUDE_NODES filter")
-    errors = 0
-    while errors < count:
-        try:
-            hive = Hive(*args, **kwargs)
-            return hive
-        except TypeError as e:
-            logger.warning(
-                f"Node {kwargs['node'][0]} not working {e} error: {errors}",
-                extra={"notification": True, "nodes": kwargs["node"]},
-            )
-            # remove the first node from the list
-            kwargs["node"] = kwargs["node"][1:]
-            errors += 1
-
-        except ValueError as e:
-            logger.warning(f"Bad keys passed to Hive client: {e}", extra={"notification": True})
-            raise HiveMissingKeyError(
-                f"Bad keys passed to Hive client: {e}", extra={"notification": True}
-            )
-
-        except Exception as e:
-            logger.warning(
-                f"Node {kwargs['node'][0]} not working {e} error: {errors}",
-                extra={"notification": True, "nodes": kwargs["node"]},
-            )
-            # remove the first node from the list
-            kwargs["node"] = kwargs["node"][1:]
-            errors += 1
-    raise ValueError(f"No working node found {errors} errors")
+    try:
+        return Hive(*args, **kwargs)
+    except ValueError as e:
+        # Nectar raises ValueError for bad keys / wallet issues
+        logger.warning(f"Bad keys passed to Hive client: {e}", extra={"notification": True})
+        raise HiveMissingKeyError(
+            f"Bad keys passed to Hive client: {e}", extra={"notification": True}
+        ) from e
 
 
 def get_blockchain_instance(*args, **kwargs) -> Blockchain:
     """
-    Create a Blockchain instance bound to a Hive client.
+    Create a Blockchain instance bound to a Nectar Hive client.
 
-    Accepts either ``hive_instance=`` or ``hive=`` (or creates a client via
-    ``get_hive_client``). Must pass ``blockchain_instance=`` to Nectar's
-    ``Blockchain`` — ``hive_instance`` is ignored by Nectar and would silently
-    fall back to the process-global shared Hive (whose node pool can be dead
-    while a freshly built client is healthy).
+    Accepts either ``hive_instance=`` or ``hive=`` (or constructs ``Hive``).
+    Must pass ``blockchain_instance=`` to Nectar's ``Blockchain`` — plain
+    ``hive_instance`` is ignored by Nectar.
     """
     hive = kwargs.pop("hive_instance", None) or kwargs.pop("hive", None)
     if hive is None:
-        # Avoid passing Blockchain-only kwargs into get_hive_client.
         hive_kwargs = {
             k: v
             for k, v in kwargs.items()
             if k
             not in {"mode", "max_block_wait_repetition", "data_refresh_time_seconds"}
         }
-        hive = get_hive_client(*args, **hive_kwargs)
+        if "nobroadcast" not in hive_kwargs:
+            hive_kwargs["nobroadcast"] = False
+        if "node" not in hive_kwargs or not hive_kwargs["node"]:
+            hive_kwargs["node"] = default_hive_nodes()
+        hive = Hive(*args, **hive_kwargs)
     mode = kwargs.pop("mode", "head")
     max_block_wait_repetition = kwargs.pop("max_block_wait_repetition", None)
     return Blockchain(
@@ -451,9 +602,10 @@ def get_verified_hive_client_non_async(
     if not keys:
         raise HiveToLightningError("Missing Hive server account keys for repayment")
 
-    hive_client = get_hive_client(
+    hive_client = Hive(
         keys=keys,
         nobroadcast=nobroadcast,
+        node=default_hive_nodes(),
     )
     return hive_client, hive_account.name
 
@@ -497,11 +649,12 @@ async def get_verified_hive_client_for_accounts(
             hive_config.server_account.posting_key,
         ]
     if keys == ["", "", ""]:
-        hive_client = get_hive_client(nobroadcast=nobroadcast)
+        hive_client = Hive(nobroadcast=nobroadcast, node=default_hive_nodes())
     else:
-        hive_client = get_hive_client(
+        hive_client = Hive(
             keys=keys,
             nobroadcast=nobroadcast,
+            node=default_hive_nodes(),
         )
     return hive_client
 
@@ -624,7 +777,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
     if _hive_internal_market_cooldown_until and now < _hive_internal_market_cooldown_until:
         return HiveInternalQuote(error="HiveInternalMarket cooldown active")
 
-    hive = get_hive_client()
+    hive = Hive(node=default_hive_nodes())
     market = Market("HBD:HIVE", hive=hive)
     try:
         ticker = market.ticker()
@@ -714,7 +867,7 @@ def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     if not hive_accname:
         hive_accname = InternalConfig().server_id
     try:
-        hive = get_hive_client()
+        hive = Hive(node=default_hive_nodes())
         hive_account = Account(hive_accname, blockchain_instance=hive)
         balances: List[Amount] | None = hive_account.balances.get("available", None)
     except Exception as e:
@@ -790,7 +943,7 @@ def decode_memo(
         raise ValueError("No memo keys or Hive instance provided.")
 
     if memo_keys and not hive_inst:
-        hive_inst = get_hive_client(keys=memo_keys)
+        hive_inst = Hive(keys=memo_keys, node=default_hive_nodes())
         blockchain = get_blockchain_instance(hive_instance=hive_inst)
 
     if not hive_inst:
@@ -890,7 +1043,7 @@ async def send_custom_json(
     if not hive_client and not keys:
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
-        hive_client = get_hive_client(keys=keys)
+        hive_client = Hive(keys=keys, node=default_hive_nodes())
     if hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
         raise ValueError("nobroadcast is not set to the same value as hive_client")
     try:
@@ -1002,7 +1155,7 @@ async def send_transfer_bulk(
     if not hive_client and not keys:
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
-        hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
+        hive_client = Hive(keys=keys, nobroadcast=nobroadcast, node=default_hive_nodes())
     if hive_client and nobroadcast:
         raise ValueError(
             "nobroadcast is not supported if hive_client is passed, nobroadcast must be set in the hive_client"
@@ -1158,7 +1311,7 @@ async def send_transfer(
     if not hive_client and not keys:
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
-        hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
+        hive_client = Hive(keys=keys, nobroadcast=nobroadcast, node=default_hive_nodes())
     if hive_client and hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
         raise ValueError("nobroadcast is not set to the same value as hive_client")
 
@@ -1374,7 +1527,7 @@ def witness_signing_key(witness_name: str) -> str | None:
     """
     ICON = "X"
     try:
-        hive = get_hive_client()
+        hive = Hive(node=default_hive_nodes())
         if not hive or not hive.rpc:
             logger.warning(
                 f"{ICON} Could not get Hive client to retrieve signing key for witness {witness_name}.",

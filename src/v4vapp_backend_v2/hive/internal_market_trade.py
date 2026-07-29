@@ -14,7 +14,7 @@ from v4vapp_backend_v2.config.setup import (
     InternalConfig,
     logger,
 )
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import default_hive_nodes
 
 ORDER_BOOK_CACHE: Dict[str, Any] = {}
 ICON = "📈"
@@ -75,7 +75,7 @@ def account_trade(
         logger.error(f"{ICON} Account {hive_acc.name} not found in config")
         raise ValueError(f"Account {hive_acc.name} Active Keys not found in config")
 
-    hive = get_hive_client(keys=hive_acc.keys, nobroadcast=nobroadcast)
+    hive = Hive(keys=hive_acc.keys, nobroadcast=nobroadcast, node=default_hive_nodes())
     account = Account(hive_acc.name, blockchain_instance=hive)
     balance: Dict[str, Amount] = {}
     balance["HIVE"] = account.available_balances[0]
@@ -158,7 +158,7 @@ def market_trade(
         if hive_acc.name in hive_configs.hive_accs:
             hive_acc = hive_configs.hive_accs[hive_acc.name]
 
-        hive = get_hive_client(keys=hive_acc.keys, nobroadcast=nobroadcast)
+        hive = Hive(keys=hive_acc.keys, nobroadcast=nobroadcast, node=default_hive_nodes())
         try:
             quote = check_order_book(amount, hive, use_cache=use_cache)
         except ValueError as e:
@@ -266,7 +266,7 @@ def check_order_book(
         raise ValueError("Amount must be non-zero")
 
     if not hive:
-        hive = get_hive_client()
+        hive = Hive(node=default_hive_nodes())
 
     base_asset = amount.symbol  # the asset we want to trade
     quote_asset = "HBD" if base_asset == "HIVE" else "HIVE"

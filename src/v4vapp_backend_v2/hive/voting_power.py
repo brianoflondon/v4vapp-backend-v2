@@ -5,7 +5,7 @@ from nectar.account import Account
 from nectar.hive import Hive
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import default_hive_nodes
 
 
 class VoterDetails(BaseModel):
@@ -91,7 +91,7 @@ class VotingPower:
         if not voter:
             return
         if not hive:
-            hive = get_hive_client()
+            hive = Hive(node=default_hive_nodes())
 
         acc = Account(voter)
         self.proposal = proposal

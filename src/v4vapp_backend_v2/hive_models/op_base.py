@@ -13,7 +13,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
     snake_case,
 )
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import default_hive_nodes
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids
 from v4vapp_backend_v2.hive_models.op_base_extras import (
     OP_TRACKED,
@@ -454,17 +454,18 @@ class OpBase(TrackedBaseModel):
                 last_good_block = int(ans["block_num"])
             else:
                 try:
-                    hive = get_hive_client()
+                    hive = Hive(node=default_hive_nodes())
                     global_properties = hive.get_dynamic_global_properties()
                     if not global_properties:
                         raise Exception("Could not get global properties from hive client")
                     else:
                         last_good_block = global_properties["head_block_number"]
                 except Exception as e:
-                    logger.exception(f"{e}", extra={"notification": True, "exc_info": True})
+                    # Do not put exc_info in extra — logger.exception already sets it.
+                    logger.exception(f"{e}", extra={"notification": True})
                     last_good_block = 103468945
             return last_good_block
 
         except Exception as e:
-            logger.exception(f"{e}", extra={"notification": True, "exc_info": True})
+            logger.exception(f"{e}", extra={"notification": True})
             raise e

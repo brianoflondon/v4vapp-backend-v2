@@ -30,7 +30,7 @@ def test_initial_state():
 
 # Mock Hive class
 class MockHive:
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self.rpc = Mock(url="node1", next=Mock(return_value=None))
 
 

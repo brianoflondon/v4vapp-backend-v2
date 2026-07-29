@@ -32,7 +32,13 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
     seconds_only,
 )
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client, send_transfer
+from nectar.hive import Hive
+from v4vapp_backend_v2.hive.hive_extras import (
+    close_hive_client,
+    default_hive_nodes,
+    make_stream_hive,
+    send_transfer,
+)
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
@@ -105,10 +111,43 @@ class StatusObject:
     is_catching_up: bool = False
     drift_no_recovery_since: datetime | None = None
     last_marker_time_diff: timedelta = timedelta(0)
+    # Wall-clock of last successfully processed stream op (for stall detection).
+    last_progress_at: datetime | None = None
+    last_progress_age_s: float = 0.0
+    fatal_reason: str = ""
 
 
 STATUS_OBJ = StatusObject()
 force_restart: bool = False
+
+# In-process recovery: try a few times, then exit(1) so Docker `restart: on-failure` kicks in.
+MAX_CONSECUTIVE_EMPTY_STREAM_RESTARTS = 5
+# No processed op for this long → unhealthy; with empty restarts → fatal exit.
+MAX_PROGRESS_STALL_SECONDS = 180.0
+# Health endpoint fails after this with no progress (Docker marks unhealthy).
+HEALTH_STALE_PROGRESS_SECONDS = 300.0
+
+
+def request_fatal_restart(reason: str) -> None:
+    """
+    Mark the process for a non-zero exit so Docker restarts the container.
+
+    Sets ``force_restart`` (main() exits 1) and ``shutdown_event`` so the async
+    main loop tears down cleanly. Prefer this over hanging forever in recovery.
+    """
+    global force_restart
+    force_restart = True
+    STATUS_OBJ.fatal_reason = reason
+    logger.critical(
+        f"{ICON} Fatal restart requested: {reason}. "
+        f"Exiting with code 1 so Docker restarts the container.",
+        extra={
+            "notification": True,
+            "error_code": "hive_monitor_fatal_restart",
+            "fatal_reason": reason,
+        },
+    )
+    shutdown_event.set()
 
 
 async def health_check() -> Dict[str, Any]:
@@ -145,6 +184,21 @@ async def health_check() -> Dict[str, Any]:
             )
 
     STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
+    if STATUS_OBJ.last_progress_at is not None:
+        STATUS_OBJ.last_progress_age_s = (
+            datetime.now(tz=timezone.utc) - STATUS_OBJ.last_progress_at
+        ).total_seconds()
+        # Only enforce after startup has produced at least one op.
+        if (
+            startup_complete_event.is_set()
+            and STATUS_OBJ.last_progress_age_s > HEALTH_STALE_PROGRESS_SECONDS
+        ):
+            exceptions.append(
+                f"no stream progress for {STATUS_OBJ.last_progress_age_s:.0f}s "
+                f"(limit {HEALTH_STALE_PROGRESS_SECONDS:.0f}s)"
+            )
+    if STATUS_OBJ.fatal_reason:
+        exceptions.append(f"fatal: {STATUS_OBJ.fatal_reason}")
 
     if exceptions:
         logger.error(
@@ -163,7 +217,7 @@ async def health_check() -> Dict[str, Any]:
 
 def handle_shutdown_signal():
     """
-    Signal handler to set the shutdown event.
+    Signal handler to set the shutdown event (graceful stop, exit 0 unless force_restart).
     """
     logger.info("Received shutdown signal. Setting shutdown event.")
     shutdown_event.set()
@@ -233,7 +287,7 @@ async def balance_server_hive_level() -> None:
     try:
         current_target_hive_balance = Amount(server_account.hive_balance)
         nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
-        hive = get_hive_client(keys=server_account.keys, nobroadcast=nobroadcast)
+        hive = Hive(keys=server_account.keys, nobroadcast=nobroadcast, node=default_hive_nodes())
         account = Account(server_account.name, blockchain_instance=hive)
         balance: Dict[str, Amount] = {}
         balance["HIVE"] = account.available_balances[0]
@@ -473,7 +527,8 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
         # Exit loop on cancellation
         return
     except Exception as e:
-        logger.exception(f"{ICON} {e}", extra={"notification": False, "exc_info": True})
+        # Do not put exc_info in extra — logger.exception already sets it (LogRecord reserved).
+        logger.exception(f"{ICON} {e}", extra={"notification": False})
         raise e
     finally:
         logger.info(
@@ -499,7 +554,7 @@ async def witness_check_startup() -> None:
     except Exception as e:
         logger.exception(
             f"{ICON} Error in Witness Check startup {e}",
-            extra={"notification": False, "exc_info": True},
+            extra={"notification": False},
         )
         raise e
 
@@ -541,11 +596,14 @@ async def all_ops_loop(
     for witness in watch_witnesses:
         asyncio.create_task(witness_first_run(witness), name=f"witness_first_run_{witness}")
 
-    hive_client = get_hive_client(keys=InternalConfig().config.hive_config.memo_keys)
+    # Fail-fast Hive: Nectar defaults (60s × 100 retries) can freeze the event loop for hours.
+    hive_client = make_stream_hive(keys=InternalConfig().config.hive_config.memo_keys)
     if start_block == 0:
         last_good_block = await OpBase.get_last_good_block() + 1
     elif start_block == -1:
-        global_properties: Dict = hive_client.get_dynamic_global_properties()  # type: ignore
+        global_properties: Dict = await asyncio.to_thread(
+            hive_client.get_dynamic_global_properties
+        )  # type: ignore
         last_good_block = global_properties.get("head_block_number", 97112440)
     else:
         last_good_block = start_block
@@ -568,11 +626,50 @@ async def all_ops_loop(
         await TrackedBaseModel.update_quote(time_delay=TIME_DELAY)
 
     start = timer()
+    # Outer safety net: if stream_ops yields nothing for this long, abandon and rebuild.
+    # Must be > STREAM_TIMEOUT_SECONDS and longer than a normal quiet filtered stretch.
+    STREAM_PROGRESS_WATCHDOG_SECONDS = 90.0
+    consecutive_empty_restarts = 0
+    last_progress_mono = timer()
     while True:
+        if shutdown_event.is_set():
+            logger.info(f"{ICON} Shutdown requested; exiting all_ops_loop.")
+            return
+
+        loop_error = False
+        stream_agen = None
+        ops_this_session = 0
         try:
-            async for op in stream_ops_async(
+            logger.info(
+                f"{ICON} Entering stream_ops from block {last_good_block:,} "
+                f"via {getattr(getattr(hive_client, 'rpc', None), 'url', 'unknown')}",
+                extra={"notification": False},
+            )
+            stream_agen = stream_ops_async(
                 opNames=OpBase.op_tracked, start=last_good_block, stop_now=False, hive=hive_client
-            ):
+            )
+            stream_iter = stream_agen.__aiter__()
+            while True:
+                try:
+                    op = await asyncio.wait_for(
+                        stream_iter.__anext__(),
+                        timeout=STREAM_PROGRESS_WATCHDOG_SECONDS,
+                    )
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError as te:
+                    # wait_for fires on true idle OR on TimeoutError raised inside stream_ops
+                    # (e.g. rebuild budget). Log distinctly so we can tell them apart.
+                    loop_error = True
+                    detail = str(te).strip() or "no op yielded"
+                    logger.error(
+                        f"{ICON} Stream progress timeout after "
+                        f"{STREAM_PROGRESS_WATCHDOG_SECONDS:.0f}s at block "
+                        f"{last_good_block:,} ({detail}); abandoning stream and rebuilding",
+                        extra={"notification": False, "error_code": "stream_restart"},
+                    )
+                    break
+
                 time_delay = TIME_DELAY if not block_counter.is_catching_up else 0
                 notification = False
                 log_it = False
@@ -580,6 +677,12 @@ async def all_ops_loop(
                 db_store = False
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Shutdown requested")
+                # Keep resume point current so outer restarts do not re-scan history.
+                last_good_block = max(last_good_block, op.block_num)
+                ops_this_session += 1
+                consecutive_empty_restarts = 0
+                last_progress_mono = timer()
+                STATUS_OBJ.last_progress_at = datetime.now(tz=timezone.utc)
                 new_block, marker = block_counter.inc(op.raw_op)
 
                 if watch_witnesses and isinstance(op, AccountWitnessVote):
@@ -696,13 +799,11 @@ async def all_ops_loop(
                         elif (
                             datetime.now(tz=timezone.utc) - STATUS_OBJ.drift_no_recovery_since
                         ) > timedelta(minutes=5):
-                            global force_restart
-                            force_restart = True
-                            logger.critical(
-                                f"{ICON} Drift unrecoverable for >5 minutes (behind: {block_counter.time_diff}). Triggering restart.",
-                                extra={"notification": True},
+                            request_fatal_restart(
+                                f"drift unrecoverable for >5 minutes "
+                                f"(behind: {block_counter.time_diff})"
                             )
-                            shutdown_event.set()
+                            return
                     else:
                         if STATUS_OBJ.drift_no_recovery_since is not None:
                             logger.info(
@@ -717,36 +818,103 @@ async def all_ops_loop(
                     await db_store_op(block_marker)
                     start = timer()
 
-        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        except KeyboardInterrupt as e:
             logger.info(f"{ICON} {e}: Stopping event listener.")
-            # Exit loop on cancellation
+            shutdown_event.set()
             return
+        except asyncio.CancelledError as e:
+            # Real shutdown vs spurious cancel (e.g. wait_for on aclose/anext).
+            if shutdown_event.is_set():
+                logger.info(f"{ICON} {e}: Shutdown cancel; exiting all_ops_loop.")
+                return
+            loop_error = True
+            logger.warning(
+                f"{ICON} Spurious CancelledError in all_ops_loop ({e!r}); "
+                f"will rebuild and re-enter (not exiting)",
+                extra={"notification": False},
+            )
         except Exception as e:
-            logger.exception(f"{ICON} {e}", extra={"notification": False, "exc_info": True})
-            # Removing a RAISE here to allow automatic restart of the loop
-            # raise e
+            loop_error = True
+            # Do not put exc_info in extra — logger.exception already sets it (LogRecord reserved).
+            logger.exception(f"{ICON} {e}", extra={"notification": False})
+            # Do not re-raise: outer loop rebuilds a fresh client and resumes.
         finally:
-            # Do not restart if we’re shutting down
+            # Best-effort close of the async generator (does not stop zombie next() threads).
+            if stream_agen is not None:
+                aclose = getattr(stream_agen, "aclose", None)
+                if aclose is not None:
+                    try:
+                        await asyncio.wait_for(aclose(), timeout=2.0)
+                    except Exception:
+                        pass
+            # Do not restart if we’re shutting down (graceful or fatal).
             if shutdown_event.is_set():
                 logger.info(f"{ICON} Shutdown requested; exiting all_ops_loop.")
                 return
+
+            # Prefer in-memory progress; STATUS_OBJ is updated on every processed op.
+            if getattr(STATUS_OBJ, "last_good_block", None):
+                last_good_block = max(last_good_block, int(STATUS_OBJ.last_good_block))
+
+            if ops_this_session == 0:
+                consecutive_empty_restarts += 1
+            else:
+                consecutive_empty_restarts = 0
+
+            stall_s = timer() - last_progress_mono
+            if consecutive_empty_restarts >= MAX_CONSECUTIVE_EMPTY_STREAM_RESTARTS:
+                request_fatal_restart(
+                    f"{consecutive_empty_restarts} consecutive stream restarts with no ops "
+                    f"(limit {MAX_CONSECUTIVE_EMPTY_STREAM_RESTARTS})"
+                )
+                return
+            if (
+                consecutive_empty_restarts >= 2
+                and stall_s >= MAX_PROGRESS_STALL_SECONDS
+            ):
+                request_fatal_restart(
+                    f"no stream progress for {stall_s:.0f}s after "
+                    f"{consecutive_empty_restarts} empty restarts "
+                    f"(limit {MAX_PROGRESS_STALL_SECONDS:.0f}s)"
+                )
+                return
+
+            previous_url = getattr(getattr(hive_client, "rpc", None), "url", "unknown")
+            reason = "after error" if loop_error else "stream ended"
             logger.warning(
-                f"{ICON} Restarting real_ops_loop after error from {getattr(hive_client.rpc, 'url', 'unknown')} no_preview",
+                f"{ICON} Restarting all_ops_loop {reason} from block "
+                f"{last_good_block:,} (was {previous_url}) — rebuild "
+                f"{consecutive_empty_restarts}/{MAX_CONSECUTIVE_EMPTY_STREAM_RESTARTS} empty",
                 extra={"notification": False},
             )
-            if getattr(hive_client, "rpc", None):
-                rpc = hive_client.rpc
-                try:
-                    if rpc:
-                        rpc.next()
-                except Exception:
-                    pass
-            else:
-                logger.error(
-                    f"{ICON} Hive client not available, re-fetching new hive-client",
+            # Always discard the old client (and close its httpx pool / monitor thread).
+            # Leaving them open is the EMFILE / "Too many open files" path on port 6001.
+            try:
+                old_client = hive_client
+                keys = InternalConfig().config.hive_config.memo_keys
+
+                def _close_and_make() -> Hive:
+                    close_hive_client(old_client)
+                    return make_stream_hive(keys=keys)
+
+                hive_client = await asyncio.wait_for(
+                    asyncio.to_thread(_close_and_make),
+                    timeout=30.0,
+                )
+                # BlockCounter must not keep a closed Hive (pool_manager=None).
+                block_counter.hive_client = hive_client
+                logger.info(
+                    f"{ICON} Rebuilt Hive client → "
+                    f"{getattr(getattr(hive_client, 'rpc', None), 'url', 'unknown')}",
                     extra={"notification": False},
                 )
-                hive_client = get_hive_client(keys=InternalConfig().config.hive_config.memo_keys)
+            except Exception as e:
+                logger.error(
+                    f"{ICON} Failed to rebuild Hive client: {e}; sleeping before retry",
+                    extra={"notification": False},
+                )
+                consecutive_empty_restarts += 1
+                await asyncio.sleep(5.0)
 
 
 async def combined_logging(
@@ -875,27 +1043,43 @@ async def main_async_start(
     logger.info(f"{ICON} Main Loop running in thread: {threading.get_ident()}")
 
     try:
-        # asyncio.create_task(balance_server_hbd_level(), name="initial_balance_hbd_level")
         # Create tasks so we can cancel them on shutdown_event
         await witness_check_startup()
-        tasks = [
-            asyncio.create_task(
-                all_ops_loop(
-                    watch_witnesses=watch_witnesses,
-                    watch_users=watch_users,
-                    start_block=start_block,
-                ),
-                name="all_ops_loop",
+        all_ops_task = asyncio.create_task(
+            all_ops_loop(
+                watch_witnesses=watch_witnesses,
+                watch_users=watch_users,
+                start_block=start_block,
             ),
+            name="all_ops_loop",
+        )
+        tasks = [
+            all_ops_task,
             asyncio.create_task(store_rates(), name="store_rates"),
             asyncio.create_task(status_api.start(), name="status_api"),
         ]
+
+        async def _watch_all_ops_loop() -> None:
+            """If the stream loop dies without an intentional shutdown, exit non-zero."""
+            try:
+                await all_ops_task
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                if not shutdown_event.is_set():
+                    request_fatal_restart(f"all_ops_loop crashed: {e}")
+                return
+            if not shutdown_event.is_set():
+                request_fatal_restart("all_ops_loop exited unexpectedly")
+
+        asyncio.create_task(_watch_all_ops_loop(), name="watch_all_ops_loop")
+
         startup_complete_event.set()
         logger.info(
             f"{ICON}{Fore.WHITE}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
             extra={"notification": True},
         )
-        # Wait until shutdown is requested
+        # Wait until shutdown is requested (graceful SIGTERM or fatal restart)
         await shutdown_event.wait()
         # Cancel tasks and wait for them to finish
         for t in tasks:
@@ -907,6 +1091,7 @@ async def main_async_start(
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(f"{ICON} Irregular shutdown in Hive Monitor {e}", extra={"error": e})
+        request_fatal_restart(f"main_async_start error: {e}")
         raise e
     finally:
         # Cancel all other tasks and exit cleanly
@@ -915,7 +1100,13 @@ async def main_async_start(
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
+        if force_restart:
+            logger.critical(
+                f"{ICON} 👋 Fatal exit (Docker restart): {STATUS_OBJ.fatal_reason or 'force_restart'}",
+                extra={"notification": True},
+            )
+        else:
+            logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{ICON} Clearing notifications")
         await asyncio.sleep(2)
         InternalConfig().shutdown()
@@ -1030,8 +1221,13 @@ def main(
         watch_witnesses = CONFIG.hive_config.watch_witnesses
     COMMAND_LINE_WATCH_ONLY = watch_only
     asyncio.run(main_async_start(watch_users, watch_witnesses, start_block=start_block))
+    # Docker compose uses `restart: on-failure` — non-zero exit triggers container restart.
     if force_restart:
-        logger.info(f"{ICON} Exiting with code 1 to trigger Docker restart.")
+        logger.critical(
+            f"{ICON} Exiting with code 1 to trigger Docker restart "
+            f"({STATUS_OBJ.fatal_reason or 'force_restart'})",
+            extra={"notification": True},
+        )
         sys.exit(1)
 
 
@@ -1039,12 +1235,16 @@ if __name__ == "__main__":
     try:
         logger.name = "hive_monitor_v2"
         app()
+        if force_restart:
+            # In case main() returned without sys.exit (shouldn't), still fail hard.
+            sys.exit(1)
         print("👋 Goodbye!")
     except (KeyboardInterrupt, asyncio.CancelledError):
         sys.exit(0)
 
     except StartupFailure as e:
         print(f"{ICON} Startup failure: {e}")
+        # Startup config failures should not spin Docker forever; exit 0.
         sys.exit(0)
 
     except Exception as e:
