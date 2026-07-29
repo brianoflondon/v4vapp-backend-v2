@@ -572,17 +572,40 @@ async def all_ops_loop(
         await TrackedBaseModel.update_quote(time_delay=TIME_DELAY)
 
     start = timer()
+    # Outer safety net: if stream_ops yields nothing for this long, abandon and rebuild.
+    # Must be > STREAM_TIMEOUT_SECONDS and longer than a normal quiet filtered stretch.
+    STREAM_PROGRESS_WATCHDOG_SECONDS = 90.0
     while True:
         loop_error = False
+        stream_agen = None
         try:
             logger.info(
                 f"{ICON} Entering stream_ops from block {last_good_block:,} "
                 f"via {getattr(getattr(hive_client, 'rpc', None), 'url', 'unknown')}",
                 extra={"notification": False},
             )
-            async for op in stream_ops_async(
+            stream_agen = stream_ops_async(
                 opNames=OpBase.op_tracked, start=last_good_block, stop_now=False, hive=hive_client
-            ):
+            )
+            stream_iter = stream_agen.__aiter__()
+            while True:
+                try:
+                    op = await asyncio.wait_for(
+                        stream_iter.__anext__(),
+                        timeout=STREAM_PROGRESS_WATCHDOG_SECONDS,
+                    )
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    loop_error = True
+                    logger.error(
+                        f"{ICON} Stream progress watchdog: no ops for "
+                        f"{STREAM_PROGRESS_WATCHDOG_SECONDS:.0f}s at block "
+                        f"{last_good_block:,}; abandoning stream and rebuilding",
+                        extra={"notification": False, "error_code": "stream_restart"},
+                    )
+                    break
+
                 time_delay = TIME_DELAY if not block_counter.is_catching_up else 0
                 notification = False
                 log_it = False
@@ -736,9 +759,16 @@ async def all_ops_loop(
         except Exception as e:
             loop_error = True
             logger.exception(f"{ICON} {e}", extra={"notification": False, "exc_info": True})
-            # Do not re-raise: stream_ops_async resumes from last block; outer loop
-            # restarts the generator after Nectar rotates the RPC node.
+            # Do not re-raise: outer loop rebuilds a fresh client and resumes.
         finally:
+            # Best-effort close of the async generator (does not stop zombie next() threads).
+            if stream_agen is not None:
+                aclose = getattr(stream_agen, "aclose", None)
+                if aclose is not None:
+                    try:
+                        await asyncio.wait_for(aclose(), timeout=2.0)
+                    except Exception:
+                        pass
             # Do not restart if we’re shutting down
             if shutdown_event.is_set():
                 logger.info(f"{ICON} Shutdown requested; exiting all_ops_loop.")
@@ -750,65 +780,29 @@ async def all_ops_loop(
             reason = "after error" if loop_error else "stream ended"
             logger.warning(
                 f"{ICON} Restarting all_ops_loop {reason} from block "
-                f"{last_good_block:,} (was {previous_url})",
+                f"{last_good_block:,} (was {previous_url}) — rebuilding fresh Hive client",
                 extra={"notification": False},
             )
-            # Prefer Nectar rotation (disable stuck node first — next() alone often
-            # re-selects the same "best" node). Rebuild if still stuck / pool empty.
-            # Always off the event loop so a hung rpc.next() cannot freeze the process.
-            new_url = previous_url
-
-            def _rotate_or_keep() -> tuple[str, int]:
-                url = previous_url
-                working_count = 0
-                client = hive_client
-                if getattr(client, "rpc", None) is not None:
-                    try:
-                        nodes = getattr(client.rpc, "nodes", None)
-                        if nodes is not None and hasattr(nodes, "disable_node"):
-                            nodes.disable_node()
-                        client.rpc.next()
-                        url = getattr(client.rpc, "url", previous_url)
-                    except Exception:
-                        url = previous_url
-                    try:
-                        working_count = (
-                            getattr(client.rpc.nodes, "working_nodes_count", 0) or 0
-                        )
-                    except Exception:
-                        working_count = 0
-                return url, working_count
-
+            # Always discard the old client. Do not rpc.next() on a poisoned session.
             try:
-                new_url, working = await asyncio.wait_for(
-                    asyncio.to_thread(_rotate_or_keep), timeout=30.0
+                hive_client = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        make_stream_hive,
+                        InternalConfig().config.hive_config.memo_keys,
+                    ),
+                    timeout=30.0,
+                )
+                logger.info(
+                    f"{ICON} Rebuilt Hive client → "
+                    f"{getattr(getattr(hive_client, 'rpc', None), 'url', 'unknown')}",
+                    extra={"notification": False},
                 )
             except Exception as e:
-                logger.warning(
-                    f"{ICON} Node rotate timed out/failed ({e}); rebuilding Hive client",
-                    extra={"notification": False},
-                )
-                new_url, working = previous_url, 0
-
-            if new_url == previous_url or working == 0:
                 logger.error(
-                    f"{ICON} Hive node pool empty or still on {previous_url}; rebuilding client",
+                    f"{ICON} Failed to rebuild Hive client: {e}; sleeping before retry",
                     extra={"notification": False},
                 )
-                try:
-                    hive_client = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            make_stream_hive,
-                            InternalConfig().config.hive_config.memo_keys,
-                        ),
-                        timeout=45.0,
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"{ICON} Failed to rebuild Hive client: {e}; sleeping before retry",
-                        extra={"notification": False},
-                    )
-                    await asyncio.sleep(5.0)
+                await asyncio.sleep(5.0)
 
 
 async def combined_logging(
