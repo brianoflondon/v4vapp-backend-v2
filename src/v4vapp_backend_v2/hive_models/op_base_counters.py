@@ -97,6 +97,55 @@ class BlockCounter:
             self.current_block = self.last_good_block
         self.id = self.id + " " if self.id else ""
 
+    def _live_hive(self) -> Hive | None:
+        """
+        Prefer the stream's current Hive (OpBase.hive_inst) over a stale reference.
+
+        stream_ops rebuilds/closes clients; BlockCounter must not call rpc.next()
+        on a discarded instance (pool_manager=None → AttributeError).
+        """
+        live = getattr(OpBase, "hive_inst", None)
+        if live is not None and getattr(live, "rpc", None) is not None:
+            return live
+        if self.hive_client is not None and getattr(self.hive_client, "rpc", None) is not None:
+            return self.hive_client
+        return None
+
+    def _rpc_url(self, hive: Hive | None) -> str:
+        if hive is None or getattr(hive, "rpc", None) is None:
+            return "No RPC"
+        try:
+            return str(hive.rpc.url)
+        except Exception:
+            return "No RPC"
+
+    def _marker_node_urls(self) -> Tuple[str, str]:
+        """
+        Optionally rotate node for marker logging; never raise into the stream loop.
+
+        Returns (old_url, new_url). Rotation is best-effort only when Nodes still
+        has a live pool_manager (not after close_hive_client).
+        """
+        hive = self._live_hive()
+        old_node = self._rpc_url(hive)
+        if hive is None or getattr(hive, "rpc", None) is None:
+            return old_node, old_node
+        try:
+            nodes = getattr(hive.rpc, "nodes", None)
+            pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
+            if pool_mgr is None:
+                # Closed or single-session client — log URL only, do not call next().
+                return old_node, old_node
+            hive.rpc.next()
+            # Keep our stored ref aligned with the live stream client when possible.
+            self.hive_client = hive
+        except Exception as e:
+            logger.debug(
+                f"{self.icon} BlockCounter node rotate skipped: {e}",
+                extra={"notification": False},
+            )
+        return old_node, self._rpc_url(self._live_hive())
+
     def log_extra(self) -> dict:
         """
         Returns a dictionary containing the current state of the BlockCounter instance.
@@ -107,9 +156,7 @@ class BlockCounter:
         Returns:
             dict: A dictionary containing the current state of the BlockCounter instance.
         """
-        rpc_url = (
-            self.hive_client.rpc.url if self.hive_client and self.hive_client.rpc else "No RPC"
-        )
+        rpc_url = self._rpc_url(self._live_hive())
         return {
             "last_good_block": self.last_good_block,
             "current_block": self.current_block,
@@ -166,10 +213,7 @@ class BlockCounter:
             if self.block_count >= self.next_marker:
                 marker = True
                 self.log_time_difference_errors(timestamp=timestamp)
-                old_node = ""
-                if self.hive_client and self.hive_client.rpc:
-                    old_node = self.hive_client.rpc.url
-                    self.hive_client.rpc.next()
+                old_node, rpc_url = self._marker_node_urls()
                 last_marker_time = timer() - self.last_marker
                 last_marker_time_str = format_time_delta(last_marker_time)
                 catch_up_in = format_time_delta(
@@ -190,11 +234,6 @@ class BlockCounter:
                 self.next_marker += self.marker_point
 
                 self.running_time = timer() - self.start
-                rpc_url = (
-                    str(self.hive_client.rpc.url)
-                    if self.hive_client and self.hive_client.rpc
-                    else "No RPC"
-                )
                 logger.info(
                     f"{self.icon} {self.id:>9}{self.block_count:,} "
                     f"time: {last_marker_time_str} "

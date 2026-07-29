@@ -901,6 +901,8 @@ async def all_ops_loop(
                     asyncio.to_thread(_close_and_make),
                     timeout=30.0,
                 )
+                # BlockCounter must not keep a closed Hive (pool_manager=None).
+                block_counter.hive_client = hive_client
                 logger.info(
                     f"{ICON} Rebuilt Hive client → "
                     f"{getattr(getattr(hive_client, 'rpc', None), 'url', 'unknown')}",
