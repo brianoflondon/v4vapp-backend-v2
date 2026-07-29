@@ -177,6 +177,15 @@ class LndConnectionConfig(BaseConfig):
     macaroon_filename: str = ""
     cert_filename: str = ""
     use_proxy: str = ""
+    # Prefer these channels for self-payments (pay_req dest == this node's pubkey).
+    # Passed to SendPaymentV2 as outgoing_chan_ids when non-empty.
+    outgoing_chan_ids: list[int] = Field(
+        default_factory=list,
+        description=(
+            "Channel IDs to use as forced outgoing channels for self-payments "
+            "(invoice destination is this node). Empty = do not set outgoing_chan_ids."
+        ),
+    )
     # Optional exclusive floors for this node's LND sequences (ignore index <= floor).
     # When omitted, existing behaviour is unchanged (resume from Mongo / start at 0).
     start_add_index: int | None = Field(
