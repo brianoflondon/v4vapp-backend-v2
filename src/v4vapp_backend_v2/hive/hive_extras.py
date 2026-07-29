@@ -1,6 +1,7 @@
 import asyncio
 import json
 import struct
+import threading
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Tuple
@@ -234,6 +235,11 @@ def stream_hive_kwargs(stream_only: bool = False) -> Dict[str, Any]:
     }
 
 
+# Serialize class-level NodePoolManager.__init__ patch (concurrent make_stream_hive /
+# bare Hive() construction must not race restore of the original constructor).
+_NODE_POOL_MONITOR_PATCH_LOCK = threading.Lock()
+
+
 def make_stream_hive(keys: Any = None, stream_only: bool = False) -> Hive:
     """
     Build a Hive client for block streaming / hive_monitor.
@@ -252,19 +258,21 @@ def make_stream_hive(keys: Any = None, stream_only: bool = False) -> Hive:
 
     # Nectar starts a 30s NodePoolMonitor on every multi-node Hive. Patch the
     # constructor for this build only so stream clients never start it.
+    # Lock: class-level monkey-patch is process-global (Copilot PR review).
     try:
         from nectarapi.pool import NodePoolManager
 
-        original_init = NodePoolManager.__init__
+        with _NODE_POOL_MONITOR_PATCH_LOCK:
+            original_init = NodePoolManager.__init__
 
-        def _init_no_monitor(self, node_urls, max_lag: int = 15, monitor_interval=None):
-            original_init(self, node_urls, max_lag=max_lag, monitor_interval=0.0)
+            def _init_no_monitor(self, node_urls, max_lag: int = 15, monitor_interval=None):
+                original_init(self, node_urls, max_lag=max_lag, monitor_interval=0.0)
 
-        NodePoolManager.__init__ = _init_no_monitor  # type: ignore[method-assign]
-        try:
-            hive = Hive(**kwargs)
-        finally:
-            NodePoolManager.__init__ = original_init  # type: ignore[method-assign]
+            NodePoolManager.__init__ = _init_no_monitor  # type: ignore[method-assign]
+            try:
+                hive = Hive(**kwargs)
+            finally:
+                NodePoolManager.__init__ = original_init  # type: ignore[method-assign]
     except Exception:
         hive = Hive(**kwargs)
         _disarm_node_pool_monitor(hive)

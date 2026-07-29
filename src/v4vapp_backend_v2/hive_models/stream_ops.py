@@ -176,6 +176,13 @@ async def stream_ops_async(
       2. Resume from the last successfully processed block number.
       3. Virtual ops use a **separate** Hive client so they cannot block/poison
          the real-op stream session.
+
+    Args:
+        filter_custom_json: When True (default), drop ``custom_json`` ops whose
+            ``id`` is not a known app ID (see ``custom_json_test_data``). Other
+            op types (transfer, producer_reward, …) are never filtered by this
+            flag. When False, all ``custom_json`` events are passed through to
+            model validation.
     """
     hive = _ensure_stream_hive(hive)
     blockchain = get_blockchain_instance(hive_instance=hive)
@@ -414,7 +421,15 @@ async def stream_ops_async(
                         if op_virtual_base.op_type in opNames:
                             yield op_virtual_base
 
-                if not filter_custom_json and not custom_json_test_data(hive_event):
+                # Filter unknown custom_json only. custom_json_test_data() returns
+                # None for transfers/etc. (no cj id) — must not treat that as "drop".
+                # Previous condition used `not filter_custom_json`, which inverted
+                # the flag so default True never filtered (Copilot PR review).
+                if (
+                    filter_custom_json
+                    and hive_event.get("type") == "custom_json"
+                    and custom_json_test_data(hive_event) is None
+                ):
                     continue
 
                 try:

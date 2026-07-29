@@ -76,7 +76,9 @@ async def test_stream_ops_block_range(mocker):
 
     fake_rpc = mocker.Mock(url="https://mock.hive.node")
     fake_rpc.next.return_value = None
-    fake_hive = mocker.Mock(rpc=fake_rpc)
+    fake_rpc.timeout = 12  # fail-fast shape so _ensure_stream_hive keeps this client
+    fake_rpc.nodes = None
+    fake_hive = mocker.Mock(rpc=fake_rpc, keys=None)
     fake_hive.set_default_nodes.return_value = None
 
     fake_blockchain = mocker.Mock()
@@ -93,9 +95,14 @@ async def test_stream_ops_block_range(mocker):
         "v4vapp_backend_v2.hive_models.stream_ops.TrackedBaseModel.update_quote",
         return_value=None,
     )
+    # Clients are built via make_stream_hive (not Hive() in this module).
     mocker.patch(
-        "v4vapp_backend_v2.hive_models.stream_ops.Hive",
+        "v4vapp_backend_v2.hive_models.stream_ops.make_stream_hive",
         return_value=fake_hive,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.hive_models.stream_ops.close_hive_client",
+        return_value=None,
     )
     mocker.patch(
         "v4vapp_backend_v2.hive_models.stream_ops.get_blockchain_instance",
