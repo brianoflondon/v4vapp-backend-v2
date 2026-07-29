@@ -56,6 +56,7 @@ HIVE_DATABASE = ""
 HIVE_DATABASE_USER = ""
 HIVE_OPS_COLLECTION = "hive_ops"
 HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
+QUOTE_REFRESH_MIN_INTERVAL_CATCHUP_SECONDS = 20
 
 AUTO_BALANCE_SERVER = True
 
@@ -551,6 +552,21 @@ async def all_ops_loop(
     block_counter = BlockCounter(
         last_good_block=last_good_block, hive_client=hive_client, id="combined"
     )
+    last_quote_update_timer = 0.0
+
+    async def maybe_update_quote() -> None:
+        """Throttle quote updates while catching up to reduce RPC load and 429 risk."""
+        nonlocal last_quote_update_timer
+        if block_counter.is_catching_up:
+            now = timer()
+            if now - last_quote_update_timer < QUOTE_REFRESH_MIN_INTERVAL_CATCHUP_SECONDS:
+                return
+            last_quote_update_timer = now
+            await TrackedBaseModel.update_quote(time_delay=0)
+            return
+
+        await TrackedBaseModel.update_quote(time_delay=TIME_DELAY)
+
     start = timer()
     while True:
         try:
@@ -576,7 +592,7 @@ async def all_ops_loop(
 
                 elif is_op_all_transfer(op):
                     if op.is_watched:
-                        await TrackedBaseModel.update_quote(time_delay=time_delay)
+                        await maybe_update_quote()
                         await op.update_conv()
                         if not COMMAND_LINE_WATCH_ONLY:
                             # Now only balance the server account HBD level if this is a send back to a customer
@@ -604,7 +620,7 @@ async def all_ops_loop(
                 elif (
                     isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
                 ) and op.is_watched:
-                    await TrackedBaseModel.update_quote(time_delay=time_delay)
+                    await maybe_update_quote()
                     await op.update_conv()
                     notification = (
                         False if isinstance(op, FillOrder) and not op.completed_order else True
@@ -719,8 +735,10 @@ async def all_ops_loop(
                 extra={"notification": False},
             )
             if getattr(hive_client, "rpc", None):
+                rpc = hive_client.rpc
                 try:
-                    hive_client.rpc.next()
+                    if rpc:
+                        rpc.next()
                 except Exception:
                     pass
             else:

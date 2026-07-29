@@ -2,6 +2,7 @@ import asyncio
 from typing import Generator
 
 import pytest
+from nectarapi.exceptions import NumRetriesReached, WorkingNodeMissing
 
 # Assuming the code is in a file called async_wrapper.py
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async, sync_to_async_iterable
@@ -76,6 +77,34 @@ async def test_sync_to_async_iterable():
 
     results = [x async for x in async_iter]
     assert results == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_sync_to_async_iterable_propagates_working_node_missing():
+    """WorkingNodeMissing must propagate so upstream retry logic can run."""
+
+    def failing_generator() -> Generator[int, None, None]:
+        raise WorkingNodeMissing("No working nodes available.")
+        yield 1
+
+    async_iter = sync_to_async_iterable(failing_generator())
+
+    with pytest.raises(WorkingNodeMissing):
+        _ = [x async for x in async_iter]
+
+
+@pytest.mark.asyncio
+async def test_sync_to_async_iterable_propagates_num_retries_reached():
+    """NumRetriesReached must propagate so stream failover can apply cooldown logic."""
+
+    def failing_generator() -> Generator[int, None, None]:
+        raise NumRetriesReached()
+        yield 1
+
+    async_iter = sync_to_async_iterable(failing_generator())
+
+    with pytest.raises(NumRetriesReached):
+        _ = [x async for x in async_iter]
 
 
 def test_type_hints():

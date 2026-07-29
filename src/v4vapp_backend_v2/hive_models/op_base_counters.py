@@ -91,7 +91,8 @@ class BlockCounter:
 
     def __post_init__(self):
         self.start = timer()
-        self.hive_client = get_hive_client()
+        if self.hive_client is None:
+            self.hive_client = get_hive_client()
         if self.current_block == 0:
             self.current_block = self.last_good_block
         self.id = self.id + " " if self.id else ""

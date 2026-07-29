@@ -160,8 +160,8 @@ async def follow_on_transfer(
         await perform_transfer_checks(
             from_account=AccName(tracked_op.cust_id),
             to_account=AccName(tracked_op.to_account),
-            amount=amount,
-            nobroadcast=nobroadcast,
+            # amount=amount,
+            # nobroadcast=nobroadcast,
         )
 
         user_limits_text = await check_user_limits(

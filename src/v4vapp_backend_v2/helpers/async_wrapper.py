@@ -1,11 +1,12 @@
 import inspect
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
+from time import sleep
 from typing import Any, AsyncIterable, Callable, Iterator, TypeVar
 
 from asgiref.sync import sync_to_async as _sync_to_async
 from nectar.exceptions import NectarException
-from nectarapi.exceptions import RPCError
+from nectarapi.exceptions import NumRetriesReached, RPCError, WorkingNodeMissing
 
 from v4vapp_backend_v2.config.setup import logger
 
@@ -42,19 +43,33 @@ def sync_to_async(
     if is_gen:
 
         @wraps(sync_fn)
-        async def wrapper(*args: Any, **kwargs: Any) -> AsyncIterable[Any]:
+        async def wrapper_gen(*args: Any, **kwargs: Any) -> AsyncIterable[Any]:
             sync_iterable: Iterator[Any] = await async_fn(*args, **kwargs)
             async_iterable: AsyncIterable[Any] = sync_to_async_iterable(sync_iterable)
             async for item in async_iterable:
                 yield item
 
+        return wrapper_gen
+
     else:
 
         @wraps(sync_fn)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def wrapper_fn(*args: Any, **kwargs: Any) -> Any:
             return await async_fn(*args, **kwargs)
 
-    return wrapper
+        return wrapper_fn
+
+
+def _should_propagate_stream_error(error: BaseException) -> bool:
+    """Errors that stream_ops must see (do not swallow as clean end-of-stream)."""
+    if isinstance(error, (NumRetriesReached, WorkingNodeMissing, NectarException)):
+        return True
+    text = str(error)
+    if "429" in text or "Too Many Requests" in text:
+        return True
+    if "batched calls" in text.lower():
+        return True
+    return False
 
 
 async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]:
@@ -65,13 +80,23 @@ async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]
                 yield await next_async(sync_iterator)
             except StopAsyncIteration:
                 return
-            except AttributeError as log_error:
-                logger.error(
-                    f"Logging error: {log_error} - problem with str in log level",
-                    extra={"notification": False},
+            except Exception as e:
+                if _should_propagate_stream_error(e):
+                    raise
+                if isinstance(e, AttributeError):
+                    logger.error(
+                        f"Logging error: {e} - problem with str in log level",
+                        extra={"notification": False},
+                    )
+                    return
+                # Unexpected: log and end stream (legacy behaviour).
+                logger.warning(
+                    f"sync_to_async_iterable {e}", extra={"notification": False, "error": e}
                 )
                 return
     except Exception as e:
+        if _should_propagate_stream_error(e):
+            raise
         try:
             logger.warning(
                 f"sync_to_async_iterable {e}", extra={"notification": False, "error": e}
@@ -92,7 +117,29 @@ def _next(it: Iterator[T]) -> T:
         return next(it)
     except StopIteration:
         raise StopAsyncIteration
+    except NumRetriesReached as e:
+        logger.warning(
+            f"_next {type(e).__name__}: {e}",
+            extra={"notification": False, "error": e},
+        )
+        raise
+    except WorkingNodeMissing as e:
+        logger.warning(
+            f"_next {e}",
+            extra={"notification": False, "error": e},
+        )
+        raise
     except NectarException as e:
+        err = str(e)
+        if "Block " in err and "does not exist" in err:
+            # Let stream-level retry logic handle lagging nodes consistently.
+            raise
+        if "429" in err or "Too Many Requests" in err:
+            # Propagate so stream_ops can cooldown the node and rebuild.
+            raise
+        if "batched calls" in err.lower() or "BatchedCallsNotSupported" in type(e).__name__:
+            # Node cannot use max_batch_size — stream_ops should disable batching.
+            raise
         logger.warning(
             f"Nectar Error in _next {e}",
             extra={
@@ -130,8 +177,19 @@ def _next(it: Iterator[T]) -> T:
             raise StopAsyncIteration
         raise
     except Exception as e:
-        logger.warning(f"_next {e}", extra={"notification": False, "error": e})
-        logger.exception(e, extra={"notification": False})
+        # Propagate rate-limits (httpx HTTPStatusError etc.) to stream recovery.
+        if "429" in str(e) or "Too Many Requests" in str(e):
+            logger.warning(
+                f"_next rate limit {type(e).__name__}: {e}",
+                extra={"notification": False, "error": e},
+            )
+            raise
+        logger.warning(
+            f"_next {type(e).__name__}: {e}",
+            extra={"notification": False, "error": e},
+        )
+        logger.error(e, extra={"notification": False})
+        sleep(0.1)  # Avoid tight loop on unexpected errors
         raise StopAsyncIteration
 
 

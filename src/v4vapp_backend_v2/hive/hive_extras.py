@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import struct
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Tuple
 from uuid import uuid4
@@ -56,11 +57,11 @@ DEFAULT_GOOD_NODES = [
 BLOCK_STREAM_ONLY = ["https://rpc.podping.org/"]
 
 EXCLUDE_NODES = [
-    # "https://rpc.mahdiyari.info",
+    "https://rpc.mahdiyari.info",
     # "https://api.hive.blog",
-    # "https://api.deathwing.me",
+    "https://api.deathwing.me",
     # "https://hive-api.arcange.eu",
-    # "https://api.openhive.network",
+    "https://api.openhive.network",
     # "https://techcoderx.com",
     # "https://api.c0ff33a.uk",
     # "https://hiveapi.actifit.io",
@@ -74,6 +75,12 @@ MAX_HIVE_BATCH_SIZE = 25
 HIVE_BLOCK_TIME = 3  # seconds
 
 REDIS_KEY_GOOD_NODES = "good_nodes:"
+HIVE_INTERNAL_MARKET_FAILURE_COOLDOWN_SECONDS = 120
+HIVE_INTERNAL_MARKET_SUCCESS_CACHE_SECONDS = 45
+
+_hive_internal_market_cooldown_until: datetime | None = None
+_hive_internal_market_last_success: "HiveInternalQuote | None" = None
+_hive_internal_market_last_success_at: datetime | None = None
 
 
 class CustomJsonSendError(Exception):
@@ -182,6 +189,20 @@ class HiveDevelopmentAccountError(HiveTransferError):
     pass
 
 
+
+def _filter_excluded_nodes(nodes: List[str]) -> List[str]:
+    """Drop nodes in EXCLUDE_NODES (exact match). Always apply before Hive().
+
+    Redis cache and callers that pass ``node=`` can reintroduce excluded
+    endpoints (e.g. mahdiyari); filtering only inside get_good_nodes is not
+    enough.
+    """
+    if not nodes:
+        return []
+    excluded = set(EXCLUDE_NODES)
+    return [n for n in nodes if n not in excluded]
+
+
 @time_decorator
 def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs) -> Hive:
     """
@@ -211,19 +232,32 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
                 if isinstance(ttl, int) and ttl < 3000:
                     good_nodes = get_good_nodes()
                 else:
-                    good_nodes = json.loads(good_nodes_json)
+                    # Always re-apply EXCLUDE: Redis may predate exclude list changes.
+                    good_nodes = _filter_excluded_nodes(json.loads(good_nodes_json))
         except Exception as e:
             logger.warning(f"Redis not available {e}", extra={"notification": False})
         if not good_nodes:
             good_nodes = get_good_nodes()
         if stream_only:
             good_nodes += BLOCK_STREAM_ONLY
+        good_nodes = _filter_excluded_nodes(good_nodes)
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
+    else:
+        # Caller-supplied list (including rebuild paths) must respect exclude too.
+        node_arg = kwargs["node"]
+        if isinstance(node_arg, str):
+            node_arg = [node_arg]
+        kwargs["node"] = _filter_excluded_nodes(list(node_arg))
+        if not kwargs["node"]:
+            kwargs["node"] = get_good_nodes()
+
     if "nobroadcast" not in kwargs:
         kwargs["nobroadcast"] = nobroadcast
 
     count = len(kwargs["node"])
+    if count == 0:
+        raise ValueError("No working node found: empty node list after EXCLUDE_NODES filter")
     errors = 0
     while errors < count:
         try:
@@ -257,17 +291,31 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
 
 def get_blockchain_instance(*args, **kwargs) -> Blockchain:
     """
-    Create a Blockchain instance.
-    """
-    if "hive_instance" not in kwargs:
-        kwargs["hive"] = get_hive_client(*args, **kwargs)
-        kwargs["mode"] = kwargs.get("mode", "head")
-        blockchain = Blockchain(*args, **kwargs)
-    else:
-        kwargs["mode"] = "head"
-        blockchain = Blockchain(*args, **kwargs)
+    Create a Blockchain instance bound to a Hive client.
 
-    return blockchain
+    Accepts either ``hive_instance=`` or ``hive=`` (or creates a client via
+    ``get_hive_client``). Must pass ``blockchain_instance=`` to Nectar's
+    ``Blockchain`` — ``hive_instance`` is ignored by Nectar and would silently
+    fall back to the process-global shared Hive (whose node pool can be dead
+    while a freshly built client is healthy).
+    """
+    hive = kwargs.pop("hive_instance", None) or kwargs.pop("hive", None)
+    if hive is None:
+        # Avoid passing Blockchain-only kwargs into get_hive_client.
+        hive_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k
+            not in {"mode", "max_block_wait_repetition", "data_refresh_time_seconds"}
+        }
+        hive = get_hive_client(*args, **hive_kwargs)
+    mode = kwargs.pop("mode", "head")
+    max_block_wait_repetition = kwargs.pop("max_block_wait_repetition", None)
+    return Blockchain(
+        blockchain_instance=hive,
+        mode=mode,
+        max_block_wait_repetition=max_block_wait_repetition,
+    )
 
 
 def get_good_nodes() -> List[str]:
@@ -303,7 +351,7 @@ def get_good_nodes() -> List[str]:
                 extra={"beacon_response": nodes, "error_code_clear": "beacon_nodes_fail"},
             )
             good_nodes = [node["endpoint"] for node in nodes if node["score"] >= 80]
-            good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
+            good_nodes = _filter_excluded_nodes(good_nodes)
             logger.info(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
             try:
                 InternalConfig.redis_decoded.setex(
@@ -322,8 +370,7 @@ def get_good_nodes() -> List[str]:
 
     good_nodes_json = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
     if good_nodes_json and isinstance(good_nodes_json, str):
-        good_nodes = json.loads(good_nodes_json)
-        good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
+        good_nodes = _filter_excluded_nodes(json.loads(good_nodes_json))
     if good_nodes:
         logger.warning(
             "Failed to fetch good nodes: using last good nodes.",
@@ -340,7 +387,7 @@ def get_good_nodes() -> List[str]:
                 "error_code": "beacon_nodes_fail",
             },
         )
-        good_nodes = DEFAULT_GOOD_NODES
+        good_nodes = _filter_excluded_nodes(list(DEFAULT_GOOD_NODES))
         InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes))
 
     if len(good_nodes) < 2:
@@ -348,8 +395,7 @@ def get_good_nodes() -> List[str]:
             f"Too few good nodes found ({len(good_nodes)}), using default nodes.",
             extra={"good_nodes": good_nodes},
         )
-        good_nodes = DEFAULT_GOOD_NODES
-        good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
+        good_nodes = _filter_excluded_nodes(list(DEFAULT_GOOD_NODES))
         InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 1800, json.dumps(good_nodes))
     return good_nodes
 
@@ -564,7 +610,21 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         The function logs the last node used by the Hive blockchain instance and any
         errors encountered.
     """
-    hive = get_hive_client(node=["https://hapi.ecency.com", "https://api.hive.blog"])
+    global _hive_internal_market_cooldown_until
+    global _hive_internal_market_last_success
+    global _hive_internal_market_last_success_at
+
+    now = datetime.now(tz=timezone.utc)
+    if _hive_internal_market_last_success and _hive_internal_market_last_success_at:
+        if now - _hive_internal_market_last_success_at < timedelta(
+            seconds=HIVE_INTERNAL_MARKET_SUCCESS_CACHE_SECONDS
+        ):
+            return _hive_internal_market_last_success
+
+    if _hive_internal_market_cooldown_until and now < _hive_internal_market_cooldown_until:
+        return HiveInternalQuote(error="HiveInternalMarket cooldown active")
+
+    hive = get_hive_client()
     market = Market("HBD:HIVE", hive=hive)
     try:
         ticker = market.ticker()
@@ -575,11 +635,17 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         lowest_ask_value = float(lowest_ask["price"])
         hive_hbd = float(((lowest_ask_value - highest_bid_value) / 2) + highest_bid_value)
         answer = HiveInternalQuote(hive_hbd=hive_hbd, raw_response=ticker)
+        _hive_internal_market_last_success = answer
+        _hive_internal_market_last_success_at = now
+        _hive_internal_market_cooldown_until = None
         return answer
     except Exception as ex:
         # logging.exception(ex)
         logger.info(
             f"Calling Market API on Hive: {market['blockchain_instance'].data['last_node']}"
+        )
+        _hive_internal_market_cooldown_until = datetime.now(tz=timezone.utc) + timedelta(
+            seconds=HIVE_INTERNAL_MARKET_FAILURE_COOLDOWN_SECONDS
         )
         message = f"Problem calling Hive Market API {ex}"
         logger.error(message)
@@ -867,8 +933,8 @@ async def send_custom_json(
 async def perform_transfer_checks(
     from_account: AccName | str,
     to_account: AccName | str,
-    # amount: Amount = Amount(amount="0.000 HIVE"),
-    # nobroadcast: bool = False,
+    amount: Amount = Amount(amount="0.000 HIVE"),
+    nobroadcast: bool = False,
 ) -> bool:
     """
     Perform full validations, raise errors if a failure
@@ -1093,19 +1159,18 @@ async def send_transfer(
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
         hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
-    if hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
+    if hive_client and hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
         raise ValueError("nobroadcast is not set to the same value as hive_client")
-    from nectar.account import Account as NectarAccount
 
-    account: NectarAccount = NectarAccount(from_account, blockchain_instance=hive_client)
+    account: Account = Account(from_account, blockchain_instance=hive_client)
     if not account:
         raise ValueError("Invalid account")
     try:
         await perform_transfer_checks(
             from_account=from_account,
             to_account=to_account,
-            amount=amount,
-            nobroadcast=nobroadcast,
+            # amount=amount,
+            # nobroadcast=nobroadcast,
         )
     except HiveDevelopmentAccountError as e:
         logger.error(f"HiveDevelopmentAccountError: {e}")
