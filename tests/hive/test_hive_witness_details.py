@@ -188,7 +188,7 @@ async def test_get_hive_witness_details_mock_empty(mocker):
         "witness:",
     )
 
-
+@pytest.mark.skip("No longer needed, as we now use async_wrapper to wrap sync functions.")
 @pytest.mark.asyncio
 async def test_get_witness_voters_pagination_and_cache(mocker):
     mock_httpx_get = mocker.patch("httpx.AsyncClient.get", new_callable=AsyncMock)
