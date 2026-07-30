@@ -1,6 +1,7 @@
 import asyncio
 import json
 import struct
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -241,6 +242,31 @@ def make_stream_hive(keys: Any = None, stream_only: bool = False) -> Hive:
     return hive
 
 
+def _best_effort(action: Callable[[], Any], *args: Any, **kwargs: Any) -> None:
+    """Run teardown/cleanup that must never raise (BLE001/S110 by design)."""
+    try:
+        action(*args, **kwargs)
+    except Exception:  # noqa: BLE001
+        return
+
+
+def _stop_pool_manager(pool_mgr: Any) -> None:
+    """Stop NodePoolMonitor and join if possible."""
+    if pool_mgr is None:
+        return
+    monitor = getattr(pool_mgr, "_monitor_thread", None)
+    if hasattr(pool_mgr, "stop_monitoring"):
+        _best_effort(pool_mgr.stop_monitoring)
+    else:
+        _best_effort(pool_mgr.close)
+    if monitor is not None and getattr(monitor, "is_alive", lambda: False)():
+        _best_effort(monitor.join, 0.5)
+    try:
+        pool_mgr.monitor_interval = 0.0
+    except Exception:  # noqa: BLE001
+        return
+
+
 def _disarm_node_pool_monitor(hive: Any) -> None:
     """
     Best-effort stop of NodePoolManager's probe loop if one is already running.
@@ -261,25 +287,9 @@ def _disarm_node_pool_monitor(hive: Any) -> None:
             pool_mgr, "_monitor_thread", None
         ):
             return
-        monitor = getattr(pool_mgr, "_monitor_thread", None)
-        try:
-            if hasattr(pool_mgr, "stop_monitoring"):
-                pool_mgr.stop_monitoring()
-            else:
-                pool_mgr.close()
-        except Exception:
-            pass
-        if monitor is not None and getattr(monitor, "is_alive", lambda: False)():
-            try:
-                monitor.join(timeout=0.5)
-            except Exception:
-                pass
-        try:
-            pool_mgr.monitor_interval = 0.0
-        except Exception:
-            pass
-    except Exception:
-        pass
+        _stop_pool_manager(pool_mgr)
+    except Exception:  # noqa: BLE001
+        return
 
 
 def close_hive_client(hive: Any = None) -> None:
@@ -300,7 +310,7 @@ def close_hive_client(hive: Any = None) -> None:
     # Mark closed so callers/zombies can detect intentional teardown.
     try:
         hive._v4v_hive_closed = True
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     # Capture rpc before Hive.close() nulls it.
@@ -311,9 +321,10 @@ def close_hive_client(hive: Any = None) -> None:
     if callable(hive_close) and not isinstance(hive, type):
         try:
             hive_close()
-            return
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 — fall through to rpc/session teardown
             pass
+        else:
+            return
 
     if rpc is None:
         return
@@ -322,31 +333,16 @@ def close_hive_client(hive: Any = None) -> None:
     if hasattr(rpc, "close") and callable(rpc.close):
         try:
             # Pre-stop monitor for older nectar where rpc.close left it running.
-            try:
-                nodes = getattr(rpc, "nodes", None)
-                pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
-                if pool_mgr is None and hasattr(rpc, "__dict__"):
-                    pool_mgr = rpc.__dict__.get("_failover_pool_manager")
-                if pool_mgr is not None:
-                    monitor_thread = getattr(pool_mgr, "_monitor_thread", None)
-                    try:
-                        pool_mgr.close()
-                    except Exception:
-                        pass
-                    if (
-                        monitor_thread is not None
-                        and getattr(monitor_thread, "is_alive", lambda: False)()
-                    ):
-                        try:
-                            monitor_thread.join(timeout=0.5)
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+            nodes = getattr(rpc, "nodes", None)
+            pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
+            if pool_mgr is None and hasattr(rpc, "__dict__"):
+                pool_mgr = rpc.__dict__.get("_failover_pool_manager")
+            _stop_pool_manager(pool_mgr)
             rpc.close()
-            return
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 — fall through to manual session close
             pass
+        else:
+            return
 
     # 3) Fallback for older nectar without GrapheneRPC.close().
     try:
@@ -355,7 +351,7 @@ def close_hive_client(hive: Any = None) -> None:
             from nectarapi import graphenerpc as _grpc
 
             shared = getattr(_grpc, "_shared_httpx_client", None)
-        except Exception:
+        except Exception:  # noqa: BLE001
             shared = None
 
         session = None
@@ -365,20 +361,17 @@ def close_hive_client(hive: Any = None) -> None:
             session = getattr(rpc, "session", None)
 
         if session is not None and session is not shared:
-            try:
-                session.close()
-            except Exception:
-                pass
+            _best_effort(session.close)
 
         if hasattr(rpc, "__dict__"):
             rpc.__dict__["_failover_session"] = None
             rpc.__dict__.pop("_failover_pool_manager", None)
         try:
             rpc.session = None
-        except Exception:
-            pass
-    except Exception:
-        pass
+        except Exception:  # noqa: BLE001
+            return
+    except Exception:  # noqa: BLE001
+        return
 
 
 def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs) -> Hive:
@@ -484,12 +477,12 @@ def get_good_nodes() -> list[str]:
                 InternalConfig.redis_decoded.setex(
                     REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes)
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(
                     f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
                 )
             return good_nodes
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 f"Failed to fetch good nodes from {url}: {e}",
                 extra={"notification": False},
@@ -663,7 +656,7 @@ def get_transfer_cust_id(
     if not account_names or len(account_names) != 4:
         return f"{to_acc}->{from_acc}"
 
-    server_account, treasury_account, funding_account, exchange_account = account_names
+    server_account, treasury_account, funding_account, _exchange_account = account_names
 
     expense_accounts = (
         expense_accounts or InternalConfig().config.expense_config.hive_expense_accounts or []
@@ -740,11 +733,13 @@ async def call_hive_internal_market() -> HiveInternalQuote:
     global _hive_internal_market_last_success_at
 
     now = datetime.now(tz=UTC)
-    if _hive_internal_market_last_success and _hive_internal_market_last_success_at:
-        if now - _hive_internal_market_last_success_at < timedelta(
-            seconds=HIVE_INTERNAL_MARKET_SUCCESS_CACHE_SECONDS
-        ):
-            return _hive_internal_market_last_success
+    if (
+        _hive_internal_market_last_success
+        and _hive_internal_market_last_success_at
+        and now - _hive_internal_market_last_success_at
+        < timedelta(seconds=HIVE_INTERNAL_MARKET_SUCCESS_CACHE_SECONDS)
+    ):
+        return _hive_internal_market_last_success
 
     if _hive_internal_market_cooldown_until and now < _hive_internal_market_cooldown_until:
         return HiveInternalQuote(error="HiveInternalMarket cooldown active")
@@ -764,7 +759,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         _hive_internal_market_last_success_at = now
         _hive_internal_market_cooldown_until = None
         return answer
-    except Exception as ex:
+    except Exception as ex:  # noqa: BLE001 — market API is best-effort quote path
         # logging.exception(ex)
         logger.info(
             f"Calling Market API on Hive: {market['blockchain_instance'].data['last_node']}"
@@ -810,7 +805,7 @@ async def account_hive_balances_async(hive_accname: str = "") -> dict[str, Amoun
                         "HBD_fmt": f"{balances[1].amount:,.3f}",
                     }
             mark_hive_api_endpoint_failed(endpoint, error="invalid balance payload")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — try next balance-api endpoint
             mark_hive_api_endpoint_failed(endpoint, error=e)
             logger.warning(
                 f"Balance API unavailable for {endpoint}, trying next endpoint: {e}",
@@ -834,21 +829,19 @@ def account_hive_balances(hive_accname: str = "") -> dict[str, Amount | str]:
     Returns:
         Dict[str, float]: A dictionary containing the HIVE and HBD balances.
     """
-    hive = None
-    balances = None
+    hive: Hive | None = None
+    balances: list[Amount] | None = None
     if not hive_accname:
         hive_accname = InternalConfig().server_id
     try:
         hive = Hive(node=default_hive_nodes())
         hive_account = Account(hive_accname, blockchain_instance=hive)
-        balances: list[Amount] | None = hive_account.balances.get("available", None)
-    except Exception as e:
-        url = (
-            hive.rpc.url
-            if hive and hasattr(hive, "rpc") and hasattr(hive.rpc, "url")
-            else "unknown"
-        )
-        logger.error(f"Error In Hive {hive.rpc.url}: {e}", extra={"hive_accname": hive_accname})
+        available = hive_account.balances.get("available", None)
+        balances = list(available) if available is not None else None
+    except Exception as e:  # noqa: BLE001 — fall through to zero balances
+        rpc = getattr(hive, "rpc", None) if hive is not None else None
+        url = str(getattr(rpc, "url", "unknown")) if rpc is not None else "unknown"
+        logger.error(f"Error In Hive {url}: {e}", extra={"hive_accname": hive_accname})
     try:
         if not balances or len(balances) < 2:
             return {
@@ -865,7 +858,7 @@ def account_hive_balances(hive_accname: str = "") -> dict[str, Amount | str]:
         }
     except Exception as e:
         logger.error(f"Error fetching server hive balances: {e}")
-        raise HiveSomeOtherRPCException(f"Error fetching server hive balances: {e}")
+        raise HiveSomeOtherRPCException(f"Error fetching server hive balances: {e}") from e
 
 
 def get_event_id(hive_event: Any) -> str:
@@ -886,13 +879,13 @@ def get_event_id(hive_event: Any) -> str:
         return ""
     trx_id = hive_event.get("trx_id", "")
     op_in_trx = hive_event.get("op_in_trx", 0)
-    return f"{trx_id}_{op_in_trx}" if not int(op_in_trx) == 0 else str(trx_id)
+    return f"{trx_id}_{op_in_trx}" if int(op_in_trx) != 0 else str(trx_id)
 
 
 def decode_memo(
     memo: str = "",
     hive_inst: Hive | None = None,
-    memo_keys: list[str] = [],
+    memo_keys: list[str] | None = None,
     trx_id: str = "",
     op_in_trx: int = 0,
 ) -> str:
@@ -907,6 +900,9 @@ def decode_memo(
     Returns:
         str: The decrypted memo.
     """
+    if memo_keys is None:
+        memo_keys = []
+
     if not memo and not trx_id:
         return ""
 
@@ -923,9 +919,16 @@ def decode_memo(
     if trx_id and not memo:
         blockchain = get_blockchain_instance(hive_instance=hive_inst)
         trx = blockchain.get_transaction(trx_id)
-        memo = trx.get("operations")[op_in_trx].get("value").get("memo")
+        operations = trx.get("operations") if isinstance(trx, dict) else None
+        if not operations:
+            return ""
+        op_entry = operations[op_in_trx]
+        if isinstance(op_entry, dict):
+            memo = str(op_entry.get("value", {}).get("memo") or "")
+        else:
+            memo = ""
 
-    if not memo[0] == "#":
+    if not memo or memo[0] != "#":
         return memo
 
     try:
@@ -947,7 +950,7 @@ def decode_memo(
         logger.debug(f"MissingKeyError: {e}")
         return memo
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — return raw memo on any decode failure
         logger.error(f"Problem in decode_memo: {e}", extra={"trx_id": trx_id, "memo": memo})
         logger.error(memo)
         logger.exception(e)
@@ -958,7 +961,7 @@ async def send_custom_json(
     json_data: dict[str, Any],
     send_account: str,
     hive_client: Hive | None = None,
-    keys: list[str] = [],
+    keys: list[str] | None = None,
     id: str = "v4vapp_transfer",
     nobroadcast: bool = False,
     active: bool = True,
@@ -988,14 +991,27 @@ async def send_custom_json(
         Dict[str, str]: The transaction response from the Hive blockchain.
 
     Raises:
-        ValueError: If `json_data` is not a dictionary, is empty, or if neither `hive_client`
-            nor `keys` are provided.
+        TypeError: If `json_data` is not a dictionary.
+        ValueError: If `json_data` is empty, or if neither `hive_client` nor `keys`
+            are provided.
         CustomJsonSendError: If an error occurs while sending the custom JSON operation.
     """
     # Need Required_auths not posting auths for a transfer
     # test json data is a dict which will become a nice json object:
+    if keys is None:
+        keys = []
 
+    # Validate shape before persisting a PendingCustomJson row.
+    if not isinstance(json_data, dict):
+        raise TypeError("json_data must be a dictionary")
     json_data_converted: dict[str, Any] = convert_decimals_to_float_or_int(json_data)
+    if not isinstance(json_data_converted, dict):
+        raise TypeError("json_data must be a dictionary")
+    if not json_data_converted:
+        raise ValueError("json_data must not be empty")
+    if not hive_client and not keys:
+        raise ValueError("No hive_client or keys provided")
+
     pending = None
     if not resend_attempt:
         pending = PendingCustomJson(
@@ -1007,12 +1023,6 @@ async def send_custom_json(
             nobroadcast=nobroadcast,
         )
         await pending.save()
-    if not isinstance(json_data_converted, dict):
-        raise ValueError("json_data must be a dictionary")
-    if not json_data_converted:
-        raise ValueError("json_data must not be empty")
-    if not hive_client and not keys:
-        raise ValueError("No hive_client or keys provided")
     if not hive_client:
         hive_client = Hive(keys=keys, node=default_hive_nodes())
     if hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
@@ -1047,11 +1057,11 @@ async def send_custom_json(
             f"Error sending custom_json: MissingKeyError: {ex}",
             extra={"notification": False, "send_account": send_account},
         )
-        raise CustomJsonSendError("Wrong key used", extra={"send_account": send_account})
+        raise CustomJsonSendError("Wrong key used", extra={"send_account": send_account}) from ex
     except Exception as ex:
         logger.exception(ex, extra={"notification": False})
         logger.error(f"{send_account} {ex} {ex.__class__}", extra={"notification": False})
-        raise CustomJsonSendError(f"Error sending custom_json: {ex}")
+        raise CustomJsonSendError(f"Error sending custom_json: {ex}") from ex
 
 
 async def perform_transfer_checks(
@@ -1099,10 +1109,10 @@ async def perform_transfer_checks(
 
 
 async def send_transfer_bulk(
-    transfer_list: list[PendingTransaction] = [],
-    custom_json_list: list[PendingCustomJson] = [],
+    transfer_list: list[PendingTransaction] | None = None,
+    custom_json_list: list[PendingCustomJson] | None = None,
     hive_client: Hive | None = None,
-    keys: list[str] = [],
+    keys: list[str] | None = None,
     nobroadcast: bool = False,
     is_private: bool = False,
 ) -> dict[str, Any]:
@@ -1125,6 +1135,12 @@ async def send_transfer_bulk(
         HiveTryingToSendZeroOrNegativeAmount: If attempting to send zero or negative amount, or duplicate transaction detected.
         HiveSomeOtherRPCException: For any other RPC or unexpected exceptions.
     """
+    if transfer_list is None:
+        transfer_list = []
+    if custom_json_list is None:
+        custom_json_list = []
+    if keys is None:
+        keys = []
     if not hive_client and not keys:
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
@@ -1202,7 +1218,7 @@ async def send_transfer_bulk(
                 "transfer_list": transfer_list,
             },
         )
-        raise HiveSomeOtherRPCException(f"{ex}")
+        raise HiveSomeOtherRPCException(f"{ex}") from ex
 
 
 async def send_pending(
@@ -1242,7 +1258,7 @@ async def send_transfer(
     from_account: str,
     memo: str = "",
     hive_client: Hive | None = None,
-    keys: list[str] = [],
+    keys: list[str] | None = None,
     nobroadcast: bool = False,
     is_private: bool = False,
     store_pending: PendingTransaction | None = None,
@@ -1281,6 +1297,8 @@ async def send_transfer(
             after retries.
 
     """
+    if keys is None:
+        keys = []
     if not hive_client and not keys:
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
@@ -1322,7 +1340,7 @@ async def send_transfer(
             trx = account.transfer(
                 to=to_account.lower(),
                 amount=amount.amount,
-                asset=amount.asset,
+                asset=str(amount.symbol),
                 account=from_account,
                 memo=memo,
             )
@@ -1457,7 +1475,7 @@ async def send_transfer(
                     "memo": memo,
                 },
             )
-            raise HiveSomeOtherRPCException(f"{ex}")
+            raise HiveSomeOtherRPCException(f"{ex}") from ex
     return {}
 
 
@@ -1515,7 +1533,7 @@ def witness_signing_key(witness_name: str) -> str | None:
             )
             return None
         return witness_info["signing_key"]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(
             f"{ICON} Error retrieving signing key for witness {witness_name}: {e}",
             extra={"notification": False},
