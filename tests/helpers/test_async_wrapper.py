@@ -107,6 +107,37 @@ async def test_sync_to_async_iterable_propagates_num_retries_reached():
         _ = [x async for x in async_iter]
 
 
+def test_is_closed_client_error_covers_nectar_107_hard_close():
+    """Closed/rebuild stream workers must end quietly, not look like a stall."""
+    from v4vapp_backend_v2.helpers.async_wrapper import _is_closed_client_error
+
+    class RPCClosed(Exception):
+        pass
+
+    assert _is_closed_client_error(RPCClosed("RPC client is closed; create a new client"))
+    assert _is_closed_client_error(Exception("RPC client is closed; create a new client"))
+    assert _is_closed_client_error(AttributeError("'NoneType' object has no attribute 'get_active_node'"))
+    assert _is_closed_client_error(WorkingNodeMissing("Node pool manager is not available (client closed or not initialized)"))
+    assert not _is_closed_client_error(WorkingNodeMissing("No working nodes available."))
+    assert not _is_closed_client_error(NumRetriesReached())
+
+
+@pytest.mark.asyncio
+async def test_sync_to_async_iterable_ends_on_rpc_closed():
+    """Hard-close errors become clean end-of-stream for abandoned workers."""
+
+    class RPCClosed(Exception):
+        pass
+
+    def failing_generator() -> Generator[int, None, None]:
+        raise RPCClosed("RPC client is closed; create a new client instead of reconnecting")
+        yield 1
+
+    async_iter = sync_to_async_iterable(failing_generator())
+    results = [x async for x in async_iter]
+    assert results == []
+
+
 def test_type_hints():
     """Test that type hints are preserved (manual inspection)."""
     # This is more of a compile-time check, but we can verify the function signatures

@@ -270,9 +270,9 @@ async def test_send_custom_json_fail_posting_key_instead_active(mock_pending_cus
 @pytest.mark.parametrize(
     "json_data, send_account, hive_client, keys, expected_exception, match_message",
     [
-        # Test case: json_data is not a dictionary
-        (None, "test_account", None, [], ValueError, "json_data must be a dictionary"),
-        # Test case: json_data is empty
+        # Test case: json_data is not a dictionary (TypeError — wrong type)
+        (None, "test_account", None, [], TypeError, "json_data must be a dictionary"),
+        # Test case: json_data is empty (ValueError — right type, bad value)
         ({}, "test_account", None, [], ValueError, "json_data must not be empty"),
         # Test case: No hive_client or keys provided
         (

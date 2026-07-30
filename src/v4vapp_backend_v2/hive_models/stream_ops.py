@@ -13,8 +13,10 @@ Critical design notes (learned the hard way):
   ``rpc.next()`` on that same client (shared session / pool contention).
 - Always **rebuild** a fresh Hive client on recovery instead of rotating the
   poisoned one.
-- Real-op and virtual-op streams must not share one RPC client — concurrent
-  ``next()`` on the same session is how we deadlocked after virtual-ops timeout.
+- Use **one** Hive client for both real and virtual ops. Virtual ops are
+  fetched **sequentially** between real-op events (same pattern as the stable
+  pre-dual-client design). A second permanent client + per-block stream was
+  the main overnight EMFILE (Errno 24) amplifier in production.
 - All recovery RPCs run via ``asyncio.to_thread`` with a hard asyncio budget.
 """
 
@@ -22,8 +24,9 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncGenerator, Callable, TypeVar
+from collections.abc import AsyncGenerator, Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from nectar.blockchain import Blockchain
 from nectar.exceptions import NectarException
@@ -47,18 +50,20 @@ ICON = "🔗"
 
 # Hive blocks ~3s; filtered streams can be quiet for several blocks.
 STREAM_TIMEOUT_SECONDS = 15
-# Virtual-ops fetch is a one-block scan on a *separate* client; keep tight.
-VIRTUAL_OPS_TIMEOUT_SECONDS = 8
+# Budget for one-block virtual-ops interleave on the *same* client (sequential).
+VIRTUAL_OPS_TIMEOUT_SECONDS = 12
+# After virtual-ops timeout, skip virtual fetch for this many blocks (protect live stream).
+VIRTUAL_OPS_SKIP_BLOCKS = 20
 # Hard budget for any single sync Nectar call run in a worker thread.
 SYNC_RPC_BUDGET_SECONDS = 25
 MAX_RESTART_BACKOFF_SECONDS = 8
+# Minimum seconds between full Hive rebuilds (rate-limit client churn / FD pressure).
+MIN_REBUILD_INTERVAL_SECONDS = 20
 # Catch-up only: far-behind scans may use batched get_block_range when the node
 # supports it. Live / near-head always uses max_batch_size=None.
 CATCHUP_BATCH_SIZE = 50
 CATCHUP_NEAR_HEAD_BLOCKS = 50
 QUOTE_REFRESH_MIN_INTERVAL_SECONDS = 30
-
-T = TypeVar("T")
 
 
 def _is_rate_limit_error(error: BaseException) -> bool:
@@ -76,9 +81,12 @@ def _is_batch_not_supported_error(error: BaseException) -> bool:
 
 
 def _rpc_url(hive: Hive | None) -> str:
-    if hive is None or getattr(hive, "rpc", None) is None:
+    if hive is None:
         return "No RPC"
-    return str(hive.rpc.url)
+    rpc = getattr(hive, "rpc", None)
+    if rpc is None:
+        return "No RPC"
+    return str(rpc.url)
 
 
 def _hive_keys(hive: Hive | None) -> Any:
@@ -103,12 +111,6 @@ def _rebuild_hive_client(hive: Hive | None) -> tuple[Hive, Blockchain]:
     return new_hive, blockchain
 
 
-def _rebuild_virtual_client(keys: Any = None) -> tuple[Hive, Blockchain]:
-    """Fresh dedicated client for virtual-ops only."""
-    new_hive = make_stream_hive(keys=keys)
-    return new_hive, get_blockchain_instance(hive_instance=new_hive)
-
-
 def _ensure_stream_hive(hive: Hive | None) -> Hive:
     """Use fail-fast settings; rebuild if caller passed a default (slow) client."""
     if hive is None:
@@ -128,7 +130,7 @@ def _ensure_stream_hive(hive: Hive | None) -> Hive:
     return make_stream_hive(keys=_hive_keys(hive))
 
 
-async def _run_sync(
+async def _run_sync[T](
     fn: Callable[..., T],
     *args: Any,
     timeout: float = SYNC_RPC_BUDGET_SECONDS,
@@ -142,19 +144,17 @@ async def _run_sync(
 
     try:
         return await asyncio.wait_for(asyncio.to_thread(_call), timeout=timeout)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         logger.warning(
             f"{ICON} Sync {label} timed out after {timeout:.0f}s "
             f"(Nectar may still be retrying in a worker thread — client will be discarded)",
             extra={"notification": False, "error_code": "stream_restart"},
         )
-        raise asyncio.TimeoutError(f"{label} timed out after {timeout:.0f}s") from e
+        raise TimeoutError(f"{label} timed out after {timeout:.0f}s") from e
 
 
 class SwitchToLiveStream(Exception):
     """Reserved for callers that want to force a live-mode restart."""
-
-    pass
 
 
 async def stream_ops_async(
@@ -170,12 +170,11 @@ async def stream_ops_async(
     Async generator of Hive operations from Nectar's ``Blockchain.stream``.
 
     Failover strategy:
-      1. On any stream idle/error, **discard** the Hive client and rebuild fresh.
-         Do not call ``rpc.next()`` on a client that may still have zombie ``next()``
-         workers (that was the multi-minute silent stall).
+      1. On any stream idle/error, **discard** the Hive client and rebuild fresh
+         (rate-limited). Do not call ``rpc.next()`` on a poisoned client.
       2. Resume from the last successfully processed block number.
-      3. Virtual ops use a **separate** Hive client so they cannot block/poison
-         the real-op stream session.
+      3. Virtual ops are interleaved on the **same** client, sequentially between
+         real ops (no second permanent Hive).
 
     Args:
         filter_custom_json: When True (default), drop ``custom_json`` ops whose
@@ -187,9 +186,6 @@ async def stream_ops_async(
     hive = _ensure_stream_hive(hive)
     blockchain = get_blockchain_instance(hive_instance=hive)
     OpBase.hive_inst = hive
-    # Dedicated client for virtual-ops only — never share RPC with the live stream.
-    virtual_hive = make_stream_hive(keys=_hive_keys(hive))
-    virtual_blockchain = get_blockchain_instance(hive_instance=virtual_hive)
 
     if opNames:
         op_realms = [op_realm(op_type) for op_type in opNames]
@@ -201,21 +197,17 @@ async def stream_ops_async(
         current_block = await _run_sync(
             blockchain.get_current_block_num, label="get_current_block_num"
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — any Nectar/transport failure → rebuild
         logger.warning(
             f"{ICON} get_current_block_num failed at stream start: {e}; rebuilding client",
             extra={"notification": False, "error": e, "error_code": "stream_restart"},
         )
-        close_hive_client(virtual_hive)
-        hive, blockchain = await _run_sync(
-            _rebuild_hive_client, hive, label="rebuild_hive_client"
-        )
-        virtual_hive, virtual_blockchain = _rebuild_virtual_client(keys=_hive_keys(hive))
+        hive, blockchain = await _run_sync(_rebuild_hive_client, hive, label="rebuild_hive_client")
         current_block = await _run_sync(
             blockchain.get_current_block_num, label="get_current_block_num"
         )
 
-    time_now = datetime.now(tz=timezone.utc)
+    time_now = datetime.now(tz=UTC)
     start_time = time_now
 
     if look_back:
@@ -226,7 +218,7 @@ async def stream_ops_async(
                 start_time,
                 label="get_estimated_block_num",
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — fall back to time/3 estimate
             start_block = current_block - int(look_back.total_seconds() / 3)
             logger.warning(
                 f"{ICON} Error getting start block from time {start_time}; "
@@ -244,14 +236,15 @@ async def stream_ops_async(
     restart_count = 0
     batch_disabled = False
     last_quote_refresh_at: datetime | None = None
+    last_rebuild_at: datetime | None = None
     finite_stop = stop is not None or stop_now
     stream_ended_cleanly = False
-    # After virtual-ops trouble, skip a few blocks of virtual fetch to protect live stream.
+    # After virtual-ops trouble, skip virtual fetch for a few blocks.
     virtual_ops_skip_until_block = 0
 
     async def maybe_refresh_quote() -> None:
         nonlocal last_quote_refresh_at
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         if last_quote_refresh_at and (now - last_quote_refresh_at) < timedelta(
             seconds=QUOTE_REFRESH_MIN_INTERVAL_SECONDS
         ):
@@ -261,7 +254,7 @@ async def stream_ops_async(
                 TrackedBaseModel.update_quote(),
                 timeout=SYNC_RPC_BUDGET_SECONDS,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — quote is best-effort; stream continues
             logger.warning(
                 f"{ICON} Quote refresh failed (continuing stream): {e}",
                 extra={"notification": False},
@@ -277,7 +270,7 @@ async def stream_ops_async(
                 timeout=min(15.0, SYNC_RPC_BUDGET_SECONDS),
                 label="choose_batch_size/head",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 — fall back to unbatched stream
             return None
         gap = head_now - start_block
         if gap >= CATCHUP_NEAR_HEAD_BLOCKS:
@@ -291,50 +284,87 @@ async def stream_ops_async(
             return
         try:
             await asyncio.wait_for(aclose(), timeout=1.0)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 — teardown must not raise
+            return
 
-    def _collect_virtual_ops_sync(block_num: int) -> list[dict]:
-        """Run on a worker thread against the dedicated virtual client only."""
-        events: list[dict] = []
-        for event in virtual_blockchain.stream(
-            start=block_num,
-            stop=block_num,
-            raw_ops=False,
-            only_virtual_ops=True,
-            max_batch_size=None,
-            threading=False,
-        ):
-            events.append(event)
-        return events
+    async def yield_virtual_ops_for_block(block_num: int):
+        """
+        Sequentially stream virtual ops for one block on the *same* blockchain.
 
-    async def fetch_virtual_ops_for_block(block_num: int) -> list[dict]:
-        """Fetch virtual ops without touching the live stream's Hive client."""
-        nonlocal virtual_hive, virtual_blockchain
-        try:
-            return await _run_sync(
-                _collect_virtual_ops_sync,
-                block_num,
-                timeout=VIRTUAL_OPS_TIMEOUT_SECONDS,
-                label=f"virtual_ops@{block_num}",
+        Does not open a second Hive client. Timeout → skip virtual ops briefly.
+        """
+        nonlocal virtual_ops_skip_until_block
+        if block_num < 1:
+            return
+        virtual_stream = sync_to_async_iterable(
+            blockchain.stream(
+                start=block_num,
+                stop=block_num,
+                raw_ops=False,
+                only_virtual_ops=True,
+                max_batch_size=None,
+                threading=False,
             )
-        except Exception as e:
+        )
+        try:
+            async with asyncio.timeout(VIRTUAL_OPS_TIMEOUT_SECONDS):
+                async for virtual_event in virtual_stream:
+                    try:
+                        op_virtual_base = op_any_or_base(virtual_event)
+                    except ValueError as e:
+                        logger.warning(
+                            f"{ICON} ValidationError virtual "
+                            f"{virtual_event.get('block_num')} "
+                            f"{virtual_event.get('trx_id')}: {e}",
+                            extra={
+                                "notification": True,
+                                "virtual_event": virtual_event,
+                            },
+                        )
+                        continue
+                    op_in_trx_counter.op_in_trx_inc(op_virtual_base)
+                    if op_virtual_base.op_type in opNames:
+                        yield op_virtual_base
+        except TimeoutError:
+            virtual_ops_skip_until_block = last_block + VIRTUAL_OPS_SKIP_BLOCKS
             logger.warning(
-                f"{ICON} Virtual-ops fetch failed for block {block_num:,} "
-                f"on {_rpc_url(virtual_hive)}: {e}; rebuilding virtual client only",
+                f"{ICON} Virtual-ops for block {block_num:,} timed out after "
+                f"{VIRTUAL_OPS_TIMEOUT_SECONDS}s on {_rpc_url(hive)}; "
+                f"skipping virtual fetch until block {virtual_ops_skip_until_block:,}",
                 extra={"notification": False, "error_code": "stream_restart"},
             )
-            try:
-                close_hive_client(virtual_hive)
-                virtual_hive, virtual_blockchain = _rebuild_virtual_client(
-                    keys=_hive_keys(hive)
-                )
-            except Exception as rebuild_err:
-                logger.warning(
-                    f"{ICON} Virtual client rebuild failed: {rebuild_err}",
+        except Exception as e:  # noqa: BLE001 — skip virtual briefly; keep real stream
+            virtual_ops_skip_until_block = last_block + VIRTUAL_OPS_SKIP_BLOCKS
+            logger.warning(
+                f"{ICON} Virtual-ops for block {block_num:,} failed on "
+                f"{_rpc_url(hive)}: {e}; skipping until {virtual_ops_skip_until_block:,}",
+                extra={"notification": False, "error_code": "stream_restart"},
+            )
+        finally:
+            await close_async_stream(virtual_stream)
+
+    async def rebuild_hive_with_rate_limit() -> str:
+        """Rebuild single Hive client; rate-limit to reduce FD churn."""
+        nonlocal hive, blockchain, last_rebuild_at
+        now = datetime.now(tz=UTC)
+        if last_rebuild_at is not None:
+            elapsed = (now - last_rebuild_at).total_seconds()
+            if elapsed < MIN_REBUILD_INTERVAL_SECONDS:
+                wait_for = MIN_REBUILD_INTERVAL_SECONDS - elapsed
+                logger.info(
+                    f"{ICON} Rebuild rate-limit: waiting {wait_for:.1f}s "
+                    f"(min interval {MIN_REBUILD_INTERVAL_SECONDS}s)",
                     extra={"notification": False},
                 )
-            return []
+                await asyncio.sleep(wait_for)
+        hive, blockchain = await _run_sync(
+            _rebuild_hive_client,
+            hive,
+            timeout=SYNC_RPC_BUDGET_SECONDS,
+            label="rebuild_hive_client",
+        )
+        last_rebuild_at = datetime.now(tz=UTC)
+        return _rpc_url(hive)
 
     while last_block is not None and stop_block is not None and last_block < stop_block:
         stream_ended_cleanly = False
@@ -342,7 +372,7 @@ async def stream_ops_async(
         rpc_url = _rpc_url(hive)
         try:
             effective_batch = await choose_batch_size()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             effective_batch = None
         async_stream_real = None
         try:
@@ -378,7 +408,7 @@ async def stream_ops_async(
                 except StopAsyncIteration:
                     stream_ended_cleanly = True
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(
                         f"{ICON} {start_block:,} Stream idle >{STREAM_TIMEOUT_SECONDS}s "
                         f"on {rpc_url}; discarding client and rebuilding "
@@ -389,7 +419,7 @@ async def stream_ops_async(
                     async_stream_real = None
                     raise
 
-                # Interleave virtual ops for the previous block when the stream advances.
+                # Interleave virtual ops for the previous block (same client, sequential).
                 if (
                     not only_virtual_ops
                     and hive_event["block_num"] > last_block
@@ -398,33 +428,12 @@ async def stream_ops_async(
                 ):
                     start_block = last_block
                     virtual_block = last_block - 1
-                    virtual_events = await fetch_virtual_ops_for_block(virtual_block)
-                    if not virtual_events and virtual_block > 0:
-                        # Brief cooldown so a bad virtual node doesn't stall every block.
-                        virtual_ops_skip_until_block = last_block + 5
-                    for virtual_event in virtual_events:
+                    async for op_virtual_base in yield_virtual_ops_for_block(virtual_block):
                         last_block = hive_event.get("block_num", start_block)
-                        try:
-                            op_virtual_base = op_any_or_base(virtual_event)
-                        except ValueError as e:
-                            logger.warning(
-                                f"{ICON} ValidationError virtual "
-                                f"{virtual_event.get('block_num')} "
-                                f"{virtual_event.get('trx_id')}: {e}",
-                                extra={
-                                    "notification": True,
-                                    "virtual_event": virtual_event,
-                                },
-                            )
-                            continue
-                        op_in_trx_counter.op_in_trx_inc(op_virtual_base)
-                        if op_virtual_base.op_type in opNames:
-                            yield op_virtual_base
+                        yield op_virtual_base
 
                 # Filter unknown custom_json only. custom_json_test_data() returns
                 # None for transfers/etc. (no cj id) — must not treat that as "drop".
-                # Previous condition used `not filter_custom_json`, which inverted
-                # the flag so default True never filtered (Copilot PR review).
                 if (
                     filter_custom_json
                     and hive_event.get("type") == "custom_json"
@@ -456,7 +465,7 @@ async def stream_ops_async(
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
             logger.info(f"{ICON} Async streamer stopping: {e}")
             return
-        except asyncio.TimeoutError:
+        except TimeoutError:
             await asyncio.sleep(0.1)
         except (NectarException, NumRetriesReached, UnhandledRPCError, WorkingNodeMissing) as e:
             sleep_for = 1.0
@@ -504,7 +513,7 @@ async def stream_ops_async(
             await asyncio.sleep(sleep_for)
         except StopAsyncIteration as e:
             logger.error(f"{ICON} {start_block:,} Stream stopped unexpectedly: {e}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — outer recovery for unknown stream faults
             if _is_batch_not_supported_error(e):
                 batch_disabled = True
                 logger.warning(
@@ -535,82 +544,59 @@ async def stream_ops_async(
             if async_stream_real is not None:
                 await close_async_stream(async_stream_real)
 
-            if last_block >= stop_block:
-                logger.info(
-                    f"{ICON} {start_block:,} Reached stop block {stop_block:,}, stopping."
-                )
-                break
+        # Exit / recovery outside finally so break/continue do not silence exceptions (B012).
+        if last_block >= stop_block:
+            logger.info(f"{ICON} {start_block:,} Reached stop block {stop_block:,}, stopping.")
+            break
 
-            if stream_ended_cleanly and finite_stop:
-                logger.info(
-                    f"{ICON} Stream finished cleanly at block {last_block:,} "
-                    f"(stop={stop_block:,}); ending catch-up.",
-                    extra={"notification": False},
-                )
-                break
-
-            if last_block and last_block > start_block:
-                start_block = last_block
-
-            previous_node = rpc_url
+        if stream_ended_cleanly and finite_stop:
             logger.info(
-                f"{ICON} {start_block:,} Recovering stream (last_block={last_block:,}, "
-                f"was {previous_node}) — abandoning client, rebuilding fresh…",
+                f"{ICON} Stream finished cleanly at block {last_block:,} "
+                f"(stop={stop_block:,}); ending catch-up.",
                 extra={"notification": False},
             )
-            # Never rpc.next() on the poisoned client: zombie next() workers still
-            # hold that session and next()/rotate can contend for minutes.
-            try:
-                # Close virtual client first (rebuild of main hive closes old main).
-                close_hive_client(virtual_hive)
-                hive, blockchain = await _run_sync(
-                    _rebuild_hive_client,
-                    hive,
-                    timeout=SYNC_RPC_BUDGET_SECONDS,
-                    label="rebuild_hive_client",
-                )
-                virtual_hive, virtual_blockchain = _rebuild_virtual_client(
-                    keys=_hive_keys(hive)
-                )
-                next_url = _rpc_url(hive)
-                logger.info(
-                    f"{ICON} {start_block:,} Rebuilt Hive client → {next_url}",
-                    extra={"notification": False},
-                )
-            except Exception as e:
-                restart_count += 1
-                backoff = min(MAX_RESTART_BACKOFF_SECONDS, 0.5 * restart_count)
-                logger.warning(
-                    f"{ICON} {start_block:,} Rebuild failed ({e}); "
-                    f"sleeping {backoff:.1f}s before retry",
-                    extra={"notification": False, "error_code": "stream_restart"},
-                )
-                await asyncio.sleep(backoff)
-                try:
-                    close_hive_client(virtual_hive)
-                    hive, blockchain = await _run_sync(
-                        _rebuild_hive_client,
-                        hive,
-                        timeout=15.0,
-                        label="rebuild_hive_client_retry",
-                    )
-                    virtual_hive, virtual_blockchain = _rebuild_virtual_client(
-                        keys=_hive_keys(hive)
-                    )
-                    next_url = _rpc_url(hive)
-                except Exception as e2:
-                    logger.warning(
-                        f"{ICON} {start_block:,} Rebuild retry failed: {e2}",
-                        extra={"notification": False},
-                    )
-                    continue
+            break
 
+        if last_block and last_block > start_block:
+            start_block = last_block
+
+        previous_node = rpc_url
+        logger.info(
+            f"{ICON} {start_block:,} Recovering stream (last_block={last_block:,}, "
+            f"was {previous_node}) — abandoning client, rebuilding fresh…",
+            extra={"notification": False},
+        )
+        # Single client only — never open a second permanent Hive for virtual ops.
+        try:
+            next_url = await rebuild_hive_with_rate_limit()
+            logger.info(
+                f"{ICON} {start_block:,} Rebuilt Hive client → {next_url}",
+                extra={"notification": False},
+            )
+        except Exception as e:  # noqa: BLE001 — rebuild may raise any transport error
             restart_count += 1
-            logger.info(
-                f"{ICON} {start_block:,} Resuming from block {last_block:,} "
-                f"via {next_url} (was {previous_node})",
-                extra={"notification": False},
+            backoff = min(MAX_RESTART_BACKOFF_SECONDS, 0.5 * restart_count)
+            logger.warning(
+                f"{ICON} {start_block:,} Rebuild failed ({e}); "
+                f"sleeping {backoff:.1f}s before retry",
+                extra={"notification": False, "error_code": "stream_restart"},
             )
+            await asyncio.sleep(backoff)
+            try:
+                next_url = await rebuild_hive_with_rate_limit()
+            except Exception as e2:  # noqa: BLE001
+                logger.warning(
+                    f"{ICON} {start_block:,} Rebuild retry failed: {e2}",
+                    extra={"notification": False},
+                )
+                continue
+
+        restart_count += 1
+        logger.info(
+            f"{ICON} {start_block:,} Resuming from block {last_block:,} "
+            f"via {next_url} (was {previous_node})",
+            extra={"notification": False},
+        )
 
 
 def get_virtual_ops_block(block_num: int, blockchain: Blockchain):

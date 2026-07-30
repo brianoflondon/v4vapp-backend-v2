@@ -1,6 +1,6 @@
 [project]
 name = "v4vapp-backend-v2"
-version = "2.12.2"
+version = "2.12.3"
 description = "Back End for the V4V.app bridge from Hive to Lightning"
 authors = [{name = "Brian of London (home imac)", email = "brian@v4v.app"}]
 license = {text = "MIT"}
@@ -98,7 +98,10 @@ filterwarnings = [
     "ignore:.*Task was destroyed but it is pending.*",  # Suppress task destroyed warnings
     "ignore:.*PytestUnraisableExceptionWarning.*"  # Suppress unraisable exception warnings
 ]
-markers = ["integration: mark slow integration tests"]
+markers = [
+    "integration: mark slow integration tests",
+    "live_nectar: live Hive/Nectar network probes (opt-in via NECTAR_STABILITY=1; never CI)",
+]
 
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "module"
@@ -108,7 +111,7 @@ asyncio_default_test_loop_scope = "module"
 exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a single regex pattern
 
 [tool.uv.sources]
-# hive-nectar = { git = "https://github.com/brianoflondon/hive-nectar.git", branch="fix/missing-account-import" }
+hive-nectar = { git = "https://github.com/brianoflondon/hive-nectar.git", branch="fix/long-running-client-lifecycle" }
 
 # hive-nectar = { git = "https://github.com/brianoflondon/hive-nectar.git", rev="95da569835ec3f31e85d5c2c489dfd101e4cbf85" }
 # hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git", rev="288d2313a8e9ec8f401a5e3e7e4a01bac73a17cd" }

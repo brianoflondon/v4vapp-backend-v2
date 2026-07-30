@@ -1,10 +1,10 @@
 import asyncio
 import json
 import struct
-import threading
-from datetime import datetime, timedelta, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List, Tuple
+from typing import Any
 from uuid import uuid4
 
 import backoff
@@ -23,7 +23,6 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.decorators import time_decorator
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_not_development_accounts,
@@ -117,8 +116,6 @@ class HiveNotHiveAccount(HiveTransferError):
     so a transfer to it can't be made for notifications
     """
 
-    pass
-
 
 class HiveNotEnoughHiveInAccount(HiveTransferError):
     """
@@ -145,15 +142,11 @@ class HiveTryingToSendZeroOrNegativeAmount(HiveTransferError):
     Exception raised when trying to send a zero or negative amount.
     """
 
-    pass
-
 
 class HiveMissingKeyError(HiveTransferError):
     """
     Exception raised when a required key is missing.
     """
-
-    pass
 
 
 class HiveSomeOtherRPCException(HiveTransferError):
@@ -162,35 +155,24 @@ class HiveSomeOtherRPCException(HiveTransferError):
     This is a catch-all for any other exceptions that do not fit the specific cases.
     """
 
-    pass
-
 
 class HiveToKeepsatsConversionError(HiveTransferError):
     """Custom exception for Hive to Keepsats conversion errors."""
-
-    pass
 
 
 class HiveConversionLimits(HiveTransferError):
     """Custom exception for conversion limit errors."""
 
-    pass
-
 
 class HiveAccountNameOnExchangesList(HiveTransferError):
     """Custom exception for when a Hive account name is found on exchanges list."""
-
-    pass
 
 
 class HiveDevelopmentAccountError(HiveTransferError):
     """Custom exception for development-related errors."""
 
-    pass
 
-
-
-def _filter_excluded_nodes(nodes: List[str]) -> List[str]:
+def _filter_excluded_nodes(nodes: list[str]) -> list[str]:
     """Drop nodes in EXCLUDE_NODES (exact match). Always apply before Hive().
 
     Callers that pass ``node=`` can reintroduce excluded endpoints; filter always.
@@ -201,7 +183,7 @@ def _filter_excluded_nodes(nodes: List[str]) -> List[str]:
     return [n for n in nodes if n not in excluded]
 
 
-def default_hive_nodes(stream_only: bool = False) -> List[str]:
+def default_hive_nodes(stream_only: bool = False) -> list[str]:
     """
     Static default RPC node list for Nectar ``Hive(node=...)``.
 
@@ -223,21 +205,20 @@ def default_hive_nodes(stream_only: bool = False) -> List[str]:
 STREAM_HIVE_TIMEOUT = 12
 STREAM_HIVE_NUM_RETRIES = 5
 STREAM_HIVE_NUM_RETRIES_CALL = 2
+# hive-nectar 1.0.7+ defaults monitor_interval=0; pass explicitly for older builds
+# and so stream clients never opt into background NodePoolMonitor probes.
+STREAM_HIVE_MONITOR_INTERVAL = 0.0
 
 
-def stream_hive_kwargs(stream_only: bool = False) -> Dict[str, Any]:
+def stream_hive_kwargs(stream_only: bool = False) -> dict[str, Any]:
     """Keyword args for a fail-fast Nectar ``Hive`` used by long-running streams."""
     return {
         "node": default_hive_nodes(stream_only=stream_only),
         "timeout": STREAM_HIVE_TIMEOUT,
         "num_retries": STREAM_HIVE_NUM_RETRIES,
         "num_retries_call": STREAM_HIVE_NUM_RETRIES_CALL,
+        "monitor_interval": STREAM_HIVE_MONITOR_INTERVAL,
     }
-
-
-# Serialize class-level NodePoolManager.__init__ patch (concurrent make_stream_hive /
-# bare Hive() construction must not race restore of the original constructor).
-_NODE_POOL_MONITOR_PATCH_LOCK = threading.Lock()
 
 
 def make_stream_hive(keys: Any = None, stream_only: bool = False) -> Hive:
@@ -247,38 +228,43 @@ def make_stream_hive(keys: Any = None, stream_only: bool = False) -> Hive:
     Uses short per-request timeouts and few retries so RPC failures surface to
     stream_ops quickly instead of freezing the process on Nectar's defaults.
 
-    Background ``NodePoolManager`` health monitors are disabled for stream clients
-    (``monitor_interval=0``). Streaming owns failover via rebuild; each abandoned
-    monitor thread + probe sockets is a major contributor to EMFILE
-    (``Too many open files``) under recovery pressure.
+    Background ``NodePoolManager`` health monitors are disabled
+    (``monitor_interval=0``). Streaming owns failover via rebuild; abandoned
+    monitor threads + probe sockets contributed to EMFILE under recovery pressure.
     """
     kwargs = stream_hive_kwargs(stream_only=stream_only)
     if keys:
         kwargs["keys"] = keys
 
-    # Nectar starts a 30s NodePoolMonitor on every multi-node Hive. Patch the
-    # constructor for this build only so stream clients never start it.
-    # Lock: class-level monkey-patch is process-global (Copilot PR review).
-    try:
-        from nectarapi.pool import NodePoolManager
-
-        with _NODE_POOL_MONITOR_PATCH_LOCK:
-            original_init = NodePoolManager.__init__
-
-            def _init_no_monitor(self, node_urls, max_lag: int = 15, monitor_interval=None):
-                original_init(self, node_urls, max_lag=max_lag, monitor_interval=0.0)
-
-            NodePoolManager.__init__ = _init_no_monitor  # type: ignore[method-assign]
-            try:
-                hive = Hive(**kwargs)
-            finally:
-                NodePoolManager.__init__ = original_init  # type: ignore[method-assign]
-    except Exception:
-        hive = Hive(**kwargs)
-        _disarm_node_pool_monitor(hive)
-
+    hive = Hive(**kwargs)
+    # Belt-and-suspenders for nectar builds that still default monitor_interval=30.
     _disarm_node_pool_monitor(hive)
     return hive
+
+
+def _best_effort(action: Callable[[], Any], *args: Any, **kwargs: Any) -> None:
+    """Run teardown/cleanup that must never raise (BLE001/S110 by design)."""
+    try:
+        action(*args, **kwargs)
+    except Exception:  # noqa: BLE001
+        return
+
+
+def _stop_pool_manager(pool_mgr: Any) -> None:
+    """Stop NodePoolMonitor and join if possible."""
+    if pool_mgr is None:
+        return
+    monitor = getattr(pool_mgr, "_monitor_thread", None)
+    if hasattr(pool_mgr, "stop_monitoring"):
+        _best_effort(pool_mgr.stop_monitoring)
+    else:
+        _best_effort(pool_mgr.close)
+    if monitor is not None and getattr(monitor, "is_alive", lambda: False)():
+        _best_effort(monitor.join, 0.5)
+    try:
+        pool_mgr.monitor_interval = 0.0
+    except Exception:  # noqa: BLE001
+        return
 
 
 def _disarm_node_pool_monitor(hive: Any) -> None:
@@ -296,81 +282,67 @@ def _disarm_node_pool_monitor(hive: Any) -> None:
         pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
         if pool_mgr is None:
             return
-        monitor = getattr(pool_mgr, "_monitor_thread", None)
-        try:
-            if hasattr(pool_mgr, "stop_monitoring"):
-                pool_mgr.stop_monitoring()
-            else:
-                pool_mgr.close()
-        except Exception:
-            pass
-        if monitor is not None and getattr(monitor, "is_alive", lambda: False)():
-            try:
-                monitor.join(timeout=0.5)
-            except Exception:
-                pass
-        try:
-            pool_mgr.monitor_interval = 0.0
-        except Exception:
-            pass
-    except Exception:
-        pass
+        # Already disabled — nothing to do.
+        if float(getattr(pool_mgr, "monitor_interval", 0) or 0) <= 0 and not getattr(
+            pool_mgr, "_monitor_thread", None
+        ):
+            return
+        _stop_pool_manager(pool_mgr)
+    except Exception:  # noqa: BLE001
+        return
 
 
 def close_hive_client(hive: Any = None) -> None:
     """
-    Release Nectar ``Hive`` RPC resources so rebuild/rotate paths do not leak FDs.
+    Release Nectar ``Hive`` resources so rebuild/rotate paths do not leak FDs.
 
-    Prefer Nectar's ``GrapheneRPC.close()`` for the per-instance httpx failover
-    session (hive-nectar a461fc5+). That call does **not** stop ``NodePoolManager``'s
-    background monitor, so we still close the pool manager explicitly.
+    Prefers ``Hive.close()`` / ``BlockChainInstance.close()`` (nectar 1.0.6+), which
+    closes the per-instance httpx clients **and** stops ``NodePoolManager``.
+    Falls back to ``GrapheneRPC.close()`` (hard-close + pool stop on 1.0.7+) and
+    manual session teardown for older builds.
 
     Safe to call with None or non-Hive objects. Does not close Nectar's process-wide
     shared httpx client.
     """
     if hive is None:
         return
+
+    # Mark closed so callers/zombies can detect intentional teardown.
+    try:
+        hive._v4v_hive_closed = True
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+    # Capture rpc before Hive.close() nulls it.
     rpc = getattr(hive, "rpc", None)
+
+    # 1) Full instance close when available (rpc + instance client/async_client + pool).
+    hive_close = getattr(hive, "close", None)
+    if callable(hive_close) and not isinstance(hive, type):
+        try:
+            hive_close()
+        except Exception:  # noqa: BLE001, S110 — fall through to rpc/session teardown
+            pass
+        else:
+            return
+
     if rpc is None:
         return
 
-    # Mark closed so callers/zombies can detect without exploding on pool_manager=None.
-    try:
-        setattr(hive, "_v4v_hive_closed", True)
-    except Exception:
-        pass
-
-    # 1) Stop NodePoolMonitor first (GrapheneRPC.close does not do this).
-    #    Keep a thread ref: stop_monitoring() nulls _monitor_thread without joining.
-    #    Do NOT set nodes.pool_manager = None: abandoned stream next() threads may still
-    #    call rpcconnect() → next(nodes) and would raise AttributeError on None.
-    try:
-        nodes = getattr(rpc, "nodes", None)
-        pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
-        # Also check the session-bound manager tracked since a461fc5.
-        if pool_mgr is None and hasattr(rpc, "__dict__"):
-            pool_mgr = rpc.__dict__.get("_failover_pool_manager")
-        if pool_mgr is not None:
-            monitor_thread = getattr(pool_mgr, "_monitor_thread", None)
-            try:
-                pool_mgr.close()  # stop_monitoring only
-            except Exception:
-                pass
-            if monitor_thread is not None and getattr(monitor_thread, "is_alive", lambda: False)():
-                try:
-                    monitor_thread.join(timeout=0.5)
-                except Exception:
-                    pass
-    except Exception:
-        pass
-
-    # 2) Official Nectar session cleanup (failover httpx client).
+    # 2) GrapheneRPC.close — on 1.0.7+ hard-closes and stops the pool manager.
     if hasattr(rpc, "close") and callable(rpc.close):
         try:
+            # Pre-stop monitor for older nectar where rpc.close left it running.
+            nodes = getattr(rpc, "nodes", None)
+            pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
+            if pool_mgr is None and hasattr(rpc, "__dict__"):
+                pool_mgr = rpc.__dict__.get("_failover_pool_manager")
+            _stop_pool_manager(pool_mgr)
             rpc.close()
-            return
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 — fall through to manual session close
             pass
+        else:
+            return
 
     # 3) Fallback for older nectar without GrapheneRPC.close().
     try:
@@ -379,7 +351,7 @@ def close_hive_client(hive: Any = None) -> None:
             from nectarapi import graphenerpc as _grpc
 
             shared = getattr(_grpc, "_shared_httpx_client", None)
-        except Exception:
+        except Exception:  # noqa: BLE001
             shared = None
 
         session = None
@@ -389,25 +361,20 @@ def close_hive_client(hive: Any = None) -> None:
             session = getattr(rpc, "session", None)
 
         if session is not None and session is not shared:
-            try:
-                session.close()
-            except Exception:
-                pass
+            _best_effort(session.close)
 
         if hasattr(rpc, "__dict__"):
             rpc.__dict__["_failover_session"] = None
             rpc.__dict__.pop("_failover_pool_manager", None)
         try:
             rpc.session = None
-        except Exception:
-            pass
-    except Exception:
-        pass
+        except Exception:  # noqa: BLE001
+            return
+    except Exception:  # noqa: BLE001
+        return
 
 
-def get_hive_client(
-    stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs
-) -> Hive:
+def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs) -> Hive:
     """
     Thin factory around Nectar ``Hive``.
 
@@ -455,8 +422,7 @@ def get_blockchain_instance(*args, **kwargs) -> Blockchain:
         hive_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k
-            not in {"mode", "max_block_wait_repetition", "data_refresh_time_seconds"}
+            if k not in {"mode", "max_block_wait_repetition", "data_refresh_time_seconds"}
         }
         if "nobroadcast" not in hive_kwargs:
             hive_kwargs["nobroadcast"] = False
@@ -472,7 +438,7 @@ def get_blockchain_instance(*args, **kwargs) -> Blockchain:
     )
 
 
-def get_good_nodes() -> List[str]:
+def get_good_nodes() -> list[str]:
     """
     Fetches a list of default nodes from the specified API endpoint.
 
@@ -490,7 +456,7 @@ def get_good_nodes() -> List[str]:
         "https://beacon.peakd.com/api/nodes",
     ]
 
-    good_nodes: List[str] = []
+    good_nodes: list[str] = []
 
     while not good_nodes and beacon_urls:
         url = "unset"
@@ -511,12 +477,12 @@ def get_good_nodes() -> List[str]:
                 InternalConfig.redis_decoded.setex(
                     REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes)
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(
                     f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
                 )
             return good_nodes
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 f"Failed to fetch good nodes from {url}: {e}",
                 extra={"notification": False},
@@ -557,7 +523,7 @@ def get_good_nodes() -> List[str]:
 async def get_verified_hive_client(
     hive_role: HiveRoles = HiveRoles.server,
     nobroadcast: bool = False,
-) -> Tuple[Hive, str]:
+) -> tuple[Hive, str]:
     """
     Asynchronously obtains a verified Hive client instance using server account credentials from the internal configuration.
 
@@ -577,7 +543,7 @@ async def get_verified_hive_client(
 def get_verified_hive_client_non_async(
     hive_role: HiveRoles = HiveRoles.server,
     nobroadcast: bool = False,
-) -> Tuple[Hive, str]:
+) -> tuple[Hive, str]:
     """
     Synchronously obtains a verified Hive client instance using server account credentials from the internal configuration.
 
@@ -614,7 +580,7 @@ def get_verified_hive_client_non_async(
 
 
 async def get_verified_hive_client_for_accounts(
-    accounts: List[str],
+    accounts: list[str],
     nobroadcast: bool = False,
 ) -> Hive:
     """
@@ -690,7 +656,7 @@ def get_transfer_cust_id(
     if not account_names or len(account_names) != 4:
         return f"{to_acc}->{from_acc}"
 
-    server_account, treasury_account, funding_account, exchange_account = account_names
+    server_account, treasury_account, funding_account, _exchange_account = account_names
 
     expense_accounts = (
         expense_accounts or InternalConfig().config.expense_config.hive_expense_accounts or []
@@ -704,21 +670,21 @@ def get_transfer_cust_id(
         return to_acc
 
     # Treasury to Server: cust_id = from_account (treasury)
-    elif from_acc == treasury_account and to_acc == server_account:
-        return from_acc
-
-    # Funding to Treasury: cust_id = from_account (funding)
-    elif from_acc == funding_account and to_acc == treasury_account:
+    elif (
+        from_acc == treasury_account
+        and to_acc == server_account
+        or from_acc == funding_account
+        and to_acc == treasury_account
+    ):
         return from_acc
 
     # Treasury to Funding: cust_id = to_account (funding)
-    elif from_acc == treasury_account and to_acc == funding_account:
-        return to_acc
-
-    # Treasury or Server to Exchange: cust_id = to_account (exchange)
     elif (
-        from_acc == treasury_account or from_acc == server_account
-    ) and to_acc in exchange_accounts:
+        from_acc == treasury_account
+        and to_acc == funding_account
+        or (from_acc == treasury_account or from_acc == server_account)
+        and to_acc in exchange_accounts
+    ):
         return to_acc
 
     # Exchange to Treasury: cust_id = from_account (exchange)
@@ -726,11 +692,7 @@ def get_transfer_cust_id(
         return from_acc
 
     # Server to expense: cust_id = to_account (expense)
-    elif from_acc == server_account and to_acc in expense_accounts:
-        return to_acc
-
-    # Server to customer (withdrawal): cust_id = to_account (customer)
-    elif from_acc == server_account:
+    elif from_acc == server_account and to_acc in expense_accounts or from_acc == server_account:
         return to_acc
 
     # Customer to server (deposit): cust_id = from_account (customer)
@@ -743,7 +705,7 @@ def get_transfer_cust_id(
 
 class HiveInternalQuote(BaseModel):
     hive_hbd: float | None = None
-    raw_response: Dict[str, Any] = {}
+    raw_response: dict[str, Any] = {}
     error: str = ""
 
 
@@ -770,12 +732,14 @@ async def call_hive_internal_market() -> HiveInternalQuote:
     global _hive_internal_market_last_success
     global _hive_internal_market_last_success_at
 
-    now = datetime.now(tz=timezone.utc)
-    if _hive_internal_market_last_success and _hive_internal_market_last_success_at:
-        if now - _hive_internal_market_last_success_at < timedelta(
-            seconds=HIVE_INTERNAL_MARKET_SUCCESS_CACHE_SECONDS
-        ):
-            return _hive_internal_market_last_success
+    now = datetime.now(tz=UTC)
+    if (
+        _hive_internal_market_last_success
+        and _hive_internal_market_last_success_at
+        and now - _hive_internal_market_last_success_at
+        < timedelta(seconds=HIVE_INTERNAL_MARKET_SUCCESS_CACHE_SECONDS)
+    ):
+        return _hive_internal_market_last_success
 
     if _hive_internal_market_cooldown_until and now < _hive_internal_market_cooldown_until:
         return HiveInternalQuote(error="HiveInternalMarket cooldown active")
@@ -795,12 +759,12 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         _hive_internal_market_last_success_at = now
         _hive_internal_market_cooldown_until = None
         return answer
-    except Exception as ex:
+    except Exception as ex:  # noqa: BLE001 — market API is best-effort quote path
         # logging.exception(ex)
         logger.info(
             f"Calling Market API on Hive: {market['blockchain_instance'].data['last_node']}"
         )
-        _hive_internal_market_cooldown_until = datetime.now(tz=timezone.utc) + timedelta(
+        _hive_internal_market_cooldown_until = datetime.now(tz=UTC) + timedelta(
             seconds=HIVE_INTERNAL_MARKET_FAILURE_COOLDOWN_SECONDS
         )
         message = f"Problem calling Hive Market API {ex}"
@@ -809,7 +773,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
 
 
 # @async_time_decorator
-async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amount | str]:
+async def account_hive_balances_async(hive_accname: str = "") -> dict[str, Amount | str]:
     """
     Asynchronously retrieves the current HIVE and HBD balances for the given account.
     """
@@ -841,7 +805,7 @@ async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amoun
                         "HBD_fmt": f"{balances[1].amount:,.3f}",
                     }
             mark_hive_api_endpoint_failed(endpoint, error="invalid balance payload")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — try next balance-api endpoint
             mark_hive_api_endpoint_failed(endpoint, error=e)
             logger.warning(
                 f"Balance API unavailable for {endpoint}, trying next endpoint: {e}",
@@ -857,7 +821,7 @@ async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amoun
 
 
 # @time_decorator
-def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
+def account_hive_balances(hive_accname: str = "") -> dict[str, Amount | str]:
     """
     Retrieves the current HIVE and HBD balances for the given account.
     Returns
@@ -865,22 +829,19 @@ def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     Returns:
         Dict[str, float]: A dictionary containing the HIVE and HBD balances.
     """
-    hive = None
-    balances = None
+    hive: Hive | None = None
+    balances: list[Amount] | None = None
     if not hive_accname:
         hive_accname = InternalConfig().server_id
     try:
         hive = Hive(node=default_hive_nodes())
         hive_account = Account(hive_accname, blockchain_instance=hive)
-        balances: List[Amount] | None = hive_account.balances.get("available", None)
-    except Exception as e:
-        url = (
-            hive.rpc.url
-            if hive and hasattr(hive, "rpc") and hasattr(hive.rpc, "url")
-            else "unknown"
-        )
-        logger.error(f"Error In Hive {hive.rpc.url}: {e}", extra={"hive_accname": hive_accname})
-        pass
+        available = hive_account.balances.get("available", None)
+        balances = list(available) if available is not None else None
+    except Exception as e:  # noqa: BLE001 — fall through to zero balances
+        rpc = getattr(hive, "rpc", None) if hive is not None else None
+        url = str(getattr(rpc, "url", "unknown")) if rpc is not None else "unknown"
+        logger.error(f"Error In Hive {url}: {e}", extra={"hive_accname": hive_accname})
     try:
         if not balances or len(balances) < 2:
             return {
@@ -897,7 +858,7 @@ def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
         }
     except Exception as e:
         logger.error(f"Error fetching server hive balances: {e}")
-        raise HiveSomeOtherRPCException(f"Error fetching server hive balances: {e}")
+        raise HiveSomeOtherRPCException(f"Error fetching server hive balances: {e}") from e
 
 
 def get_event_id(hive_event: Any) -> str:
@@ -918,13 +879,13 @@ def get_event_id(hive_event: Any) -> str:
         return ""
     trx_id = hive_event.get("trx_id", "")
     op_in_trx = hive_event.get("op_in_trx", 0)
-    return f"{trx_id}_{op_in_trx}" if not int(op_in_trx) == 0 else str(trx_id)
+    return f"{trx_id}_{op_in_trx}" if int(op_in_trx) != 0 else str(trx_id)
 
 
 def decode_memo(
     memo: str = "",
     hive_inst: Hive | None = None,
-    memo_keys: List[str] = [],
+    memo_keys: list[str] | None = None,
     trx_id: str = "",
     op_in_trx: int = 0,
 ) -> str:
@@ -939,6 +900,9 @@ def decode_memo(
     Returns:
         str: The decrypted memo.
     """
+    if memo_keys is None:
+        memo_keys = []
+
     if not memo and not trx_id:
         return ""
 
@@ -955,9 +919,16 @@ def decode_memo(
     if trx_id and not memo:
         blockchain = get_blockchain_instance(hive_instance=hive_inst)
         trx = blockchain.get_transaction(trx_id)
-        memo = trx.get("operations")[op_in_trx].get("value").get("memo")
+        operations = trx.get("operations") if isinstance(trx, dict) else None
+        if not operations:
+            return ""
+        op_entry = operations[op_in_trx]
+        if isinstance(op_entry, dict):
+            memo = str(op_entry.get("value", {}).get("memo") or "")
+        else:
+            memo = ""
 
-    if not memo[0] == "#":
+    if not memo or memo[0] != "#":
         return memo
 
     try:
@@ -979,7 +950,7 @@ def decode_memo(
         logger.debug(f"MissingKeyError: {e}")
         return memo
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — return raw memo on any decode failure
         logger.error(f"Problem in decode_memo: {e}", extra={"trx_id": trx_id, "memo": memo})
         logger.error(memo)
         logger.exception(e)
@@ -987,15 +958,15 @@ def decode_memo(
 
 
 async def send_custom_json(
-    json_data: Dict[str, Any],
+    json_data: dict[str, Any],
     send_account: str,
     hive_client: Hive | None = None,
-    keys: List[str] = [],
+    keys: list[str] | None = None,
     id: str = "v4vapp_transfer",
     nobroadcast: bool = False,
     active: bool = True,
     resend_attempt: int = 0,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Asynchronously sends a custom JSON operation to the Hive blockchain.
 
@@ -1020,14 +991,27 @@ async def send_custom_json(
         Dict[str, str]: The transaction response from the Hive blockchain.
 
     Raises:
-        ValueError: If `json_data` is not a dictionary, is empty, or if neither `hive_client`
-            nor `keys` are provided.
+        TypeError: If `json_data` is not a dictionary.
+        ValueError: If `json_data` is empty, or if neither `hive_client` nor `keys`
+            are provided.
         CustomJsonSendError: If an error occurs while sending the custom JSON operation.
     """
     # Need Required_auths not posting auths for a transfer
     # test json data is a dict which will become a nice json object:
+    if keys is None:
+        keys = []
 
-    json_data_converted: Dict[str, Any] = convert_decimals_to_float_or_int(json_data)
+    # Validate shape before persisting a PendingCustomJson row.
+    if not isinstance(json_data, dict):
+        raise TypeError("json_data must be a dictionary")
+    json_data_converted: dict[str, Any] = convert_decimals_to_float_or_int(json_data)
+    if not isinstance(json_data_converted, dict):
+        raise TypeError("json_data must be a dictionary")
+    if not json_data_converted:
+        raise ValueError("json_data must not be empty")
+    if not hive_client and not keys:
+        raise ValueError("No hive_client or keys provided")
+
     pending = None
     if not resend_attempt:
         pending = PendingCustomJson(
@@ -1039,12 +1023,6 @@ async def send_custom_json(
             nobroadcast=nobroadcast,
         )
         await pending.save()
-    if not isinstance(json_data_converted, dict):
-        raise ValueError("json_data must be a dictionary")
-    if not json_data_converted:
-        raise ValueError("json_data must not be empty")
-    if not hive_client and not keys:
-        raise ValueError("No hive_client or keys provided")
     if not hive_client:
         hive_client = Hive(keys=keys, node=default_hive_nodes())
     if hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
@@ -1079,17 +1057,17 @@ async def send_custom_json(
             f"Error sending custom_json: MissingKeyError: {ex}",
             extra={"notification": False, "send_account": send_account},
         )
-        raise CustomJsonSendError("Wrong key used", extra={"send_account": send_account})
+        raise CustomJsonSendError("Wrong key used", extra={"send_account": send_account}) from ex
     except Exception as ex:
         logger.exception(ex, extra={"notification": False})
         logger.error(f"{send_account} {ex} {ex.__class__}", extra={"notification": False})
-        raise CustomJsonSendError(f"Error sending custom_json: {ex}")
+        raise CustomJsonSendError(f"Error sending custom_json: {ex}") from ex
 
 
 async def perform_transfer_checks(
     from_account: AccName | str,
     to_account: AccName | str,
-    amount: Amount = Amount(amount="0.000 HIVE"),
+    amount: Amount | None = None,
     nobroadcast: bool = False,
 ) -> bool:
     """
@@ -1112,6 +1090,8 @@ async def perform_transfer_checks(
     """
     from_account = AccName(from_account)
     to_account = AccName(to_account)
+    if not amount:
+        amount = Amount(amount="0.000 HIVE")
     if await check_not_development_accounts([from_account.no_prefix, to_account.no_prefix]):
         raise HiveDevelopmentAccountError(
             f"{from_account} or {to_account} is not in allowed hive accounts for development mode"
@@ -1129,13 +1109,13 @@ async def perform_transfer_checks(
 
 
 async def send_transfer_bulk(
-    transfer_list: List[PendingTransaction] = [],
-    custom_json_list: List[PendingCustomJson] = [],
+    transfer_list: list[PendingTransaction] | None = None,
+    custom_json_list: list[PendingCustomJson] | None = None,
     hive_client: Hive | None = None,
-    keys: List[str] = [],
+    keys: list[str] | None = None,
     nobroadcast: bool = False,
     is_private: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Send multiple Hive token transfers in bulk.
 
@@ -1155,6 +1135,12 @@ async def send_transfer_bulk(
         HiveTryingToSendZeroOrNegativeAmount: If attempting to send zero or negative amount, or duplicate transaction detected.
         HiveSomeOtherRPCException: For any other RPC or unexpected exceptions.
     """
+    if transfer_list is None:
+        transfer_list = []
+    if custom_json_list is None:
+        custom_json_list = []
+    if keys is None:
+        keys = []
     if not hive_client and not keys:
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
@@ -1232,13 +1218,13 @@ async def send_transfer_bulk(
                 "transfer_list": transfer_list,
             },
         )
-        raise HiveSomeOtherRPCException(f"{ex}")
+        raise HiveSomeOtherRPCException(f"{ex}") from ex
 
 
 async def send_pending(
     pending: PendingTransaction,
     hive_client: Hive | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Send a pending transaction.
 
@@ -1272,11 +1258,11 @@ async def send_transfer(
     from_account: str,
     memo: str = "",
     hive_client: Hive | None = None,
-    keys: List[str] = [],
+    keys: list[str] | None = None,
     nobroadcast: bool = False,
     is_private: bool = False,
     store_pending: PendingTransaction | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Sends a transfer of Hive tokens from one account to another, with support for retries,
     private memos, and error handling.
@@ -1311,6 +1297,8 @@ async def send_transfer(
             after retries.
 
     """
+    if keys is None:
+        keys = []
     if not hive_client and not keys:
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
@@ -1352,7 +1340,7 @@ async def send_transfer(
             trx = account.transfer(
                 to=to_account.lower(),
                 amount=amount.amount,
-                asset=amount.asset,
+                asset=str(amount.symbol),
                 account=from_account,
                 memo=memo,
             )
@@ -1487,7 +1475,7 @@ async def send_transfer(
                     "memo": memo,
                 },
             )
-            raise HiveSomeOtherRPCException(f"{ex}")
+            raise HiveSomeOtherRPCException(f"{ex}") from ex
     return {}
 
 
@@ -1537,7 +1525,7 @@ def witness_signing_key(witness_name: str) -> str | None:
                 extra={"notification": False},
             )
             return None
-        witness_info: Dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
+        witness_info: dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
         if not witness_info or "signing_key" not in witness_info:
             logger.warning(
                 f"{ICON} Could not retrieve witness info for {witness_name}.",
@@ -1545,7 +1533,7 @@ def witness_signing_key(witness_name: str) -> str | None:
             )
             return None
         return witness_info["signing_key"]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(
             f"{ICON} Error retrieving signing key for witness {witness_name}: {e}",
             extra={"notification": False},
@@ -1553,7 +1541,7 @@ def witness_signing_key(witness_name: str) -> str | None:
         return None
 
 
-def get_hive_amount_from_trx_reply(trx: Dict[str, Any]) -> Amount:
+def get_hive_amount_from_trx_reply(trx: dict[str, Any]) -> Amount:
     """
     Extracts the amount of a specific asset from a Hive transaction.
 
