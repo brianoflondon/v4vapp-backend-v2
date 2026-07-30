@@ -406,7 +406,7 @@ class KeepsatsApiResponse(BaseModel):
     in_progress_sats: float = Field(
         ..., description="Keepsats currently held in progress (rounded sats)"
     )
-    all_transactions: llist[AccountBalanceLine] | LedgerAccountDetails = Field(
+    all_transactions: list[AccountBalanceLine] | LedgerAccountDetails = Field(
         default_factory=list,
         description=("Full account balance object when line_items=True, otherwise an empty list"),
     )
