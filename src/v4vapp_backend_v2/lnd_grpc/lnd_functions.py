@@ -167,15 +167,32 @@ async def get_channel_name(
         node2_pub = chan_info.get("node2_pub", "")
 
         if not own_pub_key:
-            own_pub_key = lnd_client.get_info.identity_pubkey
-            # own_pub_key = await get_node_pub_key(connection_name)
+            # get_info may be None when __aenter__ hit DEADLINE_EXCEEDED / LND busy.
+            get_info = getattr(lnd_client, "get_info", None)
+            if get_info is None:
+                try:
+                    get_info = await lnd_client.node_get_info
+                except Exception as e:  # noqa: BLE001 — name resolution is best-effort
+                    logger.warning(
+                        f"{lnd_client.icon} Channel {channel_id}: no node identity "
+                        f"(GetInfo unavailable: {e}); using Unknown",
+                        extra={"notification": False},
+                    )
+                    return LndChannelName(channel_id=channel_id, name="Unknown")
+            own_pub_key = getattr(get_info, "identity_pubkey", None) or ""
+            if not own_pub_key:
+                logger.warning(
+                    f"{lnd_client.icon} Channel {channel_id}: empty identity_pubkey; "
+                    f"using Unknown",
+                    extra={"notification": False},
+                )
+                return LndChannelName(channel_id=channel_id, name="Unknown")
 
         # Determine the partner node's public key
         partner_pub_key = node1_pub if own_pub_key != node1_pub else node2_pub
 
         # Get the node info of the partner node
         node_info = await get_node_info(partner_pub_key, lnd_client)
-        # node_info = MessageToDict(response, preserving_proto_field_name=True)
 
         return LndChannelName(channel_id=channel_id, name=node_info.node.alias)
     except LNDConnectionError as e:
@@ -187,7 +204,7 @@ async def get_channel_name(
                 details = rpc_err.details()
             else:
                 details = getattr(rpc_err, "_details", "") or str(rpc_err)
-        except Exception:
+        except Exception:  # noqa: BLE001
             details = str(rpc_err)
 
         # For newly opened channels, the edge info may not be available yet
@@ -197,10 +214,16 @@ async def get_channel_name(
             )
             return LndChannelName(channel_id=channel_id, name="Unknown")
 
-        logger.exception(e)
+        logger.warning(
+            f"{lnd_client.icon} get_channel_name LND error for {channel_id}: {e}",
+            extra={"notification": False},
+        )
         return LndChannelName(channel_id=channel_id, name="Unknown")
-    except Exception as e:
-        logger.exception(e)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            f"{lnd_client.icon} get_channel_name failed for {channel_id}: {e}",
+            extra={"notification": False},
+        )
         return LndChannelName(channel_id=channel_id, name="Unknown")
 
 
@@ -411,8 +434,11 @@ async def send_lightning_to_pay_req(
     logger.info(pay_req.log_str)
 
     request_params = {}
-    await lnd_client.node_get_info
-    if pay_req.destination == lnd_client.get_info.identity_pubkey:
+    get_info = getattr(lnd_client, "get_info", None)
+    if get_info is None:
+        get_info = await lnd_client.node_get_info
+    identity_pubkey = getattr(get_info, "identity_pubkey", None) if get_info else None
+    if identity_pubkey and pay_req.destination == identity_pubkey:
         logger.info(
             "Payment address is the same as the node's identity pubkey set fee limit to minimum"
         )

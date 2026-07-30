@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig
@@ -13,7 +13,7 @@ def _get_exchange_sub() -> str:
     """Resolve the exchange sub-account name from config."""
     try:
         return get_exchange_adapter().exchange_name
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return "binance_convert"  # safe fallback
 
 
@@ -21,11 +21,11 @@ def _get_node_name() -> str:
     """Resolve the Lightning node name from config."""
     try:
         return InternalConfig().node_name
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return "voltage"  # safe fallback
 
 
-def _build_editor_presets() -> List[Dict[str, Any]]:
+def _build_editor_presets() -> list[dict[str, Any]]:
     """Build presets using the config-driven exchange name."""
     exchange_sub = _get_exchange_sub()
     node_name = _get_node_name()
