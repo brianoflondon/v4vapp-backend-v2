@@ -874,8 +874,6 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                 # - PENDING_OPEN_CHANNEL
 
                 decoded_event = MessageToDict(channel_event, preserving_proto_field_name=True)
-                logger.info("Channel event received", extra={"channel_event": decoded_event})
-
                 # Process the different event types
                 if "open_channel" in decoded_event:
                     channel = decoded_event["open_channel"]
@@ -948,6 +946,11 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                         extra={"notification": True},
                     )
                     await fill_channel_names(lnd_client, lnd_events_group)
+                else:
+                    logger.info(
+                        f"{lnd_client.icon} Unknown channel event received",
+                        extra={"channel_event": decoded_event},
+                    )
 
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
@@ -991,46 +994,50 @@ async def fill_channel_names(
             request,
         )
         channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
-        if len(channels_dict.get("channels", [])) == len(lnd_events_group.channel_names):
+        open_channels = channels_dict.get("channels", [])
+        open_ids = [int(ch["chan_id"]) for ch in open_channels if ch.get("chan_id") is not None]
+
+        # Skip only when every open channel already has a *resolved* name.
+        # Do not short-circuit on length alone: placeholders named "Unknown"
+        # (or a failed GetInfo path that left the map incomplete) must retry.
+        def _name_resolved(chan_id: int) -> bool:
+            entry = lnd_events_group.channel_names.get(chan_id)
+            return entry is not None and entry.name and entry.name != "Unknown"
+
+        if open_ids and all(_name_resolved(cid) for cid in open_ids):
             logger.debug("No new channels to fill")
             return
+
         # Resolve identity once (avoid N× GetInfo when LND is busy/unreachable).
-        own_pub_key: str | None = None
         get_info = getattr(lnd_client, "get_info", None)
         if get_info is None:
             try:
                 get_info = await lnd_client.node_get_info
-            except Exception as e:  # noqa: BLE001 — mark all Unknown, retry next fill
+            except Exception as e:  # noqa: BLE001 — leave map unchanged so next fill retries
                 logger.warning(
                     f"{lnd_client.icon} fill_channel_names: GetInfo unavailable ({e}); "
-                    f"channel partners will be Unknown until next fill",
+                    f"will retry aliases on next fill (not caching Unknown)",
                     extra={"notification": False},
                 )
-                for channel in channels_dict.get("channels", []):
-                    channel_name = LndChannelName(
-                        channel_id=int(channel["chan_id"]), name="Unknown"
-                    )
-                    lnd_events_group.append(channel_name)
-                    logger.info(
-                        f"{lnd_client.icon} Channel {channel_name.channel_id} -> Unknown",
-                        extra={"channel_name": channel_name.to_dict()},
-                    )
                 return
         own_pub_key = getattr(get_info, "identity_pubkey", None) or None
         if not own_pub_key:
             logger.warning(
-                f"{lnd_client.icon} fill_channel_names: empty identity_pubkey",
+                f"{lnd_client.icon} fill_channel_names: empty identity_pubkey; "
+                f"will retry on next fill",
                 extra={"notification": False},
             )
             return
 
+        # Only resolve channels still missing a real name (new opens or prior Unknown).
+        to_resolve = [cid for cid in open_ids if not _name_resolved(cid)]
         tasks = [
             get_channel_name(
-                channel_id=int(channel["chan_id"]),
+                channel_id=cid,
                 lnd_client=lnd_client,
                 own_pub_key=own_pub_key,
             )
-            for channel in channels_dict.get("channels", [])
+            for cid in to_resolve
         ]
         names_list: list[LndChannelName] = await asyncio.gather(*tasks)
         for channel_name in names_list:
