@@ -24,8 +24,9 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncGenerator, Callable, TypeVar
+from collections.abc import AsyncGenerator, Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from nectar.blockchain import Blockchain
 from nectar.exceptions import NectarException
@@ -64,8 +65,6 @@ CATCHUP_BATCH_SIZE = 50
 CATCHUP_NEAR_HEAD_BLOCKS = 50
 QUOTE_REFRESH_MIN_INTERVAL_SECONDS = 30
 
-T = TypeVar("T")
-
 
 def _is_rate_limit_error(error: BaseException) -> bool:
     text = str(error)
@@ -82,9 +81,12 @@ def _is_batch_not_supported_error(error: BaseException) -> bool:
 
 
 def _rpc_url(hive: Hive | None) -> str:
-    if hive is None or getattr(hive, "rpc", None) is None:
+    if hive is None:
         return "No RPC"
-    return str(hive.rpc.url)
+    rpc = getattr(hive, "rpc", None)
+    if rpc is None:
+        return "No RPC"
+    return str(rpc.url)
 
 
 def _hive_keys(hive: Hive | None) -> Any:
@@ -128,7 +130,7 @@ def _ensure_stream_hive(hive: Hive | None) -> Hive:
     return make_stream_hive(keys=_hive_keys(hive))
 
 
-async def _run_sync(
+async def _run_sync[T](
     fn: Callable[..., T],
     *args: Any,
     timeout: float = SYNC_RPC_BUDGET_SECONDS,
@@ -142,19 +144,17 @@ async def _run_sync(
 
     try:
         return await asyncio.wait_for(asyncio.to_thread(_call), timeout=timeout)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         logger.warning(
             f"{ICON} Sync {label} timed out after {timeout:.0f}s "
             f"(Nectar may still be retrying in a worker thread — client will be discarded)",
             extra={"notification": False, "error_code": "stream_restart"},
         )
-        raise asyncio.TimeoutError(f"{label} timed out after {timeout:.0f}s") from e
+        raise TimeoutError(f"{label} timed out after {timeout:.0f}s") from e
 
 
 class SwitchToLiveStream(Exception):
     """Reserved for callers that want to force a live-mode restart."""
-
-    pass
 
 
 async def stream_ops_async(
@@ -197,19 +197,17 @@ async def stream_ops_async(
         current_block = await _run_sync(
             blockchain.get_current_block_num, label="get_current_block_num"
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — any Nectar/transport failure → rebuild
         logger.warning(
             f"{ICON} get_current_block_num failed at stream start: {e}; rebuilding client",
             extra={"notification": False, "error": e, "error_code": "stream_restart"},
         )
-        hive, blockchain = await _run_sync(
-            _rebuild_hive_client, hive, label="rebuild_hive_client"
-        )
+        hive, blockchain = await _run_sync(_rebuild_hive_client, hive, label="rebuild_hive_client")
         current_block = await _run_sync(
             blockchain.get_current_block_num, label="get_current_block_num"
         )
 
-    time_now = datetime.now(tz=timezone.utc)
+    time_now = datetime.now(tz=UTC)
     start_time = time_now
 
     if look_back:
@@ -220,7 +218,7 @@ async def stream_ops_async(
                 start_time,
                 label="get_estimated_block_num",
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — fall back to time/3 estimate
             start_block = current_block - int(look_back.total_seconds() / 3)
             logger.warning(
                 f"{ICON} Error getting start block from time {start_time}; "
@@ -246,7 +244,7 @@ async def stream_ops_async(
 
     async def maybe_refresh_quote() -> None:
         nonlocal last_quote_refresh_at
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         if last_quote_refresh_at and (now - last_quote_refresh_at) < timedelta(
             seconds=QUOTE_REFRESH_MIN_INTERVAL_SECONDS
         ):
@@ -256,7 +254,7 @@ async def stream_ops_async(
                 TrackedBaseModel.update_quote(),
                 timeout=SYNC_RPC_BUDGET_SECONDS,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — quote is best-effort; stream continues
             logger.warning(
                 f"{ICON} Quote refresh failed (continuing stream): {e}",
                 extra={"notification": False},
@@ -272,7 +270,7 @@ async def stream_ops_async(
                 timeout=min(15.0, SYNC_RPC_BUDGET_SECONDS),
                 label="choose_batch_size/head",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 — fall back to unbatched stream
             return None
         gap = head_now - start_block
         if gap >= CATCHUP_NEAR_HEAD_BLOCKS:
@@ -286,8 +284,8 @@ async def stream_ops_async(
             return
         try:
             await asyncio.wait_for(aclose(), timeout=1.0)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 — teardown must not raise
+            return
 
     async def yield_virtual_ops_for_block(block_num: int):
         """
@@ -335,7 +333,7 @@ async def stream_ops_async(
                 f"skipping virtual fetch until block {virtual_ops_skip_until_block:,}",
                 extra={"notification": False, "error_code": "stream_restart"},
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — skip virtual briefly; keep real stream
             virtual_ops_skip_until_block = last_block + VIRTUAL_OPS_SKIP_BLOCKS
             logger.warning(
                 f"{ICON} Virtual-ops for block {block_num:,} failed on "
@@ -348,7 +346,7 @@ async def stream_ops_async(
     async def rebuild_hive_with_rate_limit() -> str:
         """Rebuild single Hive client; rate-limit to reduce FD churn."""
         nonlocal hive, blockchain, last_rebuild_at
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         if last_rebuild_at is not None:
             elapsed = (now - last_rebuild_at).total_seconds()
             if elapsed < MIN_REBUILD_INTERVAL_SECONDS:
@@ -365,7 +363,7 @@ async def stream_ops_async(
             timeout=SYNC_RPC_BUDGET_SECONDS,
             label="rebuild_hive_client",
         )
-        last_rebuild_at = datetime.now(tz=timezone.utc)
+        last_rebuild_at = datetime.now(tz=UTC)
         return _rpc_url(hive)
 
     while last_block is not None and stop_block is not None and last_block < stop_block:
@@ -374,7 +372,7 @@ async def stream_ops_async(
         rpc_url = _rpc_url(hive)
         try:
             effective_batch = await choose_batch_size()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             effective_batch = None
         async_stream_real = None
         try:
@@ -410,7 +408,7 @@ async def stream_ops_async(
                 except StopAsyncIteration:
                     stream_ended_cleanly = True
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(
                         f"{ICON} {start_block:,} Stream idle >{STREAM_TIMEOUT_SECONDS}s "
                         f"on {rpc_url}; discarding client and rebuilding "
@@ -467,7 +465,7 @@ async def stream_ops_async(
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
             logger.info(f"{ICON} Async streamer stopping: {e}")
             return
-        except asyncio.TimeoutError:
+        except TimeoutError:
             await asyncio.sleep(0.1)
         except (NectarException, NumRetriesReached, UnhandledRPCError, WorkingNodeMissing) as e:
             sleep_for = 1.0
@@ -515,7 +513,7 @@ async def stream_ops_async(
             await asyncio.sleep(sleep_for)
         except StopAsyncIteration as e:
             logger.error(f"{ICON} {start_block:,} Stream stopped unexpectedly: {e}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — outer recovery for unknown stream faults
             if _is_batch_not_supported_error(e):
                 batch_disabled = True
                 logger.warning(
@@ -546,60 +544,59 @@ async def stream_ops_async(
             if async_stream_real is not None:
                 await close_async_stream(async_stream_real)
 
-            if last_block >= stop_block:
-                logger.info(
-                    f"{ICON} {start_block:,} Reached stop block {stop_block:,}, stopping."
-                )
-                break
+        # Exit / recovery outside finally so break/continue do not silence exceptions (B012).
+        if last_block >= stop_block:
+            logger.info(f"{ICON} {start_block:,} Reached stop block {stop_block:,}, stopping.")
+            break
 
-            if stream_ended_cleanly and finite_stop:
-                logger.info(
-                    f"{ICON} Stream finished cleanly at block {last_block:,} "
-                    f"(stop={stop_block:,}); ending catch-up.",
-                    extra={"notification": False},
-                )
-                break
-
-            if last_block and last_block > start_block:
-                start_block = last_block
-
-            previous_node = rpc_url
+        if stream_ended_cleanly and finite_stop:
             logger.info(
-                f"{ICON} {start_block:,} Recovering stream (last_block={last_block:,}, "
-                f"was {previous_node}) — abandoning client, rebuilding fresh…",
+                f"{ICON} Stream finished cleanly at block {last_block:,} "
+                f"(stop={stop_block:,}); ending catch-up.",
                 extra={"notification": False},
             )
-            # Single client only — never open a second permanent Hive for virtual ops.
+            break
+
+        if last_block and last_block > start_block:
+            start_block = last_block
+
+        previous_node = rpc_url
+        logger.info(
+            f"{ICON} {start_block:,} Recovering stream (last_block={last_block:,}, "
+            f"was {previous_node}) — abandoning client, rebuilding fresh…",
+            extra={"notification": False},
+        )
+        # Single client only — never open a second permanent Hive for virtual ops.
+        try:
+            next_url = await rebuild_hive_with_rate_limit()
+            logger.info(
+                f"{ICON} {start_block:,} Rebuilt Hive client → {next_url}",
+                extra={"notification": False},
+            )
+        except Exception as e:  # noqa: BLE001 — rebuild may raise any transport error
+            restart_count += 1
+            backoff = min(MAX_RESTART_BACKOFF_SECONDS, 0.5 * restart_count)
+            logger.warning(
+                f"{ICON} {start_block:,} Rebuild failed ({e}); "
+                f"sleeping {backoff:.1f}s before retry",
+                extra={"notification": False, "error_code": "stream_restart"},
+            )
+            await asyncio.sleep(backoff)
             try:
                 next_url = await rebuild_hive_with_rate_limit()
-                logger.info(
-                    f"{ICON} {start_block:,} Rebuilt Hive client → {next_url}",
+            except Exception as e2:  # noqa: BLE001
+                logger.warning(
+                    f"{ICON} {start_block:,} Rebuild retry failed: {e2}",
                     extra={"notification": False},
                 )
-            except Exception as e:
-                restart_count += 1
-                backoff = min(MAX_RESTART_BACKOFF_SECONDS, 0.5 * restart_count)
-                logger.warning(
-                    f"{ICON} {start_block:,} Rebuild failed ({e}); "
-                    f"sleeping {backoff:.1f}s before retry",
-                    extra={"notification": False, "error_code": "stream_restart"},
-                )
-                await asyncio.sleep(backoff)
-                try:
-                    next_url = await rebuild_hive_with_rate_limit()
-                except Exception as e2:
-                    logger.warning(
-                        f"{ICON} {start_block:,} Rebuild retry failed: {e2}",
-                        extra={"notification": False},
-                    )
-                    continue
+                continue
 
-            restart_count += 1
-            logger.info(
-                f"{ICON} {start_block:,} Resuming from block {last_block:,} "
-                f"via {next_url} (was {previous_node})",
-                extra={"notification": False},
-            )
+        restart_count += 1
+        logger.info(
+            f"{ICON} {start_block:,} Resuming from block {last_block:,} "
+            f"via {next_url} (was {previous_node})",
+            extra={"notification": False},
+        )
 
 
 def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
