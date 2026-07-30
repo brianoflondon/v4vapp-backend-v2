@@ -1,9 +1,9 @@
 import asyncio
 import json
 import struct
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List, Tuple
+from typing import Any
 from uuid import uuid4
 
 import backoff
@@ -22,7 +22,6 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.decorators import time_decorator
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_not_development_accounts,
@@ -116,8 +115,6 @@ class HiveNotHiveAccount(HiveTransferError):
     so a transfer to it can't be made for notifications
     """
 
-    pass
-
 
 class HiveNotEnoughHiveInAccount(HiveTransferError):
     """
@@ -144,15 +141,11 @@ class HiveTryingToSendZeroOrNegativeAmount(HiveTransferError):
     Exception raised when trying to send a zero or negative amount.
     """
 
-    pass
-
 
 class HiveMissingKeyError(HiveTransferError):
     """
     Exception raised when a required key is missing.
     """
-
-    pass
 
 
 class HiveSomeOtherRPCException(HiveTransferError):
@@ -161,35 +154,24 @@ class HiveSomeOtherRPCException(HiveTransferError):
     This is a catch-all for any other exceptions that do not fit the specific cases.
     """
 
-    pass
-
 
 class HiveToKeepsatsConversionError(HiveTransferError):
     """Custom exception for Hive to Keepsats conversion errors."""
-
-    pass
 
 
 class HiveConversionLimits(HiveTransferError):
     """Custom exception for conversion limit errors."""
 
-    pass
-
 
 class HiveAccountNameOnExchangesList(HiveTransferError):
     """Custom exception for when a Hive account name is found on exchanges list."""
-
-    pass
 
 
 class HiveDevelopmentAccountError(HiveTransferError):
     """Custom exception for development-related errors."""
 
-    pass
 
-
-
-def _filter_excluded_nodes(nodes: List[str]) -> List[str]:
+def _filter_excluded_nodes(nodes: list[str]) -> list[str]:
     """Drop nodes in EXCLUDE_NODES (exact match). Always apply before Hive().
 
     Callers that pass ``node=`` can reintroduce excluded endpoints; filter always.
@@ -200,7 +182,7 @@ def _filter_excluded_nodes(nodes: List[str]) -> List[str]:
     return [n for n in nodes if n not in excluded]
 
 
-def default_hive_nodes(stream_only: bool = False) -> List[str]:
+def default_hive_nodes(stream_only: bool = False) -> list[str]:
     """
     Static default RPC node list for Nectar ``Hive(node=...)``.
 
@@ -227,7 +209,7 @@ STREAM_HIVE_NUM_RETRIES_CALL = 2
 STREAM_HIVE_MONITOR_INTERVAL = 0.0
 
 
-def stream_hive_kwargs(stream_only: bool = False) -> Dict[str, Any]:
+def stream_hive_kwargs(stream_only: bool = False) -> dict[str, Any]:
     """Keyword args for a fail-fast Nectar ``Hive`` used by long-running streams."""
     return {
         "node": default_hive_nodes(stream_only=stream_only),
@@ -317,7 +299,7 @@ def close_hive_client(hive: Any = None) -> None:
 
     # Mark closed so callers/zombies can detect intentional teardown.
     try:
-        setattr(hive, "_v4v_hive_closed", True)
+        hive._v4v_hive_closed = True
     except Exception:
         pass
 
@@ -351,9 +333,10 @@ def close_hive_client(hive: Any = None) -> None:
                         pool_mgr.close()
                     except Exception:
                         pass
-                    if monitor_thread is not None and getattr(
-                        monitor_thread, "is_alive", lambda: False
-                    )():
+                    if (
+                        monitor_thread is not None
+                        and getattr(monitor_thread, "is_alive", lambda: False)()
+                    ):
                         try:
                             monitor_thread.join(timeout=0.5)
                         except Exception:
@@ -398,9 +381,7 @@ def close_hive_client(hive: Any = None) -> None:
         pass
 
 
-def get_hive_client(
-    stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs
-) -> Hive:
+def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs) -> Hive:
     """
     Thin factory around Nectar ``Hive``.
 
@@ -448,8 +429,7 @@ def get_blockchain_instance(*args, **kwargs) -> Blockchain:
         hive_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k
-            not in {"mode", "max_block_wait_repetition", "data_refresh_time_seconds"}
+            if k not in {"mode", "max_block_wait_repetition", "data_refresh_time_seconds"}
         }
         if "nobroadcast" not in hive_kwargs:
             hive_kwargs["nobroadcast"] = False
@@ -465,7 +445,7 @@ def get_blockchain_instance(*args, **kwargs) -> Blockchain:
     )
 
 
-def get_good_nodes() -> List[str]:
+def get_good_nodes() -> list[str]:
     """
     Fetches a list of default nodes from the specified API endpoint.
 
@@ -483,7 +463,7 @@ def get_good_nodes() -> List[str]:
         "https://beacon.peakd.com/api/nodes",
     ]
 
-    good_nodes: List[str] = []
+    good_nodes: list[str] = []
 
     while not good_nodes and beacon_urls:
         url = "unset"
@@ -550,7 +530,7 @@ def get_good_nodes() -> List[str]:
 async def get_verified_hive_client(
     hive_role: HiveRoles = HiveRoles.server,
     nobroadcast: bool = False,
-) -> Tuple[Hive, str]:
+) -> tuple[Hive, str]:
     """
     Asynchronously obtains a verified Hive client instance using server account credentials from the internal configuration.
 
@@ -570,7 +550,7 @@ async def get_verified_hive_client(
 def get_verified_hive_client_non_async(
     hive_role: HiveRoles = HiveRoles.server,
     nobroadcast: bool = False,
-) -> Tuple[Hive, str]:
+) -> tuple[Hive, str]:
     """
     Synchronously obtains a verified Hive client instance using server account credentials from the internal configuration.
 
@@ -607,7 +587,7 @@ def get_verified_hive_client_non_async(
 
 
 async def get_verified_hive_client_for_accounts(
-    accounts: List[str],
+    accounts: list[str],
     nobroadcast: bool = False,
 ) -> Hive:
     """
@@ -697,21 +677,21 @@ def get_transfer_cust_id(
         return to_acc
 
     # Treasury to Server: cust_id = from_account (treasury)
-    elif from_acc == treasury_account and to_acc == server_account:
-        return from_acc
-
-    # Funding to Treasury: cust_id = from_account (funding)
-    elif from_acc == funding_account and to_acc == treasury_account:
+    elif (
+        from_acc == treasury_account
+        and to_acc == server_account
+        or from_acc == funding_account
+        and to_acc == treasury_account
+    ):
         return from_acc
 
     # Treasury to Funding: cust_id = to_account (funding)
-    elif from_acc == treasury_account and to_acc == funding_account:
-        return to_acc
-
-    # Treasury or Server to Exchange: cust_id = to_account (exchange)
     elif (
-        from_acc == treasury_account or from_acc == server_account
-    ) and to_acc in exchange_accounts:
+        from_acc == treasury_account
+        and to_acc == funding_account
+        or (from_acc == treasury_account or from_acc == server_account)
+        and to_acc in exchange_accounts
+    ):
         return to_acc
 
     # Exchange to Treasury: cust_id = from_account (exchange)
@@ -719,11 +699,7 @@ def get_transfer_cust_id(
         return from_acc
 
     # Server to expense: cust_id = to_account (expense)
-    elif from_acc == server_account and to_acc in expense_accounts:
-        return to_acc
-
-    # Server to customer (withdrawal): cust_id = to_account (customer)
-    elif from_acc == server_account:
+    elif from_acc == server_account and to_acc in expense_accounts or from_acc == server_account:
         return to_acc
 
     # Customer to server (deposit): cust_id = from_account (customer)
@@ -736,7 +712,7 @@ def get_transfer_cust_id(
 
 class HiveInternalQuote(BaseModel):
     hive_hbd: float | None = None
-    raw_response: Dict[str, Any] = {}
+    raw_response: dict[str, Any] = {}
     error: str = ""
 
 
@@ -763,7 +739,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
     global _hive_internal_market_last_success
     global _hive_internal_market_last_success_at
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     if _hive_internal_market_last_success and _hive_internal_market_last_success_at:
         if now - _hive_internal_market_last_success_at < timedelta(
             seconds=HIVE_INTERNAL_MARKET_SUCCESS_CACHE_SECONDS
@@ -793,7 +769,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         logger.info(
             f"Calling Market API on Hive: {market['blockchain_instance'].data['last_node']}"
         )
-        _hive_internal_market_cooldown_until = datetime.now(tz=timezone.utc) + timedelta(
+        _hive_internal_market_cooldown_until = datetime.now(tz=UTC) + timedelta(
             seconds=HIVE_INTERNAL_MARKET_FAILURE_COOLDOWN_SECONDS
         )
         message = f"Problem calling Hive Market API {ex}"
@@ -802,7 +778,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
 
 
 # @async_time_decorator
-async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amount | str]:
+async def account_hive_balances_async(hive_accname: str = "") -> dict[str, Amount | str]:
     """
     Asynchronously retrieves the current HIVE and HBD balances for the given account.
     """
@@ -850,7 +826,7 @@ async def account_hive_balances_async(hive_accname: str = "") -> Dict[str, Amoun
 
 
 # @time_decorator
-def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
+def account_hive_balances(hive_accname: str = "") -> dict[str, Amount | str]:
     """
     Retrieves the current HIVE and HBD balances for the given account.
     Returns
@@ -865,7 +841,7 @@ def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     try:
         hive = Hive(node=default_hive_nodes())
         hive_account = Account(hive_accname, blockchain_instance=hive)
-        balances: List[Amount] | None = hive_account.balances.get("available", None)
+        balances: list[Amount] | None = hive_account.balances.get("available", None)
     except Exception as e:
         url = (
             hive.rpc.url
@@ -873,7 +849,6 @@ def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
             else "unknown"
         )
         logger.error(f"Error In Hive {hive.rpc.url}: {e}", extra={"hive_accname": hive_accname})
-        pass
     try:
         if not balances or len(balances) < 2:
             return {
@@ -917,7 +892,7 @@ def get_event_id(hive_event: Any) -> str:
 def decode_memo(
     memo: str = "",
     hive_inst: Hive | None = None,
-    memo_keys: List[str] = [],
+    memo_keys: list[str] = [],
     trx_id: str = "",
     op_in_trx: int = 0,
 ) -> str:
@@ -980,15 +955,15 @@ def decode_memo(
 
 
 async def send_custom_json(
-    json_data: Dict[str, Any],
+    json_data: dict[str, Any],
     send_account: str,
     hive_client: Hive | None = None,
-    keys: List[str] = [],
+    keys: list[str] = [],
     id: str = "v4vapp_transfer",
     nobroadcast: bool = False,
     active: bool = True,
     resend_attempt: int = 0,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Asynchronously sends a custom JSON operation to the Hive blockchain.
 
@@ -1020,7 +995,7 @@ async def send_custom_json(
     # Need Required_auths not posting auths for a transfer
     # test json data is a dict which will become a nice json object:
 
-    json_data_converted: Dict[str, Any] = convert_decimals_to_float_or_int(json_data)
+    json_data_converted: dict[str, Any] = convert_decimals_to_float_or_int(json_data)
     pending = None
     if not resend_attempt:
         pending = PendingCustomJson(
@@ -1082,7 +1057,7 @@ async def send_custom_json(
 async def perform_transfer_checks(
     from_account: AccName | str,
     to_account: AccName | str,
-    amount: Amount = Amount(amount="0.000 HIVE"),
+    amount: Amount | None = None,
     nobroadcast: bool = False,
 ) -> bool:
     """
@@ -1105,6 +1080,8 @@ async def perform_transfer_checks(
     """
     from_account = AccName(from_account)
     to_account = AccName(to_account)
+    if not amount:
+        amount = Amount(amount="0.000 HIVE")
     if await check_not_development_accounts([from_account.no_prefix, to_account.no_prefix]):
         raise HiveDevelopmentAccountError(
             f"{from_account} or {to_account} is not in allowed hive accounts for development mode"
@@ -1122,13 +1099,13 @@ async def perform_transfer_checks(
 
 
 async def send_transfer_bulk(
-    transfer_list: List[PendingTransaction] = [],
-    custom_json_list: List[PendingCustomJson] = [],
+    transfer_list: list[PendingTransaction] = [],
+    custom_json_list: list[PendingCustomJson] = [],
     hive_client: Hive | None = None,
-    keys: List[str] = [],
+    keys: list[str] = [],
     nobroadcast: bool = False,
     is_private: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Send multiple Hive token transfers in bulk.
 
@@ -1231,7 +1208,7 @@ async def send_transfer_bulk(
 async def send_pending(
     pending: PendingTransaction,
     hive_client: Hive | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Send a pending transaction.
 
@@ -1265,11 +1242,11 @@ async def send_transfer(
     from_account: str,
     memo: str = "",
     hive_client: Hive | None = None,
-    keys: List[str] = [],
+    keys: list[str] = [],
     nobroadcast: bool = False,
     is_private: bool = False,
     store_pending: PendingTransaction | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Sends a transfer of Hive tokens from one account to another, with support for retries,
     private memos, and error handling.
@@ -1530,7 +1507,7 @@ def witness_signing_key(witness_name: str) -> str | None:
                 extra={"notification": False},
             )
             return None
-        witness_info: Dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
+        witness_info: dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
         if not witness_info or "signing_key" not in witness_info:
             logger.warning(
                 f"{ICON} Could not retrieve witness info for {witness_name}.",
@@ -1546,7 +1523,7 @@ def witness_signing_key(witness_name: str) -> str | None:
         return None
 
 
-def get_hive_amount_from_trx_reply(trx: Dict[str, Any]) -> Amount:
+def get_hive_amount_from_trx_reply(trx: dict[str, Any]) -> Amount:
     """
     Extracts the amount of a specific asset from a Hive transaction.
 
