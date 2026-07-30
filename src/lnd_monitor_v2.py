@@ -411,7 +411,7 @@ async def db_store_invoice(
         ans = await invoice_pyd.save()
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
-            f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
+            f"New invoice recorded: {invoice_pyd.add_index:>7} {invoice_pyd.value:,.0f} sats {invoice_pyd.r_hash}",
             extra={"db_ans": ans.raw_result, **invoice_pyd.log_extra},
         )
     except Exception as e:  # noqa: BLE001
