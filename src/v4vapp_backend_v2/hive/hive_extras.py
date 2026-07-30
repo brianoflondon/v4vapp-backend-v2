@@ -23,6 +23,7 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
+from v4vapp_backend_v2.config.decorators import time_decorator
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_not_development_accounts,
@@ -190,7 +191,8 @@ def default_hive_nodes(stream_only: bool = False) -> list[str]:
     Health probes, retries, and failover after construction are Nectar's job.
     Beacon/Redis good-node lists are not used for client construction.
     """
-    nodes = _filter_excluded_nodes(list(DEFAULT_GOOD_NODES))
+    my_good_nodes = get_good_nodes()
+    nodes = _filter_excluded_nodes(my_good_nodes or list(DEFAULT_GOOD_NODES))
     if stream_only:
         nodes = nodes + [n for n in BLOCK_STREAM_ONLY if n not in nodes]
     if not nodes:
@@ -450,6 +452,10 @@ def get_good_nodes() -> list[str]:
     Returns:
         List[str]: A list of endpoints for nodes with a score of 100.
     """
+    cached_nodes = InternalConfig.redis_decoded.get(REDIS_KEY_GOOD_NODES)
+    if cached_nodes:
+        return _filter_excluded_nodes(json.loads(cached_nodes))
+
     beacon_urls = [
         "https://devapi.v4v.app/v2/beacon/nodes/",
         "https://api.v4v.app/v2/beacon/nodes/",
