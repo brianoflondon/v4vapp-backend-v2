@@ -9,9 +9,14 @@ Requires hive-nectar 1.0.7+ (fix/long-running-client-lifecycle) for hard-close
 and default monitor_interval=0. Still useful against older builds to document
 regressions.
 
-Not for default CI: needs network and takes time.
+**Not for default CI / GitHub Actions** (network + long runtime).
 
-Run (short suite):
+  - Module is skipped unless ``NECTAR_STABILITY=1`` *and* not on CI.
+  - Marked ``live_nectar`` + ``integration`` so ``pytest -m "not integration"``
+    and ``-m "not live_nectar"`` deselect them.
+  - GitHub workflow explicitly ``--ignore`` this file.
+
+Run (short suite, local only):
   NECTAR_STABILITY=1 pytest tests/hive/test_nectar_long_running_stability.py -v -s
 
 Optional soak:
@@ -44,14 +49,37 @@ from v4vapp_backend_v2.hive.hive_extras import (
     stream_hive_kwargs,
 )
 
+
+def _running_on_ci() -> bool:
+    """True in GitHub Actions and other common CI environments."""
+    if os.getenv("GITHUB_ACTIONS", "").lower() in ("true", "1", "yes"):
+        return True
+    if os.getenv("CI", "").lower() in ("true", "1", "yes"):
+        return True
+    # Extra belt-and-suspenders for hosted runners.
+    for key in ("GITLAB_CI", "CIRCLECI", "TF_BUILD", "BUILDKITE", "TRAVIS"):
+        if os.getenv(key):
+            return True
+    return False
+
+
+def _nectar_stability_enabled() -> bool:
+    """Opt-in only; never on CI even if NECTAR_STABILITY is set by mistake."""
+    if _running_on_ci():
+        return False
+    return os.getenv("NECTAR_STABILITY") == "1"
+
+
+# Triple gate: marker deselection in CI, skipif if collected, opt-in env only.
 pytestmark = [
+    pytest.mark.live_nectar,
+    pytest.mark.integration,
     pytest.mark.skipif(
-        os.getenv("NECTAR_STABILITY") != "1",
-        reason="Set NECTAR_STABILITY=1 to run live Nectar stability probes",
-    ),
-    pytest.mark.skipif(
-        os.getenv("GITHUB_ACTIONS") == "true",
-        reason="Live Nectar stability tests are not for GitHub Actions",
+        not _nectar_stability_enabled(),
+        reason=(
+            "Live Nectar stability probes: set NECTAR_STABILITY=1 locally "
+            "(never runs on CI / GitHub Actions)"
+        ),
     ),
 ]
 

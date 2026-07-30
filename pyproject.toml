@@ -98,7 +98,10 @@ filterwarnings = [
     "ignore:.*Task was destroyed but it is pending.*",  # Suppress task destroyed warnings
     "ignore:.*PytestUnraisableExceptionWarning.*"  # Suppress unraisable exception warnings
 ]
-markers = ["integration: mark slow integration tests"]
+markers = [
+    "integration: mark slow integration tests",
+    "live_nectar: live Hive/Nectar network probes (opt-in via NECTAR_STABILITY=1; never CI)",
+]
 
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "module"

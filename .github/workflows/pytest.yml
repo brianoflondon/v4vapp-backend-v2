@@ -87,8 +87,12 @@ jobs:
         env:
           HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
           HIVE_MEMO_TEST_KEY: ${{ secrets.HIVE_MEMO_TEST_KEY }}
+          # Never enable live Hive/Nectar stability probes in CI.
+          NECTAR_STABILITY: "0"
         run: |
-          uv run pytest -m "not integration" --durations=20
+          uv run pytest -m "not integration and not live_nectar" \
+            --ignore=tests/hive/test_nectar_long_running_stability.py \
+            --durations=20
 
       # Print service container logs only if tests fail
       - name: Print service container logs
@@ -169,8 +173,12 @@ jobs:
         env:
           HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
           HIVE_MEMO_TEST_KEY: ${{ secrets.HIVE_MEMO_TEST_KEY }}
+          # Live Nectar stability suite is opt-in local only (network + long runtime).
+          NECTAR_STABILITY: "0"
         run: |
-          uv run pytest -m "integration" --durations=20
+          uv run pytest -m "integration and not live_nectar" \
+            --ignore=tests/hive/test_nectar_long_running_stability.py \
+            --durations=20
 
       # Print service container logs only if tests fail
       - name: Print service container logs (integration)
