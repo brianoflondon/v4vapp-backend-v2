@@ -1081,7 +1081,7 @@ async def main_async_start(
         )
         # Wait until shutdown is requested (graceful SIGTERM or fatal restart)
         await shutdown_event.wait()
-        # Cancel tasks and wait for them to finish
+        # Cancel tasks and wait for them to finish *before* closing Redis/Mongo/Hive.
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -1096,10 +1096,20 @@ async def main_async_start(
     finally:
         # Cancel all other tasks and exit cleanly
         current_task = asyncio.current_task()
-        tasks = [task for task in asyncio.all_tasks() if task is not current_task]
-        for task in tasks:
+        pending = [task for task in asyncio.all_tasks() if task is not current_task]
+        for task in pending:
             task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*pending, return_exceptions=True)
+        # Let thread-pool stream workers notice cancellation / closed clients
+        # before we tear down Redis/Mongo (avoids "Session must be initialized"
+        # noise on Ctrl-C from abandoned Nectar next() threads).
+        try:
+            from v4vapp_backend_v2.helpers.async_wrapper import thread_pool
+
+            thread_pool.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+        await asyncio.sleep(0.3)
         if force_restart:
             logger.critical(
                 f"{ICON} 👋 Fatal exit (Docker restart): {STATUS_OBJ.fatal_reason or 'force_restart'}",
@@ -1108,7 +1118,7 @@ async def main_async_start(
         else:
             logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{ICON} Clearing notifications")
-        await asyncio.sleep(2)
+        await asyncio.sleep(0.5)
         InternalConfig().shutdown()
 
 

@@ -334,8 +334,16 @@ def close_hive_client(hive: Any = None) -> None:
     if rpc is None:
         return
 
+    # Mark closed so callers/zombies can detect without exploding on pool_manager=None.
+    try:
+        setattr(hive, "_v4v_hive_closed", True)
+    except Exception:
+        pass
+
     # 1) Stop NodePoolMonitor first (GrapheneRPC.close does not do this).
     #    Keep a thread ref: stop_monitoring() nulls _monitor_thread without joining.
+    #    Do NOT set nodes.pool_manager = None: abandoned stream next() threads may still
+    #    call rpcconnect() → next(nodes) and would raise AttributeError on None.
     try:
         nodes = getattr(rpc, "nodes", None)
         pool_mgr = getattr(nodes, "pool_manager", None) if nodes is not None else None
@@ -345,17 +353,12 @@ def close_hive_client(hive: Any = None) -> None:
         if pool_mgr is not None:
             monitor_thread = getattr(pool_mgr, "_monitor_thread", None)
             try:
-                pool_mgr.close()
+                pool_mgr.close()  # stop_monitoring only
             except Exception:
                 pass
             if monitor_thread is not None and getattr(monitor_thread, "is_alive", lambda: False)():
                 try:
-                    monitor_thread.join(timeout=1.0)
-                except Exception:
-                    pass
-            if nodes is not None:
-                try:
-                    nodes.pool_manager = None  # type: ignore[attr-defined]
+                    monitor_thread.join(timeout=0.5)
                 except Exception:
                     pass
     except Exception:

@@ -60,9 +60,31 @@ def sync_to_async(
         return wrapper_fn
 
 
+def _is_closed_client_error(error: BaseException) -> bool:
+    """True when the Hive/RPC client was closed under a still-running stream worker."""
+    text = str(error)
+    name = type(error).__name__
+    if "Session must be initialized" in text:
+        return True
+    if "get_active_node" in text:
+        return True
+    if name == "AttributeError" and "pool_manager" in text:
+        return True
+    if name == "RPCConnection" and "Session" in text:
+        return True
+    return False
+
+
 def _should_propagate_stream_error(error: BaseException) -> bool:
     """Errors that stream_ops must see (do not swallow as clean end-of-stream)."""
+    # Closed/discarded clients during rebuild or Ctrl-C: end stream quietly.
+    if _is_closed_client_error(error):
+        return False
     if isinstance(error, (NumRetriesReached, WorkingNodeMissing, NectarException)):
+        # RPCConnection("Session must be initialized") is a NectarException subclass path
+        # handled above via _is_closed_client_error when message matches.
+        if "Session must be initialized" in str(error):
+            return False
         return True
     text = str(error)
     name = type(error).__name__
@@ -94,31 +116,25 @@ async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]
             except StopAsyncIteration:
                 return
             except Exception as e:
+                if _is_closed_client_error(e):
+                    return
                 if _should_propagate_stream_error(e):
                     raise
-                if isinstance(e, AttributeError):
-                    logger.error(
-                        f"Logging error: {e} - problem with str in log level",
-                        extra={"notification": False},
-                    )
-                    return
                 # Unexpected: log and end stream (legacy behaviour).
                 logger.warning(
-                    f"sync_to_async_iterable {e}", extra={"notification": False, "error": e}
+                    f"sync_to_async_iterable {type(e).__name__}: {e}",
+                    extra={"notification": False},
                 )
                 return
     except Exception as e:
+        if _is_closed_client_error(e):
+            return
         if _should_propagate_stream_error(e):
             raise
-        try:
-            logger.warning(
-                f"sync_to_async_iterable {e}", extra={"notification": False, "error": e}
-            )
-        except AttributeError as log_error:
-            logger.error(
-                f"Logging error: {log_error} - problem with str in log level",
-                extra={"notification": False},
-            )
+        logger.warning(
+            f"sync_to_async_iterable {type(e).__name__}: {e}",
+            extra={"notification": False},
+        )
         return
 
 
@@ -143,6 +159,9 @@ def _next(it: Iterator[T]) -> T:
         )
         raise
     except NectarException as e:
+        if _is_closed_client_error(e):
+            # Client closed under us (rebuild / Ctrl-C) — end stream quietly.
+            raise StopAsyncIteration
         err = str(e)
         if "Block " in err and "does not exist" in err:
             # Let stream-level retry logic handle lagging nodes consistently.
@@ -154,7 +173,7 @@ def _next(it: Iterator[T]) -> T:
             # Node cannot use max_batch_size — stream_ops should disable batching.
             raise
         logger.warning(
-            f"Nectar Error in _next {e}",
+            f"Nectar Error in _next {type(e).__name__}: {err}",
             extra={
                 "notification": False,
                 "error": e,
@@ -164,14 +183,17 @@ def _next(it: Iterator[T]) -> T:
         raise StopAsyncIteration
 
     except AttributeError as e:
-        logger.exception(
-            f"Logging error: {e} - problem with str in log level",
-            extra={"notification": False, "error": e},
+        # Common on shutdown: pool_manager=None after close_hive_client, or closed RPC.
+        if _is_closed_client_error(e):
+            raise StopAsyncIteration
+        logger.warning(
+            f"_next AttributeError: {e}",
+            extra={"notification": False},
         )
         raise StopAsyncIteration
 
     except TypeError as e:
-        logger.warning(f"_next {e}", extra={"notification": False, "error": e})
+        logger.warning(f"_next {e}", extra={"notification": False})
         raise StopAsyncIteration
 
     except ValueError as e:
@@ -179,7 +201,7 @@ def _next(it: Iterator[T]) -> T:
             logger.warning("Recurrent Transfer list error", extra={"notification": False})
             raise StopAsyncIteration
         else:
-            logger.warning(f"_next {e}", extra={"notification": False, "error": e})
+            logger.warning(f"_next {e}", extra={"notification": False})
             raise StopAsyncIteration
     except RPCError as e:
         if "Unable to acquire database lock" in str(e):
@@ -190,18 +212,19 @@ def _next(it: Iterator[T]) -> T:
             raise StopAsyncIteration
         raise
     except Exception as e:
+        if _is_closed_client_error(e):
+            raise StopAsyncIteration
         # Propagate rate-limits / pool failures so stream_ops can recover.
         if _should_propagate_stream_error(e):
             logger.warning(
                 f"_next propagating {type(e).__name__}: {e}",
-                extra={"notification": False, "error": e},
+                extra={"notification": False},
             )
             raise
         logger.warning(
             f"_next {type(e).__name__}: {e}",
-            extra={"notification": False, "error": e},
+            extra={"notification": False},
         )
-        logger.error(e, extra={"notification": False})
         sleep(0.1)  # Avoid tight loop on unexpected errors
         raise StopAsyncIteration
 
