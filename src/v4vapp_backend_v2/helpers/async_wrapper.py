@@ -64,13 +64,22 @@ def _is_closed_client_error(error: BaseException) -> bool:
     """True when the Hive/RPC client was closed under a still-running stream worker."""
     text = str(error)
     name = type(error).__name__
+    # hive-nectar 1.0.7+ hard-close
+    if name == "RPCClosed":
+        return True
+    if "RPC client is closed" in text:
+        return True
     if "Session must be initialized" in text:
         return True
     if "get_active_node" in text:
         return True
     if name == "AttributeError" and "pool_manager" in text:
         return True
-    if name == "RPCConnection" and "Session" in text:
+    if name == "WorkingNodeMissing" and "pool manager is not available" in text:
+        return True
+    if name == "RPCConnection" and (
+        "Session" in text or "not connected" in text.lower() or "closed" in text.lower()
+    ):
         return True
     return False
 
@@ -153,6 +162,9 @@ def _next(it: Iterator[T]) -> T:
         )
         raise
     except WorkingNodeMissing as e:
+        if _is_closed_client_error(e):
+            # pool_manager gone after intentional close — clean EOS, not failover.
+            raise StopAsyncIteration
         logger.warning(
             f"_next {e}",
             extra={"notification": False, "error": e},
