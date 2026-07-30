@@ -872,6 +872,9 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                 # - ACTIVE_CHANNEL
                 # - INACTIVE_CHANNEL
                 # - PENDING_OPEN_CHANNEL
+                # - FULLY_RESOLVED_CHANNEL
+                # - CHANNEL_FUNDING_TIMEOUT
+                # - CHANNEL_UPDATE
 
                 decoded_event = MessageToDict(channel_event, preserving_proto_field_name=True)
                 # Process the different event types
@@ -947,8 +950,9 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                     )
                     await fill_channel_names(lnd_client, lnd_events_group)
                 else:
+                    event_type = decoded_event.get("type", "Unknown")
                     logger.info(
-                        f"{lnd_client.icon} Unknown channel event received",
+                        f"{lnd_client.icon} Other (fully resolved, funding timeout, update) channel event received {event_type}",
                         extra={"channel_event": decoded_event},
                     )
 
