@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import List
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
@@ -60,7 +59,7 @@ def magi_exchange_adapter(provider_name: str = "magi_vsc") -> BaseExchangeAdapte
 
 async def process_magi_btc_transfer_event(
     magi_transfer: MagiBTCTransferEvent,
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Route a Magi BTC transfer event to the correct accounting handler.
 
@@ -242,7 +241,7 @@ async def forward_magisats(invoice: Invoice) -> None:
 
 async def magisats_outbound(
     magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Record accounting entries when the server sends sats outbound via a Magi VSC transfer.
 
@@ -252,7 +251,7 @@ async def magisats_outbound(
     to derive the true fee (received msats − forwarded msats).
 
     Pre-condition (recorded earlier in the deposit handler):
-      - Debit:  External Lightning Payments (umbrel)   full received amount (e.g. 560 sats)
+      - Debit:  External Lightning Payments (node_name)   full received amount (e.g. 560 sats)
       - Credit: VSC Liability (server_id)              full received amount
 
     Accounting entries created here (double-entry, all amounts in MSATS):
@@ -345,7 +344,7 @@ async def magisats_outbound(
         ledger_type=ledger_type,
         group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
         op_type=magi_transfer.op_type,
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         description=f"Magi Transfer out {magi_transfer.amount:,.0f} sats for {magi_transfer.cust_id}",
         user_memo=vsc_payload.memo,
         debit=LiabilityAccount(
@@ -375,7 +374,7 @@ async def magisats_outbound(
             ledger_type=ledger_type,
             group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
             op_type=magi_transfer.op_type,
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             description=f"Fee for Magisats {net_fee_msats / 1000:.3f} sats",
             user_memo=vsc_payload.memo,
             debit=LiabilityAccount(
@@ -427,7 +426,7 @@ async def magisats_outbound(
 
 async def magisats_inbound(
     magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall | None = None
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Record accounting entries when sats arrive at the server's Magi address from a customer.
 
@@ -537,7 +536,7 @@ async def magisats_inbound(
         ledger_type=ledger_type,
         group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
         op_type=magi_transfer.op_type,
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         description=f"Receive Magisats to Keepsats {magi_transfer.amount:,.0f} sats for {cust_id}",
         user_memo=processed_memo.short_memo,
         debit=AssetAccount(name="Exchange Holdings", sub=exchange_sub),
@@ -630,7 +629,7 @@ async def magisats_fee_ledger_entry(
         ledger_type=ledger_type,
         group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
         op_type=magi_transfer.op_type,
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         description=f"Fee for Magisats receive {magi_transfer.amount:,.0f} sats {net_fee_msats / 1000:.3f} sats for {cust_id}",
         user_memo=processed_memo.short_memo,
         debit=LiabilityAccount(
@@ -740,7 +739,7 @@ async def return_magisats(
         ledger_type=ledger_type,
         group_id=f"{initiating_op.group_id}_{ledger_type.value}",
         op_type=initiating_op.op_type,
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         description=f"Return {remainder_sats:,.0f} sats to Magi for original transfer {initiating_op.short_id}",
         user_memo=processed_memo.short_memo,
         debit=LiabilityAccount(
@@ -779,7 +778,7 @@ async def return_magisats(
 
 async def magisats_funding(
     magi_transfer: MagiBTCTransferEvent, vsc_call: VSCCall
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Handle special case of Magi transfer from a Funding Account.
 
@@ -812,7 +811,7 @@ async def magisats_funding(
         ledger_type=ledger_type,
         group_id=f"{magi_transfer.group_id}_{ledger_type.value}",
         op_type=magi_transfer.op_type,
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         description=f"Funding to Magi Server {magi_transfer.amount:,.0f} sats from {magi_transfer.from_account}",
         debit=AssetAccount(name="Exchange Holdings", sub=exchange_sub),
         debit_unit=Currency.MSATS,

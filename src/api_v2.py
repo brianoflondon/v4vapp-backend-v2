@@ -2,7 +2,7 @@ import argparse
 import socket
 import sys
 from decimal import ROUND_CEILING, Decimal
-from typing import Any, Dict, List
+from typing import Any
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, status
@@ -172,7 +172,7 @@ async def cryptoprices() -> AllQuotes:
     return all_quotes
 
 
-def _magisats_fee_response(receive_sats: int, include_forwarding: bool = True) -> Dict[str, int]:
+def _magisats_fee_response(receive_sats: int, include_forwarding: bool = True) -> dict[str, int]:
     """Build the fee response payload for a given receive amount."""
     msats = Decimal(receive_sats) * Decimal(1000)
     fee_msats = calculate_fee_msats(msats)
@@ -182,7 +182,7 @@ def _magisats_fee_response(receive_sats: int, include_forwarding: bool = True) -
     to_send_msats = msats + fee_msats + forwarding_fee_estimate_msats
     total_to_send_sats = int(
         Decimal(Decimal(to_send_msats) / Decimal(1000)).quantize(
-            Decimal("1"), rounding=ROUND_CEILING
+            Decimal(1), rounding=ROUND_CEILING
         )
     )
     return {
@@ -217,7 +217,7 @@ def _magisats_fee(
     sats: int | None,
     reverse_sats: int | None,
     include_forwarding: bool,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     if (sats is None) == (reverse_sats is None):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -261,7 +261,7 @@ async def magisats_fee_out(
         description="The total sats to send for the invoice. The API will calculate the "
         "receive_sats such that total_to_send_sats == reverse_sats.",
     ),
-) -> Dict[str, int]:
+) -> dict[str, int]:
     return _magisats_fee(sats, reverse_sats, include_forwarding=True)
 
 
@@ -277,7 +277,7 @@ async def magisats_fee_in(
         description="The total sats to send for the invoice. The API will calculate the "
         "receive_sats such that total_to_send_sats == reverse_sats.",
     ),
-) -> Dict[str, int]:
+) -> dict[str, int]:
     return _magisats_fee(sats, reverse_sats, include_forwarding=False)
 
 
@@ -297,7 +297,7 @@ async def conversion(
         None, description="The amount of sats"
     ),  # Replace Field with Query for query parameters in a POST endpoint
     use_cache: bool = Query(True, description="Use cached quotes if available"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     all_quotes = AllQuotes()
     await all_quotes.get_all_quotes(store_db=False, use_cache=use_cache)
     answer = all_quotes.legacy_api_format()
@@ -349,7 +349,7 @@ async def fixed_quote(
 
 
 @crypto_v1_router.get("/binance/")
-async def binance() -> Dict[str, str | int | float]:
+async def binance() -> dict[str, str | int | float]:
     try:
         adapter = get_exchange_adapter()
         balances = adapter.get_balances(["BTC", "HIVE", "USDT"])
@@ -366,7 +366,7 @@ async def binance() -> Dict[str, str | int | float]:
 
 async def sats_to_hive(
     sats: int = Query(..., description="The amount of sats to convert to Hive"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Convert a specified amount of Bitcoin Satoshis (sats) to Hive using current exchange rates.
 
@@ -374,7 +374,7 @@ async def sats_to_hive(
         sats (int): The amount of sats to convert to Hive.
 
     Returns:
-        Dict[str, Any]: A dictionary containing the original sats amount and the equivalent Hive amount.
+        dict[str, Any]: A dictionary containing the original sats amount and the equivalent Hive amount.
     """
     try:
         all_quotes = AllQuotes()
@@ -406,7 +406,7 @@ class KeepsatsApiResponse(BaseModel):
     in_progress_sats: float = Field(
         ..., description="Keepsats currently held in progress (rounded sats)"
     )
-    all_transactions: List[AccountBalanceLine] | LedgerAccountDetails = Field(
+    all_transactions: list[AccountBalanceLine] | LedgerAccountDetails = Field(
         default_factory=list,
         description=("Full account balance object when line_items=True, otherwise an empty list"),
     )

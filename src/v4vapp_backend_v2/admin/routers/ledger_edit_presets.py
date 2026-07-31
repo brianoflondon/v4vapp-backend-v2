@@ -1,31 +1,53 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, StartupFailure
 from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
 
 # ---------------------------------------------------------------------------
 # Quick-action presets (built dynamically from config)
 # ---------------------------------------------------------------------------
 
+# Broad catch so preset UI never crashes admin; includes StartupFailure from InternalConfig.
+_PRESET_CONFIG_ERRORS = (
+    AttributeError,
+    TypeError,
+    ValueError,
+    KeyError,
+    StartupFailure,
+    RuntimeError,
+)
+
 
 def _get_exchange_sub() -> str:
-    """Resolve the exchange sub-account name from config."""
+    """Resolve the exchange sub-account name from config (safe for admin UI)."""
     try:
         return get_exchange_adapter().exchange_name
-    except Exception:
-        return "binance_convert"  # safe fallback
+    except _PRESET_CONFIG_ERRORS:
+        return "binance_convert"
 
 
 def _get_node_name() -> str:
-    """Resolve the Lightning node name from config."""
+    """
+    Resolve the Lightning node / ledger sub name from config (safe for admin UI).
+
+    Prefer ``lnd_config.default`` over a hard-coded historical node name so
+    cutovers (e.g. voltage → umbrel) do not invent the wrong sub-account.
+    """
     try:
-        return InternalConfig().node_name
-    except Exception:
-        return "voltage"  # safe fallback
+        ic = InternalConfig()
+        name = ic.node_name
+        if name:
+            return name
+        default = getattr(ic.config.lnd_config, "default", None)
+        if default:
+            return str(default)
+    except _PRESET_CONFIG_ERRORS:
+        pass
+    return "unknown"
 
 
-def _build_editor_presets() -> List[Dict[str, Any]]:
+def _build_editor_presets() -> list[dict[str, Any]]:
     """Build presets using the config-driven exchange name."""
     exchange_sub = _get_exchange_sub()
     node_name = _get_node_name()

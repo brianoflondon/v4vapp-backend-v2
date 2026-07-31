@@ -4,8 +4,8 @@ import os
 import signal
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, Dict, List
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any
 
 import typer
 from colorama import Fore, Style
@@ -138,7 +138,7 @@ class StatusObject:
 STATUS_OBJ = StatusObject()
 
 
-async def health_check() -> Dict[str, Any]:
+async def health_check() -> dict[str, Any]:
     """
     Asynchronous health check function that verifies the status of critical background tasks.
     Used with the `StatusAPI` to provide health monitoring API endpoint especially for docker
@@ -150,7 +150,7 @@ async def health_check() -> Dict[str, Any]:
     STATUS_OBJ dictionary.
 
     Returns:
-        Dict[str, Any]: The dictionary representation of STATUS_OBJ containing status information.
+        dict[str, Any]: The dictionary representation of STATUS_OBJ containing status information.
 
     Raises:
         StatusAPIException: If one or more critical tasks are not running, with a message
@@ -205,7 +205,7 @@ async def track_events(
     # Invoices and Payments are not received in the right order with the HtlcEvents
     try:
         htlc_event_dict = MessageToDict(htlc_event, preserving_proto_field_name=True)
-    except Exception:
+    except Exception:  # noqa: BLE001
         htlc_event_dict = {}
     invoice_dict = {}
     if lnd_events_group.complete_group(event=htlc_event):
@@ -229,9 +229,8 @@ async def track_events(
                     invoice_dict = MessageToDict(
                         incoming_invoice, preserving_proto_field_name=True
                     )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.exception(e)
-                pass
         await asyncio.sleep(0.2)
         message_str, ans_dict = lnd_events_group.message(htlc_event, dest_alias=dest_alias)
         forward_success = False
@@ -263,7 +262,7 @@ async def track_events(
                     asyncio.create_task(
                         db_store_htlc_event(forward_event=forward_event, lnd_client=lnd_client)
                     )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(
                         f"Could not save HTLC event: {e}", extra={"notification": False}
                     )
@@ -356,7 +355,7 @@ async def fetch_dest_alias_from_request(payment_request: str, lnd_client: LNDCli
             extra={"notification": False},
         )
         return "Unknown"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(
             f"{getattr(lnd_client, 'icon', '')} Could not fetch dest alias: {e}",
             extra={"notification": False},
@@ -374,7 +373,7 @@ async def remove_event_group(
     try:
         await asyncio.wait_for(shutdown_event.wait(), timeout=10)
         return
-    except asyncio.TimeoutError:
+    except TimeoutError:
         pass
     lnd_events_group.remove_group(htlc_event)
 
@@ -412,10 +411,10 @@ async def db_store_invoice(
         ans = await invoice_pyd.save()
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
-            f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
+            f"New invoice recorded: {invoice_pyd.add_index:>7} {invoice_pyd.value:,.0f} sats {invoice_pyd.r_hash}",
             extra={"db_ans": ans.raw_result, **invoice_pyd.log_extra},
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(e)
         return
 
@@ -466,7 +465,7 @@ async def db_store_payment(
             extra={"db_ans": ans.raw_result, **payment_pyd.log_extra},
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.info(e)
         return
 
@@ -510,7 +509,7 @@ async def node_balance_report(
             logger.info(f"{lnd_client.icon} {balances.log_str}", extra={**balances.log_extra})
             await balances.save()
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(
             f"{lnd_client.icon} Could not fetch or log node balance: {e}",
             extra={"notification": False},
@@ -523,10 +522,8 @@ async def invoice_report(
     lnd_events_group: LndEventsGroup | None = None,
 ) -> None:
     asyncio.create_task(node_balance_report(lnd_client=lnd_client))
-    expiry_datetime = datetime.fromtimestamp(
-        htlc_event.creation_date + htlc_event.expiry, tz=timezone.utc
-    )
-    time_to_expire = expiry_datetime - datetime.now(tz=timezone.utc)
+    expiry_datetime = datetime.fromtimestamp(htlc_event.creation_date + htlc_event.expiry, tz=UTC)
+    time_to_expire = expiry_datetime - datetime.now(tz=UTC)
     if time_to_expire.total_seconds() < 0:
         time_to_expire = timedelta(seconds=0)
     time_to_expire_str = format_time_delta(time_to_expire)
@@ -549,7 +546,7 @@ async def payment_report(
     lnd_events_group: LndEventsGroup,
 ) -> None:
     status = lnrpc.Payment.PaymentStatus.Name(htlc_event.status)
-    creation_date = datetime.fromtimestamp(htlc_event.creation_time_ns / 1e9, tz=timezone.utc)
+    creation_date = datetime.fromtimestamp(htlc_event.creation_time_ns / 1e9, tz=UTC)
     pre_image = htlc_event.payment_preimage if htlc_event.payment_preimage else ""
     asyncio.create_task(node_balance_report(lnd_client=lnd_client))
     try:
@@ -566,7 +563,7 @@ async def payment_report(
             extra={"notification": False},
         )
         dest_alias = "Unknown"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(
             f"{lnd_client.icon} Could not fetch dest alias: {e}",
             extra={"notification": False},
@@ -655,7 +652,7 @@ async def invoices_loop(
     floors = get_lnd_index_floors(lnd_client.connection.name)
     try:
         recent_invoice = await asyncio.wait_for(get_most_recent_invoice(), timeout=30)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning(
             "Timed out querying DB for most recent invoice in invoices_loop (30s). "
             "Starting subscription from index floors or 0.",
@@ -672,7 +669,7 @@ async def invoices_loop(
         try:
             await asyncio.wait_for(shutdown_event.wait(), timeout=10)
             return
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
     add_index, settle_index = apply_invoice_index_floors(add_index, settle_index, floors)
@@ -713,7 +710,6 @@ async def invoices_loop(
                 else None,
                 call_name="SubscribeInvoices",
             )
-            pass
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
             logger.error("🔴 Connection error in invoices_loop", exc_info=e, stack_info=True)
@@ -721,9 +717,8 @@ async def invoices_loop(
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.exception(e)
-            pass
 
 
 async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
@@ -760,7 +755,6 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
                 else None,
                 call_name="TrackPayments",
             )
-            pass
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
             logger.error("🔴 Connection error in payments_loop", exc_info=e, stack_info=True)
@@ -768,9 +762,8 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.exception(e)
-            pass
 
 
 async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
@@ -799,7 +792,6 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
                 else None,
                 call_name="SubscribeHtlcEvents",
             )
-            pass
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
             logger.error("🔴 Connection error in payments_loop", exc_info=e, stack_info=True)
@@ -807,9 +799,8 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.exception(e)
-            pass
 
 
 async def get_channel_display_name(
@@ -851,14 +842,14 @@ async def get_channel_display_name(
                 details = rpc_err.details()
             else:
                 details = getattr(rpc_err, "_details", "") or str(rpc_err)
-        except Exception:
+        except Exception:  # noqa: BLE001
             details = str(rpc_err)
         if "edge not found" in str(details).lower():
             logger.warning(f"{lnd_client.icon} get_channel_name: channel {chan_id} not found")
             return "Unknown"
         logger.exception(e)
         return "Unknown"
-    except Exception:
+    except Exception:  # noqa: BLE001
         return "Unknown"
 
 
@@ -881,10 +872,11 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                 # - ACTIVE_CHANNEL
                 # - INACTIVE_CHANNEL
                 # - PENDING_OPEN_CHANNEL
+                # - FULLY_RESOLVED_CHANNEL
+                # - CHANNEL_FUNDING_TIMEOUT
+                # - CHANNEL_UPDATE
 
                 decoded_event = MessageToDict(channel_event, preserving_proto_field_name=True)
-                logger.info("Channel event received", extra={"channel_event": decoded_event})
-
                 # Process the different event types
                 if "open_channel" in decoded_event:
                     channel = decoded_event["open_channel"]
@@ -957,6 +949,12 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                         extra={"notification": True},
                     )
                     await fill_channel_names(lnd_client, lnd_events_group)
+                else:
+                    event_type = decoded_event.get("type", "Unknown")
+                    logger.info(
+                        f"{lnd_client.icon} Other (fully resolved, funding timeout, update) channel event received {event_type}",
+                        extra={"channel_event": decoded_event},
+                    )
 
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
@@ -965,7 +963,6 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                 else None,
                 call_name="SubscribeHtlcEvents",
             )
-            pass
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
             logger.error("🔴 Connection error in channel_events_loop", exc_info=e, stack_info=True)
@@ -973,9 +970,8 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.exception(e)
-            pass
 
 
 async def fill_channel_names(
@@ -1002,19 +998,52 @@ async def fill_channel_names(
             request,
         )
         channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
-        if len(channels_dict.get("channels", [])) == len(lnd_events_group.channel_names):
+        open_channels = channels_dict.get("channels", [])
+        open_ids = [int(ch["chan_id"]) for ch in open_channels if ch.get("chan_id") is not None]
+
+        # Skip only when every open channel already has a *resolved* name.
+        # Do not short-circuit on length alone: placeholders named "Unknown"
+        # (or a failed GetInfo path that left the map incomplete) must retry.
+        def _name_resolved(chan_id: int) -> bool:
+            entry = lnd_events_group.channel_names.get(chan_id)
+            return entry is not None and entry.name and entry.name != "Unknown"
+
+        if open_ids and all(_name_resolved(cid) for cid in open_ids):
             logger.debug("No new channels to fill")
             return
-        # Get the name of each channel
-        tasks = []
-        for channel in channels_dict.get("channels", []):
-            tasks.append(
-                get_channel_name(
-                    channel_id=int(channel["chan_id"]),
-                    lnd_client=lnd_client,
+
+        # Resolve identity once (avoid N× GetInfo when LND is busy/unreachable).
+        get_info = getattr(lnd_client, "get_info", None)
+        if get_info is None:
+            try:
+                get_info = await lnd_client.node_get_info
+            except Exception as e:  # noqa: BLE001 — leave map unchanged so next fill retries
+                logger.warning(
+                    f"{lnd_client.icon} fill_channel_names: GetInfo unavailable ({e}); "
+                    f"will retry aliases on next fill (not caching Unknown)",
+                    extra={"notification": False},
                 )
+                return
+        own_pub_key = getattr(get_info, "identity_pubkey", None) or None
+        if not own_pub_key:
+            logger.warning(
+                f"{lnd_client.icon} fill_channel_names: empty identity_pubkey; "
+                f"will retry on next fill",
+                extra={"notification": False},
             )
-        names_list: List[LndChannelName] = await asyncio.gather(*tasks)
+            return
+
+        # Only resolve channels still missing a real name (new opens or prior Unknown).
+        to_resolve = [cid for cid in open_ids if not _name_resolved(cid)]
+        tasks = [
+            get_channel_name(
+                channel_id=cid,
+                lnd_client=lnd_client,
+                own_pub_key=own_pub_key,
+            )
+            for cid in to_resolve
+        ]
+        names_list: list[LndChannelName] = await asyncio.gather(*tasks)
         for channel_name in names_list:
             lnd_events_group.append(channel_name)
             logger.info(
@@ -1028,32 +1057,39 @@ async def fill_channel_names(
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
         return
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.exception(e, extra={"notification": False})
         await asyncio.sleep(10)
 
 
 async def read_all_invoices(lnd_client: LNDClient) -> None:
     """
-    Reads all invoices from the LND client and inserts them into a MongoDB collection.
+    Sync invoices from LND into Mongo (missing docs only).
 
-    This function continuously fetches invoices from the LND client in batches
-    and inserts them into a MongoDB collection.
-    It stops fetching when the number of invoices in a batch is less than the maximum
-    number of invoices per batch.
-
-    Args:
-        lnd_client (LNDClient): The LND client used to fetch invoices.
-
-    Returns:
-        None
+    Floor-aware fetch:
+    - With ``start_add_index`` > 0: list **forward** from that index so LND
+      does not return pre-floor history (filter on fetch).
+    - Without a floor: reverse list from newest (full history), with an
+      early stop if a floor is later applied mid-walk.
+    Store path still skips pre-floor indexes as defense in depth.
     """
     try:
-        index_offset = 0
         num_max_invoices = 1000
-        total_invoices = 0
+        total_fetched = 0
+        total_skipped_floor = 0
         floors = get_lnd_index_floors(lnd_client.connection.name)
-        logger.info(f"{lnd_client.icon} Reading all invoices...")
+        floor = floors.add_index
+        # Forward from floor when set: LND returns add_index > index_offset.
+        # Reverse full history only when no floor (bootstrap / no cutover).
+        reversed_list = floor <= 0
+        index_offset = 0 if reversed_list else floor
+        if floor > 0:
+            logger.info(
+                f"{lnd_client.icon} Reading invoices after add_index>{floor} "
+                f"(floor-aware ListInvoices, forward)..."
+            )
+        else:
+            logger.info(f"{lnd_client.icon} Reading all invoices (no add_index floor; reverse)...")
         while True:
             if shutdown_event.is_set():
                 return
@@ -1061,17 +1097,26 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 pending_only=False,
                 index_offset=index_offset,
                 num_max_invoices=num_max_invoices,
-                reversed=True,
+                reversed=reversed_list,
             )
             invoices_raw: lnrpc.ListInvoiceResponse = await lnd_client.call(
                 lnd_client.lightning_stub.ListInvoices,
                 request,
             )
             list_invoices = ListInvoiceResponse(invoices_raw)
-            index_offset = list_invoices.first_index_offset
+            batch = list_invoices.invoices
+            if not batch:
+                logger.info(
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Finished reading invoices (empty page); "
+                    f"fetched={total_fetched} skipped_floor={total_skipped_floor}"
+                )
+                break
+
             bulk_updates = []
-            for invoice in list_invoices.invoices:
+            for invoice in batch:
                 if should_ignore_invoice_index(invoice.add_index, floors):
+                    total_skipped_floor += 1
                     continue
                 read_invoice = await Invoice.collection().find_one(
                     filter={"r_hash": invoice.r_hash},
@@ -1100,22 +1145,45 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 else:
                     modified = 0
                     inserted = 0
+                batch_min = min(int(i.add_index or 0) for i in batch)
+                batch_max = max(int(i.add_index or 0) for i in batch)
                 logger.info(
                     f"{lnd_client.icon} {DATABASE_ICON} "
-                    f"Invoices {index_offset}... "
-                    f"modified: {modified} inserted: {inserted}"
+                    f"Invoices add_index {batch_min}..{batch_max} "
+                    f"(offset→{index_offset}) "
+                    f"modified: {modified} inserted: {inserted} "
+                    f"skipped_floor: {total_skipped_floor}"
                 )
-                total_invoices += len(list_invoices.invoices)
+                total_fetched += len(batch)
             except BulkWriteError as e:
                 logger.debug(e.details)
-                pass
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.exception(str(e), extra={"error": e})
                 break
-            if len(list_invoices.invoices) < num_max_invoices:
+
+            # Pagination: reverse walks newest→oldest via first_index_offset;
+            # forward walks floor→newest via last_index_offset.
+            if reversed_list:
+                index_offset = int(list_invoices.first_index_offset)
+                # Early stop: entire page is at/below floor (no more post-floor data).
+                if floor > 0:
+                    batch_max = max(int(i.add_index or 0) for i in batch)
+                    if batch_max <= floor:
+                        logger.info(
+                            f"{lnd_client.icon} {DATABASE_ICON} "
+                            f"Stopped invoice reverse sync at floor "
+                            f"(batch max add_index={batch_max} <= {floor}); "
+                            f"fetched={total_fetched} skipped_floor={total_skipped_floor}"
+                        )
+                        break
+            else:
+                index_offset = int(list_invoices.last_index_offset)
+
+            if len(batch) < num_max_invoices:
                 logger.info(
                     f"{lnd_client.icon} {DATABASE_ICON} "
-                    f"Finished reading {total_invoices} invoices..."
+                    f"Finished reading invoices; "
+                    f"fetched={total_fetched} skipped_floor={total_skipped_floor}"
                 )
                 break
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
@@ -1125,25 +1193,31 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
 
 async def read_all_payments(lnd_client: LNDClient) -> None:
     """
-    Reads all payments from the LND client and inserts them into a MongoDB collection.
+    Sync payments from LND into Mongo (fill missing route/description).
 
-    This function continuously fetches payments from the LND client in batches and
-    inserts them into a MongoDB collection.
-    It stops fetching when the number of payments in a batch is less than the
-    maximum number of payments per batch.
-
-    Args:
-        lnd_client (LNDClient): The LND client used to fetch payments.
-
-    Returns:
-        None
+    Floor-aware fetch:
+    - With ``start_payment_index`` > 0: list **forward** from that index so LND
+      does not return pre-floor history.
+    - Without a floor: reverse full history, with early stop if a floor is set.
+    Store path still skips pre-floor indexes as defense in depth.
     """
     try:
-        index_offset = 0
         num_max_payments = 1000
-        total_payments = 0
+        total_fetched = 0
+        total_skipped_floor = 0
         floors = get_lnd_index_floors(lnd_client.connection.name)
-        logger.info(f"{lnd_client.icon} Reading all payments...")
+        floor = floors.payment_index
+        reversed_list = floor <= 0
+        index_offset = 0 if reversed_list else floor
+        if floor > 0:
+            logger.info(
+                f"{lnd_client.icon} Reading payments after payment_index>{floor} "
+                f"(floor-aware ListPayments, forward)..."
+            )
+        else:
+            logger.info(
+                f"{lnd_client.icon} Reading all payments (no payment_index floor; reverse)..."
+            )
         while True:
             if shutdown_event.is_set():
                 return
@@ -1151,30 +1225,37 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 include_incomplete=True,
                 index_offset=index_offset,
                 max_payments=num_max_payments,
-                reversed=True,
+                reversed=reversed_list,
             )
             payments_raw: lnrpc.ListPaymentsResponse = await lnd_client.call(
                 lnd_client.lightning_stub.ListPayments,
                 request,
             )
             list_payments = ListPaymentsResponse(payments_raw)
-            index_offset = payments_raw.first_index_offset
+            batch = list_payments.payments
+            if not batch:
+                logger.info(
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Finished reading payments (empty page); "
+                    f"fetched={total_fetched} skipped_floor={total_skipped_floor}"
+                )
+                break
+
             bulk_updates = []
-            for payment in list_payments.payments:
+            for payment in batch:
                 if should_ignore_payment_index(payment.payment_index, floors):
+                    total_skipped_floor += 1
                     continue
                 query = {"payment_hash": payment.payment_hash}
                 read_payment = await Payment.collection().find_one(
                     filter=query,
                 )
                 # The invoice_description "Not set" is used in pub_key_alias.py if there is no description.
-                # look for existing data so we can skip further processing
                 route_str = read_payment.get("route_str", None) if read_payment else None
                 invoice_description = (
                     read_payment.get("invoice_description", None) if read_payment else None
                 )
                 status = read_payment.get("status", None) if read_payment else None
-                # if we already have a meaningful route or description, nothing to do
                 if read_payment and route_str and invoice_description:
                     continue
                 if (
@@ -1184,7 +1265,8 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 ):
                     continue
                 logger.info(
-                    f"Updating payment {payment.payment_index} {route_str} {invoice_description} {payment.payment_hash} {status}"
+                    f"Updating payment {payment.payment_index} {route_str} "
+                    f"{invoice_description} {payment.payment_hash} {status}"
                 )
                 await update_payment_route_with_alias(
                     lnd_client=lnd_client,
@@ -1215,27 +1297,47 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 else:
                     modified = 0
                     inserted = 0
+                batch_min = min(int(p.payment_index or 0) for p in batch)
+                batch_max = max(int(p.payment_index or 0) for p in batch)
                 logger.info(
                     f"{lnd_client.icon} {DATABASE_ICON} "
-                    f"Payments {index_offset}... "
-                    f"modified: {modified} inserted: {inserted}"
+                    f"Payments payment_index {batch_min}..{batch_max} "
+                    f"(offset→{index_offset}) "
+                    f"modified: {modified} inserted: {inserted} "
+                    f"skipped_floor: {total_skipped_floor}"
                 )
-                total_payments += len(list_payments.payments)
+                total_fetched += len(batch)
             except BulkWriteError as e:
                 logger.debug(e.details)
-                pass
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.exception(str(e), extra={"error": e})
-            if len(list_payments.payments) < num_max_payments:
+
+            if reversed_list:
+                index_offset = int(payments_raw.first_index_offset)
+                if floor > 0:
+                    batch_max = max(int(p.payment_index or 0) for p in batch)
+                    if batch_max <= floor:
+                        logger.info(
+                            f"{lnd_client.icon} {DATABASE_ICON} "
+                            f"Stopped payment reverse sync at floor "
+                            f"(batch max payment_index={batch_max} <= {floor}); "
+                            f"fetched={total_fetched} skipped_floor={total_skipped_floor}"
+                        )
+                        break
+            else:
+                index_offset = int(payments_raw.last_index_offset)
+
+            if len(batch) < num_max_payments:
                 logger.info(
                     f"{lnd_client.icon} {DATABASE_ICON} "
-                    f"Finished reading {total_payments} payments..."
+                    f"Finished reading payments; "
+                    f"fetched={total_fetched} skipped_floor={total_skipped_floor}"
                 )
                 break
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
         raise e
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.exception(e, extra={"error": e})
         return
 
@@ -1280,7 +1382,7 @@ async def get_most_recent_invoice() -> Invoice | None:
         )
         if invoice:
             return invoice
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"No invoices found, empty database {e}")
     return None
 
@@ -1321,7 +1423,7 @@ async def get_most_recent_payment() -> Payment | None:
         )
         if payment:
             return payment
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"No payments found, empty database {e}")
     return None
 
@@ -1355,7 +1457,7 @@ async def synchronize_db(
     try:
         await asyncio.wait_for(shutdown_event.wait(), timeout=delay)
         return
-    except asyncio.TimeoutError:
+    except TimeoutError:
         pass
     await asyncio.gather(*sync_tasks)
 
@@ -1491,7 +1593,7 @@ async def main_async_start(connection_name: str) -> None:
                 await asyncio.wait_for(
                     asyncio.gather(*running_tasks, return_exceptions=True), timeout=5
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     "Timed out waiting for stream tasks to cancel; continuing shutdown."
                 )
@@ -1574,7 +1676,7 @@ async def _background_sync(lnd_client: LNDClient) -> None:
         await synchronize_db(lnd_client, delay=delay)
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Background sync cancelled during shutdown.")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(
             f"Background sync failed: {e}",
             extra={"notification": False},
@@ -1620,7 +1722,7 @@ async def expired_invoices_maintenance_loop(
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info(f"{lnd_client.icon} expired_invoices_maintenance_loop cancelled")
             return
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 f"{lnd_client.icon} expired invoice maintenance find failed: {e}",
                 extra={"notification": False},
@@ -1629,7 +1731,7 @@ async def expired_invoices_maintenance_loop(
         try:
             await asyncio.wait_for(shutdown_event.wait(), timeout=interval_seconds)
             return
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
 
@@ -1637,7 +1739,7 @@ async def pause_for_database_sync() -> bool:
     try:
         recent_invoice = await asyncio.wait_for(get_most_recent_invoice(), timeout=30)
         recent_payment = await asyncio.wait_for(get_most_recent_payment(), timeout=30)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning(
             "Timed out querying DB for recent invoice/payment during startup. "
             "Skipping database sync check.",
@@ -1650,8 +1752,8 @@ async def pause_for_database_sync() -> bool:
         and recent_invoice.creation_date
         and recent_payment.creation_date
     ):
-        invoice_time_delta = datetime.now(tz=timezone.utc) - recent_invoice.creation_date
-        payment_time_delta = datetime.now(tz=timezone.utc) - recent_payment.creation_date
+        invoice_time_delta = datetime.now(tz=UTC) - recent_invoice.creation_date
+        payment_time_delta = datetime.now(tz=UTC) - recent_payment.creation_date
         if invoice_time_delta > timedelta(days=1) and payment_time_delta > timedelta(days=1):
             logger.info(
                 f"Database sync needed Invoice: {recent_invoice.creation_date} {invoice_time_delta}"
@@ -1725,7 +1827,7 @@ if __name__ == "__main__":
         print(f"{ICON} Startup failure: {e}")
         sys.exit(0)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error("🔴 Unhandled exception in lnd_monitor_v2", exc_info=e, stack_info=True)
         logger.exception(e, extra={"error": e, "notification": True})
         print(e)
