@@ -562,9 +562,11 @@ class TestPresets:
         resp = await get_presets()
         body = json.loads(resp.body)
         assert isinstance(body, list)
-        assert len(body) == 2
+        assert len(body) == 4
         assert body[0]["id"] == "exchange_to_lightning"
         assert body[1]["id"] == "exchange_fee"
+        assert body[2]["id"] == "voltage_closeout_writeoff"
+        assert body[3]["id"] == "voltage_reclass_legion"
 
     @pytest.mark.asyncio
     async def test_presets_contain_cust_id(self, monkeypatch):
@@ -586,6 +588,13 @@ class TestPresets:
         assert body[0]["entries"][1]["cust_id"] == "binance_test"
         # exchange_fee entry: cust_id = exchange_sub
         assert body[1]["entries"][0]["cust_id"] == "binance_test"
+        # voltage closeout write-off: fixed sub voltage
+        assert body[2]["entries"][0]["cust_id"] == "voltage"
+        assert body[2]["entries"][0]["credit_sub"] == "voltage"
+        # voltage reclass → current node
+        assert body[3]["entries"][0]["cust_id"] == "test_node"
+        assert body[3]["entries"][0]["debit_sub"] == "test_node"
+        assert body[3]["entries"][0]["credit_sub"] == "voltage"
 
     @pytest.mark.asyncio
     async def test_presets_use_config_names(self, monkeypatch):
@@ -640,11 +649,16 @@ class TestHelperFunctions:
             lambda: "nd",
         )
         presets = _build_editor_presets()
-        assert len(presets) == 2
-        # First preset has 2 entries
+        assert len(presets) == 4
+        # First preset has 2 entries (exchange → lightning + fee)
         assert len(presets[0]["entries"]) == 2
-        # Second preset has 1 entry
+        # Remaining presets have 1 entry each
         assert len(presets[1]["entries"]) == 1
+        assert len(presets[2]["entries"]) == 1
+        assert len(presets[3]["entries"]) == 1
+        assert presets[2]["id"] == "voltage_closeout_writeoff"
+        assert presets[3]["id"] == "voltage_reclass_legion"
+        assert presets[3]["entries"][0]["debit_sub"] == "nd"
         # All entries have required keys
         for preset in presets:
             for entry in preset["entries"]:
