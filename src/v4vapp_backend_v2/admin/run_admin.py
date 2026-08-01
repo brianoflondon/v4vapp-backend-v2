@@ -58,7 +58,7 @@ Examples:
         sys.exit(1)
 
     # Print startup information
-    logger.info(f"🚀 Starting V4VApp Admin Interface: {__version__}")
+    logger.info(f"🚀 Started V4VApp Admin Interface Version: {__version__}")
     logger.info(f"📁 Config file: {args.config}")
     logger.info(f"🌐 Server: http://{args.host}:{args.port}/admin")
     logger.info(f"📊 API Docs: http://{args.host}:{args.port}/admin/docs")

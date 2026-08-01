@@ -54,7 +54,7 @@ def create_lifespan(config_filename: str):
         db_conn = DBConn()
         await db_conn.setup_database()
         logger.info(
-            f"{ICON} API v2 Started, Version: {__version__}", extra={"notification": False}
+            f"{ICON} API v2 Started. Version: {__version__}", extra={"notification": False}
         )
         yield
 

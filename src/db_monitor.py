@@ -2,13 +2,13 @@ import asyncio
 import os
 import signal
 import sys
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
-from datetime import datetime, timezone
-from typing import Annotated, Any, Dict, Mapping, Sequence
+from datetime import UTC, datetime
+from typing import Annotated, Any
 
 import bson
 import typer
-from colorama import Fore, Style
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import (
     ConnectionFailure,
@@ -49,7 +49,7 @@ ICON = "🏆"
 app = typer.Typer()
 
 
-async def health_check() -> Dict[str, Any]:
+async def health_check() -> dict[str, Any]:
     """
     Health check function for the StatusAPI.
 
@@ -124,7 +124,7 @@ class ResumeToken(BaseModel):
         None, description="Resume token for MongoDB change stream"
     )
     timestamp: datetime = Field(
-        datetime.now(tz=timezone.utc), description="Timestamp when the token were created"
+        datetime.now(tz=UTC), description="Timestamp when the token were created"
     )
     collection: str = Field("", description="Collection name for the change stream")
     redis_key: str = Field("", description="Redis key for storing the resume token")
@@ -155,7 +155,7 @@ class ResumeToken(BaseModel):
             token_data (Mapping[str, Any]): The resume token data to set.
         """
         self.data = token_data
-        self.timestamp = datetime.now(tz=timezone.utc)
+        self.timestamp = datetime.now(tz=UTC)
         serialized_token = repr(self.data)
         redis_client = InternalConfig.redis
         try:
@@ -369,7 +369,7 @@ async def subscribe_stream(
             watch_kwargs["resume_after"] = resume_token
         else:
             # Get the unix timestamp for 60 seconds ago
-            unix_ts = int(datetime.now(tz=timezone.utc).timestamp()) - 60
+            unix_ts = int(datetime.now(tz=UTC).timestamp()) - 60
             # The second argument (increment) is usually 0 for new watches
             watch_kwargs["start_at_operation_time"] = bson.Timestamp(unix_ts, 0)
             logger.warning(
@@ -699,7 +699,7 @@ def main(
     """
     _ = InternalConfig(config_filename=config_filename)
     logger.info(
-        f"{ICON}{Fore.WHITE} ✅ Database Monitor App. Started. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
+        f"{ICON}✅ Database Monitor App. Started. Version: {__version__} on {InternalConfig().local_machine_name}",
         extra={"notification": True},
     )
     logger.info(

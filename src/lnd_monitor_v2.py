@@ -1807,8 +1807,8 @@ def main(
         sys.exit(1)
     logger.name = f"lnd_monitor_{lnd_node}"
     logger.info(
-        f"{icon}{Fore.WHITE}✅ LND gRPC client started. "
-        f"Monitoring node: {lnd_node} {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
+        f"{icon}✅ LND gRPC client Started.  Version: {__version__}"
+        f"Monitoring node: {lnd_node} {icon} on {InternalConfig().local_machine_name}",
         extra={"notification": False},
     )
     asyncio.run(main_async_start(lnd_node))

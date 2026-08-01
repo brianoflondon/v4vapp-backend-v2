@@ -4,16 +4,16 @@ import signal
 import sys
 import threading
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from random import uniform
 from time import sleep
 from timeit import default_timer as timer
-from typing import Annotated, Any, Dict, List, Tuple
+from typing import Annotated, Any
 
 import typer
-from colorama import Fore, Style
 from nectar.account import Account
 from nectar.amount import Amount
+from nectar.hive import Hive
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
@@ -32,7 +32,6 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
     seconds_only,
 )
-from nectar.hive import Hive
 from v4vapp_backend_v2.hive.hive_extras import (
     close_hive_client,
     default_hive_nodes,
@@ -67,7 +66,7 @@ QUOTE_REFRESH_MIN_INTERVAL_CATCHUP_SECONDS = 20
 AUTO_BALANCE_SERVER = True
 
 
-COMMAND_LINE_WATCH_USERS: List[str] = []
+COMMAND_LINE_WATCH_USERS: list[str] = []
 COMMAND_LINE_WATCH_ONLY = False
 
 TIME_DELAY: int = 0
@@ -150,7 +149,7 @@ def request_fatal_restart(reason: str) -> None:
     shutdown_event.set()
 
 
-async def health_check() -> Dict[str, Any]:
+async def health_check() -> dict[str, Any]:
     """
     Asynchronous health check function that verifies the status of critical background tasks.
     Used with the `StatusAPI` to provide health monitoring API endpoint especially for docker
@@ -186,7 +185,7 @@ async def health_check() -> Dict[str, Any]:
     STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
     if STATUS_OBJ.last_progress_at is not None:
         STATUS_OBJ.last_progress_age_s = (
-            datetime.now(tz=timezone.utc) - STATUS_OBJ.last_progress_at
+            datetime.now(tz=UTC) - STATUS_OBJ.last_progress_at
         ).total_seconds()
         # Only enforce after startup has produced at least one op.
         if (
@@ -289,7 +288,7 @@ async def balance_server_hive_level() -> None:
         nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
         hive = Hive(keys=server_account.keys, nobroadcast=nobroadcast, node=default_hive_nodes())
         account = Account(server_account.name, blockchain_instance=hive)
-        balance: Dict[str, Amount] = {}
+        balance: dict[str, Amount] = {}
         balance["HIVE"] = account.available_balances[0]
         balance["HBD"] = account.available_balances[1]
         delta = balance["HIVE"] - current_target_hive_balance
@@ -440,7 +439,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
     return None
 
 
-async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, datetime]:
+async def witness_average_block_time(watch_witness: str) -> tuple[timedelta, datetime]:
     """
     Asynchronously calculates the average block time for a specified witness.
 
@@ -460,10 +459,10 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
         sort=[("block_num", -1)],
     )
     # loop through the blocks and calculate the average block time
-    block_timestamps: List[datetime] = []
+    block_timestamps: list[datetime] = []
     counter = 0
     async for block in cursor:
-        block_timestamps.append((block["timestamp"]))
+        block_timestamps.append(block["timestamp"])
         counter += 1
         if counter > count_back:
             break
@@ -481,7 +480,7 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
             f"{ICON} No time differences found for witness {watch_witness}",
             extra={"notification": True},
         )
-        return timedelta(seconds=0), datetime.now(tz=timezone.utc) - timedelta(days=1)
+        return timedelta(seconds=0), datetime.now(tz=UTC) - timedelta(days=1)
 
     # Convert the mean time difference back to a timedelta object
     mean_time_diff = seconds_only(timedelta(seconds=mean_time_diff_seconds))
@@ -560,7 +559,7 @@ async def witness_check_startup() -> None:
 
 
 async def all_ops_loop(
-    watch_witnesses: List[str] = [], watch_users: List[str] = [], start_block: int = 0
+    watch_witnesses: list[str] = [], watch_users: list[str] = [], start_block: int = 0
 ) -> None:
     """
     Asynchronously loops through transactions and processes them.
@@ -601,7 +600,7 @@ async def all_ops_loop(
     if start_block == 0:
         last_good_block = await OpBase.get_last_good_block() + 1
     elif start_block == -1:
-        global_properties: Dict = await asyncio.to_thread(
+        global_properties: dict = await asyncio.to_thread(
             hive_client.get_dynamic_global_properties
         )  # type: ignore
         last_good_block = global_properties.get("head_block_number", 97112440)
@@ -657,7 +656,7 @@ async def all_ops_loop(
                     )
                 except StopAsyncIteration:
                     break
-                except asyncio.TimeoutError as te:
+                except TimeoutError as te:
                     # wait_for fires on true idle OR on TimeoutError raised inside stream_ops
                     # (e.g. rebuild budget). Log distinctly so we can tell them apart.
                     loop_error = True
@@ -673,7 +672,7 @@ async def all_ops_loop(
                 time_delay = TIME_DELAY if not block_counter.is_catching_up else 0
                 notification = False
                 log_it = False
-                extra_bots: List[str] = []
+                extra_bots: list[str] = []
                 db_store = False
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Shutdown requested")
@@ -682,7 +681,7 @@ async def all_ops_loop(
                 ops_this_session += 1
                 consecutive_empty_restarts = 0
                 last_progress_mono = timer()
-                STATUS_OBJ.last_progress_at = datetime.now(tz=timezone.utc)
+                STATUS_OBJ.last_progress_at = datetime.now(tz=UTC)
                 new_block, marker = block_counter.inc(op.raw_op)
 
                 if watch_witnesses and isinstance(op, AccountWitnessVote):
@@ -791,13 +790,13 @@ async def all_ops_loop(
                         and STATUS_OBJ.last_marker_time_diff > timedelta(0)
                     ):
                         if STATUS_OBJ.drift_no_recovery_since is None:
-                            STATUS_OBJ.drift_no_recovery_since = datetime.now(tz=timezone.utc)
+                            STATUS_OBJ.drift_no_recovery_since = datetime.now(tz=UTC)
                             logger.warning(
                                 f"{ICON} Drift not recovering (behind: {block_counter.time_diff}). Monitoring for forced restart.",
                                 extra={"notification": False},
                             )
                         elif (
-                            datetime.now(tz=timezone.utc) - STATUS_OBJ.drift_no_recovery_since
+                            datetime.now(tz=UTC) - STATUS_OBJ.drift_no_recovery_since
                         ) > timedelta(minutes=5):
                             request_fatal_restart(
                                 f"drift unrecoverable for >5 minutes "
@@ -868,10 +867,7 @@ async def all_ops_loop(
                     f"(limit {MAX_CONSECUTIVE_EMPTY_STREAM_RESTARTS})"
                 )
                 return
-            if (
-                consecutive_empty_restarts >= 2
-                and stall_s >= MAX_PROGRESS_STALL_SECONDS
-            ):
+            if consecutive_empty_restarts >= 2 and stall_s >= MAX_PROGRESS_STALL_SECONDS:
                 request_fatal_restart(
                     f"no stream progress for {stall_s:.0f}s after "
                     f"{consecutive_empty_restarts} empty restarts "
@@ -918,7 +914,7 @@ async def all_ops_loop(
 
 
 async def combined_logging(
-    op: OpAny, log_it: bool, notification: bool, db_store: bool, extra_bots: List[str] | None
+    op: OpAny, log_it: bool, notification: bool, db_store: bool, extra_bots: list[str] | None
 ) -> None:
     """
     Asynchronously logs and stores events.
@@ -994,7 +990,7 @@ async def store_rates() -> None:
             # Wait for up to 10 minutes, but wake up early if shutdown_event is set
             try:
                 await asyncio.wait_for(shutdown_event.wait(), timeout=600)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue  # Timeout means 10 minutes passed, so loop again
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{ICON} store_rates cancelled or interrupted, exiting.")
@@ -1002,11 +998,10 @@ async def store_rates() -> None:
     except Exception as e:
         logger.exception(f"{ICON} Exception in store_rates: {e}", extra={"notification": False})
         asyncio.create_task(store_rates(), name="store_rates")
-    return
 
 
 async def main_async_start(
-    watch_users: List[str], watch_witnesses: List[str], start_block: int
+    watch_users: list[str], watch_witnesses: list[str], start_block: int
 ) -> None:
     """
     Main function to run the Hive Watcher client.
@@ -1076,7 +1071,7 @@ async def main_async_start(
 
         startup_complete_event.set()
         logger.info(
-            f"{ICON}{Fore.WHITE}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
+            f"{ICON}✅ Hive Monitor v2: Started. Version: {__version__} on {InternalConfig().local_machine_name}",
             extra={"notification": True},
         )
         # Wait until shutdown is requested (graceful SIGTERM or fatal restart)
@@ -1125,7 +1120,7 @@ async def main_async_start(
 @app.command()
 def main(
     watch_users: Annotated[
-        List[str],
+        list[str],
         typer.Option(
             "--user",
             help="Hive User(s) to watch for transactions, can have multiple",
@@ -1141,7 +1136,7 @@ def main(
         ),
     ] = False,
     watch_witnesses: Annotated[
-        List[str],
+        list[str],
         typer.Option(
             "--witness",
             help="Hive Witness(es) to watch for transactions",
