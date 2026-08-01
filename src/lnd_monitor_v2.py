@@ -76,9 +76,12 @@ def get_lnd_index_floors(connection_name: str | None = None) -> LndIndexFloors:
     """
     Load optional index floors from the LND connection config.
 
-    Missing config fields behave as 0 (no floor). When ``start_settle_index`` is
-    omitted but ``start_add_index`` is set, the add-index floor is also used for
-    settle so SubscribeInvoices does not re-emit pre-cutover settles.
+    Missing config fields behave as 0 (no floor).
+
+    **Important:** ``add_index`` and ``settle_index`` are independent LND sequences.
+    Many invoices are created (high add_index) while fewer settle (low settle_index).
+    Never default the settle floor to the add floor — that skips live SETTLED events
+    (OPEN invoices are stored, then never update when paid).
     """
     lnd_config = InternalConfig().config.lnd_config
     conn = lnd_config.connection_config(connection_name)
@@ -86,10 +89,8 @@ def get_lnd_index_floors(connection_name: str | None = None) -> LndIndexFloors:
         return LndIndexFloors()
 
     add_floor = int(conn.start_add_index or 0)
-    if conn.start_settle_index is not None:
-        settle_floor = int(conn.start_settle_index)
-    else:
-        settle_floor = add_floor
+    # Explicit only — do not copy start_add_index onto settle (different sequence).
+    settle_floor = int(conn.start_settle_index or 0)
     payment_floor = int(conn.start_payment_index or 0)
     return LndIndexFloors(
         add_index=add_floor,
@@ -409,9 +410,11 @@ async def db_store_invoice(
         invoice_pyd.node_name = lnd_client.connection.name
         await invoice_pyd.update_conv()
         ans = await invoice_pyd.save()
+        state = "SETTLED" if invoice_pyd.settled else "OPEN"
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
-            f"New invoice recorded: {invoice_pyd.add_index:>7} {invoice_pyd.value:,.0f} sats {invoice_pyd.r_hash}",
+            f"Invoice {state}: add={invoice_pyd.add_index:>7} settle={invoice_pyd.settle_index:>7} "
+            f"{invoice_pyd.value:,.0f} sats {invoice_pyd.r_hash}",
             extra={"db_ans": ans.raw_result, **invoice_pyd.log_extra},
         )
     except Exception as e:  # noqa: BLE001
@@ -651,21 +654,19 @@ async def invoices_loop(
 
     floors = get_lnd_index_floors(lnd_client.connection.name)
     try:
-        recent_invoice = await asyncio.wait_for(get_most_recent_invoice(), timeout=30)
+        add_index, settle_index = await asyncio.wait_for(
+            get_invoice_subscription_cursors(), timeout=30
+        )
     except TimeoutError:
         logger.warning(
-            "Timed out querying DB for most recent invoice in invoices_loop (30s). "
+            "Timed out querying DB for invoice cursors in invoices_loop (30s). "
             "Starting subscription from index floors or 0.",
             extra={"notification": True},
         )
-        recent_invoice = None
-    if recent_invoice:
-        add_index = recent_invoice.add_index
-        settle_index = recent_invoice.settle_index
-    else:
-        add_index = 0
-        settle_index = 0
-        # Don’t block shutdown for 10s if the DB is empty
+        add_index, settle_index = 0, 0
+
+    if add_index == 0 and settle_index == 0 and not floors.has_any:
+        # Don’t block shutdown for 10s if the DB is empty and no floors
         try:
             await asyncio.wait_for(shutdown_event.wait(), timeout=10)
             return
@@ -673,14 +674,12 @@ async def invoices_loop(
             pass
 
     add_index, settle_index = apply_invoice_index_floors(add_index, settle_index, floors)
-    if floors.has_any:
-        logger.info(
-            f"{lnd_client.icon} Invoice subscription floors: "
-            f"add_index>={add_index} settle_index>={settle_index} "
-            f"(config start_add_index={floors.add_index}, "
-            f"start_settle_index={floors.settle_index})",
-            extra={"notification": False},
-        )
+    logger.info(
+        f"{lnd_client.icon} SubscribeInvoices cursors: "
+        f"add_index>{add_index} settle_index>{settle_index} "
+        f"(config floors add={floors.add_index} settle={floors.settle_index})",
+        extra={"notification": False},
+    )
 
     request_sub = lnrpc.InvoiceSubscription(
         add_index=int(add_index) if add_index is not None else 0,
@@ -1064,7 +1063,12 @@ async def fill_channel_names(
 
 async def read_all_invoices(lnd_client: LNDClient) -> None:
     """
-    Sync invoices from LND into Mongo (missing docs only).
+    Sync invoices from LND into Mongo.
+
+    - Inserts docs missing from Mongo.
+    - Updates Mongo OPEN → SETTLED when LND already shows settled (cutover /
+      missed SubscribeInvoices settle catch-up).
+    - Does not regress SETTLED docs back to OPEN.
 
     Floor-aware fetch:
     - With ``start_add_index`` > 0: list **forward** from that index so LND
@@ -1077,6 +1081,7 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
         num_max_invoices = 1000
         total_fetched = 0
         total_skipped_floor = 0
+        total_settle_refresh = 0
         floors = get_lnd_index_floors(lnd_client.connection.name)
         floor = floors.add_index
         # Forward from floor when set: LND returns add_index > index_offset.
@@ -1109,7 +1114,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 logger.info(
                     f"{lnd_client.icon} {DATABASE_ICON} "
                     f"Finished reading invoices (empty page); "
-                    f"fetched={total_fetched} skipped_floor={total_skipped_floor}"
+                    f"fetched={total_fetched} skipped_floor={total_skipped_floor} "
+                    f"settle_refresh={total_settle_refresh}"
                 )
                 break
 
@@ -1122,7 +1128,15 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                     filter={"r_hash": invoice.r_hash},
                 )
                 if read_invoice:
-                    continue
+                    mongo_settled = bool(read_invoice.get("settled"))
+                    # Already fully settled in Mongo — leave alone.
+                    if mongo_settled:
+                        continue
+                    # Still open on LND — nothing to refresh.
+                    if not invoice.settled:
+                        continue
+                    # Mongo OPEN, LND SETTLED → push settle fields into Mongo.
+                    total_settle_refresh += 1
                 invoice.node_name = lnd_client.connection.name
                 insert_one = invoice.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv"}
@@ -1152,7 +1166,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                     f"Invoices add_index {batch_min}..{batch_max} "
                     f"(offset→{index_offset}) "
                     f"modified: {modified} inserted: {inserted} "
-                    f"skipped_floor: {total_skipped_floor}"
+                    f"skipped_floor: {total_skipped_floor} "
+                    f"settle_refresh: {total_settle_refresh}"
                 )
                 total_fetched += len(batch)
             except BulkWriteError as e:
@@ -1173,7 +1188,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                             f"{lnd_client.icon} {DATABASE_ICON} "
                             f"Stopped invoice reverse sync at floor "
                             f"(batch max add_index={batch_max} <= {floor}); "
-                            f"fetched={total_fetched} skipped_floor={total_skipped_floor}"
+                            f"fetched={total_fetched} skipped_floor={total_skipped_floor} "
+                            f"settle_refresh={total_settle_refresh}"
                         )
                         break
             else:
@@ -1183,7 +1199,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 logger.info(
                     f"{lnd_client.icon} {DATABASE_ICON} "
                     f"Finished reading invoices; "
-                    f"fetched={total_fetched} skipped_floor={total_skipped_floor}"
+                    f"fetched={total_fetched} skipped_floor={total_skipped_floor} "
+                    f"settle_refresh={total_settle_refresh}"
                 )
                 break
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
@@ -1344,24 +1361,11 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
 
 async def get_most_recent_invoice() -> Invoice | None:
     """
-    Fetches the most recent invoice from the MongoDB collection.
+    Fetches the invoice with the highest ``add_index`` from MongoDB.
 
-    This asynchronous function retrieves the most recent invoice document
-    from the "invoices" collection in the MongoDB database. The invoices
-    are sorted by the "creation_date" field in descending order to ensure
-    the latest invoice is selected.
-
-    Returns:
-        Invoice: An instance of the `Invoice` class representing the most
-        recent invoice.
-
-    Raises:
-        Exception: If there is an issue with database connectivity or data
-        parsing.
-
-    Logs:
-        Logs the `add_index` and `settle_index` of the most recent invoice
-        for debugging and monitoring purposes.
+    Note: that document is often still OPEN (``settle_index=0``). For
+    SubscribeInvoices cursors use :func:`get_invoice_subscription_cursors`
+    so the settle cursor is the max settle_index across all invoices.
     """
     query = {}
     sort = [("add_index", -1)]
@@ -1385,6 +1389,37 @@ async def get_most_recent_invoice() -> Invoice | None:
     except Exception as e:  # noqa: BLE001
         logger.warning(f"No invoices found, empty database {e}")
     return None
+
+
+async def get_invoice_subscription_cursors() -> tuple[int, int]:
+    """
+    Return (max_add_index, max_settle_index) from the invoices collection.
+
+    LND SubscribeInvoices uses two independent cursors. Using the settle_index
+    from the highest-add_index document alone is wrong: that row is often OPEN
+    with settle_index=0, which would re-stream every prior settle after restart.
+    """
+    collection = Invoice.collection()
+    add_index = 0
+    settle_index = 0
+    try:
+        top_add = await collection.find_one(filter={}, sort=[("add_index", -1)])
+        if top_add:
+            add_index = int(top_add.get("add_index") or 0)
+        top_settle = await collection.find_one(
+            filter={"settle_index": {"$gt": 0}},
+            sort=[("settle_index", -1)],
+        )
+        if top_settle:
+            settle_index = int(top_settle.get("settle_index") or 0)
+        logger.info(
+            f"{DATABASE_ICON} Invoice subscription DB cursors: "
+            f"add_index={add_index} settle_index={settle_index}"
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"{DATABASE_ICON} Failed to load invoice cursors: {e}")
+    return add_index, settle_index
+
 
 
 async def get_most_recent_payment() -> Payment | None:

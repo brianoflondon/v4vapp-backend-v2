@@ -108,4 +108,58 @@ def _build_editor_presets() -> list[dict[str, Any]]:
                 },
             ],
         },
+        {
+            "id": "voltage_closeout_writeoff",
+            "label": "Voltage closeout — write-off residual (vs Owner Loan)",
+            "icon": "🧊",
+            "description": (
+                "Post-cutover Strategy C: zero residual External Lightning Payments / voltage "
+                "against Owner Loan Payable / voltage when the Voltage node is empty and "
+                "Legion already has its own FUNDING. Amount = current External Lightning / "
+                "voltage (sats). Prefer scripts/script_voltage_node_closeout.py for dry-run."
+            ),
+            "entries": [
+                {
+                    "ledger_type": LedgerType.FUNDING.value,
+                    "description": (
+                        "Voltage node closeout T0 — write-off residual External Lightning / "
+                        "voltage vs Owner Loan"
+                    ),
+                    "debit_account_type": "Liability",
+                    "debit_name": "Owner Loan Payable",
+                    "debit_sub": "voltage",
+                    "credit_account_type": "Asset",
+                    "credit_name": "External Lightning Payments",
+                    "credit_sub": "voltage",
+                    "currency": "sats",
+                    "cust_id": "voltage",
+                },
+            ],
+        },
+        {
+            "id": "voltage_reclass_legion",
+            "label": "Voltage closeout — reclass residual → Legion",
+            "icon": "🔀",
+            "description": (
+                "Post-cutover Strategy B: reclass External Lightning / voltage into "
+                f"External Lightning / {node_name}. ONLY if residual sats economically "
+                "moved into Legion and are not already in Legion FUNDING (else double-count)."
+            ),
+            "entries": [
+                {
+                    "ledger_type": LedgerType.EXCHANGE_TO_NODE.value,
+                    "description": (
+                        f"Voltage node closeout T0 — reclass External Lightning voltage → {node_name}"
+                    ),
+                    "debit_account_type": "Asset",
+                    "debit_name": "External Lightning Payments",
+                    "debit_sub": node_name,
+                    "credit_account_type": "Asset",
+                    "credit_name": "External Lightning Payments",
+                    "credit_sub": "voltage",
+                    "currency": "sats",
+                    "cust_id": node_name,
+                },
+            ],
+        },
     ]

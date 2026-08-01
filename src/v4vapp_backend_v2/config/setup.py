@@ -198,8 +198,9 @@ class LndConnectionConfig(BaseConfig):
     start_settle_index: int | None = Field(
         default=None,
         description=(
-            "Optional settle_index floor for SubscribeInvoices. If omitted but "
-            "start_add_index is set, start_add_index is used as the settle floor too."
+            "Optional settle_index floor for SubscribeInvoices (independent of "
+            "add_index). Set to the node's max settle_index at cutover — NOT the "
+            "same as start_add_index. If omitted, defaults to 0 (no settle floor)."
         ),
     )
     start_payment_index: int | None = Field(

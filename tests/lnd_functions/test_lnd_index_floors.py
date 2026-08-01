@@ -51,8 +51,8 @@ def test_get_lnd_index_floors_from_test_config():
     floors = get_lnd_index_floors("example2")
     assert floors.add_index == 42
     assert floors.payment_index == 7
-    # settle defaults to add when start_settle_index omitted
-    assert floors.settle_index == 42
+    # settle must NOT default to add_index (independent LND sequence)
+    assert floors.settle_index == 0
 
 
 def test_get_lnd_index_floors_missing_fields_are_zero():
