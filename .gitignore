@@ -175,6 +175,7 @@ config/config.yaml
 logs/*
 logs_docker/*
 config/telegram_bot.json
+*_Archived*/
 
 # Config Secrets
 config/config_env.yaml
