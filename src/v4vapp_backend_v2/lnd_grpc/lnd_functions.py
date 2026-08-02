@@ -443,7 +443,7 @@ async def send_lightning_to_pay_req(
 
     request_params = {}
     # Self-payment detection: prefer static config pub_key (no RPC). Fall back to
-    # cached GetInfo, then a best-effort GetInfo call. Never block the pay on
+    # cached GetInfo, then a best-effort GetInfo call. Try not to block the pay on
     # GetInfo failure — external payments do not need identity.
     conn_cfg = lnd_config.connection_config(lnd_client.connection.name)
     identity_pubkey = (conn_cfg.pub_key if conn_cfg else "") or ""
