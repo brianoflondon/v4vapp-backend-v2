@@ -467,7 +467,7 @@ async def send_lightning_to_pay_req(
         fee_limit_msat = 100_000
         request_params["allow_self_payment"] = True
         # Prefer connection-specific channels from lnd_config.connections.<name>.outgoing_chan_ids
-        outgoing = list(conn_cfg.outgoing_chan_ids) if conn_cfg else []
+        outgoing = conn_cfg.outgoing_chan_ids if conn_cfg else []
         if outgoing:
             request_params["outgoing_chan_ids"] = outgoing
             logger.info(
