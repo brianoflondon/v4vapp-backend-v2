@@ -85,6 +85,14 @@ class NavigationManager:
                 badge="Editor",
                 badge_color="warning",
             ),
+            NavigationItem(
+                name="Replay Hive Deposit",
+                url="/admin/replay-deposit",
+                icon="🔁",
+                description="Retry failed HBD/HIVE deposit follow-on Lightning pays without reversing the deposit",
+                badge="Recover",
+                badge_color="danger",
+            ),
             # Add more items here as you expand the admin interface
             # NavigationItem(
             #     name="User Management",

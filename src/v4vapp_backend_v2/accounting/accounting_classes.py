@@ -1,7 +1,7 @@
 from dataclasses import field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Dict, List
+from typing import Any
 
 from nectar.amount import Amount
 from pydantic import BaseModel, ConfigDict, Field, RootModel
@@ -23,6 +23,48 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 Helper classes for accounting summaries, including account balances and lightning conv summaries.
 """
 
+# Same-second ties only. Timestamps are primary; this map breaks pairs that are
+# booked in one second (especially recv_l vs c_j_fee). Unknown types → 50.
+_LEDGER_TYPE_TIEBREAK: dict[str, int] = {
+    "ob": 0,
+    "open_bal": 0,
+    "cust_h_in": 10,
+    "deposit_h": 10,
+    "deposit_l": 10,
+    "hold_k": 20,
+    "cust_conv": 30,
+    "h_conv_k": 30,
+    "k_conv_h": 30,
+    "withdraw_l": 40,
+    "recv_l": 50,
+    "c_j_fee": 60,
+    "c_j_fee_r": 60,
+    "release_k": 70,
+    "cust_h_out": 80,
+    "withdraw_h": 80,
+}
+
+
+def balance_line_sort_key(line: Any) -> tuple[datetime, int, str]:
+    """
+    Chronological sort key for balance history lines.
+
+    (timestamp, type_tiebreak, short_id) — enough for same-second fee/recv
+    collisions without a full economic-flow ontology.
+    """
+    ts = getattr(line, "timestamp", None)
+    if ts is None:
+        ts_ord: datetime = datetime.min.replace(tzinfo=UTC)
+    elif getattr(ts, "tzinfo", None) is None:
+        ts_ord = ts.replace(tzinfo=UTC)
+    else:
+        ts_ord = ts
+
+    lt = str(getattr(line, "ledger_type", None) or "").lower()
+    type_ord = _LEDGER_TYPE_TIEBREAK.get(lt, 50)
+    short_id = str(getattr(line, "short_id", None) or "")
+    return (ts_ord, type_ord, short_id)
+
 
 @dataclass
 class UnitSummary:
@@ -43,13 +85,13 @@ class AccountBalanceSummary:
         output_text (str): A formatted string representation of the summary for output purposes.
     """
 
-    unit_summaries: Dict[str, UnitSummary] = field(default_factory=dict)
+    unit_summaries: dict[str, UnitSummary] = field(default_factory=dict)
     total_usd: Decimal = Decimal(0)
     total_sats: Decimal = Decimal(0)
     total_hive: Decimal = Decimal(0)
     total_hbd: Decimal = Decimal(0)
     total_msats: Decimal = Decimal(0)
-    line_items: List[str] = field(default_factory=list)
+    line_items: list[str] = field(default_factory=list)
     output_text: str = ""
 
 
@@ -71,10 +113,10 @@ class LedgerConvSummary(ConvertedSummary):
 
     cust_id: str = ""
     account: LedgerAccount | None = None
-    as_of_date: datetime | None = field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    as_of_date: datetime | None = field(default_factory=lambda: datetime.now(tz=UTC))
     age: timedelta | None = None
-    by_ledger_type: Dict[str, ConvertedSummary] = field(default_factory=dict)
-    ledger_entries: List[LedgerEntry] = field(default_factory=list)
+    by_ledger_type: dict[str, ConvertedSummary] = field(default_factory=dict)
+    ledger_entries: list[LedgerEntry] = field(default_factory=list)
     net_balance: ConvertedSummary = field(default_factory=ConvertedSummary)
 
 
@@ -142,7 +184,7 @@ class AccountBalanceLine(BaseModel):
     ledger_type_str: str = ""
     link: str = ""
     icon: str = ""
-    timestamp: datetime = datetime.now(tz=timezone.utc)
+    timestamp: datetime = datetime.now(tz=UTC)
     timestamp_unix: float = 0.0
     description: str = ""
     user_memo: str = ""
@@ -215,18 +257,18 @@ class LedgerAccountDetails(LedgerAccount):
         keepsats_printout() -> str: Returns a formatted string representation of the account details for Keepsats.
     """
 
-    balances: Dict[Currency, List[AccountBalanceLine]] = Field(
+    balances: dict[Currency, list[AccountBalanceLine]] = Field(
         default_factory=dict,
         description="Complete details for all transactions in each currency, each list is for a separate currency",
     )
-    balances_totals: Dict[Currency, ConvertedSummary] = Field(
+    balances_totals: dict[Currency, ConvertedSummary] = Field(
         default_factory=dict,
         description="Conversions to every currency for each currency which has a balance, including conversion summaries",
     )
-    balances_net: Dict[Currency, Decimal] = Field(
+    balances_net: dict[Currency, Decimal] = Field(
         default_factory=dict, description="Net balance in each currency that has a balance"
     )
-    combined_balance: List[AccountBalanceLine] = Field(
+    combined_balance: list[AccountBalanceLine] = Field(
         default_factory=list,
         description="Combined list of all balance lines across all currencies sorted by timestamp ascending",
     )
@@ -255,17 +297,12 @@ class LedgerAccountDetails(LedgerAccount):
 
     @property
     def has_transactions(self) -> bool:
-        """Returns True if there are any transactions in the combined balance other than an opening balance"""
+        """True if combined balance has anything other than a lone opening-balance row."""
         if not self.combined_balance:
             return False
         if len(self.combined_balance) > 1:
             return True
-        if (
-            len(self.combined_balance) == 1
-            and self.combined_balance[0].ledger_type != LedgerType.OPENING_BALANCE.value
-        ):
-            return True
-        return False
+        return self.combined_balance[0].ledger_type != LedgerType.OPENING_BALANCE.value
 
     @property
     def hive_amount(self) -> Amount:
@@ -299,7 +336,7 @@ class LedgerAccountDetails(LedgerAccount):
             self.msats = self.balances[Currency.MSATS][-1].amount_running_total
             self.conv_total += self.balances[Currency.MSATS][-1].conv_running_total
             self.sats = Decimal(self.msats / Decimal(1000)).quantize(
-                Decimal("1"), rounding="ROUND_DOWN"
+                Decimal(1), rounding="ROUND_DOWN"
             )
 
         for currency, balance_lines in self.balances.items():
@@ -318,7 +355,7 @@ class LedgerAccountDetails(LedgerAccount):
                     line_copy = line.model_copy()
                     line_copy.conv = None
                     combined_lines.append(line_copy)
-        self.combined_balance = sorted(combined_lines, key=lambda x: x.timestamp)
+        self.combined_balance = sorted(combined_lines, key=balance_line_sort_key)
 
         if self.combined_balance:
             # Initialize the first line's running total
@@ -363,26 +400,26 @@ class LedgerAccountDetails(LedgerAccount):
         self.sats = Decimal(0)
         self.conv_total = ConvertedSummary()
 
-        if Currency.HIVE in self.balances and self.balances[Currency.HIVE]:
+        if self.balances.get(Currency.HIVE):
             self.hive = self.balances[Currency.HIVE][-1].amount_running_total.quantize(
                 Decimal("0.001"), rounding="ROUND_HALF_UP"
             )
             self.conv_total += self.balances[Currency.HIVE][-1].conv_running_total
-        if Currency.HBD in self.balances and self.balances[Currency.HBD]:
+        if self.balances.get(Currency.HBD):
             self.hbd = self.balances[Currency.HBD][-1].amount_running_total.quantize(
                 Decimal("0.001"), rounding="ROUND_HALF_UP"
             )
             self.conv_total += self.balances[Currency.HBD][-1].conv_running_total
-        if Currency.USD in self.balances and self.balances[Currency.USD]:
+        if self.balances.get(Currency.USD):
             self.usd = self.balances[Currency.USD][-1].amount_running_total.quantize(
                 Decimal("0.001"), rounding="ROUND_HALF_UP"
             )
             self.conv_total += self.balances[Currency.USD][-1].conv_running_total
-        if Currency.MSATS in self.balances and self.balances[Currency.MSATS]:
+        if self.balances.get(Currency.MSATS):
             self.msats = self.balances[Currency.MSATS][-1].amount_running_total
             self.conv_total += self.balances[Currency.MSATS][-1].conv_running_total
             self.sats = Decimal(self.msats / Decimal(1000)).quantize(
-                Decimal("1"), rounding="ROUND_HALF_UP"
+                Decimal(1), rounding="ROUND_HALF_UP"
             )
 
         for currency, balance_lines in self.balances.items():
@@ -454,7 +491,7 @@ class LedgerAccountDetails(LedgerAccount):
         Returns:
             LedgerAccountDetails: A new LedgerAccountDetails instance with older balance lines removed.
         """
-        cutoff_time = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+        cutoff_time = datetime.now(tz=UTC) - timedelta(hours=hours)
         copy_balance = self.model_copy()
 
         filtered_combined_balance = [
@@ -466,7 +503,7 @@ class LedgerAccountDetails(LedgerAccount):
 
     def to_api_response(
         self, hive_accname: str, line_items: bool = False, admin: bool = False
-    ) -> Dict:
+    ) -> dict:
         """
         Returns a dictionary representation of the account balance details, with numeric values
         rounded to 3 decimal places (half up) where applicable, formatted for API responses.
@@ -482,16 +519,16 @@ class LedgerAccountDetails(LedgerAccount):
             Dict: A dictionary with the specified keys and rounded float values.
         """
         in_progress_sats = (Decimal(self.in_progress_msats) / Decimal(1000)).quantize(
-            Decimal("1"), rounding="ROUND_HALF_UP"
+            Decimal(1), rounding="ROUND_HALF_UP"
         )
         # Prepare rounded Decimal values (using Decimal.quantize with ROUND_HALF_UP) then convert to float for API
-        net_msats_q = self.msats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+        net_msats_q = self.msats.quantize(Decimal(1), rounding="ROUND_HALF_UP")
         net_hive_q = self.hive.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
         net_usd_q = self.usd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
         net_hbd_q = self.hbd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
-        net_sats_q = self.sats.quantize(Decimal("1"), rounding="ROUND_DOWN")
-        net_magi_msats_q = self.magi_btc_msats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
-        net_magisats_q = self.magi_btc_sats.quantize(Decimal("1"), rounding="ROUND_DOWN")
+        net_sats_q = self.sats.quantize(Decimal(1), rounding="ROUND_DOWN")
+        net_magi_msats_q = self.magi_btc_msats.quantize(Decimal(1), rounding="ROUND_HALF_UP")
+        net_magisats_q = self.magi_btc_sats.quantize(Decimal(1), rounding="ROUND_DOWN")
         return {
             "hive_accname": hive_accname,
             "net_msats": float(net_msats_q),
@@ -507,4 +544,4 @@ class LedgerAccountDetails(LedgerAccount):
 
 
 class AccountBalances(RootModel):
-    root: List[LedgerAccountDetails]
+    root: list[LedgerAccountDetails]

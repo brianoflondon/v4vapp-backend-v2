@@ -65,9 +65,16 @@ def get_tracked_any_type(value: Any) -> str:
         if add_index and add_index != 0:
             return "invoice"
         r_hash = value.get("r_hash")
-        if r_hash and not value.get("status") == "settled":
-            # This is an unpaid Lightning invoice
-            raise ValueError(f"Unpaid Lightning invoice detected: {r_hash}")
+        if r_hash:
+            # Prefer InvoiceState; fall back to deprecated settled bool / legacy status.
+            state = value.get("state") or ""
+            is_settled = (
+                state == "SETTLED"
+                or value.get("settled") is True
+                or str(value.get("status", "")).lower() == "settled"
+            )
+            if not is_settled:
+                raise ValueError(f"Unpaid Lightning invoice detected: {r_hash}")
 
         payment_index = value.get("payment_index")
         if payment_index and payment_index != 0:

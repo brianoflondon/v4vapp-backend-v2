@@ -19,6 +19,7 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     ConvertedSummary,
     LedgerAccountDetails,
     LedgerConvSummary,
+    balance_line_sort_key,
 )
 from v4vapp_backend_v2.accounting.in_progress_results_class import (
     InProgressResults,
@@ -86,10 +87,8 @@ def _merge_groups(groups: List[LedgerAccountDetails]) -> LedgerAccountDetails:
             merged_balances[unit].extend([line.model_copy() for line in lines])
 
     # sort and recompute running totals for each currency
-    from datetime import datetime as _dt
-
     for unit, rows in merged_balances.items():
-        rows.sort(key=lambda x: x.timestamp or _dt.min.replace(tzinfo=_dt.now().tzinfo))
+        rows.sort(key=balance_line_sort_key)
         running_amount = Decimal(0)
         running_conv = ConvertedSummary()
         for row in rows:
@@ -536,10 +535,8 @@ async def one_account_balance(
                     merged_balances[unit].extend([line.model_copy() for line in lines])
 
         # Sort and recompute running totals (amount_running_total and conv_running_total)
-        from datetime import datetime as _dt
-
         for unit, rows in merged_balances.items():
-            rows.sort(key=lambda x: x.timestamp or _dt.min.replace(tzinfo=_dt.now().tzinfo))
+            rows.sort(key=balance_line_sort_key)
             running_amount = Decimal(0)
             running_conv = ConvertedSummary()
             for row in rows:
@@ -828,6 +825,22 @@ def _format_amounts_for_display(
     return debit_fmt, credit_fmt, balance_fmt
 
 
+def _format_user_memo_line(user_memo: str, col_ts: int = 12, max_length: int = 60) -> str | None:
+    """
+    Format a single indented memo line for balance printouts.
+
+    Collapses newlines so a multi-line memo cannot inject fake transaction rows.
+    Returns None when there is nothing useful to show.
+    """
+    if not user_memo:
+        return None
+    memo_raw = LightningMemo(user_memo).short_memo or ""
+    memo = truncate_text(memo_raw.replace("\n", " ").replace("\r", " "), max_length)
+    if not memo:
+        return None
+    return f"{' ' * (col_ts + 1)} {memo}"
+
+
 async def account_balance_printout(
     account: LedgerAccount | str,
     line_items: bool = True,
@@ -959,7 +972,9 @@ async def account_balance_printout(
     total_usd: Decimal = Decimal(0)
     total_msats: Decimal = Decimal(0)
 
-    for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
+    # HBD first so multi-unit customer reports open on the usual liability unit
+    # (HIVE dust from failed withdraws used to dominate the first screenful).
+    for unit in [Currency.HBD, Currency.HIVE, Currency.MSATS]:
         if unit not in units:
             continue
         # Compute common KSATS display settings for this unit
@@ -986,7 +1001,14 @@ async def account_balance_printout(
             f"{'-' * COL_SHORT_ID} "
             f"{'-' * COL_LEDGER_TYPE}"
         )
-        all_rows = ledger_account_details.balances[unit]
+        unit_key = str(unit).lower()
+        # Only rows that truly belong to this unit (never mix HBD/HIVE/MSATS sections).
+        all_rows = [
+            row
+            for row in ledger_account_details.balances.get(unit, [])
+            if str(getattr(row, "unit", "") or "").lower() == unit_key
+        ]
+        all_rows.sort(key=balance_line_sort_key)
         if all_rows:
             # If there's an opening balance from a prior period, emit a synthetic
             # "=== <period_start date> ===" block with an "Opening Balance" row first.
@@ -998,7 +1020,6 @@ async def account_balance_printout(
                 ob_net = opening_details.balances_net.get(unit, Decimal(0))
                 if (
                     ob_net != Decimal(0)
-                    and not (len(all_rows) == 1 and all_rows[0].ledger_type == "ob")
                     and not (len(all_rows) == 1 and all_rows[0].ledger_type == "ob")
                 ):
                     ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
@@ -1025,25 +1046,42 @@ async def account_balance_printout(
                     )
 
             transactions_by_date: dict[str, list] = {}
-            transactions_by_cust_id: dict[str, list] = {}
             for row in all_rows:
-                date_str = f"{row.timestamp:%Y-%m-%d}" if row.timestamp else "No Date"
+                # Always group by UTC calendar day so local TZ never scrambles dates.
+                if row.timestamp is None:
+                    date_str = "No Date"
+                else:
+                    ts = row.timestamp
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    else:
+                        ts = ts.astimezone(timezone.utc)
+                    date_str = f"{ts:%Y-%m-%d}"
                 transactions_by_date.setdefault(date_str, []).append(row)
-                transactions_by_cust_id.setdefault(row.cust_id, []).append(row)
 
             for date_str, rows in sorted(transactions_by_date.items()):
+                rows.sort(key=balance_line_sort_key)
                 output.append(f"\n=== {date_str} ===")
                 for row in rows:
                     contra_str = "-c-" if row.contra else "   "
-                    timestamp = f"{row.timestamp:%H:%M:%S.%f}"[:10] if row.timestamp else "N/A"
+                    if row.timestamp is None:
+                        timestamp = "N/A"
+                    else:
+                        ts = row.timestamp
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=timezone.utc)
+                        else:
+                            ts = ts.astimezone(timezone.utc)
+                        timestamp = f"{ts:%H:%M:%S.%f}"[:10]
                     description = truncate_text(row.description, 50)
                     ledger_type = row.ledger_type
-                    # Raw numeric values
+                    row_unit = str(getattr(row, "unit", "") or "").lower()
+                    # Raw numeric values — only this unit's native amounts
                     debit_val = (
-                        row.amount if row.side == "debit" and row.unit == unit else Decimal(0)
+                        row.amount if row.side == "debit" and row_unit == unit_key else Decimal(0)
                     )
                     credit_val = (
-                        row.amount if row.side == "credit" and row.unit == unit else Decimal(0)
+                        row.amount if row.side == "credit" and row_unit == unit_key else Decimal(0)
                     )
                     balance_val = row.amount_running_total
 
@@ -1070,8 +1108,9 @@ async def account_balance_printout(
                     if line_items:
                         output.append(line)
                     if user_memos and row.user_memo:
-                        memo = truncate_text(LightningMemo(row.user_memo).short_memo, 60)
-                        output.append(f"{' ' * (COL_TS + 1)} {memo}")
+                        memo_line = _format_user_memo_line(row.user_memo, COL_TS)
+                        if memo_line:
+                            output.append(memo_line)
 
         # Perform a conversion with the current quote for this Currency unit
         final_balance = Decimal(ledger_account_details.balances_net.get(unit, 0))
@@ -1242,7 +1281,8 @@ async def account_balance_printout_grouped_by_customer(
     total_usd: Decimal = Decimal(0)
     total_msats: Decimal = Decimal(0)
 
-    for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
+    # Match account_balance_printout unit order (HBD before HIVE).
+    for unit in [Currency.HBD, Currency.HIVE, Currency.MSATS]:
         if unit not in units:
             continue
         conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
@@ -1326,7 +1366,7 @@ async def account_balance_printout_grouped_by_customer(
                         running_total = Decimal(0)
                         for row in sorted(
                             cust_rows,
-                            key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc),
+                            key=balance_line_sort_key,
                         ):
                             contra_str = "-c-" if row.contra else "   "
                             timestamp = (
@@ -1389,15 +1429,16 @@ async def account_balance_printout_grouped_by_customer(
                             if line_items:
                                 output.append(line)
                             if user_memos and row.user_memo:
-                                memo = truncate_text(LightningMemo(row.user_memo).short_memo, 60)
-                                output.append(f"{' ' * (COL_TS + 1)} {memo}")
+                                memo_line = _format_user_memo_line(row.user_memo, COL_TS)
+                                if memo_line:
+                                    output.append(memo_line)
                 else:
                     # Single cust_id, recalculate running totals for consistency
                     output.append(f"\n--- Customer: {list(cust_ids)[0]} ---")
                     running_total = Decimal(0)
                     for row in sorted(
                         date_rows,
-                        key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc),
+                        key=balance_line_sort_key,
                     ):
                         contra_str = "-c-" if row.contra else "   "
                         timestamp = f"{row.timestamp:%H:%M:%S.%f}"[:10] if row.timestamp else "N/A"
@@ -1459,8 +1500,9 @@ async def account_balance_printout_grouped_by_customer(
                         if line_items:
                             output.append(line)
                         if user_memos and row.user_memo:
-                            memo = truncate_text(LightningMemo(row.user_memo).short_memo, 60)
-                            output.append(f"{' ' * (COL_TS + 1)} {memo}")
+                            memo_line = _format_user_memo_line(row.user_memo, COL_TS)
+                            if memo_line:
+                                output.append(memo_line)
 
         # Perform a conversion with the current quote for this Currency unit
         final_balance = ledger_account_details.balances_net.get(unit, 0)
@@ -1924,11 +1966,9 @@ async def notification_lines(
         )
         notification_lines.append(line)
 
-    # Merge into the combined balance and re-sort
+    # Merge into the combined balance and re-sort (stable multi-key order)
     account_balance.combined_balance.extend(notification_lines)
-    account_balance.combined_balance.sort(
-        key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc)
-    )
+    account_balance.combined_balance.sort(key=balance_line_sort_key)
 
     # Recompute running totals for the combined history (notifications are zero-value)
     running_conv = ConvertedSummary()

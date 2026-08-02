@@ -14,6 +14,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import select_autoescape
 
 from v4vapp_backend_v2 import __version__ as project_version
 
@@ -88,6 +89,14 @@ class AdminApp:
 
         # Setup templates and static files
         self.templates = Jinja2Templates(directory=str(self.templates_dir))
+        # Starlette's default select_autoescape only treats .html/.xml as HTML.
+        # Our templates are named *.html.jinja, so the last suffix is "jinja" and
+        # autoescape was OFF — raw user memos with "<AioRpcError...>" then break
+        # the balance printout DOM (looks fine with User Memos off).
+        self.templates.env.autoescape = select_autoescape(
+            enabled_extensions=("html", "htm", "xml", "jinja"),
+            default_for_string=True,
+        )
 
         # determine sidebar colour based on configured server account
         # default to the existing light blue used in admin.css
@@ -176,6 +185,16 @@ class AdminApp:
         ledger_editor.set_templates_and_nav(self.templates, self.nav_manager)
         self.app.include_router(
             ledger_editor.router, prefix="/admin/ledger-editor", tags=["Ledger Editor"]
+        )
+
+        # Replay Hive Deposit (stuck deposit recovery)
+        from v4vapp_backend_v2.admin.routers import replay_deposit
+
+        replay_deposit.set_templates_and_nav(self.templates, self.nav_manager)
+        self.app.include_router(
+            replay_deposit.router,
+            prefix="/admin/replay-deposit",
+            tags=["Replay Hive Deposit"],
         )
 
         # Add more routers here as needed

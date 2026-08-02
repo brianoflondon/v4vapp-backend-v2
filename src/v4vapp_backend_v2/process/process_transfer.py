@@ -48,6 +48,11 @@ from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_tr
 from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.process.process_errors import CustomJsonToLightningError
 
+# Intentional local/dev test hook for Replay Hive Deposit recovery drills.
+# Must stay False in production. Flip True only while inducing a stuck cust_h_in.
+# copilot:ignore — deliberate temporary failure injection for admin recovery testing.
+_TEMP_DEV_FORCE_FOLLOW_ON_PAY_FAIL = False
+
 
 async def follow_on_transfer(
     tracked_op: TrackedTransferWithCustomJson, nobroadcast: bool = False
@@ -302,6 +307,13 @@ async def follow_on_transfer(
                 if lightning_memo.after_text:
                     chat_message += lightning_memo.after_text
             chat_message = chat_message.strip(" |")
+            # copilot:ignore — see _TEMP_DEV_FORCE_FOLLOW_ON_PAY_FAIL above.
+            if _TEMP_DEV_FORCE_FOLLOW_ON_PAY_FAIL:
+                raise RuntimeError(
+                    "TEMP DEV: deliberate follow_on pay failure after deposit "
+                    f"(short_id={tracked_op.short_id}). "
+                    "Set _TEMP_DEV_FORCE_FOLLOW_ON_PAY_FAIL=False before retrying pay."
+                )
             payment = await send_lightning_to_pay_req(
                 pay_req=pay_req,
                 lnd_client=lnd_client,

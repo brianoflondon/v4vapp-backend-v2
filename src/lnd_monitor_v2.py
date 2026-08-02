@@ -45,7 +45,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     get_channel_name,
     get_node_alias_from_pay_request,
 )
-from v4vapp_backend_v2.models.invoice_models import Invoice, ListInvoiceResponse
+from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState, ListInvoiceResponse
 from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
@@ -225,11 +225,11 @@ async def track_events(
                 if incoming_invoice:
                     # logger.info(f"Found incoming invoice... {htlc_id}")
                     amount = int(incoming_invoice.value_msat / 1000)
-                    settled = incoming_invoice.settled
-                    notification = False if amount < 10 or not settled else notification
                     invoice_dict = MessageToDict(
                         incoming_invoice, preserving_proto_field_name=True
                     )
+                    settled = invoice_dict.get("state") == InvoiceState.SETTLED
+                    notification = False if amount < 10 or not settled else notification
             except Exception as e:  # noqa: BLE001
                 logger.exception(e)
         await asyncio.sleep(0.2)
@@ -410,7 +410,7 @@ async def db_store_invoice(
         invoice_pyd.node_name = lnd_client.connection.name
         await invoice_pyd.update_conv()
         ans = await invoice_pyd.save()
-        state = "SETTLED" if invoice_pyd.settled else "OPEN"
+        state = invoice_pyd.state.value if invoice_pyd.state else "OPEN"
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
             f"Invoice {state}: add={invoice_pyd.add_index:>7} settle={invoice_pyd.settle_index:>7} "
@@ -1128,12 +1128,15 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                     filter={"r_hash": invoice.r_hash},
                 )
                 if read_invoice:
-                    mongo_settled = bool(read_invoice.get("settled"))
+                    mongo_settled = (
+                        read_invoice.get("state") == InvoiceState.SETTLED
+                        or bool(read_invoice.get("settled"))
+                    )
                     # Already fully settled in Mongo — leave alone.
                     if mongo_settled:
                         continue
                     # Still open on LND — nothing to refresh.
-                    if not invoice.settled:
+                    if invoice.state != InvoiceState.SETTLED:
                         continue
                     # Mongo OPEN, LND SETTLED → push settle fields into Mongo.
                     total_settle_refresh += 1
