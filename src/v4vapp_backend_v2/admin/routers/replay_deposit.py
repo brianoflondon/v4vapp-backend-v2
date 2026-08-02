@@ -54,7 +54,6 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager) -> None
 
 
 def _serialize_reply(reply: Any) -> dict[str, Any]:
-    
     if hasattr(reply, "model_dump"):
         data = reply.model_dump(mode="json")
     elif isinstance(reply, dict):

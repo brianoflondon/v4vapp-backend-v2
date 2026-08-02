@@ -205,7 +205,8 @@ class Invoice(TrackedBaseModel):
         description="Whether this invoice has been fulfilled. The field is deprecated. Use the state field instead (compare to SETTLED).",
     )
     creation_date: datetime = Field(
-        datetime.now(tz=UTC), description="The date this invoice was created."
+        default_factory=lambda: datetime.now(tz=UTC),
+        description="The date this invoice was created.",
     )
     settle_date: datetime | None = None
     payment_request: str = ""

@@ -241,7 +241,7 @@
                 tbody.appendChild(tr);
             }
         } catch (e) {
-            setStatus('Search failed: ' + e, 'danger');
+            setStatus('Search failed: ' + esc(e), 'danger');
         }
     }
 
@@ -254,14 +254,14 @@
             const res = await fetch(`/admin/replay-deposit/api/inspect?${params}`);
             const data = await res.json();
             if (!res.ok) {
-                setStatus(data.error || 'Inspect failed', 'danger');
+                setStatus(esc(data.error || 'Inspect failed'), 'danger');
                 return;
             }
             current = data;
             renderInspect(data);
             clearStatus();
         } catch (e) {
-            setStatus('Inspect failed: ' + e, 'danger');
+            setStatus('Inspect failed: ' + esc(e), 'danger');
         }
     }
 
@@ -372,13 +372,13 @@
             });
             const data = await res.json();
             if (!res.ok) {
-                setStatus(data.error || 'Clear failed', 'danger');
+                setStatus(esc(data.error || 'Clear failed'), 'danger');
                 return;
             }
             setStatus(`Cleared ${data.removed} reply(ies).`, 'success');
             refreshInspect();
         } catch (e) {
-            setStatus('Clear failed: ' + e, 'danger');
+            setStatus('Clear failed: ' + esc(e), 'danger');
         }
     }
 
@@ -419,7 +419,7 @@
                 'success'
             );
         } catch (e) {
-            setStatus('Retry failed: ' + e, 'danger');
+            setStatus('Retry failed: ' + esc(e), 'danger');
         } finally {
             document.getElementById('btn-retry').disabled = false;
         }
@@ -435,7 +435,7 @@
                 setStatus(`LND FAIL: ${esc(data.error || 'unknown')}`, 'danger');
             }
         } catch (e) {
-            setStatus('LND check failed: ' + e, 'danger');
+            setStatus('LND check failed: ' + esc(e), 'danger');
         }
     }
 
