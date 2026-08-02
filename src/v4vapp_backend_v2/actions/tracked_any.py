@@ -65,7 +65,7 @@ def get_tracked_any_type(value: Any) -> str:
         if add_index and add_index != 0:
             return "invoice"
         r_hash = value.get("r_hash")
-        if r_hash and not value.get("status") == "settled":
+        if r_hash and value.get("state","") != "SETTLED":
             # This is an unpaid Lightning invoice
             raise ValueError(f"Unpaid Lightning invoice detected: {r_hash}")
 
