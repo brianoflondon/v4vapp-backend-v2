@@ -1,7 +1,7 @@
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Any, ClassVar, Dict, List, override
+from typing import Any, ClassVar, override
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -98,7 +98,7 @@ class InvoiceHTLC(BaseModel):
     resolve_time: datetime
     expiry_height: int
     state: InvoiceHTLCState
-    custom_records: Dict[str, str] | None = None
+    custom_records: dict[str, str] | None = None
     mpp_total_amt_msat: BSONInt64 = BSONInt64(0)
     amp: dict | None = None
 
@@ -205,7 +205,7 @@ class Invoice(TrackedBaseModel):
         description="Whether this invoice has been fulfilled. The field is deprecated. Use the state field instead (compare to SETTLED).",
     )
     creation_date: datetime = Field(
-        datetime.now(tz=timezone.utc), description="The date this invoice was created."
+        datetime.now(tz=UTC), description="The date this invoice was created."
     )
     settle_date: datetime | None = None
     payment_request: str = ""
@@ -213,7 +213,7 @@ class Invoice(TrackedBaseModel):
     expiry: int | None = None
     fallback_addr: str = ""
     cltv_expiry: int | None = None
-    route_hints: List[dict] | None = None
+    route_hints: list[dict] | None = None
     private: bool | None = None
     add_index: BSONInt64 = BSONInt64(0)
     settle_index: BSONInt64 = BSONInt64(0)
@@ -234,7 +234,7 @@ class Invoice(TrackedBaseModel):
     )
     amt_paid_msat: BSONInt64 = Field(BSONInt64(0), description="The amount paid in millisatoshis.")
     state: InvoiceState | None = None
-    htlcs: List[InvoiceHTLC] | None = None
+    htlcs: list[InvoiceHTLC] | None = None
     features: dict[str, Feature] | None = None
     is_keysend: bool = False
     payment_addr: str = ""
@@ -334,7 +334,7 @@ class Invoice(TrackedBaseModel):
         return InternalConfig.db["invoices"]
 
     @property
-    def group_id_query(self) -> Dict[str, Any]:
+    def group_id_query(self) -> dict[str, Any]:
         """
         Returns the query used to identify the group ID in the database.
 
@@ -461,8 +461,7 @@ class Invoice(TrackedBaseModel):
 
         if extracted_value:
             self.cust_id = LockStr(extracted_value)
-            if self.cust_id.startswith("@"):
-                self.cust_id = self.cust_id[1:]
+            self.cust_id = self.cust_id.removeprefix("@")
             self.is_lndtohive = True
 
     def fill_custom_records(self) -> None:
@@ -520,7 +519,7 @@ class Invoice(TrackedBaseModel):
         """
         timestamp = self.settle_date or self.creation_date
         if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(tzinfo=timezone.utc)
+            timestamp = timestamp.replace(tzinfo=UTC)
         return timestamp
 
     @property
@@ -541,7 +540,7 @@ class Invoice(TrackedBaseModel):
         Returns:
             float: The age of the invoice in seconds.
         """
-        return (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds()
+        return (datetime.now(tz=UTC) - self.timestamp).total_seconds()
 
     @property
     def age_str(self) -> str:
@@ -579,7 +578,7 @@ class Invoice(TrackedBaseModel):
 
 class ListInvoiceResponse(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    invoices: List[Invoice]
+    invoices: list[Invoice]
     last_index_offset: BSONInt64
     first_index_offset: BSONInt64
 

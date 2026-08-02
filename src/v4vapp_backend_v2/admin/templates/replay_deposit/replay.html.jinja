@@ -1,0 +1,463 @@
+{% extends "base.html.jinja" %}
+
+{% block extra_css %}
+<style>
+    .replay-panel {
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid var(--bs-border-color);
+    }
+
+    .mono {
+        font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+        font-size: 0.85rem;
+    }
+
+    .warn-list li {
+        margin-bottom: 0.35rem;
+    }
+
+    .reply-blocking {
+        border-left: 3px solid #dc3545;
+    }
+
+    .reply-ok {
+        border-left: 3px solid #198754;
+    }
+
+    #status-bar .alert {
+        margin-bottom: 1rem;
+    }
+
+    .badge-soft {
+        font-weight: 500;
+    }
+
+    pre.ctx-json {
+        max-height: 320px;
+        overflow: auto;
+        font-size: 0.75rem;
+        background: var(--bs-tertiary-bg);
+        border-radius: 6px;
+        padding: 0.75rem;
+    }
+
+    .action-btn:disabled {
+        opacity: 0.55;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="status-bar"></div>
+
+<div class="replay-panel">
+    <h3 class="mb-2">
+        <i class="bi bi-arrow-repeat me-2"></i>
+        Replay Hive Deposit
+    </h3>
+    <p class="text-muted mb-3">
+        Recover stuck <strong>cust_h_in</strong> deposits where the Lightning follow-on pay failed
+        (e.g. LND GetInfo timeout). Preferred path: keep the deposit, clear blocking replies, re-run
+        <code>follow_on_transfer</code>. Do <em>not</em> reverse the deposit unless you must full-replay.
+    </p>
+
+    <div class="row g-2 align-items-end">
+        <div class="col-md-8">
+            <label for="search_q" class="form-label">Search</label>
+            <input type="text" class="form-control mono" id="search_q"
+                placeholder="short_id (8075_6900b2_1), group_id, or hive account"
+                value="{{ initial_query }}">
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+            <button class="btn btn-primary flex-grow-1" onclick="searchDeposits()">
+                <i class="bi bi-search me-1"></i> Search deposits
+            </button>
+            <button class="btn btn-outline-secondary" onclick="checkLnd()" title="LND GetInfo">
+                <i class="bi bi-lightning-charge"></i>
+            </button>
+        </div>
+    </div>
+    <div class="form-text">Only <code>cust_h_in</code> (customer HIVE/HBD deposit) ledger rows are listed.</div>
+</div>
+
+<div class="replay-panel" id="results-panel" style="display:none;">
+    <h5 class="mb-3">Deposit matches</h5>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Short ID</th>
+                    <th>Customer</th>
+                    <th>Amount</th>
+                    <th>When (UTC)</th>
+                    <th>Description</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="replay-panel" id="inspect-panel" style="display:none;">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div>
+            <h5 class="mb-1">Inspect &amp; recover</h5>
+            <div class="mono text-muted" id="inspect-ids"></div>
+        </div>
+        <div id="inspect-rec" class="badge text-bg-secondary badge-soft fs-6"></div>
+    </div>
+
+    <div id="warnings-box" class="alert alert-warning d-none">
+        <strong>Warnings</strong>
+        <ul class="warn-list mb-0 mt-2" id="warnings-list"></ul>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <div class="border rounded p-3 h-100">
+                <div class="text-muted small">Deposit</div>
+                <div class="fs-5 fw-semibold mono" id="dep-amount">—</div>
+                <div class="small mono" id="dep-cust"></div>
+                <div class="small text-muted" id="dep-desc"></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="border rounded p-3 h-100">
+                <div class="text-muted small">LND (Legion)</div>
+                <div class="fs-6 fw-semibold" id="lnd-status">—</div>
+                <div class="small mono" id="lnd-detail"></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="border rounded p-3 h-100">
+                <div class="text-muted small">Invoice in memo</div>
+                <div class="fs-6 fw-semibold" id="inv-status">—</div>
+                <div class="small mono" id="inv-detail"></div>
+            </div>
+        </div>
+    </div>
+
+    <h6>Hive op replies</h6>
+    <div id="replies-box" class="mb-3"></div>
+
+    <h6>Related ledger (same short_id)</h6>
+    <div class="table-responsive mb-3">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Short ID</th>
+                    <th>Amount</th>
+                    <th>Description</th>
+                    <th>Reversed?</th>
+                </tr>
+            </thead>
+            <tbody id="related-body"></tbody>
+        </table>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button class="btn btn-outline-warning action-btn" id="btn-clear" onclick="clearReplies(false)">
+            Clear blocking replies only
+        </button>
+        <button class="btn btn-success action-btn" id="btn-retry" onclick="retryPay(false)">
+            <i class="bi bi-play-fill me-1"></i>
+            Clear replies + retry follow-on pay
+        </button>
+        <button class="btn btn-outline-danger action-btn" id="btn-retry-force" onclick="retryPay(true)"
+            title="Bypass LND/expiry/reversed guards">
+            Force retry
+        </button>
+        <button class="btn btn-outline-secondary" onclick="refreshInspect()">
+            <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+        </button>
+    </div>
+
+    <details>
+        <summary class="text-muted">Raw inspect JSON</summary>
+        <pre class="ctx-json mono" id="raw-json"></pre>
+    </details>
+</div>
+
+<div class="replay-panel">
+    <h6 class="mb-2">Safe order of operations</h6>
+    <ol class="mb-0 small">
+        <li>Confirm invoice unpaid and not expired; confirm Legion GetInfo works.</li>
+        <li>Search the <code>cust_h_in</code> deposit (e.g. <code>8075_6900b2_1</code>).</li>
+        <li>Prefer <strong>Clear replies + retry follow-on pay</strong> — deposit stays on books.</li>
+        <li>Watch for payment success, <code>withdraw_l</code> / convert entries, change HBD/HIVE out.</li>
+        <li>Only full reverse+reprocess if retry path cannot run; never double-deposit.</li>
+    </ol>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let current = null; // last inspect context
+
+    function setStatus(html, kind = 'info') {
+        const el = document.getElementById('status-bar');
+        el.innerHTML = `<div class="alert alert-${kind}">${html}</div>`;
+    }
+
+    function clearStatus() {
+        document.getElementById('status-bar').innerHTML = '';
+    }
+
+    async function searchDeposits() {
+        clearStatus();
+        const q = document.getElementById('search_q').value.trim();
+        if (!q) {
+            setStatus('Enter a short_id, group_id, or hive account.', 'warning');
+            return;
+        }
+        setStatus('Searching…', 'secondary');
+        try {
+            const res = await fetch(`/admin/replay-deposit/api/search?q=${encodeURIComponent(q)}`);
+            const data = await res.json();
+            const tbody = document.getElementById('results-body');
+            tbody.innerHTML = '';
+            document.getElementById('results-panel').style.display = 'block';
+            if (!data.results || !data.results.length) {
+                setStatus('No cust_h_in deposits matched.', 'warning');
+                return;
+            }
+            clearStatus();
+            for (const r of data.results) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="mono">${esc(r.short_id)}</td>
+                    <td class="mono">${esc(r.cust_id)}</td>
+                    <td class="mono">${esc(r.credit_amount)} ${esc(r.credit_unit || '')}</td>
+                    <td class="small">${esc((r.timestamp || '').replace('T', ' ').slice(0, 19))}</td>
+                    <td class="small">${esc((r.description || '').slice(0, 80))}</td>
+                    <td><button class="btn btn-sm btn-outline-primary" data-sid="${escAttr(r.short_id)}" data-gid="${escAttr(r.group_id)}">Inspect</button></td>
+                `;
+                tr.querySelector('button').onclick = () => inspectDeposit(r.short_id, r.group_id);
+                tbody.appendChild(tr);
+            }
+        } catch (e) {
+            setStatus('Search failed: ' + e, 'danger');
+        }
+    }
+
+    async function inspectDeposit(shortId, groupId) {
+        setStatus('Loading context…', 'secondary');
+        const params = new URLSearchParams();
+        if (shortId) params.set('short_id', shortId);
+        if (groupId) params.set('group_id', groupId);
+        try {
+            const res = await fetch(`/admin/replay-deposit/api/inspect?${params}`);
+            const data = await res.json();
+            if (!res.ok) {
+                setStatus(data.error || 'Inspect failed', 'danger');
+                return;
+            }
+            current = data;
+            renderInspect(data);
+            clearStatus();
+        } catch (e) {
+            setStatus('Inspect failed: ' + e, 'danger');
+        }
+    }
+
+    function refreshInspect() {
+        if (!current || !current.deposit) return;
+        inspectDeposit(current.deposit.short_id, current.deposit.group_id);
+    }
+
+    function renderInspect(data) {
+        document.getElementById('inspect-panel').style.display = 'block';
+        const d = data.deposit;
+        document.getElementById('inspect-ids').textContent =
+            `short_id=${d.short_id}  group_id=${d.group_id}`;
+        document.getElementById('inspect-rec').textContent = data.recommendation || '';
+        document.getElementById('inspect-rec').className =
+            'badge badge-soft fs-6 ' + (data.can_retry_pay ? 'text-bg-success' : 'text-bg-secondary');
+
+        document.getElementById('dep-amount').textContent =
+            `${d.credit_amount} ${d.credit_unit || ''}`.trim();
+        document.getElementById('dep-cust').textContent = d.cust_id || '';
+        document.getElementById('dep-desc').textContent = d.description || '';
+
+        const lnd = data.lnd || {};
+        document.getElementById('lnd-status').textContent = lnd.ok ? 'OK' : 'FAIL';
+        document.getElementById('lnd-status').className =
+            'fs-6 fw-semibold ' + (lnd.ok ? 'text-success' : 'text-danger');
+        document.getElementById('lnd-detail').textContent = lnd.ok
+            ? `${lnd.alias || ''} · ${lnd.connection || ''} · height ${lnd.block_height ?? '?'}`
+            : (lnd.error || 'unavailable');
+
+        const inv = data.invoice || {};
+        let invLabel = 'none';
+        if (inv.error) invLabel = 'error';
+        else if (inv.present) invLabel = inv.expired ? 'EXPIRED' : 'valid';
+        document.getElementById('inv-status').textContent = invLabel;
+        document.getElementById('inv-status').className =
+            'fs-6 fw-semibold ' + (inv.expired ? 'text-danger' : inv.present ? 'text-success' : 'text-muted');
+        document.getElementById('inv-detail').textContent = inv.present
+            ? `${inv.value_sat || 0} sats · exp ${inv.expiry_date || '?'} · ${inv.destination || ''}`
+            : (inv.error || inv.message || '');
+
+        const warns = data.warnings || [];
+        const wbox = document.getElementById('warnings-box');
+        const wlist = document.getElementById('warnings-list');
+        if (warns.length) {
+            wbox.classList.remove('d-none');
+            wlist.innerHTML = warns.map(w => `<li>${esc(w)}</li>`).join('');
+        } else {
+            wbox.classList.add('d-none');
+            wlist.innerHTML = '';
+        }
+
+        const replies = (data.hive_op && data.hive_op.replies) || [];
+        const rbox = document.getElementById('replies-box');
+        if (!replies.length) {
+            rbox.innerHTML = '<div class="text-muted small">No replies on hive op.</div>';
+        } else {
+            rbox.innerHTML = replies.map(r => {
+                const cls = r.blocks_follow_on ? 'reply-blocking' : 'reply-ok';
+                return `<div class="border rounded p-2 mb-2 ${cls}">
+                    <div class="mono small"><strong>${esc(r.reply_type || '?')}</strong> · ${esc(r.reply_id || '')}
+                    ${r.blocks_follow_on ? '<span class="badge text-bg-danger ms-1">blocks</span>' : '<span class="badge text-bg-success ms-1">ok</span>'}
+                    </div>
+                    <div class="small">${esc(r.reply_message || r.reply_error || '')}</div>
+                </div>`;
+            }).join('');
+        }
+
+        const related = data.related_ledger || [];
+        const rb = document.getElementById('related-body');
+        rb.innerHTML = related.map(e => `
+            <tr>
+                <td class="mono">${esc(e.ledger_type)}</td>
+                <td class="mono">${esc(e.short_id)}</td>
+                <td class="mono">${esc(e.debit_amount || e.credit_amount)} ${esc(e.debit_unit || e.credit_unit || '')}</td>
+                <td class="small">${esc((e.description || '').slice(0, 70))}</td>
+                <td class="small">${e.reversed ? esc(e.reversed) : '—'}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" class="text-muted">None</td></tr>';
+
+        document.getElementById('raw-json').textContent = JSON.stringify(data, null, 2);
+
+        const can = !!data.can_retry_pay;
+        document.getElementById('btn-retry').disabled = !can && !(data.hive_op && data.hive_op.found);
+        document.getElementById('btn-clear').disabled = !(data.hive_op && data.hive_op.found);
+        if (data.hive_op && data.hive_op.has_payment_reply) {
+            document.getElementById('btn-retry').disabled = true;
+            document.getElementById('btn-retry-force').disabled = true;
+            document.getElementById('btn-clear').disabled = true;
+        } else {
+            document.getElementById('btn-retry-force').disabled = !(data.hive_op && data.hive_op.found);
+        }
+    }
+
+    async function clearReplies(dryRun) {
+        if (!current || !current.deposit) return;
+        if (!confirm('Clear failure/transfer replies on this hive op? (deposit ledger is kept)')) return;
+        setStatus('Clearing replies…', 'secondary');
+        try {
+            const res = await fetch('/admin/replay-deposit/api/clear-replies', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    short_id: current.deposit.short_id,
+                    group_id: current.hive_op.group_id || current.deposit.group_id,
+                    dry_run: !!dryRun,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setStatus(data.error || 'Clear failed', 'danger');
+                return;
+            }
+            setStatus(`Cleared ${data.removed} reply(ies).`, 'success');
+            refreshInspect();
+        } catch (e) {
+            setStatus('Clear failed: ' + e, 'danger');
+        }
+    }
+
+    async function retryPay(force) {
+        if (!current || !current.deposit) return;
+        const msg = force
+            ? 'FORCE retry follow_on (bypasses some guards). Deposit stays. Continue?'
+            : 'Clear blocking replies and re-run follow_on_transfer? Deposit ledger stays. Continue?';
+        if (!confirm(msg)) return;
+        setStatus('Running follow_on_transfer… this may take a while.', 'secondary');
+        document.getElementById('btn-retry').disabled = true;
+        try {
+            const res = await fetch('/admin/replay-deposit/api/retry-pay', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    short_id: current.deposit.short_id,
+                    group_id: current.deposit.group_id,
+                    clear_replies: true,
+                    force: !!force,
+                    nobroadcast: false,
+                }),
+            });
+            const data = await res.json();
+            if (data.context) {
+                current = data.context;
+                renderInspect(data.context);
+            }
+            if (!res.ok || data.ok === false) {
+                setStatus(
+                    `<strong>Retry failed</strong>: ${esc(data.error || res.statusText)}<br><span class="mono small">${esc((data.steps || []).join(' · '))}</span>`,
+                    'danger'
+                );
+                return;
+            }
+            setStatus(
+                `<strong>follow_on finished</strong><br><span class="mono small">${esc((data.steps || []).join(' · '))}</span><br>${esc(data.message || '')}`,
+                'success'
+            );
+        } catch (e) {
+            setStatus('Retry failed: ' + e, 'danger');
+        } finally {
+            document.getElementById('btn-retry').disabled = false;
+        }
+    }
+
+    async function checkLnd() {
+        try {
+            const res = await fetch('/admin/replay-deposit/api/lnd-health');
+            const data = await res.json();
+            if (data.ok) {
+                setStatus(`LND OK: ${esc(data.alias || '')} (${esc(data.connection || '')}) height ${data.block_height}`, 'success');
+            } else {
+                setStatus(`LND FAIL: ${esc(data.error || 'unknown')}`, 'danger');
+            }
+        } catch (e) {
+            setStatus('LND check failed: ' + e, 'danger');
+        }
+    }
+
+    function esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+    function escAttr(s) {
+        return esc(s).replace(/`/g, '');
+    }
+
+    document.getElementById('search_q').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchDeposits();
+        }
+    });
+
+    // Auto-search if query provided
+    if (document.getElementById('search_q').value.trim()) {
+        searchDeposits();
+    }
+</script>
+{% endblock %}

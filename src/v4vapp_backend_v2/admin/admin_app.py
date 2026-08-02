@@ -187,6 +187,16 @@ class AdminApp:
             ledger_editor.router, prefix="/admin/ledger-editor", tags=["Ledger Editor"]
         )
 
+        # Replay Hive Deposit (stuck deposit recovery)
+        from v4vapp_backend_v2.admin.routers import replay_deposit
+
+        replay_deposit.set_templates_and_nav(self.templates, self.nav_manager)
+        self.app.include_router(
+            replay_deposit.router,
+            prefix="/admin/replay-deposit",
+            tags=["Replay Hive Deposit"],
+        )
+
         # Add more routers here as needed
         # self.app.include_router(other_router, prefix="/admin/other", tags=["Other"])
 

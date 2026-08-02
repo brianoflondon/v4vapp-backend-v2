@@ -48,6 +48,14 @@ from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_tr
 from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.process.process_errors import CustomJsonToLightningError
 
+# =============================================================================
+# TEMP DEV ONLY — delete this flag (or set False) after testing Replay Hive Deposit.
+# When True, follow_on fails AFTER cust_h_in is saved, immediately before LND pay,
+# so you get the same stuck shape as production (deposit kept, pay never sent).
+# Hits the generic Exception → ReturnAction.HOLD path (dust / unexpected error memo).
+# =============================================================================
+_TEMP_DEV_FORCE_FOLLOW_ON_PAY_FAIL = False
+
 
 async def follow_on_transfer(
     tracked_op: TrackedTransferWithCustomJson, nobroadcast: bool = False
@@ -302,6 +310,14 @@ async def follow_on_transfer(
                 if lightning_memo.after_text:
                     chat_message += lightning_memo.after_text
             chat_message = chat_message.strip(" |")
+            if _TEMP_DEV_FORCE_FOLLOW_ON_PAY_FAIL:
+                # Intentionally not LNDPaymentError: mirrors unexpected LND/GetInfo failure.
+                raise RuntimeError(
+                    "TEMP DEV: deliberate follow_on pay failure after deposit "
+                    f"(short_id={tracked_op.short_id}). "
+                    "Set _TEMP_DEV_FORCE_FOLLOW_ON_PAY_FAIL=False in process_transfer.py "
+                    "before using Replay Hive Deposit retry, then remove this block."
+                )
             payment = await send_lightning_to_pay_req(
                 pay_req=pay_req,
                 lnd_client=lnd_client,
