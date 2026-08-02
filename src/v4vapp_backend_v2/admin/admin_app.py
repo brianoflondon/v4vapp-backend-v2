@@ -14,6 +14,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import select_autoescape
 
 from v4vapp_backend_v2 import __version__ as project_version
 
@@ -88,6 +89,14 @@ class AdminApp:
 
         # Setup templates and static files
         self.templates = Jinja2Templates(directory=str(self.templates_dir))
+        # Starlette's default select_autoescape only treats .html/.xml as HTML.
+        # Our templates are named *.html.jinja, so the last suffix is "jinja" and
+        # autoescape was OFF — raw user memos with "<AioRpcError...>" then break
+        # the balance printout DOM (looks fine with User Memos off).
+        self.templates.env.autoescape = select_autoescape(
+            enabled_extensions=("html", "htm", "xml", "jinja"),
+            default_for_string=True,
+        )
 
         # determine sidebar colour based on configured server account
         # default to the existing light blue used in admin.css
