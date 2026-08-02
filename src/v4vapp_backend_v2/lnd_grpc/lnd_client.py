@@ -153,8 +153,11 @@ class LNDClient:
         try:
             if getattr(self, "get_info", None) is not None:
                 return self.get_info
+            # 30s: Tailscale / busy Legion often exceeds the old 10s; GetInfo is
+            # identity/health only and callers should treat failures as soft where
+            # possible (see send_lightning_to_pay_req).
             self.get_info: lnrpc.GetInfoResponse = await self.lightning_stub.GetInfo(
-                lnrpc.GetInfoRequest(), timeout=10.0
+                lnrpc.GetInfoRequest(), timeout=30.0
             )
             # always_print_fields_with_no_presence=True: forces serialization of fields that lack
             # presence (repeated, maps, scalars) so missing lists become [] instead of absent

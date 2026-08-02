@@ -3831,7 +3831,7 @@ requires-dist = [
     { name = "binance-connector", specifier = ">=3.12.0,<4.0.0" },
     { name = "colorama", specifier = ">=0.4.6,<1.0.0" },
     { name = "colorlog", specifier = ">=6.8.2,<7.0.0" },
-    { name = "fastapi", extras = ["standard"], specifier = ">=0.136.0" },
+    { name = "fastapi", extras = ["standard"], specifier = ">=0.141.1" },
     { name = "googleapis-common-protos", specifier = ">=1.62.0" },
     { name = "grpcio", specifier = ">=1.74.0" },
     { name = "grpcio-tools", specifier = ">=1.74.0" },
@@ -3839,7 +3839,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "packaging", specifier = ">=25.0" },
     { name = "pandas", specifier = ">=3.0.0" },
-    { name = "pydantic", extras = ["email"], specifier = ">=2.13.2,<3.0.0" },
+    { name = "pydantic", extras = ["email"], specifier = ">=2.13.4,<3.0.0" },
     { name = "pymongo", specifier = ">=4.15.5" },
     { name = "python-telegram-bot", specifier = ">=22.3,<23.0" },
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
@@ -3876,7 +3876,7 @@ dev = [
     { name = "types-colorama", specifier = ">=0.4.15.20240311,<1.0.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20240917,<7.0.0" },
     { name = "types-redis", specifier = ">=4.6.0.20241004" },
-    { name = "types-toml", specifier = ">=0.10.8.20240310,<1.0.0" },
+    { name = "types-toml", specifier = ">=0.10.8.20260518,<1.0.0" },
 ]
 
 [[package]]

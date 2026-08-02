@@ -167,19 +167,27 @@ async def get_channel_name(
         node2_pub = chan_info.get("node2_pub", "")
 
         if not own_pub_key:
-            # get_info may be None when __aenter__ hit DEADLINE_EXCEEDED / LND busy.
-            get_info = getattr(lnd_client, "get_info", None)
-            if get_info is None:
-                try:
-                    get_info = await lnd_client.node_get_info
-                except Exception as e:  # noqa: BLE001 — name resolution is best-effort
-                    logger.warning(
-                        f"{lnd_client.icon} Channel {channel_id}: no node identity "
-                        f"(GetInfo unavailable: {e}); using Unknown",
-                        extra={"notification": False},
-                    )
-                    return LndChannelName(channel_id=channel_id, name="Unknown")
-            own_pub_key = getattr(get_info, "identity_pubkey", None) or ""
+            # Prefer static config pub_key; only hit GetInfo if missing.
+            try:
+                lnd_cfg = InternalConfig().config.lnd_config
+                conn_cfg = lnd_cfg.connection_config(lnd_client.connection.name)
+                own_pub_key = (conn_cfg.pub_key if conn_cfg else "") or ""
+            except Exception:  # noqa: BLE001
+                own_pub_key = ""
+            if not own_pub_key:
+                # get_info may be None when __aenter__ hit DEADLINE_EXCEEDED / LND busy.
+                get_info = getattr(lnd_client, "get_info", None)
+                if get_info is None:
+                    try:
+                        get_info = await lnd_client.node_get_info
+                    except Exception as e:  # noqa: BLE001 — name resolution is best-effort
+                        logger.warning(
+                            f"{lnd_client.icon} Channel {channel_id}: no node identity "
+                            f"(GetInfo unavailable: {e}); using Unknown",
+                            extra={"notification": False},
+                        )
+                        return LndChannelName(channel_id=channel_id, name="Unknown")
+                own_pub_key = getattr(get_info, "identity_pubkey", None) or ""
             if not own_pub_key:
                 logger.warning(
                     f"{lnd_client.icon} Channel {channel_id}: empty identity_pubkey; "
@@ -434,10 +442,24 @@ async def send_lightning_to_pay_req(
     logger.info(pay_req.log_str)
 
     request_params = {}
-    get_info = getattr(lnd_client, "get_info", None)
-    if get_info is None:
-        get_info = await lnd_client.node_get_info
-    identity_pubkey = getattr(get_info, "identity_pubkey", None) if get_info else None
+    # Self-payment detection: prefer static config pub_key (no RPC). Fall back to
+    # cached GetInfo, then a best-effort GetInfo call. Try not to block the pay on
+    # GetInfo failure — external payments do not need identity.
+    conn_cfg = lnd_config.connection_config(lnd_client.connection.name)
+    identity_pubkey = (conn_cfg.pub_key if conn_cfg else "") or ""
+    if not identity_pubkey:
+        get_info = getattr(lnd_client, "get_info", None)
+        if get_info is None:
+            try:
+                get_info = await lnd_client.node_get_info
+            except Exception as e:  # noqa: BLE001 — identity optional for external pays
+                logger.warning(
+                    f"{lnd_client.icon} GetInfo unavailable before pay "
+                    f"(continuing without self-payment check): {e}",
+                    extra={"notification": False},
+                )
+                get_info = None
+        identity_pubkey = getattr(get_info, "identity_pubkey", None) or ""
     if identity_pubkey and pay_req.destination == identity_pubkey:
         logger.info(
             "Payment address is the same as the node's identity pubkey set fee limit to minimum"
@@ -445,7 +467,6 @@ async def send_lightning_to_pay_req(
         fee_limit_msat = 100_000
         request_params["allow_self_payment"] = True
         # Prefer connection-specific channels from lnd_config.connections.<name>.outgoing_chan_ids
-        conn_cfg = lnd_config.connection_config(lnd_client.connection.name)
         outgoing = list(conn_cfg.outgoing_chan_ids) if conn_cfg else []
         if outgoing:
             request_params["outgoing_chan_ids"] = outgoing
