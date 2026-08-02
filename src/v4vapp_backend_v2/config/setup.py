@@ -8,7 +8,7 @@ import sys
 import time
 from enum import StrEnum, auto
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, Protocol, Set
+from typing import Any, ClassVar, Protocol
 
 from dotenv import load_dotenv
 from packaging import version
@@ -23,6 +23,7 @@ from yaml import safe_load
 
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.error_code_manager import ErrorCodeManager
+
 # from v4vapp_backend_v2.hive.hive_api_endpoints import (
 #     HIVE_API_ENDPOINTS as BASE_HIVE_API_ENDPOINTS,
 # )
@@ -134,7 +135,7 @@ class BaseConfig(BaseModel):
 
 
 class AdminConfig(BaseConfig):
-    highlight_users: List[str] = []
+    highlight_users: list[str] = []
     public_api_host: str = ""
 
 
@@ -142,9 +143,9 @@ class LoggingConfig(BaseConfig):
     log_config_file: str = ""
     default_log_level: str = "DEBUG"
     console_log_level: str = "INFO"
-    log_levels: Dict[str, str] = {}
+    log_levels: dict[str, str] = {}
     log_folder: Path = Path("logs/")
-    log_notification_silent: List[str] = []
+    log_notification_silent: list[str] = []
     default_notification_bot_name: str = ""
     # If True, place rotated files into a 'rotation/' subdirectory next to the
     # configured log files. Default: False (keep rotated files next to the
@@ -177,6 +178,16 @@ class LndConnectionConfig(BaseConfig):
     macaroon_filename: str = ""
     cert_filename: str = ""
     use_proxy: str = ""
+    # Static node identity (hex pubkey). Preferred over GetInfo for self-payment
+    # detection so pay paths do not hard-depend on a cold GetInfo RPC.
+    pub_key: str = Field(
+        default="",
+        description=(
+            "This node's Lightning identity pubkey (hex). Used to detect "
+            "self-payments without calling GetInfo. Leave empty to fall back to "
+            "cached GetInfo / RPC."
+        ),
+    )
     # Prefer these channels for self-payments (pay_req dest == this node's pubkey).
     # Passed to SendPaymentV2 as outgoing_chan_ids when non-empty.
     outgoing_chan_ids: list[int] = Field(
@@ -214,7 +225,7 @@ class LndConnectionConfig(BaseConfig):
 
 class LndConfig(BaseConfig):
     default: str = ""
-    connections: Dict[str, LndConnectionConfig] = {}
+    connections: dict[str, LndConnectionConfig] = {}
     lightning_fee_limit_ppm: int = 5000
     lightning_fee_estimate_ppm: int = 1000
     lightning_fee_base_msats: int = 50000
@@ -263,11 +274,11 @@ class TimeseriesConfig(BaseConfig):
 
 class IndexConfig(BaseConfig):
     index_key: _IndexKeyHint
-    unique: Optional[bool] = None
+    unique: bool | None = None
 
 
 class CollectionConfig(BaseConfig):
-    indexes: Dict[str, IndexConfig] | None = None
+    indexes: dict[str, IndexConfig] | None = None
 
     # @model_validator(mode="after")
     # def validate_timeseries_and_indexes(self):
@@ -278,19 +289,19 @@ class CollectionConfig(BaseConfig):
 
 class DatabaseUserConfig(BaseConfig):
     password: str = ""
-    roles: List[str]
+    roles: list[str]
 
 
 class DatabaseDetailsConfig(BaseConfig):
-    db_users: Dict[str, DatabaseUserConfig]
-    collections: Dict[str, CollectionConfig] = {}
-    timeseries: Dict[str, TimeseriesConfig] = {}
+    db_users: dict[str, DatabaseUserConfig]
+    collections: dict[str, CollectionConfig] = {}
+    timeseries: dict[str, TimeseriesConfig] = {}
 
 
 class DatabaseConnectionConfig(BaseConfig):
-    hosts: List[str]
+    hosts: list[str]
     replica_set: str | None = None
-    admin_dbs: Dict[str, DatabaseDetailsConfig] | None = None
+    admin_dbs: dict[str, DatabaseDetailsConfig] | None = None
     icon: str | None = None
 
     @property
@@ -302,8 +313,8 @@ class DbsConfig(BaseConfig):
     default_connection: str = ""
     default_name: str = ""
     default_user: str = ""
-    connections: Dict[str, DatabaseConnectionConfig] = {}
-    dbs: Dict[str, DatabaseDetailsConfig] = {}
+    connections: dict[str, DatabaseConnectionConfig] = {}
+    dbs: dict[str, DatabaseDetailsConfig] = {}
 
     @property
     def default_db_connection(self) -> DatabaseConnectionConfig | None:
@@ -316,7 +327,7 @@ class RedisConnectionConfig(BaseConfig):
     host: str = "localhost"
     port: int = 6379
     db: int = 0
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
 
 
 class ExchangeMode(StrEnum):
@@ -369,7 +380,7 @@ class ExchangeProviderConfig(BaseConfig):
     exchange_mode: ExchangeMode = ExchangeMode.testnet
     testnet: ExchangeNetworkConfig = ExchangeNetworkConfig()
     mainnet: ExchangeNetworkConfig = ExchangeNetworkConfig()
-    hive_accounts: List[str] = []  # List of Hive account names associated with this exchange,
+    hive_accounts: list[str] = []  # list of Hive account names associated with this exchange,
     # first used for outbound transfers, others may be inbound
 
     @property
@@ -404,7 +415,7 @@ class ExchangeConfig(BaseConfig):
 
         raise ValueError(f"Unknown exchange provider: {provider_name}")
 
-    def all_hive_exchange_accounts(self) -> List[str]:
+    def all_hive_exchange_accounts(self) -> list[str]:
         """Get a list of all Hive accounts associated with any exchange."""
         accounts = set()
         for provider in self.__dict__.values():
@@ -468,7 +479,7 @@ class HiveAccountConfig(BaseConfig):
 
     name: str = ""
     role: HiveRoles = HiveRoles.customer
-    alternate_names: List[str] = Field(
+    alternate_names: list[str] = Field(
         default_factory=list,
         description="Alternate names for the account, e.g. exchange hot wallet names",
     )
@@ -482,21 +493,21 @@ class HiveAccountConfig(BaseConfig):
     auto_rebalance: HiveAutoRebalanceConfig = HiveAutoRebalanceConfig()
 
     @property
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         """
         Retrieve the keys of the Hive account.
 
         Returns:
-            List[str]]: A list of the private keys for the account.
+            list[str]]: A list of the private keys for the account.
         """
         return [key for key in [self.posting_key, self.active_key, self.memo_key] if key]
 
-    def all_names(self) -> List[str]:
+    def all_names(self) -> list[str]:
         """
         Retrieve all names associated with the Hive account, including the primary name and any alternate names.
 
         Returns:
-            List[str]: A list of all names associated with the Hive account.
+            list[str]: A list of all names associated with the Hive account.
         """
         return [self.name] + self.alternate_names
 
@@ -517,14 +528,14 @@ class WitnessMachineConfig(BaseConfig):
 class WitnessConfig(BaseConfig):
     kuma_webhook_url: str = ""
     kuma_heartbeat_time: int = 60  # seconds
-    witness_machines: List[WitnessMachineConfig]
+    witness_machines: list[WitnessMachineConfig]
 
 
 class HiveConfig(BaseConfig):
-    hive_accs: Dict[str, HiveAccountConfig] = {"_none": HiveAccountConfig()}
-    watch_users: List[str] = []
-    proposals_tracked: List[int] = []
-    watch_witnesses: List[str] = []
+    hive_accs: dict[str, HiveAccountConfig] = {"_none": HiveAccountConfig()}
+    watch_users: list[str] = []
+    proposals_tracked: list[int] = []
+    watch_witnesses: list[str] = []
     custom_json_prefix: str = Field(
         "v4vapp_dev",
         description="""
@@ -533,8 +544,8 @@ class HiveConfig(BaseConfig):
         with ids that start with this prefix
         """,
     )
-    custom_json_ids_tracked: List[str] = []
-    witness_configs: Dict[str, WitnessConfig] = {}
+    custom_json_ids_tracked: list[str] = []
+    witness_configs: dict[str, WitnessConfig] = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -585,22 +596,22 @@ class HiveConfig(BaseConfig):
         return True
 
     @property
-    def memo_keys(self) -> List[str]:
+    def memo_keys(self) -> list[str]:
         """
         Retrieve the memo keys of all Hive accounts.
 
         Returns:
-            List[str]: A list containing the memo keys of all Hive accounts.
+            list[str]: A list containing the memo keys of all Hive accounts.
         """
         return [acc.memo_key for acc in self.hive_accs.values() if acc.memo_key]
 
     @property
-    def hive_acc_names(self) -> List[str]:
+    def hive_acc_names(self) -> list[str]:
         """
         Retrieve the names of all Hive accounts.
 
         Returns:
-            List[str]: A list containing the names of all Hive accounts.
+            list[str]: A list containing the names of all Hive accounts.
         """
         return list(self.hive_accs.keys())
 
@@ -620,22 +631,22 @@ class HiveConfig(BaseConfig):
         return None
 
     @property
-    def server_accounts(self) -> List[HiveAccountConfig]:
+    def server_accounts(self) -> list[HiveAccountConfig]:
         """
         Retrieve the server accounts from the Hive account configurations.
 
         Returns:
-            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.server.
+            list[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.server.
         """
         return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.server]
 
     @property
-    def server_account_names(self) -> List[str]:
+    def server_account_names(self) -> list[str]:
         """
         Retrieve the names of the server accounts.
 
         Returns:
-            List[str]: A list containing the names of all server accounts.
+            list[str]: A list containing the names of all server accounts.
         """
         return [acc.name for acc in self.server_accounts]
 
@@ -660,12 +671,12 @@ class HiveConfig(BaseConfig):
         return self.treasury_accounts[0] if self.treasury_accounts else None
 
     @property
-    def treasury_accounts(self) -> List[HiveAccountConfig]:
+    def treasury_accounts(self) -> list[HiveAccountConfig]:
         """
         Retrieve the treasury accounts from the Hive account configurations.
 
         Returns:
-            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.treasury.
+            list[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.treasury.
         """
         return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.treasury]
 
@@ -680,12 +691,12 @@ class HiveConfig(BaseConfig):
         return self.funding_accounts[0] if self.funding_accounts else None
 
     @property
-    def funding_accounts(self) -> List[HiveAccountConfig]:
+    def funding_accounts(self) -> list[HiveAccountConfig]:
         """
         Retrieve the funding accounts from the Hive account configurations.
 
         Returns:
-            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.funding.
+            list[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.funding.
         """
         return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.funding]
 
@@ -700,52 +711,52 @@ class HiveConfig(BaseConfig):
         return self.exchange_accounts[0] if self.exchange_accounts else None
 
     @property
-    def exchange_accounts(self) -> List[HiveAccountConfig]:
+    def exchange_accounts(self) -> list[HiveAccountConfig]:
         """
         Retrieve the exchange accounts from the Hive account configurations.
 
         Returns:
-            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.exchange.
+            list[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.exchange.
         """
         return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.exchange]
 
     @property
-    def funding_account_names(self) -> List[str]:
+    def funding_account_names(self) -> list[str]:
         """
         Retrieve the names of the funding accounts.
 
         Returns:
-            List[str]: A list containing the names of all funding accounts.
+            list[str]: A list containing the names of all funding accounts.
         """
         return [acc.name for acc in self.funding_accounts]
 
     @property
-    def exchange_account_names(self) -> List[str]:
+    def exchange_account_names(self) -> list[str]:
         """
         Retrieve the names of the exchange accounts.
 
         Returns:
-            List[str]: A list containing the names of all exchange accounts.
+            list[str]: A list containing the names of all exchange accounts.
         """
         return [acc.name for acc in self.exchange_accounts]
 
     @property
-    def treasury_account_names(self) -> List[str]:
+    def treasury_account_names(self) -> list[str]:
         """
         Retrieve the names of the Treasury accounts.
 
         Returns:
-            List[str]: A list containing the names of all treasury accounts.
+            list[str]: A list containing the names of all treasury accounts.
         """
         return [acc.name for acc in self.treasury_accounts]
 
     @property
-    def all_account_names(self) -> List[str]:
+    def all_account_names(self) -> list[str]:
         """
         Retrieve the names of all significant accounts. All names must be set in order to receive any.
 
         Returns:
-            List[str]: A list containing the names of all significant accounts.
+            list[str]: A list containing the names of all significant accounts.
         """
         if (
             self.server_account
@@ -762,11 +773,11 @@ class HiveConfig(BaseConfig):
         return []
 
     @property
-    def extended_all_account_names(self) -> List[str]:
+    def extended_all_account_names(self) -> list[str]:
         """
         Retrieve the names of all accounts, including alternate names.
         Returns:
-            List[str]: A list containing the names of all accounts, including alternate names.
+            list[str]: A list containing the names of all accounts, including alternate names.
 
         """
         names = self.all_account_names
@@ -774,7 +785,7 @@ class HiveConfig(BaseConfig):
             names.extend(self.exchange_account.alternate_names)
         return names
 
-    def get_account_names_by_role(self, role: HiveRoles) -> List[str]:
+    def get_account_names_by_role(self, role: HiveRoles) -> list[str]:
         """
         Retrieve all accounts that match a specific role.
 
@@ -782,7 +793,7 @@ class HiveConfig(BaseConfig):
             role (HiveRoles): The role to filter accounts by.
 
         Returns:
-            List[str]: A list of account names that match the specified role.
+            list[str]: A list of account names that match the specified role.
         """
         return [acc.name for acc in self.hive_accs.values() if acc.role == role]
 
@@ -808,50 +819,50 @@ class ExpenseConfig(BaseConfig):
     default_ledger_type: LedgerType = Field(
         LedgerType.EXPENSE, description="Default ledger type for expense entries"
     )
-    lnd_expense_rules: Dict[str, ExpenseRuleConfig] = {}
-    hive_expense_rules: Dict[str, ExpenseRuleConfig] = {}
+    lnd_expense_rules: dict[str, ExpenseRuleConfig] = {}
+    hive_expense_rules: dict[str, ExpenseRuleConfig] = {}
 
     @property
-    def all_expense_rules(self) -> Dict[str, ExpenseRuleConfig]:
+    def all_expense_rules(self) -> dict[str, ExpenseRuleConfig]:
         """
         Retrieve a combined list of all expense rules from both Hive and LND configurations.
 
         Returns:
-            List[expense_rule_config]: A list containing all expense rules defined in the configuration.
+            list[expense_rule_config]: A list containing all expense rules defined in the configuration.
         """
         return {**self.hive_expense_rules, **self.lnd_expense_rules}
 
     @property
-    def hive_expense_accounts(self) -> List[str]:
+    def hive_expense_accounts(self) -> list[str]:
         """
         Retrieve the list of Hive expense account names defined in the hive_expense_rules.
 
         Returns:
-            List[str]: A list containing the names of Hive expense accounts.
+            list[str]: A list containing the names of Hive expense accounts.
         """
         return list(self.hive_expense_rules.keys())
 
     @property
-    def lnd_expense_accounts(self) -> List[str]:
+    def lnd_expense_accounts(self) -> list[str]:
         """
         Retrieve the list of LND expense account names defined in the lnd_expense_rules.
 
         Returns:
-            List[str]: A list containing the names of LND expense accounts.
+            list[str]: A list containing the names of LND expense accounts.
         """
         return list({rule.expense_account_name for rule in self.lnd_expense_rules.values()})
 
     @property
-    def lnd_expense_roles(self) -> List[HiveRoles]:
+    def lnd_expense_roles(self) -> list[HiveRoles]:
         """
         Retrieve the list of unique HiveRoles that are defined as from_role in the LND expense rules.
 
         Returns:
-            List[HiveRoles]: A list containing the unique HiveRoles that are defined as from_role in the LND expense rules.
+            list[HiveRoles]: A list containing the unique HiveRoles that are defined as from_role in the LND expense rules.
         """
         return list({rule.from_role for rule in self.lnd_expense_rules.values()})
 
-    def all_lnd_rule_hive_accounts(self, hive_config: HiveConfig) -> Set[str]:
+    def all_lnd_rule_hive_accounts(self, hive_config: HiveConfig) -> set[str]:
         """
         Retrieve a list of all Hive account names that are associated with the from_role in the LND expense rules.
 
@@ -879,7 +890,7 @@ class DevelopmentConfig(BaseModel):
 
     enabled: bool = False
     env_var: str = "V4VAPP_DEV_MODE"
-    allowed_hive_accounts: List[str] = []
+    allowed_hive_accounts: list[str] = []
 
 
 # MARK: Config class
@@ -891,7 +902,7 @@ class Config(BaseModel):
     lnd_config (LndConfig): Configuration for LND connections.
     dbs_config (DbsConfig): Configuration for database connections.
     redis (RedisConnectionConfig): Configuration for Redis connection.
-    notification_bots (Dict[str, NotificationBotConfig]): Dictionary of notification bot configurations.
+    notification_bots (dict[str, NotificationBotConfig]): Dictionary of notification bot configurations.
     api_keys (ApiKeys): Configuration for API keys.
     hive (HiveConfig): Configuration for Hive.
     min_config_version (ClassVar[str]): Minimum required configuration version.
@@ -926,7 +937,7 @@ class Config(BaseModel):
 
     tailscale: TailscaleConfig = TailscaleConfig()
 
-    notification_bots: Dict[str, NotificationBotConfig] = {}
+    notification_bots: dict[str, NotificationBotConfig] = {}
 
     api_keys: ApiKeys = ApiKeys()
     hive_config: HiveConfig = HiveConfig()
@@ -1149,7 +1160,7 @@ class InternalConfig:
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(InternalConfig, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(
