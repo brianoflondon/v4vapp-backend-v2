@@ -498,7 +498,7 @@ class HiveAccountConfig(BaseConfig):
         Retrieve the keys of the Hive account.
 
         Returns:
-            list[str]]: A list of the private keys for the account.
+            list[str]: A list of the private keys for the account.
         """
         return [key for key in [self.posting_key, self.active_key, self.memo_key] if key]
 
