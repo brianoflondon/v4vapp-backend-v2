@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Dict, List, Optional
 
 
 class LedgerType(StrEnum):
@@ -77,6 +76,8 @@ class LedgerType(StrEnum):
     MAGI_OUTBOUND = "magi_out"  # Outbound transfer to Magi
     MAGI_CHANGE = "magi_chg"  # Change returned to Magi (e.g., when returning excess Magisats after a conversion)
 
+    MANUAL_FIX = "manual_fix"  # Manual fix entry for accounting adjustments
+
     @property
     def printout(self) -> str:
         """Returns the string representation of the ledger type.
@@ -147,7 +148,7 @@ Attributes:
 
 
 """
-LedgerTypeIcon: Dict[LedgerType, str] = {
+LedgerTypeIcon: dict[LedgerType, str] = {
     # LedgerType.DEPOSIT_HIVE: "📥",  # Deposit into a customer's liability account
     # LedgerType.WITHDRAW_HIVE: "📤",  # Withdrawal to a customer's liability account
     LedgerType.CUSTOMER_HIVE_OUT: "📤",  # Customer withdrawal from Hive account
@@ -170,7 +171,7 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.MAGI_CHANGE: "🧙‍♂️",  # Change returned to Magi (e.g., when returning excess Magisats after a conversion)
 }
 
-LedgerTypeStr: Dict[LedgerType, str] = {
+LedgerTypeStr: dict[LedgerType, str] = {
     LedgerType.FEE_INCOME: "Fee",  # Fee income from Hive transactions
     LedgerType.CUSTOM_JSON_FEE: "Fee",  # Custom JSON fee notification
     LedgerType.CUSTOM_JSON_FEE_REFUND: "Fee Refund",  # Custom JSON fee refund notification
@@ -238,12 +239,12 @@ class LedgerTypeDetails:
         return self.ledger_type.capitalized
 
 
-def list_all_ledger_type_details() -> List[LedgerTypeDetails]:
+def list_all_ledger_type_details() -> list[LedgerTypeDetails]:
     """Return details for all defined LedgerType members."""
     return [LedgerTypeDetails(lt) for lt in LedgerType]
 
 
-def ledger_type_details_for_value(value: str) -> Optional[LedgerTypeDetails]:
+def ledger_type_details_for_value(value: str) -> LedgerTypeDetails | None:
     """Lookup LedgerTypeDetails by enum *value* (exact match)."""
     try:
         lt = LedgerType(value)
