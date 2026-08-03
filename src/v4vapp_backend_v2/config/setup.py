@@ -1297,7 +1297,7 @@ class InternalConfig:
                         )
                 except KeyError as ex:
                     print(f"KeyError in logging config no logfile set: {ex}")
-                    raise ex
+                    raise
         except (FileNotFoundError, IsADirectoryError) as ex:
             print(f"Logging config file not found: {ex}")
             return

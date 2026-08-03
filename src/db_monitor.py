@@ -63,7 +63,11 @@ async def health_check() -> dict[str, Any]:
             exceptions.append(f"{task} task is not running")
             logger.warning(
                 f"{ICON} {task} DB Monitor task is not running",
-                extra={"notification": True, "error_code": "db_monitor_task_failure"},
+                extra={
+                    "notification": True,
+                    "error_code": "db_monitor_task_failure",
+                    "pipeline": pipeline,
+                },
             )
             # Exit the code to allow docker to restart the container
             shutdown_event.set()
@@ -166,7 +170,7 @@ class ResumeToken(BaseModel):
                 f"{ICON} Error setting resume token for collection '{self.collection}': {e}",
                 extra={"notification": False},
             )
-            raise e
+            raise
 
     def delete_token(self):
         """
@@ -181,7 +185,7 @@ class ResumeToken(BaseModel):
                 f"{ICON} Error deleting resume token for collection '{self.collection}': {e}",
                 extra={"notification": False},
             )
-            raise e
+            raise
 
     @property
     def token(self) -> Mapping[str, Any] | None:
@@ -437,7 +441,7 @@ async def subscribe_stream(
             f"{ICON} 👋 Goodbye! from {collection_name} stream",
             extra={"notification": False},
         )
-        raise e
+        raise
 
     except OperationFailure as e:
         # Mongo will raise OperationFailure for a variety of reasons; one that we
@@ -479,7 +483,7 @@ async def subscribe_stream(
             try:
                 resume.delete_token()
             except Exception:
-                pass
+                logger.debug(f"{ICON} {collection_name} Failed to delete resume token; continuing shutdown")
             # signal shutdown in case anything else is watching
             shutdown_event.set()
             # raise something that bubbles up through main_async_start and
@@ -516,7 +520,7 @@ async def subscribe_stream(
         logger.error(
             f"{ICON} Error in stream subscription: {e}", extra={"error_code": "stream_error"}
         )
-        raise e
+        raise
     finally:
         logger.info(
             f"{ICON} Closed connection to {collection_name} stream. Error:{error_code} {error_count}"
@@ -633,7 +637,7 @@ async def main_async_start(use_resume: bool = True, use_overwatch: bool = False)
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(f"{ICON} Irregular shutdown in Database Monitor App {e}", extra={"error": e})
-        raise e
+        raise
     finally:
         logger.info(f"{ICON} Cleaning up resources...")
         logger.info(

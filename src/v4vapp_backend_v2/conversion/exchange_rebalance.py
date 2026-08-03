@@ -11,7 +11,7 @@ The rebalancing is decoupled from the main conversion flow - it runs as a
 background task that doesn't affect customer transactions.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import ClassVar
@@ -61,21 +61,21 @@ class PendingRebalance(BaseModel):
 
     # Accumulated amounts
     pending_qty: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Accumulated quantity of base asset pending conversion",
     )
     pending_quote_value: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Estimated value in quote asset (for tracking)",
     )
 
     # Threshold tracking
     min_qty_threshold: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Minimum quantity required by exchange",
     )
     min_notional_threshold: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Minimum notional value required by exchange",
     )
 
@@ -90,8 +90,8 @@ class PendingRebalance(BaseModel):
     )
 
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     last_executed_at: datetime | None = Field(
         default=None,
         description="Timestamp of last successful trade execution",
@@ -99,7 +99,7 @@ class PendingRebalance(BaseModel):
 
     # Execution history
     total_executed_qty: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Total quantity executed across all trades",
     )
     execution_count: int = Field(
@@ -174,7 +174,7 @@ class PendingRebalance(BaseModel):
 
     async def save(self) -> None:
         """Save/update the pending rebalance in MongoDB."""
-        self.updated_at = datetime.now(tz=timezone.utc)
+        self.updated_at = datetime.now(tz=UTC)
         collection = self.collection()
 
         filter_query = {
@@ -208,7 +208,7 @@ class PendingRebalance(BaseModel):
         self.transaction_count += 1
         if transaction_id:
             self.transaction_ids.append(transaction_id)
-        self.updated_at = datetime.now(tz=timezone.utc)
+        self.updated_at = datetime.now(tz=UTC)
 
     def can_execute(self) -> tuple[bool, str]:
         """
@@ -217,7 +217,7 @@ class PendingRebalance(BaseModel):
         Returns:
             tuple: (can_execute: bool, reason: str)
         """
-        if self.pending_qty <= Decimal("0"):
+        if self.pending_qty <= Decimal(0):
             return False, "No pending quantity"
 
         if self.pending_qty < self.min_qty_threshold:
@@ -247,7 +247,7 @@ class PendingRebalance(BaseModel):
         """
         self.total_executed_qty += executed_qty
         self.execution_count += 1
-        self.last_executed_at = datetime.now(tz=timezone.utc)
+        self.last_executed_at = datetime.now(tz=UTC)
 
         # Reset pending amounts (keep any remainder if partial fill)
         # Treat dust remainders (< 1e-3) as zero to avoid accumulating tiny amounts
@@ -255,12 +255,12 @@ class PendingRebalance(BaseModel):
         if remainder >= Decimal("0.001"):
             self.pending_qty = remainder
             # Estimate remaining quote value proportionally
-            if executed_qty > Decimal("0"):
+            if executed_qty > Decimal(0):
                 ratio = remainder / (remainder + executed_qty)
                 self.pending_quote_value = self.pending_quote_value * ratio
         else:
-            self.pending_qty = Decimal("0")
-            self.pending_quote_value = Decimal("0")
+            self.pending_qty = Decimal(0)
+            self.pending_quote_value = Decimal(0)
 
         # Clear transaction tracking
         self.transaction_ids = []
@@ -274,7 +274,7 @@ class PendingRebalance(BaseModel):
     @property
     def log_str(self) -> str:
         """Formatted string for logging the pending rebalance."""
-        can_exec, reason = self.can_execute()
+        can_exec, _ = self.can_execute()
         status = "ready" if can_exec else "pending"
         qty_str = format_base_asset(self.pending_qty, self.base_asset)
         quote_str = format_quote_asset(self.pending_quote_value, self.quote_asset)
@@ -305,7 +305,7 @@ class PendingRebalance(BaseModel):
             pct_qty = (
                 (self.pending_qty / self.min_qty_threshold * 100)
                 if self.min_qty_threshold > 0
-                else Decimal("0")
+                else Decimal(0)
             )
             min_str = format_base_asset(self.min_qty_threshold, self.base_asset)
             return (
@@ -329,25 +329,25 @@ class NetPosition(BaseModel):
 
     # Raw pending amounts from each side
     sell_pending_qty: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Pending quantity to sell (from HIVE→Lightning conversions)",
     )
     sell_pending_notional: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Pending notional value for sells",
     )
     buy_pending_qty: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Pending quantity to buy (from Lightning→HIVE conversions)",
     )
     buy_pending_notional: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Pending notional value for buys",
     )
 
     # Net position after offsetting
     net_qty: Decimal = Field(
-        default=Decimal("0"),
+        default=Decimal(0),
         description="Net quantity (positive = need to sell, negative = need to buy)",
     )
     net_direction: RebalanceDirection | None = Field(
@@ -356,8 +356,8 @@ class NetPosition(BaseModel):
     )
 
     # Threshold info
-    min_qty_threshold: Decimal = Field(default=Decimal("0"))
-    min_notional_threshold: Decimal = Field(default=Decimal("0"))
+    min_qty_threshold: Decimal = Field(default=Decimal(0))
+    min_notional_threshold: Decimal = Field(default=Decimal(0))
 
     # Status
     can_execute: bool = Field(
@@ -369,7 +369,7 @@ class NetPosition(BaseModel):
     @property
     def is_balanced(self) -> bool:
         """Check if buy and sell sides are perfectly balanced."""
-        return self.net_qty == Decimal("0")
+        return self.net_qty == Decimal(0)
 
     @property
     def abs_net_qty(self) -> Decimal:
@@ -385,15 +385,15 @@ class RebalanceResult(BaseModel):
 
     executed: bool = Field(default=False, description="Whether a trade was executed")
     reason: str = Field(default="", description="Reason for result")
-    pending_qty: Decimal = Field(default=Decimal("0"), description="Current pending quantity")
+    pending_qty: Decimal = Field(default=Decimal(0), description="Current pending quantity")
     pending_notional: Decimal = Field(
-        default=Decimal("0"), description="Current pending notional value"
+        default=Decimal(0), description="Current pending notional value"
     )
     order_result: ExchangeOrderResult | None = Field(
         default=None, description="Order result if executed"
     )
     error: str | None = Field(default=None, description="Error message if failed")
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
 
     @property
     def log_str(self) -> str:
@@ -401,18 +401,16 @@ class RebalanceResult(BaseModel):
         if self.executed and self.order_result:
             base, quote = self.order_result._get_assets()
             qty_str = format_base_asset(self.order_result.executed_qty, base)
-            if self.order_result.fee_msats < Decimal("1000"):
+            if self.order_result.fee_msats < Decimal(1000):
                 fee_str = ""
             else:
                 fee_str = f" Fee: {format_quote_asset(self.order_result.fee_original, self.order_result.fee_asset)}"
             avg_price_sats = (
-                self.order_result.avg_price * Decimal("100000000")
+                self.order_result.avg_price * Decimal(100000000)
                 if self.order_result.avg_price
-                else Decimal("0")
+                else Decimal(0)
             )
-            avg_price_str = (
-                f"{avg_price_sats:.0f} sats" if avg_price_sats > Decimal("0") else "N/A"
-            )
+            avg_price_str = f"{avg_price_sats:.0f} sats" if avg_price_sats > Decimal(0) else "N/A"
             quote_quantity_str = format_quote_asset(self.order_result.quote_qty, quote)
             return f"{ICON} Rebalance: {self.order_result.side} {qty_str} @ {avg_price_str}{fee_str} for {quote_quantity_str}"
         elif self.error:
@@ -558,7 +556,7 @@ async def add_pending_rebalance(
             quote_value = qty * price
         except ExchangeConnectionError:
             # Use a rough estimate if we can't get current price
-            quote_value = Decimal("0")
+            quote_value = Decimal(0)
             logger.warning(
                 f"{ICON} Could not get price for {base_asset}/{quote_asset}, "
                 f"pending quote value may be inaccurate {transaction_id}"
@@ -702,7 +700,7 @@ async def force_execute_pending(
         exchange=exchange_adapter.exchange_name,
     )
 
-    if pending.pending_qty <= Decimal("0"):
+    if pending.pending_qty <= Decimal(0):
         return RebalanceResult(
             executed=False,
             reason="No pending quantity to execute",
@@ -781,8 +779,8 @@ async def get_net_position(
         min_qty = minimums.min_qty
         min_notional = minimums.min_notional
     except ExchangeConnectionError:
-        min_qty = Decimal("0")
-        min_notional = Decimal("0")
+        min_qty = Decimal(0)
+        min_notional = Decimal(0)
         logger.warning(f"{ICON} Could not get minimums for {base_asset}/{quote_asset}")
 
     # Calculate net position
@@ -791,7 +789,7 @@ async def get_net_position(
     net_qty = sell_pending.pending_qty - buy_pending.pending_qty
 
     # Determine direction and check thresholds
-    if net_qty > Decimal("0"):
+    if net_qty > Decimal(0):
         net_direction = RebalanceDirection.SELL_BASE_FOR_QUOTE
         # Estimate notional for the net quantity
         try:
@@ -802,7 +800,7 @@ async def get_net_position(
             logger.warning(
                 f"{ICON} Could not get price for {base_asset}/{quote_asset}, using pending quote values"
             )
-    elif net_qty < Decimal("0"):
+    elif net_qty < Decimal(0):
         net_direction = RebalanceDirection.BUY_BASE_WITH_QUOTE
         net_qty_abs = abs(net_qty)
         try:
@@ -815,13 +813,13 @@ async def get_net_position(
             )
     else:
         net_direction = None
-        net_notional = Decimal("0")
+        net_notional = Decimal(0)
 
     # Check if we can execute the net position
     abs_net_qty = abs(net_qty)
-    abs_net_notional = abs(net_notional) if net_notional else Decimal("0")
+    abs_net_notional = abs(net_notional) if net_notional else Decimal(0)
 
-    if abs_net_qty == Decimal("0"):
+    if abs_net_qty == Decimal(0):
         can_execute = False
         reason = "Balanced: no net position to execute"
     elif abs_net_qty < min_qty:
@@ -898,8 +896,8 @@ async def execute_net_rebalance(
         return RebalanceResult(
             executed=False,
             reason="No net direction (balanced position)",
-            pending_qty=Decimal("0"),
-            pending_notional=Decimal("0"),
+            pending_qty=Decimal(0),
+            pending_notional=Decimal(0),
         )
 
     net_direction = net_position.net_direction
@@ -935,8 +933,8 @@ async def execute_net_rebalance(
         result = RebalanceResult(
             executed=True,
             reason=f"Net rebalance executed: {net_direction.value} {order_result.executed_qty} {base_asset}",
-            pending_qty=Decimal("0"),
-            pending_notional=Decimal("0"),
+            pending_qty=Decimal(0),
+            pending_notional=Decimal(0),
             order_result=order_result,
         )
         await result.save()
@@ -1006,8 +1004,8 @@ async def _update_pending_after_net_execution(
         # We sold the net amount
         # The buy side is completely consumed (used for offsetting)
         offset_qty = buy_pending.pending_qty
-        buy_pending.pending_qty = Decimal("0")
-        buy_pending.pending_quote_value = Decimal("0")
+        buy_pending.pending_qty = Decimal(0)
+        buy_pending.pending_quote_value = Decimal(0)
         buy_pending.transaction_ids = []
         buy_pending.transaction_count = 0
 
@@ -1019,8 +1017,8 @@ async def _update_pending_after_net_execution(
         # We bought the net amount
         # The sell side is completely consumed (used for offsetting)
         offset_qty = sell_pending.pending_qty
-        sell_pending.pending_qty = Decimal("0")
-        sell_pending.pending_quote_value = Decimal("0")
+        sell_pending.pending_qty = Decimal(0)
+        sell_pending.pending_quote_value = Decimal(0)
         sell_pending.transaction_ids = []
         sell_pending.transaction_count = 0
 

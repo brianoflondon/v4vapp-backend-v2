@@ -285,7 +285,7 @@ async def balance_server_hive_level() -> None:
     await asyncio.sleep(30)  # Sleeps to make sure we only balance HIVE after time for a return
     try:
         current_target_hive_balance = Amount(server_account.hive_balance)
-        nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
+        nobroadcast = bool(COMMAND_LINE_WATCH_ONLY)
         hive = Hive(keys=server_account.keys, nobroadcast=nobroadcast, node=default_hive_nodes())
         account = Account(server_account.name, blockchain_instance=hive)
         balance: dict[str, Amount] = {}
@@ -351,7 +351,7 @@ async def balance_server_hbd_level(transfer: Transfer | None = None) -> None:
             # set the amount to the current HBD balance taken from Config
             set_amount_to = Amount(hive_acc.hbd_balance)
             logger.info(f"{ICON} Balancing HBD level for account {use_account} to {set_amount_to}")
-            nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
+            nobroadcast = bool(COMMAND_LINE_WATCH_ONLY)
             trx = account_trade(
                 hive_acc=hive_acc, set_amount_to=set_amount_to, nobroadcast=nobroadcast
             )
@@ -504,7 +504,6 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
 
         None
     """
-    global TIME_DELAY
     failure_state = False
     witness_configs = InternalConfig().config.hive_config.witness_configs
     witness_config = witness_configs.get(witness_name, None)
@@ -528,7 +527,7 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
     except Exception as e:
         # Do not put exc_info in extra — logger.exception already sets it (LogRecord reserved).
         logger.exception(f"{ICON} {e}", extra={"notification": False})
-        raise e
+        raise
     finally:
         logger.info(
             f"{ICON} Witness {witness_name} check complete.", extra={"notification": False}
@@ -548,18 +547,18 @@ async def witness_check_startup() -> None:
     """
     try:
         witness_configs = InternalConfig().config.hive_config.witness_configs
-        for witness_name in witness_configs.keys():
+        for witness_name in witness_configs:
             asyncio.create_task(witness_check_heartbeat_loop(witness_name=witness_name))
     except Exception as e:
         logger.exception(
             f"{ICON} Error in Witness Check startup {e}",
             extra={"notification": False},
         )
-        raise e
+        raise
 
 
 async def all_ops_loop(
-    watch_witnesses: list[str] = [], watch_users: list[str] = [], start_block: int = 0
+    watch_witnesses: list[str] | None = None, watch_users: list[str] | None = None, start_block: int = 0
 ) -> None:
     """
     Asynchronously loops through transactions and processes them.
@@ -578,7 +577,10 @@ async def all_ops_loop(
         asyncio.CancelledError: If the asyncio task is cancelled.
         Exception: For any other exceptions that occur during processing.
     """
-    global TIME_DELAY
+    if not watch_witnesses:
+        watch_witnesses = []
+    if not watch_users:
+        watch_users = []
     logger.info(
         f"{ICON} Combined Loop Watching users: {watch_users} and witnesses {watch_witnesses}"
     )
@@ -696,18 +698,17 @@ async def all_ops_loop(
                     if op.is_watched:
                         await maybe_update_quote()
                         await op.update_conv()
-                        if not COMMAND_LINE_WATCH_ONLY:
+                        if not COMMAND_LINE_WATCH_ONLY and isinstance(op, Transfer) and (
+                            op.from_account in server_accounts
+                            and op.to_account not in server_accounts
+                        ):
                             # Now only balance the server account HBD level if this is a send back to a customer
                             # i.e. after a successful conversion.
-                            if isinstance(op, Transfer) and (
-                                op.from_account in server_accounts
-                                and op.to_account not in server_accounts
-                            ):
-                                logger.info(
-                                    f"Rebalance triggered by transfer {op.from_account} to {op.to_account} {op.amount}"
-                                )
-                                asyncio.create_task(balance_server_hbd_level(op))
-                                asyncio.create_task(balance_server_hive_level())
+                            logger.info(
+                                f"{ICON} Rebalance triggered by transfer {op.from_account} to {op.to_account} {op.amount}"
+                            )
+                            asyncio.create_task(balance_server_hbd_level(op))
+                            asyncio.create_task(balance_server_hive_level())
                         log_it = True
                         db_store = True
                         notification = True
@@ -994,7 +995,7 @@ async def store_rates() -> None:
                 continue  # Timeout means 10 minutes passed, so loop again
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{ICON} store_rates cancelled or interrupted, exiting.")
-        raise e
+        raise
     except Exception as e:
         logger.exception(f"{ICON} Exception in store_rates: {e}", extra={"notification": False})
         asyncio.create_task(store_rates(), name="store_rates")
@@ -1082,12 +1083,12 @@ async def main_async_start(
         await asyncio.gather(*tasks, return_exceptions=True)
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
-        raise e
+        raise
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(f"{ICON} Irregular shutdown in Hive Monitor {e}", extra={"error": e})
         request_fatal_restart(f"main_async_start error: {e}")
-        raise e
+        raise
     finally:
         # Cancel all other tasks and exit cleanly
         current_task = asyncio.current_task()
