@@ -169,6 +169,7 @@ LedgerTypeIcon: dict[LedgerType, str] = {
     LedgerType.MAGI_INBOUND: "🧙‍♂️",  # Inbound transfer from Magi (e.g., from a custom JSON indicating an incoming transfer
     LedgerType.MAGI_OUTBOUND: "🧙‍♂️",  # Outbound transfer to Magi
     LedgerType.MAGI_CHANGE: "🧙‍♂️",  # Change returned to Magi (e.g., when returning excess Magisats after a conversion)
+    LedgerType.MANUAL_FIX: "🛠️",  # Manual fix entry for accounting adjustments
 }
 
 LedgerTypeStr: dict[LedgerType, str] = {
@@ -183,6 +184,7 @@ LedgerTypeStr: dict[LedgerType, str] = {
     LedgerType.MAGI_INBOUND: "Magi Receive",  # Inbound transfer from Magi (e.g., from a custom JSON indicating an incoming transfer
     LedgerType.MAGI_OUTBOUND: "Magi Send",  # Outbound transfer to Magi
     LedgerType.MAGI_CHANGE: "Magi Change",  # Change returned to Magi (e.g., when returning excess Magisats after a conversion)
+    LedgerType.MANUAL_FIX: "Manual Fix",  # Manual fix entry for accounting adjustments
 }
 
 
