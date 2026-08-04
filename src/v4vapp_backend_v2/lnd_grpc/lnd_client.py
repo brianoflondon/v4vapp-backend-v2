@@ -73,7 +73,7 @@ class LNDClient:
             # `async with LNDClient(...)` invocation; callers typically continue
             # using the client and any subsequent RPC will trigger its own
             # error handling.  Log a simple warning without a stack trace.
-            logger.warning(f"{ICON} Could not fetch node info during enter: {e}")
+            logger.warning(f"{ICON} Could not fetch node info during __aenter__: {e}", extra={"notification": False})
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
