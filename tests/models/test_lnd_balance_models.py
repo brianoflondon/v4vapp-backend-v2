@@ -19,6 +19,7 @@ class FakeClient:
         self.lightning_stub = SimpleNamespace(WalletBalance="wallet", ChannelBalance="channel")
         self.entered = False
         self.exit_called = False
+        self.disconnected = False
 
     async def call(self, stub, req):
         # simulate remote call
@@ -31,6 +32,9 @@ class FakeClient:
 
     async def __aexit__(self, exc_type, exc, tb):
         self.exit_called = True
+
+    async def disconnect(self):
+        self.disconnected = True
 
 
 @pytest.mark.asyncio
@@ -93,8 +97,8 @@ async def test_fetch_balances_closes_internal_client(monkeypatch):
 
     nb = await fetch_balances(node="testnode", lnd_client=None)
     assert isinstance(nb, NodeBalances)
-    # since we used internal client, its __aexit__ should have been called
-    assert created.exit_called is True
+    # since we used internal client, it should have been disconnected explicitly
+    assert created.disconnected is True
 
 
 @pytest.mark.asyncio

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+import os
+from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
 from decimal import Decimal
 from logging import Logger
 from time import monotonic
-from typing import Any, Callable, Coroutine, List, Tuple
+from typing import Any
 
 from nectar.amount import Amount
 from pydantic import BaseModel
@@ -26,6 +28,8 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances_async
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
+from v4vapp_backend_v2.lnd_grpc import lightning_pb2 as lnrpc
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 ICON = "🧪"  # Test Tube
 
@@ -34,6 +38,7 @@ SANITY_ALL_CHECKS_TIMEOUT_SECONDS = 65.0  # overall timeout for running all chec
 
 SANITY_REDIS_CACHE_KEY = "sanity_check_results_cache"
 SANITY_REDIS_TIMEOUT_SECONDS = 200
+SANITY_REDIS_TIMEOUT_FAILURE_SECONDS = 30
 
 
 class SanityCheckResult(BaseModel):
@@ -81,10 +86,10 @@ class SanityCheckResult(BaseModel):
 
 
 class SanityCheckResults(BaseModel):
-    check_time: datetime = datetime.now(tz=timezone.utc)
-    passed: List[Tuple[str, SanityCheckResult]] = []
-    failed: List[Tuple[str, SanityCheckResult]] = []
-    results: List[Tuple[str, SanityCheckResult]] = []
+    check_time: datetime = datetime.now(tz=UTC)
+    passed: list[tuple[str, SanityCheckResult]] = []
+    failed: list[tuple[str, SanityCheckResult]] = []
+    results: list[tuple[str, SanityCheckResult]] = []
 
     def len(self) -> int:
         """Return the number of failed sanity checks.
@@ -119,7 +124,48 @@ class SanityCheckResults(BaseModel):
         return {"sanity_check_results": self.model_dump()}
 
 
-async def _get_cached_sanity_check_results() -> "SanityCheckResults | None":
+def get_lnd_reachability_summary(sanity_results: SanityCheckResults) -> dict[str, Any]:
+    """Build a compact summary of LND reachability from sanity results."""
+    lnd_config = InternalConfig().config.lnd_config
+    configured_node = lnd_config.default if lnd_config else None
+    connection_cfg = (
+        lnd_config.connections.get(configured_node) if lnd_config and configured_node else None
+    )
+    configured_address = connection_cfg.address if connection_cfg else None
+
+    lnd_result = next(
+        (
+            result
+            for check_name, result in sanity_results.results
+            if check_name == "lnd_node_reachable"
+        ),
+        None,
+    )
+
+    if lnd_result is None:
+        return {
+            "configured_node": configured_node,
+            "configured_address": configured_address,
+            "reachable": None,
+            "status": "unknown",
+            "details": "LND reachability check did not run.",
+        }
+
+    if not configured_node:
+        status = "not_configured"
+    else:
+        status = "reachable" if lnd_result.is_valid else "unreachable"
+
+    return {
+        "configured_node": configured_node,
+        "configured_address": configured_address,
+        "reachable": lnd_result.is_valid,
+        "status": status,
+        "details": lnd_result.details,
+    }
+
+
+async def _get_cached_sanity_check_results() -> SanityCheckResults | None:
     """Attempt to retrieve cached sanity check results from Redis.
 
     Returns:
@@ -143,7 +189,10 @@ async def _get_cached_sanity_check_results() -> "SanityCheckResults | None":
         return None
 
 
-async def _set_cached_sanity_check_results(results: "SanityCheckResults") -> None:
+async def _set_cached_sanity_check_results(
+    results: SanityCheckResults,
+    ttl_seconds: int = SANITY_REDIS_TIMEOUT_SECONDS,
+) -> None:
     """Cache sanity check results in Redis with a TTL.
 
     Errors are swallowed to avoid breaking the sanity check run.
@@ -154,7 +203,7 @@ async def _set_cached_sanity_check_results(results: "SanityCheckResults") -> Non
     try:
         await redis_client.setex(
             SANITY_REDIS_CACHE_KEY,
-            SANITY_REDIS_TIMEOUT_SECONDS,
+            ttl_seconds,
             results.model_dump_json(),
         )
     except Exception as e:
@@ -211,7 +260,7 @@ async def _safe_one_account_balance(account_name: str, in_progress: InProgressRe
         )
         balance_started_at = monotonic()
         balance = await one_account_balance(
-            account=account, as_of_date=datetime.now(timezone.utc), in_progress=in_progress
+            account=account, as_of_date=datetime.now(UTC), in_progress=in_progress
         )
         balance_elapsed = monotonic() - balance_started_at
         total_elapsed = monotonic() - started_at
@@ -264,7 +313,7 @@ async def server_account_balances(in_progress: InProgressResults) -> SanityCheck
 
     accounts_to_check = ["keepsats", server_id]
 
-    results: List[str] = []
+    results: list[str] = []
 
     tasks: dict[str, asyncio.Task] = {}
     try:
@@ -410,7 +459,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 raise
 
         try:
-            as_of_date = datetime.now(tz=timezone.utc)
+            as_of_date = datetime.now(tz=UTC)
             async with asyncio.TaskGroup() as tg:
                 tasks["deposits_checkpoint"] = tg.create_task(
                     _timed_checkpoint(
@@ -456,10 +505,10 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
         balances = tasks["balances"].result()
 
         # Get balances with tolerance
-        hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
-        hbd_deposits = deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
-        hive_traded = traded_deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
-        hbd_traded = traded_deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
+        hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal("0.0"))
+        hbd_deposits = deposits_details.balances_net.get(Currency.HBD, Decimal("0.0"))
+        hive_traded = traded_deposits_details.balances_net.get(Currency.HIVE, Decimal("0.0"))
+        hbd_traded = traded_deposits_details.balances_net.get(Currency.HBD, Decimal("0.0"))
 
         hive_deposits += hive_traded
         hbd_deposits += hbd_traded
@@ -575,17 +624,81 @@ async def balanced_balance_sheet(in_progress: InProgressResults) -> SanityCheckR
     )
 
 
-all_sanity_checks: List[Callable[[InProgressResults], Coroutine[Any, Any, SanityCheckResult]]] = [
+async def lnd_node_reachable(in_progress: InProgressResults) -> SanityCheckResult:
+    """Check that the configured default LND node is reachable.
+
+    Uses a lightweight WalletBalance RPC rather than GetInfo so this check
+    reflects operational reachability without requiring extra startup metadata
+    calls.
+    """
+    _ = in_progress
+    if os.getenv("TESTING") == "True" or os.getenv("PYTEST_CURRENT_TEST"):
+        return SanityCheckResult(
+            name="lnd_node_reachable",
+            is_valid=True,
+            details="Skipped LND reachability check in test environment.",
+        )
+
+    lnd_config = InternalConfig().config.lnd_config
+    if not lnd_config or not lnd_config.default:
+        return SanityCheckResult(
+            name="lnd_node_reachable",
+            is_valid=False,
+            details="LND is not configured (missing lnd_config.default).",
+        )
+
+    connection_name = lnd_config.default
+    connection_cfg = lnd_config.connections.get(connection_name)
+    connection_address = connection_cfg.address if connection_cfg else "unknown"
+
+    client = LNDClient(connection_name=connection_name)
+    try:
+        async with asyncio.timeout(15.0):
+            _ = await client.call(
+                client.lightning_stub.WalletBalance, lnrpc.WalletBalanceRequest()
+            )
+
+        return SanityCheckResult(
+            name="lnd_node_reachable",
+            is_valid=True,
+            details=(f"LND connection reachable: {connection_name} at {connection_address}."),
+        )
+    except TimeoutError:
+        return SanityCheckResult(
+            name="lnd_node_reachable",
+            is_valid=False,
+            details=(
+                f"Timed out checking LND connection {connection_name} at {connection_address}."
+            ),
+        )
+    except Exception as e:
+        return SanityCheckResult(
+            name="lnd_node_reachable",
+            is_valid=False,
+            details=(f"LND connection failed for {connection_name} at {connection_address}: {e}"),
+        )
+    finally:
+        try:
+            await client.disconnect()
+        except Exception as ex:
+            logger.debug(f"Failed to disconnect LND health-check client: {ex}")
+
+
+all_sanity_checks: list[Callable[[InProgressResults], Coroutine[Any, Any, SanityCheckResult]]] = [
     server_account_balances,
     balanced_balance_sheet,
     server_account_hive_balances,
+    lnd_node_reachable,
 ]
 
 # MARK: Runner for all sanity checks
 
 
 # @async_time_decorator
-async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
+async def run_all_sanity_checks(
+    use_cache: bool = True,
+    cache_failures: bool = False,
+) -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as
     a `SanityCheckResults` Pydantic model.
@@ -599,8 +712,9 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
             force re-run of all checks and bypass cache.
 
     Note:
-        Failed sanity checks are not cached. This avoids stale failure state and
-        ensures corrective changes are evaluated immediately.
+        Failed sanity checks are not cached by default. Set
+        ``cache_failures=True`` to cache failures briefly and reduce repeated
+        expensive recomputation during partial outages.
 
     Each registered check is expected to be an async callable that returns a
     `SanityCheckResult` instance. Checks are scheduled concurrently using an
@@ -620,18 +734,20 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
             logger.debug("Using cached sanity check results", extra={"notification": False})
             return cached_results
 
-    # Collect coroutines for checks so we can create TaskGroup tasks from coroutines
-    all_held_result = await all_held_msats()
-    in_progress = InProgressResults(results=all_held_result)
-
     try:
-        coros: List[Tuple[str, Coroutine[Any, Any, SanityCheckResult]]] = []
+        # Collect coroutines for checks so we can create TaskGroup tasks from coroutines.
+        # Keep this inside the guarded block so DB/network failures return a
+        # structured failed result instead of bubbling to API routes.
+        all_held_result = await all_held_msats()
+        in_progress = InProgressResults(results=all_held_result)
+
+        coros: list[tuple[str, Coroutine[Any, Any, SanityCheckResult]]] = []
         for check in all_sanity_checks:
             check_name = check.__name__
             coros.append((check_name, check(in_progress)))
 
         # Will hold (check_name, Task) pairs created inside the TaskGroup
-        task_list: List[Tuple[str, asyncio.Task]] = []
+        task_list: list[tuple[str, asyncio.Task]] = []
 
         def _root_exception_message(exc: BaseException) -> str:
             """Return a concise string for the most relevant underlying exception."""
@@ -665,7 +781,7 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
                 # each individual check gets its own shorter timeout so we can tell which hung
                 async with asyncio.timeout(SANITY_CHECK_TIMEOUT_SECONDS):
                     return await coro
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 timeout_message = f"Timed out after {SANITY_CHECK_TIMEOUT_SECONDS} seconds"
                 logger.warning(
                     f"sanity check '{name}' timed out after {SANITY_CHECK_TIMEOUT_SECONDS} seconds",
@@ -720,9 +836,9 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
             # re-raise to be caught by outer handler below
             raise
 
-        passed: List[Tuple[str, SanityCheckResult]] = []
-        failed: List[Tuple[str, SanityCheckResult]] = []
-        all_results: List[Tuple[str, SanityCheckResult]] = []
+        passed: list[tuple[str, SanityCheckResult]] = []
+        failed: list[tuple[str, SanityCheckResult]] = []
+        all_results: list[tuple[str, SanityCheckResult]] = []
 
         for check_name, task in task_list:
             try:
@@ -742,8 +858,13 @@ async def run_all_sanity_checks(use_cache: bool = True) -> SanityCheckResults:
 
         # Optionally filter logging elsewhere; always return the full model
         results_model = SanityCheckResults(passed=passed, failed=failed, results=all_results)
-        if use_cache and not results_model.failed:
-            await _set_cached_sanity_check_results(results_model)
+        if use_cache and (cache_failures or not results_model.failed):
+            ttl_seconds = (
+                SANITY_REDIS_TIMEOUT_FAILURE_SECONDS
+                if results_model.failed
+                else SANITY_REDIS_TIMEOUT_SECONDS
+            )
+            await _set_cached_sanity_check_results(results_model, ttl_seconds=ttl_seconds)
         return results_model
     except Exception as e:
         logger.exception(f"Error running sanity checks: {e}", extra={"notification": False})
@@ -768,6 +889,7 @@ async def log_all_sanity_checks(
     log_only_failures: bool = True,
     notification: bool = False,
     append_str: str = "",
+    cache_failures: bool = False,
 ) -> SanityCheckResults:
     """
     Run all sanity checks, log their outcomes, and return the Pydantic results model.
@@ -782,7 +904,7 @@ async def log_all_sanity_checks(
     SanityCheckResults
         The full set of sanity check results (passed, failed, results).
     """
-    results_model = await run_all_sanity_checks()
+    results_model = await run_all_sanity_checks(cache_failures=cache_failures)
     if append_str:
         append_str = " " + append_str
     for _, sanity_result in results_model.results:

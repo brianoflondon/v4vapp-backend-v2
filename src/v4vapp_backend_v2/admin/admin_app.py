@@ -7,7 +7,6 @@ FastAPI application for V4VApp backend administration.
 from contextlib import asynccontextmanager
 from pathlib import Path
 from timeit import default_timer as timer
-from typing import List
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
@@ -20,7 +19,10 @@ from v4vapp_backend_v2 import __version__ as project_version
 
 # cache helper used by admin flush button
 from v4vapp_backend_v2.accounting.ledger_cache import invalidate_all_ledger_cache
-from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
+from v4vapp_backend_v2.accounting.sanity_checks import (
+    get_lnd_reachability_summary,
+    run_all_sanity_checks,
+)
 from v4vapp_backend_v2.admin import __version__
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import dashboard_api, v4vconfig
@@ -102,13 +104,9 @@ class AdminApp:
         # default to the existing light blue used in admin.css
         sidebar_color = "#2563eb"
         favicon_folder = "favicon_prod"
-        try:
-            if self.config.server_id == "devser.v4vapp":
-                sidebar_color = "#800000"
-                favicon_folder = "favicon_dev"
-        except Exception:
-            # if server_id is not set, keep defaults
-            pass
+        if getattr(self.config, "server_id", None) == "devser.v4vapp":
+            sidebar_color = "#800000"
+            favicon_folder = "favicon_dev"
         # expose as globals so all templates can access them
         self.templates.env.globals["sidebar_color"] = sidebar_color
         self.templates.env.globals["favicon_path"] = (
@@ -290,7 +288,7 @@ class AdminApp:
         async def health_check() -> JSONResponse:
             """Health check endpoint"""
             start = timer()
-            sanity_results = await run_all_sanity_checks()
+            sanity_results = await run_all_sanity_checks(cache_failures=True)
             if sanity_results.failed:
                 response_status = status.HTTP_202_ACCEPTED
             else:
@@ -303,6 +301,7 @@ class AdminApp:
                 "config": self.config.config_filename,
                 "local_machine_name": InternalConfig().local_machine_name,
                 "server_id": InternalConfig().server_id,
+                "lnd_reachability": get_lnd_reachability_summary(sanity_results),
                 # encode the sanity object into JSON-serializable data
                 "sanity_checks": jsonable_encoder(sanity_results.model_dump()),
                 "load_time": timer() - start,
@@ -368,7 +367,7 @@ class AdminApp:
                 raise HTTPException(status_code=500, detail=f"Resend VSC custom JSONs failed: {e}")
 
         @self.app.get("/dev_accounts")
-        async def get_dev_accounts() -> List[str]:
+        async def get_dev_accounts() -> list[str]:
             """Endpoint to get list of accounts for development/testing purposes"""
             return InternalConfig().config.development.allowed_hive_accounts
 

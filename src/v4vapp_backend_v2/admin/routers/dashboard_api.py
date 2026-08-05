@@ -6,10 +6,10 @@ Each endpoint returns data for a specific dashboard section, allowing the
 browser to fetch them in parallel and render as they arrive.
 """
 
+import asyncio
 from asyncio import TaskGroup
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -21,7 +21,11 @@ from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     latest_period_create_checkpoint,
 )
 from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
-from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, log_all_sanity_checks
+from v4vapp_backend_v2.accounting.sanity_checks import (
+    SanityCheckResult,
+    SanityCheckResults,
+    log_all_sanity_checks,
+)
 from v4vapp_backend_v2.accounting.trading_pnl import generate_trading_pnl_report
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
@@ -33,10 +37,10 @@ from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
 router = APIRouter()
 
 
-def _msat_to_sats_int(msat_val) -> Optional[int]:
+def _msat_to_sats_int(msat_val) -> int | None:
     try:
         return int(
-            (Decimal(msat_val) / Decimal(1000)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            (Decimal(msat_val) / Decimal(1000)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
         )
     except Exception:
         return None
@@ -93,7 +97,7 @@ async def dashboard_magi_balances() -> JSONResponse:
     Fetch Magi Sats balances for all highlight_users.
     """
 
-    async def _safe_magi_balance(acc: str) -> Optional[dict[str, str]]:
+    async def _safe_magi_balance(acc: str) -> dict[str, str] | None:
         try:
             balance = await get_magi_btc_balance_by_account(acc)
             if balance.error:
@@ -147,7 +151,7 @@ async def dashboard_lnd_info() -> JSONResponse:
     async def _safe_ledger(asset: AssetAccount):
         try:
             await latest_period_create_checkpoint(account=asset, period_type=PeriodType.DAILY)
-            return await one_account_balance(account=asset, as_of_date=datetime.now(timezone.utc))
+            return await one_account_balance(account=asset, as_of_date=datetime.now(UTC))
         except Exception as e:
             logger.warning(f"Ledger lookup failed: {e}", extra={"notification": False})
             return None
@@ -245,14 +249,37 @@ async def dashboard_financial_summary() -> JSONResponse:
 @router.get("/sanity")
 async def dashboard_sanity() -> JSONResponse:
     """Fetch sanity check results and pending transactions."""
-    async with TaskGroup() as tg:
-        sanity_task = tg.create_task(
-            log_all_sanity_checks(local_logger=logger, log_only_failures=True, notification=False)
-        )
-        pending_task = tg.create_task(PendingTransaction.list_all_str())
+    try:
+        async with asyncio.timeout(20):
+            async with TaskGroup() as tg:
+                sanity_task = tg.create_task(
+                    log_all_sanity_checks(
+                        local_logger=logger,
+                        log_only_failures=True,
+                        notification=False,
+                        cache_failures=True,
+                    )
+                )
+                pending_task = tg.create_task(PendingTransaction.list_all_str())
 
-    sanity_results: SanityCheckResults = sanity_task.result()
-    pending_transactions = pending_task.result()
+        sanity_results: SanityCheckResults = sanity_task.result()
+        pending_transactions = pending_task.result()
+    except Exception as e:
+        logger.exception(
+            f"dashboard_sanity endpoint failed to gather data: {e}",
+            extra={"notification": False},
+        )
+        failure_result = SanityCheckResult(
+            name="dashboard_sanity",
+            is_valid=False,
+            details=f"Failed to load sanity data: {e}",
+        )
+        sanity_results = SanityCheckResults(
+            passed=[],
+            failed=[("dashboard_sanity", failure_result)],
+            results=[("dashboard_sanity", failure_result)],
+        )
+        pending_transactions = []
 
     # Determine server balance check status
     server_balance_check = {"status": "unknown", "icon": "❓"}

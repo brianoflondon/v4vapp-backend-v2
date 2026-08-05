@@ -1,5 +1,6 @@
 import asyncio
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -30,7 +31,8 @@ async def test_hive_task_failure_logged(caplog, monkeypatch):
     # minimal account balance result so the other tasks complete quickly
     async def fake_account_balance(*args, **kwargs):
         class Dummy:
-            balances_net = {Currency.HIVE: Decimal(0), Currency.HBD: Decimal(0)}
+            def __init__(self):
+                self.balances_net = {Currency.HIVE: Decimal(0), Currency.HBD: Decimal(0)}
 
         return Dummy()
 
@@ -163,6 +165,43 @@ async def test_run_all_sanity_checks_does_not_cache_failures(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_all_sanity_checks_can_cache_failures(monkeypatch):
+    """Failure results should be cached when cache_failures is enabled."""
+
+    calls = {"count": 0}
+
+    async def fake_check(in_progress):
+        calls["count"] += 1
+        return SanityCheckResult(name="fake", is_valid=False, details="bad")
+
+    async def fake_all_held():
+        return {}
+
+    class FakeRedis:
+        def __init__(self):
+            self.store = {}
+
+        async def get(self, key):
+            return self.store.get(key)
+
+        async def setex(self, key, ttl, value):
+            self.store[key] = value
+
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(sanity_checks.InternalConfig, "redis_async", fake_redis, raising=False)
+    monkeypatch.setattr(sanity_checks, "all_sanity_checks", [fake_check])
+    monkeypatch.setattr(sanity_checks, "all_held_msats", fake_all_held)
+
+    first = await sanity_checks.run_all_sanity_checks(cache_failures=True)
+    assert calls["count"] == 1
+    assert first.failed
+
+    second = await sanity_checks.run_all_sanity_checks(cache_failures=True)
+    assert calls["count"] == 1
+    assert second.failed
+
+
+@pytest.mark.asyncio
 async def test_server_account_hive_balances_open_orders_show_info(monkeypatch):
     """Mismatch with open orders should be shown but flagged as pass."""
 
@@ -170,7 +209,11 @@ async def test_server_account_hive_balances_open_orders_show_info(monkeypatch):
         account = kwargs.get("account") or (args[0] if args else None)
 
         class Dummy:
-            balances_net = {Currency.HIVE: Decimal("0.000"), Currency.HBD: Decimal("0.000")}
+            def __init__(self):
+                self.balances_net = {
+                    Currency.HIVE: Decimal("0.000"),
+                    Currency.HBD: Decimal("0.000"),
+                }
 
         result = Dummy()
         if account and getattr(account, "name", "") == "Customer Deposits Hive":
@@ -240,3 +283,73 @@ async def test_server_account_hive_balances_open_orders_show_info(monkeypatch):
     assert entry.details.startswith("**Server Hive Mismatch:**\n")
     assert "0.000 HIVE" in entry.details
     assert "-139.939 HBD" in entry.details
+
+
+@pytest.mark.asyncio
+async def test_lnd_node_reachable_pass(monkeypatch):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setenv("TESTING", "False")
+
+    class DummyConfig:
+        config = SimpleNamespace(
+            lnd_config=SimpleNamespace(
+                default="legion",
+                connections={
+                    "legion": SimpleNamespace(address="legion-witness.tail400e5.ts.net:10009")
+                },
+            )
+        )
+
+    class DummyLndClient:
+        def __init__(self, connection_name: str):
+            self.connection_name = connection_name
+            self.lightning_stub = SimpleNamespace(WalletBalance="WalletBalance")
+
+        async def call(self, method, request):
+            return {"ok": True}
+
+        async def disconnect(self):
+            return None
+
+    monkeypatch.setattr(sanity_checks, "InternalConfig", lambda *args, **kwargs: DummyConfig())
+    monkeypatch.setattr(sanity_checks, "LNDClient", DummyLndClient)
+
+    result = await sanity_checks.lnd_node_reachable(None)
+    assert result.is_valid is True
+    assert "LND connection reachable" in result.details
+    assert "legion" in result.details
+
+
+@pytest.mark.asyncio
+async def test_lnd_node_reachable_fail(monkeypatch):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setenv("TESTING", "False")
+
+    class DummyConfig:
+        config = SimpleNamespace(
+            lnd_config=SimpleNamespace(
+                default="legion",
+                connections={
+                    "legion": SimpleNamespace(address="legion-witness.tail400e5.ts.net:10009")
+                },
+            )
+        )
+
+    class DummyLndClient:
+        def __init__(self, connection_name: str):
+            self.connection_name = connection_name
+            self.lightning_stub = SimpleNamespace(WalletBalance="WalletBalance")
+
+        async def call(self, method, request):
+            raise RuntimeError("connection refused")
+
+        async def disconnect(self):
+            return None
+
+    monkeypatch.setattr(sanity_checks, "InternalConfig", lambda *args, **kwargs: DummyConfig())
+    monkeypatch.setattr(sanity_checks, "LNDClient", DummyLndClient)
+
+    result = await sanity_checks.lnd_node_reachable(None)
+    assert result.is_valid is False
+    assert "LND connection failed" in result.details
+    assert "connection refused" in result.details

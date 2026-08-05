@@ -1,7 +1,7 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, ClassVar, Optional
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field
@@ -49,7 +49,7 @@ class WalletBalance(BaseModel):
     locked_balance: Decimal = Decimal(0)
     reserved_balance_anchor_chan: Decimal = Decimal(0)
 
-    account_balance: Dict[str, WalletAccountBalance] = Field(default_factory=dict)
+    account_balance: dict[str, WalletAccountBalance] = Field(default_factory=dict)
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
@@ -71,12 +71,12 @@ class ChannelBalance(BaseModel):
     balance: Decimal = Decimal(0)
     pending_open_balance: Decimal = Decimal(0)
 
-    local_balance: Optional[LNDAmount] = None
-    remote_balance: Optional[LNDAmount] = None
-    unsettled_local_balance: Optional[LNDAmount] = None
-    unsettled_remote_balance: Optional[LNDAmount] = None
-    pending_open_local_balance: Optional[LNDAmount] = None
-    pending_open_remote_balance: Optional[LNDAmount] = None
+    local_balance: LNDAmount | None = None
+    remote_balance: LNDAmount | None = None
+    unsettled_local_balance: LNDAmount | None = None
+    unsettled_remote_balance: LNDAmount | None = None
+    pending_open_local_balance: LNDAmount | None = None
+    pending_open_remote_balance: LNDAmount | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
@@ -99,9 +99,9 @@ class ChannelBalance(BaseModel):
 
 class NodeBalances(BaseModel):
     node: str = ""
-    timestamp: datetime = datetime.now(tz=timezone.utc)
-    wallet: Optional[WalletBalance] = None
-    channel: Optional[ChannelBalance] = None
+    timestamp: datetime = datetime.now(tz=UTC)
+    wallet: WalletBalance | None = None
+    channel: ChannelBalance | None = None
 
     db_client: ClassVar[AsyncCollection | None] = None
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
@@ -120,7 +120,7 @@ class NodeBalances(BaseModel):
         return f"{self.node} Channels local: {self.channel.local_sats:,.0f} sats, remote: {self.channel.remote_sats:,.0f} sats {self.timestamp.isoformat()}"
 
     @property
-    def log_extra(self) -> Dict[str, Any]:
+    def log_extra(self) -> dict[str, Any]:
         return {"node_balances": self.model_dump()}
 
     @classmethod
@@ -187,9 +187,13 @@ async def fetch_balances(node: str = "", lnd_client: LNDClient | None = None) ->
     try:
         if lnd_client is None:
             lnd_client = LNDClient(node)
-            # we created the client, so use context manager to ensure it is closed
-            async with lnd_client as client:
-                return await _fetch_with_client(client)
+            # For one-shot balance reads we only need WalletBalance/ChannelBalance.
+            # Avoid entering the context manager here because __aenter__ eagerly
+            # calls GetInfo (slow/noisy on some nodes and unnecessary for balances).
+            try:
+                return await _fetch_with_client(lnd_client)
+            finally:
+                await lnd_client.disconnect()
         else:
             # external client: reuse it but do not close it
             return await _fetch_with_client(lnd_client)
@@ -250,9 +254,7 @@ async def main():
             f"Channels local: {balances.channel.local_sats} sats, remote: {balances.channel.remote_sats} sats, balance: {balances.channel.balance} sats"
         )
 
-    found_balance = await balances.nearest_balance(
-        datetime.now(timezone.utc) - timedelta(minutes=10)
-    )
+    found_balance = await balances.nearest_balance(datetime.now(UTC) - timedelta(minutes=10))
     if found_balance:
         logger.info(
             f"Found nearest balance at {found_balance.timestamp} for node {found_balance.node}"
