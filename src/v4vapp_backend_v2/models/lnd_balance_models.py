@@ -99,7 +99,7 @@ class ChannelBalance(BaseModel):
 
 class NodeBalances(BaseModel):
     node: str = ""
-    timestamp: datetime = datetime.now(tz=UTC)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     wallet: WalletBalance | None = None
     channel: ChannelBalance | None = None
 

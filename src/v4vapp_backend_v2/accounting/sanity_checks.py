@@ -10,7 +10,7 @@ from time import monotonic
 from typing import Any
 
 from nectar.amount import Amount
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
@@ -86,10 +86,10 @@ class SanityCheckResult(BaseModel):
 
 
 class SanityCheckResults(BaseModel):
-    check_time: datetime = datetime.now(tz=UTC)
-    passed: list[tuple[str, SanityCheckResult]] = []
-    failed: list[tuple[str, SanityCheckResult]] = []
-    results: list[tuple[str, SanityCheckResult]] = []
+    check_time: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
+    passed: list[tuple[str, SanityCheckResult]] = Field(default_factory=list)
+    failed: list[tuple[str, SanityCheckResult]] = Field(default_factory=list)
+    results: list[tuple[str, SanityCheckResult]] = Field(default_factory=list)
 
     def len(self) -> int:
         """Return the number of failed sanity checks.
