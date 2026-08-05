@@ -558,7 +558,9 @@ async def witness_check_startup() -> None:
 
 
 async def all_ops_loop(
-    watch_witnesses: list[str] | None = None, watch_users: list[str] | None = None, start_block: int = 0
+    watch_witnesses: list[str] | None = None,
+    watch_users: list[str] | None = None,
+    start_block: int = 0,
 ) -> None:
     """
     Asynchronously loops through transactions and processes them.
@@ -698,9 +700,13 @@ async def all_ops_loop(
                     if op.is_watched:
                         await maybe_update_quote()
                         await op.update_conv()
-                        if not COMMAND_LINE_WATCH_ONLY and isinstance(op, Transfer) and (
-                            op.from_account in server_accounts
-                            and op.to_account not in server_accounts
+                        if (
+                            not COMMAND_LINE_WATCH_ONLY
+                            and isinstance(op, Transfer)
+                            and (
+                                op.from_account in server_accounts
+                                and op.to_account not in server_accounts
+                            )
                         ):
                             # Now only balance the server account HBD level if this is a send back to a customer
                             # i.e. after a successful conversion.
@@ -993,7 +999,7 @@ async def store_rates() -> None:
                 await asyncio.wait_for(shutdown_event.wait(), timeout=600)
             except TimeoutError:
                 continue  # Timeout means 10 minutes passed, so loop again
-    except (asyncio.CancelledError, KeyboardInterrupt) as e:
+    except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{ICON} store_rates cancelled or interrupted, exiting.")
         raise
     except Exception as e:
@@ -1081,7 +1087,7 @@ async def main_async_start(
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-    except (asyncio.CancelledError, KeyboardInterrupt) as e:
+    except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
         raise
     except Exception as e:
@@ -1217,6 +1223,10 @@ def main(
 
     logger.info(
         f"{ICON}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name} pause: {time_delay:.2f}s",
+        extra={"notification": False},
+    )
+    logger.info(
+        f"{ICON} Notification quiet mode: {InternalConfig().config.logging.notification_quiet_mode}",
         extra={"notification": False},
     )
     # sleep for a random amount of time 0.1 to 0.8 seconds

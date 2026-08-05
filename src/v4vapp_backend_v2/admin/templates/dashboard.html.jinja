@@ -357,8 +357,20 @@
     // Sanity checks are slower, but they can run in parallel with the other
     // dashboard queries rather than waiting until the page shell is built.
 
-    const hivePromise = fetch('/admin/api/dashboard/hive-balances')
-        .then(r => r.json())
+    async function fetchJsonOrThrow(url) {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ' for ' + url);
+        }
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            const bodyPreview = (await response.text()).slice(0, 120);
+            throw new Error('Non-JSON response from ' + url + ': ' + bodyPreview);
+        }
+        return response.json();
+    }
+
+    const hivePromise = fetchJsonOrThrow('/admin/api/dashboard/hive-balances')
         .then(renderHiveBalances)
         .catch(err => {
             document.getElementById('hive-balances-section').innerHTML =
@@ -366,8 +378,7 @@
                 + '<div class="text-danger small">Failed to load: ' + escHtml(String(err)) + '</div>';
         });
 
-    const magiPromise = fetch('/admin/api/dashboard/magi-balances')
-        .then(r => r.json())
+    const magiPromise = fetchJsonOrThrow('/admin/api/dashboard/magi-balances')
         .then(renderMagiBalances)
         .catch(err => {
             latestMagiBalances = {};
@@ -376,8 +387,7 @@
             }
         });
 
-    const lndPromise = fetch('/admin/api/dashboard/lnd-info')
-        .then(r => r.json())
+    const lndPromise = fetchJsonOrThrow('/admin/api/dashboard/lnd-info')
         .then(renderLndInfo)
         .catch(err => {
             document.getElementById('lnd-info-section').innerHTML =
@@ -385,8 +395,7 @@
                 + '<div class="text-danger small">Failed to load: ' + escHtml(String(err)) + '</div>';
         });
 
-    const finPromise = fetch('/admin/api/dashboard/financial-summary')
-        .then(r => r.json())
+    const finPromise = fetchJsonOrThrow('/admin/api/dashboard/financial-summary')
         .then(renderFinancialSummary)
         .catch(err => {
             document.getElementById('financial-summary-section').innerHTML =
@@ -394,8 +403,7 @@
                 + escHtml(String(err)) + '</div>';
         });
 
-    const sanityPromise = fetch('/admin/api/dashboard/sanity')
-        .then(r => r.json())
+    const sanityPromise = fetchJsonOrThrow('/admin/api/dashboard/sanity')
         .then(renderSanity)
         .catch(err => {
             const checkEl = document.getElementById('server-balance-check');
