@@ -183,7 +183,10 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
                         magi_transfer=tracked_op
                     )
                 else:
-                    raise ValueError("Invalid tracked object")
+                    logger.warning(f"Unknown tracked object type: {type(tracked_op)}",
+                        extra={"notification": False, **tracked_op.log_extra},
+                    )
+                    raise TypeError("Invalid tracked object")
 
                 return ledger_entries
 
