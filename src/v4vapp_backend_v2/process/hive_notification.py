@@ -4,7 +4,6 @@ from uuid import uuid4
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance
-from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -286,57 +285,62 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     return {}
 
 
-async def send_notification_custom_json(
-    tracked_op: TrackedAny,
-    notification: KeepsatsTransfer,
-) -> dict[str, str]:
-    """
-    Sends a custom JSON notification for a Keepsats transfer using the Hive blockchain.
+# async def send_notification_custom_json(
+#     tracked_op: TrackedAny,
+#     notification: KeepsatsTransfer,
+# ) -> dict[str, str]:
+#     """
+#     Sends a custom JSON notification for a Keepsats transfer using the Hive blockchain.
 
-    Args:
-        notification (KeepsatsTransfer): The Keepsats transfer notification data to be sent.
+#     Args:
+#         notification (KeepsatsTransfer): The Keepsats transfer notification data to be sent.
 
-    Returns:
-        dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
+#     Returns:
+#         dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
 
-    Raises:
-        Exception: Logs and handles any exceptions that occur during the notification process.
-    """
-    try:
-        hive_client = await get_verified_hive_client_for_accounts([notification.from_account])
-        trx = await send_custom_json(
-            json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
-            send_account=notification.from_account,
-            active=True,
-            id="v4vapp_dev_notification",
-            hive_client=hive_client,
-        )
-        logger.debug(
-            f"Sent custom_json notification for: {notification.log_str} {trx.get('trx_id', '')}",
-            extra={"notification": True, **notification.log_extra},
-        )
-        reason = f"Custom Json reply for operation {tracked_op.group_id}: {trx.get('trx_id', '')}"
-        tracked_op.add_reply(
-            reply_id=trx.get("trx_id", ""),
-            reply_type=ReplyType.CUSTOM_JSON,
-            reply_msat=0,
-            reply_error=None,
-            reply_message=reason,
-        )
-        await tracked_op.save()
-        reply = tracked_op.replies[-1] if tracked_op.replies else ""
-        logger.debug(
-            f"Updated tracked_op with reply: {reply}",
-            extra={"notification": False, **tracked_op.log_extra},
-        )
-        return trx
-        # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
-    except Exception as e:
-        logger.error(
-            f"Error sending custom_json notification: {e}",
-            extra={"notification": False, **notification.log_extra},
-        )
-        return {}
+#     Raises:
+#         Exception: Logs and handles any exceptions that occur during the notification process.
+#     """
+#     try:
+#         hive_client = await get_verified_hive_client_for_accounts([notification.from_account])
+#         trx = await send_custom_json(
+#             json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
+#             send_account=notification.from_account,
+#             active=True,
+#             id="v4vapp_dev_notification",
+#             hive_client=hive_client,
+#         )
+#         logger.debug(
+#             f"Sent custom_json notification for: {notification.log_str} {trx.get('trx_id', '')}",
+#             extra={"notification": True, **notification.log_extra},
+#         )
+#         reason = f"Custom Json reply for operation {tracked_op.group_id}: {trx.get('trx_id', '')}"
+#         tracked_op.add_reply(
+#             reply_id=trx.get("trx_id", ""),
+#             reply_type=ReplyType.CUSTOM_JSON,
+#             reply_msat=0,
+#             reply_error=None,
+#             reply_message=reason,
+#         )
+#         await tracked_op.save()
+#         reply = tracked_op.replies[-1] if tracked_op.replies else ""
+#         logger.debug(
+#             f"Updated tracked_op with reply: {reply}",
+#             extra={"notification": False, **tracked_op.log_extra},
+#         )
+#         return trx
+#     except Exception as e:
+#         logger.error(
+#             f"Error sending custom_json notification: {e}",
+#             extra={"notification": False, **notification.log_extra},
+#         )
+#         return {}
+
+# History
+# Last active use was in commit 64f40893.
+# In that commit, src/v4vapp_backend_v2/actions/custom_json_to_lnd.py imported and called send_notification_custom_json.
+# By commit 441c0a91, the call had been removed/disabled and only a commented-out invocation remained:
+# # trx = await send_notification_custom_json(...)
 
 
 async def send_transfer_custom_json(
