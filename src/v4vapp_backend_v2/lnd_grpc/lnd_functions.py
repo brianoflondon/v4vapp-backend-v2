@@ -26,8 +26,6 @@ class LNDPaymentExpired(LNDPaymentError):
     This is a custom exception to handle specific payment expiration scenarios.
     """
 
-    pass
-
 
 class LNDPaymentStreamError(LNDPaymentError):
     """
@@ -35,8 +33,6 @@ class LNDPaymentStreamError(LNDPaymentError):
     payment status. The payment may still be IN_FLIGHT or may later succeed via
     lnd_monitor_v2 — callers must not auto-refund on this error.
     """
-
-    pass
 
 
 STREAM_TRANSPORT_ERROR_MARKERS = (
@@ -172,7 +168,7 @@ async def get_channel_name(
                 lnd_cfg = InternalConfig().config.lnd_config
                 conn_cfg = lnd_cfg.connection_config(lnd_client.connection.name)
                 own_pub_key = (conn_cfg.pub_key if conn_cfg else "") or ""
-            except Exception:  # noqa: BLE001
+            except Exception:
                 own_pub_key = ""
             if not own_pub_key:
                 # get_info may be None when __aenter__ hit DEADLINE_EXCEEDED / LND busy.
@@ -180,7 +176,7 @@ async def get_channel_name(
                 if get_info is None:
                     try:
                         get_info = await lnd_client.node_get_info
-                    except Exception as e:  # noqa: BLE001 — name resolution is best-effort
+                    except Exception as e:
                         logger.warning(
                             f"{lnd_client.icon} Channel {channel_id}: no node identity "
                             f"(GetInfo unavailable: {e}); using Unknown",
@@ -212,7 +208,7 @@ async def get_channel_name(
                 details = rpc_err.details()
             else:
                 details = getattr(rpc_err, "_details", "") or str(rpc_err)
-        except Exception:  # noqa: BLE001
+        except Exception:
             details = str(rpc_err)
 
         # For newly opened channels, the edge info may not be available yet
@@ -227,7 +223,7 @@ async def get_channel_name(
             extra={"notification": False},
         )
         return LndChannelName(channel_id=channel_id, name="Unknown")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(
             f"{lnd_client.icon} get_channel_name failed for {channel_id}: {e}",
             extra={"notification": False},
@@ -452,7 +448,7 @@ async def send_lightning_to_pay_req(
         if get_info is None:
             try:
                 get_info = await lnd_client.node_get_info
-            except Exception as e:  # noqa: BLE001 — identity optional for external pays
+            except Exception as e:
                 logger.warning(
                     f"{lnd_client.icon} GetInfo unavailable before pay "
                     f"(continuing without self-payment check): {e}",
@@ -613,7 +609,7 @@ async def log_payment_in_process(payment_id: str, response_queue: asyncio.Queue)
                     },
                 )
                 response_queue.task_done()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # No new payment dictionary, log periodic update
                 logger.info(
                     f"{payment_id} Payment still in process: {status}",
