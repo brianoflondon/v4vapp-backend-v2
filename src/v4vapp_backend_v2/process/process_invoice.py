@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import List
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
@@ -15,13 +14,13 @@ from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
-from v4vapp_backend_v2.process.process_transfer import check_user_limits
 from v4vapp_backend_v2.process.process_magi import forward_magisats
+from v4vapp_backend_v2.process.process_transfer import check_user_limits
 
 
 async def process_lightning_receipt(
     invoice: Invoice, nobroadcast: bool = False
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Process a Lightning invoice which is inbound.
     All inbound invoices will be first deposited as Keepsats.
@@ -63,7 +62,7 @@ async def process_lightning_receipt(
         ledger_type=ledger_type,
         group_id=f"{invoice.group_id}_{ledger_type.value}",
         op_type=invoice.op_type,
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         description=f"Receive incoming Lightning {invoice.value_msat / 1000:,.0f} sats {invoice.memo}",
         credit=LiabilityAccount(
             name="VSC Liability",
@@ -152,7 +151,7 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
         nobroadcast (bool): If True, Hive response won't be broadcast (testing mostly)
 
     Returns:
-        List[LedgerEntry]: The ledger entries for the transfer operation.
+        list[LedgerEntry]: The ledger entries for the transfer operation.
     """
 
     # MARK: Sats to Hive or HBD

@@ -29,7 +29,6 @@ has been sent.
 
 import asyncio
 from timeit import default_timer as timer
-from typing import List
 from uuid import uuid4
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
@@ -80,7 +79,7 @@ CUST_ID_LOCK_TIMEOUT = 30  # seconds
 # a different transaction can be started.
 
 
-async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> List[LedgerEntry]:
+async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> list[LedgerEntry]:
     """
     Processes a tracked operation and creates a ledger entry if applicable.
     This method handles various types of tracked operations, including
@@ -110,7 +109,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
             )
             return [existing_entry]
 
-        ledger_entries: List[LedgerEntry] = []
+        ledger_entries: list[LedgerEntry] = []
 
         existing_op = await load_tracked_object(tracked_obj=tracked_op.group_id_p)
         if existing_op and existing_op.process_time:
@@ -130,7 +129,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
             # Do nothing with Account witness votes for now
             return ledger_entries
 
-        if isinstance(tracked_op, ProducerReward) or isinstance(tracked_op, ProducerMissed):
+        if isinstance(tracked_op, (ProducerReward, ProducerMissed)):
             # No ledger entry necessary for producer rewards or missed blocks
             asyncio.create_task(process_witness_event(tracked_op=tracked_op))
             return ledger_entries
@@ -264,7 +263,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
 
 async def process_lightning_invoice(
     invoice: Invoice, nobroadcast: bool = False
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Processes a Lightning Network invoice and updates the corresponding ledger entry.
 
@@ -329,7 +328,7 @@ async def process_lightning_invoice(
 
 async def process_lightning_payment(
     payment: Payment, nobroadcast: bool = False
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Processes a Lightning Network payment and updates the corresponding ledger entry.
 
@@ -344,7 +343,7 @@ async def process_lightning_payment(
         payment (Payment): The Lightning payment object containing payment details.
 
     Returns:
-        List[LedgerEntry]: The list of ledger entries reflecting the processed payment.
+        list[LedgerEntry]: The list of ledger entries reflecting the processed payment.
 
     Raises:
         NotImplementedError: If the payment memo does not match implemented cases.
@@ -354,7 +353,7 @@ async def process_lightning_payment(
     v4vapp_group_id = ""
     if payment.succeeded and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
-        keysend_message = payment.custom_records.keysend_message or ""
+        # keysend_message = payment.custom_records.keysend_message or ""
         # existing_ledger_entry = await LedgerEntry.collection().find_one(
         #     filter={"group_id": v4vapp_group_id}
         # )
@@ -370,7 +369,7 @@ async def process_lightning_payment(
 
     if payment.failed and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
-        keysend_message = payment.custom_records.keysend_message or ""
+        # keysend_message = payment.custom_records.keysend_message or ""
         existing_ledger_entry = await LedgerEntry.collection().find_one(
             filter={"group_id": v4vapp_group_id}
         )
@@ -394,6 +393,10 @@ async def process_lightning_payment(
                         nobroadcast=nobroadcast,
                     )
                     trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
+                    logger.warning(
+                        f"Lightning payment failed, refunding Hive transfer. {hive_transfer.short_id}",
+                        extra={"notification": True, "trx": trx, **hive_transfer.log_extra},
+                    )
                     return []
                 else:
                     logger.warning(

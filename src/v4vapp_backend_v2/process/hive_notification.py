@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 from uuid import uuid4
 
 from nectar.amount import Amount
@@ -66,13 +66,12 @@ async def check_for_outstanding_hive_balance(cust_id: CustIDType, amount: Amount
         if net < Amount("0.000 HBD"):
             to_send = amount + net
 
-    if to_send < Amount(f"0.001 {amount.symbol}"):
-        to_send = Amount(f"0.001 {amount.symbol}")
+    to_send = max(to_send, Amount(f"0.001 {amount.symbol}"))
 
     return to_send
 
 
-async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False) -> Dict[str, str]:
+async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False) -> dict[str, str]:
     """
     Processes a Hive return or notification based on the provided details.
 
@@ -85,7 +84,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         nobroadcast (bool, optional): If True, the transaction will not be broadcast to the Hive network. Defaults to False.
 
     Returns:
-        Dict[str, str]: The transaction result dictionary, containing information such as transaction ID and operation details.
+        dict[str, str]: The transaction result dictionary, containing information such as transaction ID and operation details.
 
     Side Effect:
         Adds a reply to the original transaction
@@ -136,7 +135,11 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         if details.amount:
             amount = Amount(str(details.amount)) or Amount("0.001 HIVE")
         if details.tracked_op and getattr(details.tracked_op, "change_amount", None):
-            amount = details.tracked_op.change_amount.beam or Amount("0.001 HIVE")
+            change_amount = getattr(details.tracked_op, "change_amount", None)
+            if change_amount and change_amount.beam:
+                amount = change_amount.beam
+            else:
+                amount = Amount("0.001 HIVE")
         else:
             logger.debug(
                 "No change amount found in tracked operation, using default amount.",
@@ -163,7 +166,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
     # We Override for conversions because those will be set off by custom_json
     return_amount_msat = 0
-    trx: Dict[str, Any] = {}
+    trx: dict[str, Any] = {}
     reply_type = ReplyType.UNKNOWN
     error_message = ""
 
@@ -286,7 +289,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
 async def send_notification_custom_json(
     tracked_op: TrackedAny,
     notification: KeepsatsTransfer,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Sends a custom JSON notification for a Keepsats transfer using the Hive blockchain.
 
@@ -294,7 +297,7 @@ async def send_notification_custom_json(
         notification (KeepsatsTransfer): The Keepsats transfer notification data to be sent.
 
     Returns:
-        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
+        dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
 
     Raises:
         Exception: Logs and handles any exceptions that occur during the notification process.
@@ -339,7 +342,7 @@ async def send_notification_custom_json(
 async def send_transfer_custom_json(
     transfer: KeepsatsTransfer,
     nobroadcast: bool = False,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Sends a custom JSON transfer on the Hive blockchain.
     The get_verified_hive_client function will handle the account verification and use Server keys if
@@ -350,7 +353,7 @@ async def send_transfer_custom_json(
         nobroadcast (bool, optional): If True, the transaction will not be broadcasted. Defaults to False.
 
     Returns:
-        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
+        dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
     """
     try:
         hive_client = await get_verified_hive_client_for_accounts(
@@ -378,7 +381,6 @@ async def send_transfer_custom_json(
         return trx
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
     except Exception as e:
-
         logger.exception(
             f"Error sending custom_json transfer: {e} {transfer.log_str}",
             extra={"notification": False, **transfer.log_extra},
@@ -391,7 +393,7 @@ async def send_magi_transfer_custom_json(
     nobroadcast: bool = False,
     caller: str | None = None,
     no_pending: bool = False,
-) -> tuple[Dict[str, str], PendingCustomJson | None]:
+) -> tuple[dict[str, str], PendingCustomJson | None]:
     """
     Sends a custom JSON transfer on the Hive blockchain.
     The get_verified_hive_client function will handle the account verification and use Server keys if
@@ -403,7 +405,7 @@ async def send_magi_transfer_custom_json(
         caller (str | None, optional): The caller of the transfer. Defaults to None.
 
     Returns:
-        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
+        dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
     """
     id = "vsc.call"
     server_id = InternalConfig().server_id
