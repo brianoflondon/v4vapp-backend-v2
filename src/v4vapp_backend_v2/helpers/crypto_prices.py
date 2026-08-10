@@ -903,7 +903,7 @@ class AllQuotes(BaseModel):
             return self.quotes[HiveInternalMarket.__name__].hive_hbd
         hive_hbd = Decimal(0)
         count = 0
-        for service_name, quote in self.quotes.items():
+        for quote in self.quotes.values():
             if quote.hive_hbd:
                 hive_hbd += quote.hive_hbd
                 count += 1
