@@ -1,11 +1,11 @@
 import asyncio
 import pickle
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from timeit import default_timer as timer
-from typing import Annotated, Any, ClassVar, Dict, List
+from typing import Annotated, Any, ClassVar
 
 import httpx
 from bson import Decimal128
@@ -22,7 +22,6 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     convert_decimals_for_mongodb,
     format_time_delta,
 )
-
 
 ALL_PRICES_COINGECKO = (
     "https://api.coingecko.com/api/v3/simple"
@@ -97,7 +96,7 @@ def _parse_iso_datetime(value: str | datetime | None) -> datetime:
     - Returns epoch (1970-01-01 UTC) for invalid/None inputs
     """
     if value is None:
-        return datetime(1970, 1, 1, tzinfo=timezone.utc)
+        return datetime(1970, 1, 1, tzinfo=UTC)
 
     if isinstance(value, datetime):
         dt = value
@@ -110,11 +109,11 @@ def _parse_iso_datetime(value: str | datetime | None) -> datetime:
             dt = datetime.fromisoformat(s)
         except Exception:
             # Fallback to epoch on parse failure
-            return datetime(1970, 1, 1, tzinfo=timezone.utc)
+            return datetime(1970, 1, 1, tzinfo=UTC)
 
     # Ensure timezone-aware (treat naive as UTC)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -173,7 +172,7 @@ class HiveRatesDB(BaseModel):
 
 
 # Define the annotated type
-RawResponseType = Annotated[Dict[str, Any] | List[Dict[str, Any]], "Raw response type"]
+RawResponseType = Annotated[dict[str, Any] | list[dict[str, Any]], "Raw response type"]
 
 
 class QuoteResponse(BaseModel):
@@ -208,9 +207,9 @@ class QuoteResponse(BaseModel):
         exclude=True,
     )
     source: str = ""
-    fetch_date: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    fetch_date: datetime = datetime(1970, 1, 1, tzinfo=UTC)
     error: str = ""
-    error_details: Dict[str, Any] = {}
+    error_details: dict[str, Any] = {}
 
     @field_validator("hive_usd", "hbd_usd", "btc_usd", "hive_hbd", mode="before")
     @classmethod
@@ -228,13 +227,13 @@ class QuoteResponse(BaseModel):
         computed fields (like `age`) never run into string subtraction errors.
         """
         if v is None:
-            return datetime(1970, 1, 1, tzinfo=timezone.utc)
+            return datetime(1970, 1, 1, tzinfo=UTC)
         if isinstance(v, str):
             try:
                 return _parse_iso_datetime(v)
             except Exception:
                 # fallback to epoch on parse failure to keep behavior safe/consistent
-                return datetime(1970, 1, 1, tzinfo=timezone.utc)
+                return datetime(1970, 1, 1, tzinfo=UTC)
         return _parse_iso_datetime(v)
 
     def __init__(
@@ -245,7 +244,7 @@ class QuoteResponse(BaseModel):
         hive_hbd: Decimal | float | str = Decimal(0),
         raw_response: RawResponseType = {},
         source: str = "",
-        fetch_date: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc),
+        fetch_date: datetime = datetime(1970, 1, 1, tzinfo=UTC),
         error: str = "",
         error_details: Dict[str, Any] = {},
         **kwargs,
@@ -369,10 +368,10 @@ class QuoteResponse(BaseModel):
     def get_age(self) -> float:
         """Calculate the age of the quote in seconds. Function version (defensive)."""
         fd = _parse_iso_datetime(self.fetch_date)
-        return (datetime.now(tz=timezone.utc) - fd).total_seconds()
+        return (datetime.now(tz=UTC) - fd).total_seconds()
 
     @property
-    def log_extra(self) -> Dict[str, Any]:
+    def log_extra(self) -> dict[str, Any]:
         return {"quote_response": self.model_dump(exclude={"raw_response"}, exclude_none=True)}
 
 
@@ -413,13 +412,13 @@ class AllQuotes(BaseModel):
             valid Hive HBD price is found, raises a ValueError.
     """
 
-    quotes: Dict[str, QuoteResponse] = {}
+    quotes: dict[str, QuoteResponse] = {}
     quote: QuoteResponse = QuoteResponse()
-    fetch_date: datetime = datetime.now(tz=timezone.utc)
+    fetch_date: datetime = datetime.now(tz=UTC)
     source: str = ""
     redis_hit: bool = False
 
-    fetch_date_class: ClassVar[datetime] = datetime.now(tz=timezone.utc)
+    fetch_date_class: ClassVar[datetime] = datetime.now(tz=UTC)
     db_store_timestamp: ClassVar[datetime | None] = None
 
     def get_one_quote(self) -> QuoteResponse:
@@ -545,7 +544,7 @@ class AllQuotes(BaseModel):
             CoinMarketCap(),
             HiveInternalMarket(),
         ]
-        self.fetch_date = datetime.now(tz=timezone.utc)
+        self.fetch_date = datetime.now(tz=UTC)
         tasks: dict[str, asyncio.Task] = {}
 
         # per-service timeout smaller than overall; helps avoid a single slow provider
@@ -558,10 +557,10 @@ class AllQuotes(BaseModel):
                 # HiveInternalMarket call (which has no built-in timeout) from
                 # lasting the entire global timeout period.
                 return await asyncio.wait_for(service.get_quote(use_cache), PER_SERVICE_TIMEOUT)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return QuoteResponse(
                     source=service.__class__.__name__,
-                    fetch_date=datetime.now(tz=timezone.utc),
+                    fetch_date=datetime.now(tz=UTC),
                     error=f"Service timeout after {PER_SERVICE_TIMEOUT} seconds",
                 )
 
@@ -572,7 +571,7 @@ class AllQuotes(BaseModel):
                     for service in all_services:
                         name = service.__class__.__name__
                         tasks[name] = tg.create_task(_fetch_with_limit(service))
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             logger.error(
                 f"{ICON} Quote fetching exceeded timeout of {timeout} seconds",
                 exc_info=True,
@@ -588,7 +587,7 @@ class AllQuotes(BaseModel):
                 self.quotes[service_name] = QuoteResponse(
                     error=f"Timeout after {timeout} seconds",
                     source=service_name,
-                    fetch_date=datetime.now(tz=timezone.utc),
+                    fetch_date=datetime.now(tz=UTC),
                 )
             else:
                 try:
@@ -628,12 +627,12 @@ class AllQuotes(BaseModel):
         if store_db:
             await self.db_store_quote()
 
-    def global_quote_pack(self) -> Dict[str, Any]:
+    def global_quote_pack(self) -> dict[str, Any]:
         """
         Pack the global quotes into a dictionary format.
 
         Returns:
-            Dict[str, Any]: A dictionary containing the packed global quotes.
+            dict[str, Any]: A dictionary containing the packed global quotes.
         """
         return {
             "quotes": self.all_quotes_filtered(),
@@ -641,12 +640,12 @@ class AllQuotes(BaseModel):
             "source": self.source,
         }
 
-    def all_quotes_filtered(self) -> Dict[str, Dict[str, Any]]:
+    def all_quotes_filtered(self) -> dict[str, dict[str, Any]]:
         """
         Filter out quotes with errors and return the remaining valid quotes.
 
         Returns:
-            Dict[str, QuoteResponse]: A dictionary containing only the valid quotes
+            dict[str, QuoteResponse]: A dictionary containing only the valid quotes
             without errors.
         """
         no_error_quotes = {}
@@ -659,12 +658,12 @@ class AllQuotes(BaseModel):
                 no_error_quotes[service_name] = quote_dict
         return no_error_quotes
 
-    def unpack_quotes(self, cache_data: Dict[str, Any]) -> Dict[str, QuoteResponse]:
+    def unpack_quotes(self, cache_data: dict[str, Any]) -> dict[str, QuoteResponse]:
         """
         Unpack the quotes from the cached data, handling datetime conversion.
 
         Returns:
-            Dict[str, QuoteResponse]: A dictionary containing the unpacked quotes.
+            dict[str, QuoteResponse]: A dictionary containing the unpacked quotes.
         """
         quotes = {}
         for service_name, quote_data in cache_data.get("quotes", {}).items():
@@ -787,7 +786,7 @@ class AllQuotes(BaseModel):
             and self.fetch_date - AllQuotes.db_store_timestamp
             < timedelta(seconds=DB_RATES_MIN_INTERVAL)
         ):
-            delta = format_time_delta(datetime.now(tz=timezone.utc) - AllQuotes.db_store_timestamp)
+            delta = format_time_delta(datetime.now(tz=UTC) - AllQuotes.db_store_timestamp)
             logger.debug(f"{ICON} Skipping database store, last store was {delta} ago")
             return record
         try:
@@ -885,7 +884,7 @@ class AllQuotes(BaseModel):
         self.fetch_date = (
             max(fetch for fetch in fetch_dates if fetch is not None)
             if fetch_dates
-            else datetime.now(tz=timezone.utc)
+            else datetime.now(tz=UTC)
         )
         return QuoteResponse(
             hive_usd=avg_hive_usd,
@@ -1003,7 +1002,7 @@ class CoinGecko(QuoteService):
                         / Decimal(str(pri["hive_dollar"]["usd"])),
                         raw_response=pri,
                         source=self.__class__.__name__,
-                        fetch_date=datetime.now(tz=timezone.utc),
+                        fetch_date=datetime.now(tz=UTC),
                     )
                     await self.set_cache(quote_response)
                     return quote_response
@@ -1013,7 +1012,7 @@ class CoinGecko(QuoteService):
             message = f"Problem calling {self.__class__.__name__} API {ex}"
             return QuoteResponse(
                 source=self.__class__.__name__,
-                fetch_date=datetime.now(tz=timezone.utc),
+                fetch_date=datetime.now(tz=UTC),
                 error=message,
                 error_details={"exception": str(ex), "exception_type": type(ex).__name__},
             )
@@ -1092,7 +1091,7 @@ class Binance(QuoteService):
                 hive_hbd=Decimal(str(hive_hbd)),
                 raw_response=ticker_info,
                 source=self.__class__.__name__,
-                fetch_date=datetime.now(tz=timezone.utc),
+                fetch_date=datetime.now(tz=UTC),
             )
             return quote_response
 
@@ -1100,7 +1099,7 @@ class Binance(QuoteService):
             message = f"Problem calling {self.__class__.__name__} API {ex}"
             return QuoteResponse(
                 source=self.__class__.__name__,
-                fetch_date=datetime.now(tz=timezone.utc),
+                fetch_date=datetime.now(tz=UTC),
                 error=message,
                 error_details={"exception": str(ex), "exception_type": type(ex).__name__},
             )
@@ -1152,7 +1151,7 @@ class CoinMarketCap(QuoteService):
                     hive_hbd=Decimal(str(Hive_HBD)),
                     raw_response=resp_json,
                     source=self.__class__.__name__,
-                    fetch_date=datetime.now(tz=timezone.utc),
+                    fetch_date=datetime.now(tz=UTC),
                 )
                 await self.set_cache(quote_response)
                 return quote_response
@@ -1162,7 +1161,7 @@ class CoinMarketCap(QuoteService):
             message = f"Problem calling {self.__class__.__name__} API {ex}"
             return QuoteResponse(
                 source=self.__class__.__name__,
-                fetch_date=datetime.now(tz=timezone.utc),
+                fetch_date=datetime.now(tz=UTC),
                 error=message,
                 error_details={"exception": str(ex), "exception_type": type(ex).__name__},
             )
@@ -1176,6 +1175,7 @@ class HiveInternalMarket(QuoteService):
         # if cached_quote:
         #     return cached_quote
         from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
+
         try:
             hive_quote = await call_hive_internal_market()
             if hive_quote.error:
@@ -1191,7 +1191,7 @@ class HiveInternalMarket(QuoteService):
                 hive_hbd=Decimal(str(hive_hbd)),
                 raw_response=raw_response,
                 source=self.__class__.__name__,
-                fetch_date=datetime.now(tz=timezone.utc),
+                fetch_date=datetime.now(tz=UTC),
             )
             # await self.set_cache(quote_response)  # Do not cache HiveInternalMarket quote as it is only used for hive_hbd and we want to ensure it is always fresh
             return quote_response
@@ -1199,7 +1199,7 @@ class HiveInternalMarket(QuoteService):
             message = f"Problem calling {self.__class__.__name__} API {ex}"
             return QuoteResponse(
                 source=self.__class__.__name__,
-                fetch_date=datetime.now(tz=timezone.utc),
+                fetch_date=datetime.now(tz=UTC),
                 error=message,
                 error_details={"exception": str(ex), "exception_type": type(ex).__name__},
             )
