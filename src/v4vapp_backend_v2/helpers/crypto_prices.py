@@ -184,7 +184,7 @@ class QuoteResponse(BaseModel):
         hbd_usd (Decimal): The price of HBD in USD. Default is 0.
         btc_usd (Decimal): The price of BTC in USD. Default is 0.
         hive_hbd (Decimal): The price of HIVE in HBD. Default is 0.
-        raw_response (Dict[str, Any]): The raw response data. Default is an
+        raw_response (dict[str, Any]): The raw response data. Default is an
             empty dictionary.
         fetch_date (datetime): The date and time when the data was fetched. Default is
             the current UTC time.
@@ -246,7 +246,7 @@ class QuoteResponse(BaseModel):
         source: str = "",
         fetch_date: datetime = datetime(1970, 1, 1, tzinfo=UTC),
         error: str = "",
-        error_details: Dict[str, Any] = {},
+        error_details: dict[str, Any] = {},
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -381,7 +381,7 @@ class AllQuotes(BaseModel):
     from various services.
 
     Attributes:
-        quotes (Dict[str, QuoteResponse]): A dictionary to store quotes from different
+        quotes (dict[str, QuoteResponse]): A dictionary to store quotes from different
         services.
         fetch_date (datetime): The date and time when the quotes were fetched.
         source (str): The source of the quotes.
