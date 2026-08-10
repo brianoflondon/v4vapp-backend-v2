@@ -269,9 +269,7 @@ class QuoteResponse(BaseModel):
         Returns:
             bool: True if the quote is unset, False otherwise.
         """
-        if self.btc_usd == 0:
-            return True
-        return False
+        return self.btc_usd == 0
 
     @computed_field
     def sats_hive(self) -> Decimal:
@@ -477,7 +475,9 @@ class AllQuotes(BaseModel):
                                 )
                         except Exception:
                             # Fall back to leaving hbd_usd as-is if any conversion fails
-                            pass
+                            logger.debug(
+                                "Failed to calculate HBD/USD from hive_usd and hive_hbd; leaving hbd_usd as-is"
+                            )
                     quote = QuoteResponse.model_validate(quote_dict)
                 self.quote = quote
                 self.source = Binance.__name__
