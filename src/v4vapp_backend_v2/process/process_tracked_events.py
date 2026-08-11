@@ -183,7 +183,8 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
                         magi_transfer=tracked_op
                     )
                 else:
-                    logger.warning(f"Unknown tracked object type: {type(tracked_op)}",
+                    logger.warning(
+                        f"Unknown tracked object type: {type(tracked_op)}",
                         extra={"notification": False, **tracked_op.log_extra},
                     )
                     raise TypeError("Invalid tracked object")
@@ -221,6 +222,9 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
 
         except LedgerEntryDuplicateException as e:
             raise LedgerEntryDuplicateException(f"Ledger entry already exists: {e}") from e
+
+        except NotImplementedError as e:
+            raise NotImplementedError(f"Not implemented: {e}") from e
 
         except LedgerEntryException as e:
             logger.exception(f"{FAILURE_ICON} Error processing tracked operation: {e}")
@@ -275,7 +279,7 @@ async def process_lightning_invoice(
     invoice memo contains specific keywords (e.g., "Funding"), it assigns the correct
     asset and liability accounts. For other cases, it raises a NotImplementedError.
 
-    Special: If the memo contains "Funding", it treats this as an incoming
+    Special: If the memo contains "Funding" or "Balance Adjustment", it treats this as an incoming
     Owner's loan Funding to Treasury Lightning, updating the ledger entry accordingly.
 
     Args:
@@ -295,7 +299,7 @@ async def process_lightning_invoice(
     if not invoice.conv or invoice.conv.is_unset():
         await invoice.update_conv()
         await invoice.save()
-    if "funding" in invoice.memo.lower():
+    if check_funding_balance_adjustment(invoice):
         # Treat this as an incoming Owner's loan Funding to Treasury Lightning
         ledger_type = LedgerType.FUNDING
         ledger_entry = LedgerEntry(
@@ -320,10 +324,35 @@ async def process_lightning_invoice(
     if invoice.is_lndtohive or invoice.is_magisats:
         ledger_entries = await process_lightning_receipt(invoice=invoice)
         return ledger_entries
+    if invoice.is_keysend:
+        raise NotImplementedError("Keysend invoice processing is not implemented yet.")
     elif "Exchange" in invoice.memo:
         raise NotImplementedError("Exchange invoice processing is not implemented yet.")
 
     raise NotImplementedError("process_lightning_op is not implemented yet.")
+
+
+def check_funding_balance_adjustment(invoice: Invoice) -> bool:
+    """
+    Checks if the given invoice is a funding or balance adjustment invoice.
+
+    This function examines the memo of the invoice to determine if it contains
+    keywords indicating that it is related to funding or balance adjustments.
+
+    Args:
+        invoice (Invoice): The Lightning invoice object to check.
+    Returns:
+        bool: True if the invoice is a funding or balance adjustment invoice, False otherwise.
+    """
+    memo_lower = invoice.memo.lower()
+    if not memo_lower and invoice.custom_records:
+        custom_records = invoice.custom_records
+        if custom_records and custom_records.keysend_message:
+            memo_lower = custom_records.keysend_message.lower()
+    # Exclude LND to Hive and MagiSats invoices from being treated as funding or balance adjustments
+    if invoice.is_lndtohive or invoice.is_magisats:
+        return False
+    return "funding" in memo_lower or "balance adjustment" in memo_lower
 
 
 # MARK: Payment (outbound Lightning)
