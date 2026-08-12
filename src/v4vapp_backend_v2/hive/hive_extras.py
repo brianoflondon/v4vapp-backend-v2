@@ -480,8 +480,10 @@ def get_good_nodes() -> list[str]:
             good_nodes = _filter_excluded_nodes(good_nodes)
             logger.info(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
             try:
-                InternalConfig.redis_decoded.setex(
-                    REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes)
+                InternalConfig.redis_decoded.set(
+                    name=REDIS_KEY_GOOD_NODES,
+                    value=json.dumps(good_nodes),
+                    ex=3600,
                 )
             except Exception as e:  # noqa: BLE001
                 logger.warning(
@@ -514,7 +516,11 @@ def get_good_nodes() -> list[str]:
             },
         )
         good_nodes = _filter_excluded_nodes(list(DEFAULT_GOOD_NODES))
-        InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 3600, json.dumps(good_nodes))
+        InternalConfig.redis_decoded.set(
+            name=REDIS_KEY_GOOD_NODES,
+            value=json.dumps(good_nodes),
+            ex=3600,
+        )
 
     if len(good_nodes) < 2:
         logger.warning(
@@ -522,7 +528,11 @@ def get_good_nodes() -> list[str]:
             extra={"good_nodes": good_nodes},
         )
         good_nodes = _filter_excluded_nodes(list(DEFAULT_GOOD_NODES))
-        InternalConfig.redis_decoded.setex(REDIS_KEY_GOOD_NODES, 1800, json.dumps(good_nodes))
+        InternalConfig.redis_decoded.set(
+            name=REDIS_KEY_GOOD_NODES,
+            value=json.dumps(good_nodes),
+            ex=1800,
+        )
     return good_nodes
 
 

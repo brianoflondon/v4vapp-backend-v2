@@ -244,7 +244,7 @@ async def set_cached_balance(
         gen = await get_cache_generation()
         key = _make_cache_key(gen, account, as_of_date, age, use_checkpoints)
         data = result.model_dump_json()
-        await InternalConfig.redis_async.setex(key, ttl, data)
+        await InternalConfig.redis_async.set(name=key, value=data, ex=ttl)
         if report_time is not None:
             report_time_str = f"{report_time:.3f}s"
             logger.debug(f"SET: {key} (ttl={ttl}s in {report_time_str})")

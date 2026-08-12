@@ -107,8 +107,8 @@ async def test_run_all_sanity_checks_uses_redis_cache(monkeypatch):
         async def get(self, key):
             return self.store.get(key)
 
-        async def setex(self, key, ttl, value):
-            self.store[key] = value
+        async def set(self, name, value, ex=None):
+            self.store[name] = value
 
     fake_redis = FakeRedis()
 
@@ -147,8 +147,8 @@ async def test_run_all_sanity_checks_does_not_cache_failures(monkeypatch):
         async def get(self, key):
             return self.store.get(key)
 
-        async def setex(self, key, ttl, value):
-            self.store[key] = value
+        async def set(self, name, value, ex=None):
+            self.store[name] = value
 
     fake_redis = FakeRedis()
     monkeypatch.setattr(sanity_checks.InternalConfig, "redis_async", fake_redis, raising=False)
@@ -184,8 +184,8 @@ async def test_run_all_sanity_checks_can_cache_failures(monkeypatch):
         async def get(self, key):
             return self.store.get(key)
 
-        async def setex(self, key, ttl, value):
-            self.store[key] = value
+        async def set(self, name, value, ex=None):
+            self.store[name] = value
 
     fake_redis = FakeRedis()
     monkeypatch.setattr(sanity_checks.InternalConfig, "redis_async", fake_redis, raising=False)

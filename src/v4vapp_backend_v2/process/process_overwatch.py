@@ -618,7 +618,7 @@ class Overwatch:
             rkey = self._redis_flow_key(flow)
             if flow.status == FlowStatus.COMPLETED:
                 key = f"{_REDIS_COMPLETED_PREFIX}{rkey}"
-                await r.setex(key, _COMPLETED_TTL_SECONDS, data)
+                await r.set(name=key, value=data, ex=_COMPLETED_TTL_SECONDS)
                 # Remove from the active hash
                 await r.hdel(_REDIS_ACTIVE_KEY, rkey)
             else:
@@ -687,10 +687,10 @@ class Overwatch:
                     if normalized_rkey != rkey:
                         await r.hdel(_REDIS_ACTIVE_KEY, rkey)
                         if flow.status == FlowStatus.COMPLETED:
-                            await r.setex(
-                                f"{_REDIS_COMPLETED_PREFIX}{normalized_rkey}",
-                                _COMPLETED_TTL_SECONDS,
-                                flow.model_dump_json(),
+                            await r.set(
+                                name=f"{_REDIS_COMPLETED_PREFIX}{normalized_rkey}",
+                                value=flow.model_dump_json(),
+                                ex=_COMPLETED_TTL_SECONDS,
                             )
                         else:
                             await r.hset(
@@ -730,10 +730,10 @@ class Overwatch:
                         loaded += 1
                         if normalized_rkey != rkey:
                             await r.delete(key)
-                            await r.setex(
-                                f"{_REDIS_COMPLETED_PREFIX}{normalized_rkey}",
-                                _COMPLETED_TTL_SECONDS,
-                                flow.model_dump_json(),
+                            await r.set(
+                                name=f"{_REDIS_COMPLETED_PREFIX}{normalized_rkey}",
+                                value=flow.model_dump_json(),
+                                ex=_COMPLETED_TTL_SECONDS,
                             )
                     except Exception as e:
                         logger.warning(

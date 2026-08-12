@@ -201,10 +201,10 @@ async def _set_cached_sanity_check_results(
     if not redis_client:
         return
     try:
-        await redis_client.setex(
-            SANITY_REDIS_CACHE_KEY,
-            ttl_seconds,
-            results.model_dump_json(),
+        await redis_client.set(
+            name=SANITY_REDIS_CACHE_KEY,
+            value=results.model_dump_json(),
+            ex=ttl_seconds,
         )
     except Exception as e:
         logger.debug(

@@ -22,17 +22,17 @@ async def test_fetch_success_writes_tmp_and_sets_redis(mocker, tmp_path):
     mocker.patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_resp))
 
     mock_redis = mocker.patch("v4vapp_backend_v2.config.setup.InternalConfig.redis_decoded")
-    mock_redis.setex = Mock(return_value=None)
+    mock_redis.set = Mock(return_value=None)
 
     # Run
     result = await fetch_bad_actor_list()
 
     assert result == set(sample_list)
 
-    # Check Redis setex called with TTL 3600
-    assert mock_redis.setex.call_count == 1
-    _, kwargs = mock_redis.setex.call_args
-    assert kwargs.get("time") == 3600
+    # Check Redis set called with TTL 3600
+    assert mock_redis.set.call_count == 1
+    _, kwargs = mock_redis.set.call_args
+    assert kwargs.get("ex") == 3600
     # Validate payload is JSON and contains our list
     payload = json.loads(kwargs.get("value"))
     assert set(payload) == set(sample_list)

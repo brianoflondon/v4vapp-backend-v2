@@ -239,8 +239,8 @@ async def test_quote_expiry_simulation(mocker):
         def __init__(self):
             self.store = {}
 
-        def setex(self, key, time, value):
-            self.store[key] = value
+        def set(self, name, value, ex=None):
+            self.store[name] = value
             return True
 
         def get(self, key):

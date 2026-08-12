@@ -60,10 +60,10 @@ class UpdateProposalVotes(OpBase):
             )
             try:
                 cache_value = self.prop_voter_details[str(prop_id)].model_dump_json()
-                InternalConfig.redis_decoded.setex(
-                    cache_key,
-                    time=300,
+                InternalConfig.redis_decoded.set(
+                    name=cache_key,
                     value=cache_value,
+                    ex=300,
                 )
             except Exception as e:
                 logger.info(f"Error setting cache for {cache_key}: {e}")
