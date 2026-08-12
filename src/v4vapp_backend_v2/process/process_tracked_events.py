@@ -292,7 +292,7 @@ async def perform_finalize(
             "ledger_items": ledger_entries_log_extra,
         },
     )
-    logger.debug(f"{ICON} {'+++' * 10} {tracked_op.cust_id} {'+++' * 10}")
+    logger.debug(f"{ICON} {'+++' * 10} {cust_id} {'+++' * 10}")
 
 
 # MARK: Lightning Transactions
