@@ -295,15 +295,16 @@ async def process_lightning_invoice(
     # Invoice means we are receiving sats from external.
     # Invoice is locked by outer process.
     node_name = InternalConfig().node_name
-    # MARK: Funding
     if not invoice.conv or invoice.conv.is_unset():
         await invoice.update_conv()
         await invoice.save()
+    # MARK: Lightning Invoice Funding
     if check_funding_balance_adjustment(invoice):
         # Treat this as an incoming Owner's loan Funding to Treasury Lightning
         ledger_type = LedgerType.FUNDING
+        group_id = f"{invoice.group_id}_{ledger_type.value}"
         ledger_entry = LedgerEntry(
-            group_id=invoice.group_id,
+            group_id=group_id,
             short_id=invoice.short_id,
             description=f"{invoice.memo} from invoice {invoice.short_id}",
             timestamp=invoice.timestamp,
@@ -332,7 +333,7 @@ async def process_lightning_invoice(
     raise NotImplementedError("process_lightning_op is not implemented yet.")
 
 
-def check_funding_balance_adjustment(invoice: Invoice) -> bool:
+def check_funding_balance_adjustment(transaction: Invoice | Payment) -> bool:
     """
     Checks if the given invoice is a funding or balance adjustment invoice.
 
@@ -340,18 +341,28 @@ def check_funding_balance_adjustment(invoice: Invoice) -> bool:
     keywords indicating that it is related to funding or balance adjustments.
 
     Args:
-        invoice (Invoice): The Lightning invoice object to check.
+        invoice (Invoice | Payment): The Lightning invoice or payment object to check.
     Returns:
         bool: True if the invoice is a funding or balance adjustment invoice, False otherwise.
     """
-    memo_lower = invoice.memo.lower()
-    if not memo_lower and invoice.custom_records:
-        custom_records = invoice.custom_records
-        if custom_records and custom_records.keysend_message:
-            memo_lower = custom_records.keysend_message.lower()
-    # Exclude LND to Hive and MagiSats invoices from being treated as funding or balance adjustments
-    if invoice.is_lndtohive or invoice.is_magisats:
-        return False
+    memo_lower = ""
+    if isinstance(transaction, Payment):
+        if transaction.status != "SUCCEEDED":
+            return False
+        if not transaction.invoice_description:
+            return False
+        memo_lower = transaction.invoice_description.lower()
+
+    if isinstance(transaction, Invoice):
+        memo_lower = transaction.memo.lower()
+        if not memo_lower and transaction.custom_records:
+            custom_records = transaction.custom_records
+            if custom_records and custom_records.keysend_message:
+                memo_lower = custom_records.keysend_message.lower()
+        # Exclude LND to Hive and MagiSats invoices from being treated as funding or balance adjustments
+        if transaction.is_lndtohive or transaction.is_magisats:
+            return False
+
     return "funding" in memo_lower or "balance adjustment" in memo_lower
 
 
@@ -382,6 +393,30 @@ async def process_lightning_payment(
     """
     if not payment.conv or payment.conv.is_unset():
         await payment.update_conv()
+    node_name = InternalConfig().node_name
+    if check_funding_balance_adjustment(payment):
+        # Treat this as an incoming Owner's loan Funding to Treasury Lightning
+        ledger_type = LedgerType.FUNDING
+        group_id = f"{payment.group_id}_{ledger_type.value}"
+        ledger_entry = LedgerEntry(
+            group_id=group_id,
+            short_id=payment.short_id,
+            description=f"{payment.invoice_description} from payment {payment.short_id}",
+            timestamp=payment.timestamp,
+            op_type=payment.op_type,
+            ledger_type=ledger_type,
+            cust_id=payment.cust_id or node_name,
+            debit=LiabilityAccount(name="Owner Loan Payable", sub=node_name),
+            debit_amount=float(payment.value_msat),
+            debit_unit=Currency.MSATS,
+            credit=AssetAccount(name="External Lightning Payments", sub=node_name),
+            credit_unit=Currency.MSATS,
+            credit_amount=float(payment.value_msat),
+            link=payment.link,
+        )
+        await ledger_entry.save()
+        return [ledger_entry]
+
     v4vapp_group_id = ""
     if payment.succeeded and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
@@ -436,6 +471,12 @@ async def process_lightning_payment(
                         extra={"notification": False, **hive_transfer.log_extra},
                     )
                     return []
+
+    if not check_funding_balance_adjustment(payment):
+        raise NotImplementedError(
+            f"Not implemented yet for Payment: {payment.group_id}. "
+            f"Payment memo: {payment.invoice_description}"
+        )
 
     if not v4vapp_group_id:
         raise LedgerEntryCreationException(

@@ -71,7 +71,7 @@
                 placeholder="short_id (8075_6900b2_1), group_id, or hive account"
                 value="{{ initial_query }}">
         </div>
-        <div class="col-md-4 d-flex gap-2">
+        <div class="col-md-4 d-flex gap-2 flex-wrap">
             <button class="btn btn-primary flex-grow-1" onclick="searchDeposits()">
                 <i class="bi bi-search me-1"></i> Search deposits
             </button>
@@ -81,6 +81,53 @@
         </div>
     </div>
     <div class="form-text">Only <code>cust_h_in</code> (customer HIVE/HBD deposit) ledger rows are listed.</div>
+</div>
+
+<div class="replay-panel">
+    <h3 class="mb-2">
+        <i class="bi bi-arrow-repeat me-2"></i>
+        Replay Lightning Payment
+    </h3>
+    <p class="text-muted mb-3">
+        Scan payments that look like balance adjustments or funding and manually replay them through the payment processor.
+        Select found payments and then process them through <code>process_tracked_event</code>.
+    </p>
+    <div class="row g-2 align-items-end">
+        <div class="col-md-8">
+            <label class="form-label">Payment scan</label>
+            <input type="text" class="form-control mono" id="payment_scan_limit" value="50">
+            <div class="form-text">Max number of payments to scan from the payments collection.</div>
+        </div>
+        <div class="col-md-4 d-flex gap-2 flex-wrap">
+            <button class="btn btn-outline-success flex-grow-1" onclick="scanPayments()">
+                <i class="bi bi-arrow-repeat me-1"></i> Scan payments
+            </button>
+            <button class="btn btn-success flex-grow-1" onclick="processSelectedPayments()" id="btn-process-payments" disabled>
+                <i class="bi bi-play-fill me-1"></i> Process selected
+            </button>
+        </div>
+    </div>
+    <div class="form-text">Scan payments that have no <code>process_time</code> and invoice_description matching balance adjustment or funding.</div>
+</div>
+
+<div class="replay-panel" id="payment-results-panel" style="display:none;">
+    <h5 class="mb-3">Payment candidates</h5>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="payment-select-all" onchange="toggleAllPayments(this)"></th>
+                    <th>Short ID</th>
+                    <th>Destination</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Invoice description</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody id="payment-results-body"></tbody>
+        </table>
+    </div>
 </div>
 
 <div class="replay-panel" id="results-panel" style="display:none;">
@@ -379,6 +426,90 @@
             refreshInspect();
         } catch (e) {
             setStatus('Clear failed: ' + esc(e), 'danger');
+        }
+    }
+
+    async function scanPayments() {
+        clearStatus();
+        setStatus('Scanning payments…', 'secondary');
+        const limit = document.getElementById('payment_scan_limit').value || '50';
+        try {
+            const res = await fetch('/admin/replay-deposit/api/scan-payments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ limit }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.ok === false) {
+                setStatus(`Scan failed: ${esc(data.error || res.statusText)}`, 'danger');
+                return;
+            }
+            const tbody = document.getElementById('payment-results-body');
+            tbody.innerHTML = '';
+            document.getElementById('payment-results-panel').style.display = 'block';
+            const payments = data.payments || [];
+            if (!payments.length) {
+                setStatus('No payment candidates found.', 'warning');
+                document.getElementById('btn-process-payments').disabled = true;
+                return;
+            }
+            clearStatus();
+            document.getElementById('btn-process-payments').disabled = false;
+            for (const p of payments) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="checkbox" class="payment-select" data-group-id="${escAttr(p.group_id)}"></td>
+                    <td class="mono">${esc(p.short_id)}</td>
+                    <td class="mono">${esc(p.destination || '')}</td>
+                    <td class="mono">${esc(p.amount != null ? p.amount : '')}</td>
+                    <td class="mono">${esc(p.status || '')}</td>
+                    <td class="mono">${esc(p.invoice_description || '')}</td>
+                    <td class="small">${esc((p.creation_date || '').replace ? p.creation_date.replace('T', ' ').slice(0, 19) : '')}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+            const selectAll = document.getElementById('payment-select-all');
+            selectAll.checked = false;
+            selectAll.disabled = false;
+        } catch (e) {
+            setStatus('Scan failed: ' + esc(e), 'danger');
+        }
+    }
+
+    function toggleAllPayments(source) {
+        const checkboxes = document.querySelectorAll('.payment-select');
+        checkboxes.forEach(cb => {
+            cb.checked = source.checked;
+        });
+        document.getElementById('btn-process-payments').disabled = !source.checked;
+    }
+
+    async function processSelectedPayments() {
+        const checkboxes = Array.from(document.querySelectorAll('.payment-select')).filter(cb => cb.checked);
+        if (!checkboxes.length) {
+            setStatus('Select at least one payment to process.', 'warning');
+            return;
+        }
+        const groupIds = checkboxes.map(cb => cb.getAttribute('data-group-id'));
+        if (!confirm(`Process ${groupIds.length} selected payment(s)?`)) return;
+        setStatus('Processing selected payments…', 'secondary');
+        try {
+            const res = await fetch('/admin/replay-deposit/api/process-payments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ group_ids: groupIds }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.ok === false) {
+                setStatus(`Process failed: ${esc(data.error || res.statusText)}`, 'danger');
+                return;
+            }
+            setStatus(`Processed ${data.processed} of ${data.requested} payments.`, data.errors.length ? 'warning' : 'success');
+            if (data.errors && data.errors.length) {
+                console.warn('processSelectedPayments errors', data.errors);
+            }
+        } catch (e) {
+            setStatus('Process failed: ' + esc(e), 'danger');
         }
     }
 
