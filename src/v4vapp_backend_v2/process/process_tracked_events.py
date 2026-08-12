@@ -58,7 +58,7 @@ from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.magi.magi_classes import MagiBTCTransferEvent
 from v4vapp_backend_v2.models.invoice_models import Invoice
-from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.models.payment_models import Payment, PaymentStatus
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
@@ -279,8 +279,9 @@ async def process_lightning_invoice(
     invoice memo contains specific keywords (e.g., "Funding"), it assigns the correct
     asset and liability accounts. For other cases, it raises a NotImplementedError.
 
-    Special: If the memo contains "Funding" or "Balance Adjustment", it treats this as an incoming
-    Owner's loan Funding to Treasury Lightning, updating the ledger entry accordingly.
+    Special: If the memo contains "Funding" or "Balance Adjustment", it records this as an incoming
+    Owner's loan, debiting the External Lightning Payments asset account and crediting the
+    Owner Loan Payable liability account.
 
     Args:
         invoice (Invoice): The Lightning invoice object containing payment details.
@@ -347,7 +348,7 @@ def check_funding_balance_adjustment(transaction: Invoice | Payment) -> bool:
     """
     memo_lower = ""
     if isinstance(transaction, Payment):
-        if transaction.status != "SUCCEEDED":
+        if transaction.status != PaymentStatus.SUCCEEDED:
             return False
         if not transaction.invoice_description:
             return False
@@ -395,7 +396,7 @@ async def process_lightning_payment(
         await payment.update_conv()
     node_name = InternalConfig().node_name
     if check_funding_balance_adjustment(payment):
-        # Treat this as an incoming Owner's loan Funding to Treasury Lightning
+        # Treat this as an outbound Owner's loan Funding to Treasury Lightning
         ledger_type = LedgerType.FUNDING
         group_id = f"{payment.group_id}_{ledger_type.value}"
         ledger_entry = LedgerEntry(
@@ -474,7 +475,7 @@ async def process_lightning_payment(
 
     if not check_funding_balance_adjustment(payment):
         raise NotImplementedError(
-            f"Not implemented yet for Payment: {payment.group_id}. "
+            f"Not implemented yet for Payment: {payment.short_id} {payment.group_id}. "
             f"Payment memo: {payment.invoice_description}"
         )
 
@@ -482,7 +483,9 @@ async def process_lightning_payment(
         raise LedgerEntryCreationException(
             "Payment does not have a valid v4vapp_group_id in custom records."
         )
-    raise NotImplementedError(f"Not implemented yet for Payment: {payment.group_id}.")
+    raise NotImplementedError(
+        f"Not implemented yet for Payment: {payment.short_id} {payment.group_id}."
+    )
 
 
 # Last line of file

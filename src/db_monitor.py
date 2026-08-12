@@ -239,11 +239,11 @@ def ignore_changes(change: Mapping[str, Any], collection_name: str) -> bool:
     # it returns True when every element of the left‑hand set appears in the
     # right‑hand set.
     if set(updated_fields) <= set(IGNORED_UPDATE_FIELDS):
-        logger.info(
+        logger.debug(
             f"{ICON} Ignoring change with only ignored fields updated: {set(updated_fields)} in {collection_name}",
         )
         return True
-    logger.info(f"{ICON} Processing changes to: {set(updated_fields)} in {collection_name}")
+    logger.debug(f"{ICON} Processing changes to: {set(updated_fields)} in {collection_name}")
     return False
 
 
