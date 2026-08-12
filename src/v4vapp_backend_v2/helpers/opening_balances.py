@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
@@ -67,17 +67,17 @@ async def reset_lightning_opening_balance() -> None:
             "However, there are existing transactions in the ledger for this account. "
             "Resetting the opening balance may lead to discrepancies. Please review the ledger entries before proceeding."
         )
-        reason = f"Balance adjustment required for {node}"
+        reason = f"Balance Adjustment at startup {datetime.now(tz=UTC)} for {node}"
         adjustment_msats = balances.channel.local_msat - account_ledger_balance.msats
         adjustment_msats = adjustment_msats.quantize(
-            Decimal("1")
+            Decimal(1)
         )  # round to nearest 1 msat to avoid tiny adjustments
         short_id = "adjustment"
     else:
         reason = f"Initial opening balance for {node}"
         adjustment_msats = balances.channel.local_msat
         adjustment_msats = adjustment_msats.quantize(
-            Decimal("1")
+            Decimal(1)
         )  # round to nearest 1 msat to avoid tiny adjustments
         short_id = "open"
 
@@ -96,8 +96,8 @@ async def reset_lightning_opening_balance() -> None:
         short_id=short_id,
         op_type="funding",
         ledger_type=LedgerType.FUNDING,
-        group_id=f"{short_id}-{datetime.now(tz=timezone.utc).isoformat()}-{LedgerType.FUNDING.value}",
-        timestamp=datetime.now(tz=timezone.utc),
+        group_id=f"{short_id}-{datetime.now(tz=UTC).isoformat()}-{LedgerType.FUNDING.value}",
+        timestamp=datetime.now(tz=UTC),
         description=reason,
         debit=AssetAccount(name="External Lightning Payments", sub=node),
         debit_unit=Currency.MSATS,
@@ -248,7 +248,7 @@ async def reset_exchange_opening_balance(
             if currency == Currency.MSATS:
                 # round to nearest 1000 msats using Decimal quantize to avoid floating point issues, then convert back to Decimal
                 adjustment_value = (adjustment_value / Decimal(1000)).quantize(
-                    Decimal("1")
+                    Decimal(1)
                 ) * Decimal(1000)
             elif currency == Currency.HIVE:
                 # round to 3 decimal places for Hive
@@ -275,8 +275,8 @@ async def reset_exchange_opening_balance(
             short_id=short_id,
             op_type="funding",
             ledger_type=LedgerType.FUNDING,
-            group_id=f"{short_id}-{exchange_sub}-{asset_label}-{datetime.now(tz=timezone.utc).isoformat()}-{LedgerType.FUNDING.value}",
-            timestamp=datetime.now(tz=timezone.utc),
+            group_id=f"{short_id}-{exchange_sub}-{asset_label}-{datetime.now(tz=UTC).isoformat()}-{LedgerType.FUNDING.value}",
+            timestamp=datetime.now(tz=UTC),
             description=reason,
             debit=AssetAccount(name="Exchange Holdings", sub=exchange_sub),
             debit_unit=currency,

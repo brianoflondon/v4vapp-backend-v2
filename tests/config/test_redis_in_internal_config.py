@@ -28,7 +28,7 @@ def test_redis_client_decode_responses_false():
     # Test the async Redis client
     assert redis_client is not None
     assert redis_client.ping()
-    redis_client.setex("test_key", 1, "test_value")
+    redis_client.set(name="test_key", value="test_value", ex=1)
     assert redis_client.get("test_key") == b"test_value"
     sleep(1.01)
     assert redis_client.get("test_key") is None
@@ -41,7 +41,7 @@ def test_redis_client_decode_responses_true():
     # Test the async Redis client
     assert redis_client is not None
     assert redis_client.ping()
-    redis_client.setex("test_key", 1, "test_value")
+    redis_client.set(name="test_key", value="test_value", ex=1)
     assert redis_client.get("test_key") == "test_value"
     sleep(1.01)
     assert redis_client.get("test_key") is None

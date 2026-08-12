@@ -38,7 +38,7 @@ def test_op_update_proposal_votes(mocker):
 
     mock_redis = mocker.Mock()
     mock_redis.get.return_value = None
-    mock_redis.setex.return_value = None
+    mock_redis.set.return_value = None
     mocker.patch(
         "v4vapp_backend_v2.hive_models.op_update_proposal_votes.VotingPower",
         side_effect=fake_voting_power,

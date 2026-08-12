@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta, timezone
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
@@ -40,17 +41,17 @@ def filter_by_account_as_of_date_query(
             Defaults to the current datetime in UTC.
 
     Returns:
-        Dict[str, Any]: A dictionary representing the MongoDB query.
+        dict[str, Any]: A dictionary representing the MongoDB query.
     """
-    date_range_query: Dict[str, Any] = {}
+    date_range_query: dict[str, Any] = {}
     if age:
         if not as_of_date:
-            as_of_date = datetime.now(tz=timezone.utc)
+            as_of_date = datetime.now(tz=UTC)
         date_range_query = {"$gte": as_of_date - age, "$lte": as_of_date}
     else:
         date_range_query = {"$exists": True} if as_of_date is None else {"$lte": as_of_date}
 
-    query: Dict[str, Any] = {"timestamp": date_range_query}
+    query: dict[str, Any] = {"timestamp": date_range_query}
 
     if account:
         query["$or"] = [
@@ -96,9 +97,9 @@ def filter_by_account_as_of_date_query(
 def limit_check_pipeline(
     cust_id: str,
     extra_spend_sats: Decimal = Decimal(0),
-    lightning_rate_limits: List[V4VConfigRateLimits] | None = None,
+    lightning_rate_limits: list[V4VConfigRateLimits] | None = None,
     details: bool = False,
-) -> List[Mapping[str, Any]]:
+) -> list[Mapping[str, Any]]:
     """
     Look up the sum of lightning conversion credits for a given customer ID across multiple time periods defined in the configuration.
     This is used to check if a customer has exceeded their lightning conversion limits in any of the
@@ -108,7 +109,7 @@ def limit_check_pipeline(
     Args:
         cust_id (str): The customer ID to check the limits for.
         extra_spend_sats (Decimal, optional): Additional sats to include in the limit check (e.g., pending transactions). Defaults to Decimal(0).
-        lightning_rate_limits (List[V4VConfigRateLimits], optional): A list of rate limit configurations to use for the check. If not provided,
+        lightning_rate_limits (list[V4VConfigRateLimits], optional): A list of rate limit configurations to use for the check. If not provided,
             it will use the rate limits from the V4VConfig. Defaults to None.
         details (bool, optional): Whether to include detailed transaction information in the output. Defaults to False.
     """
@@ -119,7 +120,7 @@ def limit_check_pipeline(
     V4VConfig().data.check_and_sort_rate_limits()
 
     max_hours = V4VConfig().data.max_rate_limit_hours
-    start_date = datetime.now(tz=timezone.utc) - timedelta(hours=max_hours)
+    start_date = datetime.now(tz=UTC) - timedelta(hours=max_hours)
     ledger_types = [
         LedgerType.CONV_HIVE_TO_KEEPSATS.value,
         LedgerType.CONV_KEEPSATS_TO_HIVE.value,
@@ -176,7 +177,7 @@ def limit_check_pipeline(
     extra_spend_sats_str = str(extra_spend_sats)
 
     # Generate the pipeline dynamically
-    pipeline: List[Mapping[str, Any]] = [
+    pipeline: list[Mapping[str, Any]] = [
         {"$match": top_level_match},
         {"$facet": facet_dict},
         {"$project": {name: {"$first": f"${name}"} for name in facet_dict}},
@@ -235,12 +236,12 @@ IGNORED_UPDATE_FIELDS = [
 ]
 
 
-def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
+def db_monitor_pipelines() -> dict[str, Sequence[Mapping[str, Any]]]:
     """
     Generates MongoDB aggregation pipelines for monitoring database changes in payments, invoices, and hive operations collections.
 
     Returns:
-        Dict[str, Sequence[Mapping[str, Any]]]:
+        dict[str, Sequence[Mapping[str, Any]]]:
             A dictionary containing named pipelines:
                 - "payments": Pipeline to monitor payment documents, excluding deletes and filtering by group ID and status.
                 - "invoices": Pipeline to monitor invoice documents, excluding deletes and filtering for settled state.

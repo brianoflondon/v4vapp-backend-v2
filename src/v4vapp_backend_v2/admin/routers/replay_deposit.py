@@ -20,6 +20,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
+from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -27,9 +28,12 @@ from v4vapp_backend_v2.hive_models.op_all import OP_MAP
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 from v4vapp_backend_v2.process.process_transfer import HiveTransferError, follow_on_transfer
 
 router = APIRouter()
+
+PAYLOAD_BODY = Body(...)
 
 templates: Jinja2Templates | None = None
 nav_manager: NavigationManager | None = None
@@ -256,9 +260,7 @@ async def _invoice_status(memo: str | None) -> dict[str, Any]:
                 pay_req.timestamp.isoformat() if getattr(pay_req, "timestamp", None) else None
             ),
             "expiry_date": (
-                pay_req.expiry_date.isoformat()
-                if getattr(pay_req, "expiry_date", None)
-                else None
+                pay_req.expiry_date.isoformat() if getattr(pay_req, "expiry_date", None) else None
             ),
             "expired": expired,
             "destination": getattr(pay_req, "dest_alias", None)
@@ -457,12 +459,12 @@ async def replay_deposit_page(request: Request, q: str | None = None):
         "replay_deposit/replay.html.jinja",
         {
             "request": request,
-            "title": "Replay Hive Deposit",
+            "title": "Replay",
             "nav_items": nav_items,
             "initial_query": q or "",
             "breadcrumbs": [
                 {"name": "Admin", "url": "/admin"},
-                {"name": "Replay Hive Deposit", "url": "/admin/replay-deposit"},
+                {"name": "Replay", "url": "/admin/replay-deposit"},
             ],
             "sanity_results": sanity_results,
             "pending_transactions": await PendingTransaction.list_all_str(),
@@ -513,8 +515,215 @@ async def inspect_deposit(short_id: str = "", group_id: str = "") -> JSONRespons
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@router.post("/api/scan-payments")
+async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
+    """Scan payments for Balance Adjustment or funding and return matching payment candidates."""
+    limit = 50
+    try:
+        limit = max(1, min(int(payload.get("limit", 50)), 200))
+    except Exception:
+        limit = 50
+
+    db = InternalConfig.db
+    query = {
+        "process_time": {"$exists": False},
+        "invoice_description": {"$regex": "balance adjustment|funding", "$options": "i"},
+    }
+    cursor = (
+        db["payments"]
+        .find(
+            query,
+            {
+                "group_id": 1,
+                "short_id": 1,
+                "invoice_description": 1,
+                "status": 1,
+                "creation_date": 1,
+                "destination": 1,
+                "value_sat": 1,
+                "value_msat": 1,
+                "value": 1,
+            },
+        )
+        .sort("creation_date", -1)
+        .limit(limit)
+    )
+
+    payments: list[dict[str, Any]] = []
+    scanned = 0
+    async for doc in cursor:
+        scanned += 1
+        creation_date = doc.get("creation_date")
+        if creation_date and hasattr(creation_date, "isoformat"):
+            creation_date = creation_date.isoformat()
+        amount = doc.get("value_sat") or doc.get("value") or None
+        if amount is None and doc.get("value_msat") is not None:
+            try:
+                amount = int(doc.get("value_msat") // 1000)
+            except Exception:
+                amount = None
+        payments.append({
+            "group_id": doc.get("group_id"),
+            "short_id": doc.get("short_id"),
+            "invoice_description": doc.get("invoice_description"),
+            "status": doc.get("status"),
+            "creation_date": creation_date,
+            "destination": doc.get("destination"),
+            "amount": amount,
+        })
+
+    return JSONResponse({
+        "ok": True,
+        "scanned": scanned,
+        "payments": payments,
+    })
+
+
+@router.post("/api/scan-invoices")
+async def scan_invoices(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
+    """Scan settled balance adjustment/funding invoices and return matching candidates."""
+    limit = 50
+    try:
+        limit = max(1, min(int(payload.get("limit", 50)), 200))
+    except Exception:
+        limit = 50
+
+    db = InternalConfig.db
+    query = {
+        "state": "SETTLED",
+        "process_time": {"$exists": False},
+        "$or": [
+            {"memo": "Balance Adjustment"},
+            {"custom_records.keysend_message": "Balance Adjustment"},
+            {"memo": "funding"},
+        ],
+    }
+    cursor = (
+        db["invoices"]
+        .find(
+            query,
+            {
+                "group_id": 1,
+                "short_id": 1,
+                "memo": 1,
+                "state": 1,
+                "creation_date": 1,
+                "value_sat": 1,
+                "value_msat": 1,
+                "value": 1,
+            },
+        )
+        .sort("add_index", -1)
+        .limit(limit)
+    )
+
+    invoices: list[dict[str, Any]] = []
+    scanned = 0
+    async for doc in cursor:
+        scanned += 1
+        creation_date = doc.get("creation_date")
+        if creation_date and hasattr(creation_date, "isoformat"):
+            creation_date = creation_date.isoformat()
+        amount = doc.get("value_sat") or doc.get("value") or None
+        if amount is None and doc.get("value_msat") is not None:
+            try:
+                amount = int(doc.get("value_msat") // 1000)
+            except Exception:
+                amount = None
+        invoices.append({
+            "group_id": doc.get("group_id"),
+            "short_id": doc.get("short_id"),
+            "memo": doc.get("memo"),
+            "status": doc.get("state"),
+            "creation_date": creation_date,
+            "amount": amount,
+        })
+
+    return JSONResponse({
+        "ok": True,
+        "scanned": scanned,
+        "invoices": invoices,
+    })
+
+
+@router.post("/api/process-invoices")
+async def process_invoices(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
+    """Process selected invoices via process_tracked_event."""
+    group_ids = payload.get("group_ids", [])
+    if not isinstance(group_ids, list) or not group_ids:
+        return JSONResponse(
+            {"ok": False, "error": "group_ids must be a non-empty list"}, status_code=400
+        )
+
+    db = InternalConfig.db
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for group_id in group_ids:
+        try:
+            doc = await db["invoices"].find_one({"group_id": group_id})
+            if not doc:
+                errors.append({"group_id": group_id, "error": "not found"})
+                continue
+            op = tracked_any_filter(doc)
+            ledger_entries = await process_tracked_event(op)
+            results.append({
+                "group_id": group_id,
+                "short_id": getattr(op, "short_id", None),
+                "processed_entries": len(ledger_entries),
+            })
+        except Exception as e:
+            logger.error(f"Admin process_invoices failed for {group_id}: {e}")
+            errors.append({"group_id": group_id, "error": str(e)})
+
+    return JSONResponse({
+        "ok": True,
+        "requested": len(group_ids),
+        "processed": len(results),
+        "results": results,
+        "errors": errors,
+    })
+
+
+@router.post("/api/process-payments")
+async def process_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
+    """Process selected payments via process_tracked_event."""
+    group_ids = payload.get("group_ids", [])
+    if not isinstance(group_ids, list) or not group_ids:
+        return JSONResponse(
+            {"ok": False, "error": "group_ids must be a non-empty list"}, status_code=400
+        )
+
+    db = InternalConfig.db
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for group_id in group_ids:
+        try:
+            doc = await db["payments"].find_one({"group_id": group_id})
+            if not doc:
+                errors.append({"group_id": group_id, "error": "not found"})
+                continue
+            op = tracked_any_filter(doc)
+            ledger_entries = await process_tracked_event(op)
+            results.append({
+                "group_id": group_id,
+                "short_id": getattr(op, "short_id", None),
+                "processed_entries": len(ledger_entries),
+            })
+        except Exception as e:
+            logger.error(f"Admin process_payments failed for {group_id}: {e}")
+            errors.append({"group_id": group_id, "error": str(e)})
+
+    return JSONResponse({
+        "ok": True,
+        "requested": len(group_ids),
+        "processed": len(results),
+        "results": results,
+        "errors": errors,
+    })
+
+
 @router.post("/api/clear-replies")
-async def clear_blocking_replies(payload: dict[str, Any] = Body(...)) -> JSONResponse:
+async def clear_blocking_replies(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
     """Clear failure/transfer replies on the hive op so follow_on can run again."""
     short_id = (payload.get("short_id") or "").strip()
     group_id = (payload.get("group_id") or "").strip()
@@ -571,7 +780,7 @@ async def clear_blocking_replies(payload: dict[str, Any] = Body(...)) -> JSONRes
 
 
 @router.post("/api/retry-pay")
-async def retry_follow_on_pay(payload: dict[str, Any] = Body(...)) -> JSONResponse:
+async def retry_follow_on_pay(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
     """
     Preferred recovery: keep cust_h_in, clear blocking replies, re-run follow_on_transfer.
     """

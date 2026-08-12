@@ -265,7 +265,7 @@ async def test_get_all_quotes(mocker, set_base_config_path):
     mock_redis_instance = mocker.patch("v4vapp_backend_v2.config.setup.InternalConfig.redis")
     mock_redis_instance.__aenter__.return_value = mock_redis_instance
     mock_redis_instance.__aexit__.return_value = None
-    mock_redis_instance.setex = MagicMock(return_value=None)
+    mock_redis_instance.set = MagicMock(return_value=None)
     mock_redis_instance.get = MagicMock(return_value=None)
 
     # Apply the patch
@@ -356,7 +356,7 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
     """
     # Do not use the redis cache at the object level.
     mock_redis_instance = mocker.patch("v4vapp_backend_v2.config.setup.InternalConfig.redis")
-    mock_redis_instance.setex = Mock(return_value=None)
+    mock_redis_instance.set = Mock(return_value=None)
     mock_redis_instance.get = Mock(return_value=None)
 
     # Extracted the setup into this function to avoid code duplication

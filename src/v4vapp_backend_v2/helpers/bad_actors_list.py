@@ -116,8 +116,8 @@ async def fetch_bad_actor_list() -> Set[str]:
 
         try:
             # Store as JSON array in Redis with TTL
-            InternalConfig.redis_decoded.setex(
-                name=REDIS_KEY, time=REDIS_TTL, value=json.dumps(list(bad_actor_list))
+            InternalConfig.redis_decoded.set(
+                name=REDIS_KEY, value=json.dumps(list(bad_actor_list)), ex=REDIS_TTL
             )
         except Exception as e:
             logger.warning(f"Failed to cache bad actors in Redis: {e}")

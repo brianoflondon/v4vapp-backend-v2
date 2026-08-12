@@ -242,7 +242,7 @@ class TestResetLightningOpeningBalance:
         # Check the adjustment entry
         adjustment = await LedgerEntry.collection().find_one({"short_id": "adjustment"})
         assert adjustment is not None
-        assert "Balance adjustment" in adjustment["description"]
+        assert "Balance Adjustment" in adjustment["description"]
 
         # Verify the adjustment amount is the difference
         existing_ledger_msats = initial_msat + Decimal(1000)  # opening + dummy

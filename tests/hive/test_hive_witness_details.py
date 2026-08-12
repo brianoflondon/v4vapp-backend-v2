@@ -131,7 +131,7 @@ async def test_get_hive_witness_details(mocker):
     # Mock Redis get and set methods
 
     mock_redis_instance.get = Mock(return_value=json.dumps(sample_response))
-    mock_redis_instance.setex = Mock(return_value=None)
+    mock_redis_instance.set = Mock(return_value=None)
     mock_redis_instance.ttl = Mock(return_value=None)
 
     # Call the function
@@ -146,8 +146,8 @@ async def test_get_hive_witness_details(mocker):
     fixed_response = fix_witness_at_root(sample_response)
     # Ensure the Redis set method was called with the correct parameters
     # key format changed from underscore to colon
-    mock_redis_instance.setex.assert_called_with(
-        name="witness:brianoflondon", value=json.dumps(fixed_response), time=1800
+    mock_redis_instance.set.assert_called_with(
+        name="witness:brianoflondon", value=json.dumps(fixed_response), ex=1800
     )
 
 
@@ -235,7 +235,7 @@ async def test_get_witness_voters_pagination_and_cache(mocker):
 
     mock_httpx_get.side_effect = [first_page, second_page]
     mock_redis_instance.get = Mock(return_value=None)
-    mock_redis_instance.setex = Mock(return_value=None)
+    mock_redis_instance.set = Mock(return_value=None)
 
     voters = await get_witness_voters("brianoflondon")
 
@@ -249,7 +249,7 @@ async def test_get_witness_voters_pagination_and_cache(mocker):
     assert voters["voter1001"]["total_value"] == mock_hive.vests_to_token_power(
         1001000000
     ) + mock_hive.vests_to_token_power(300000000)
-    mock_redis_instance.setex.assert_called_once()
+    mock_redis_instance.set.assert_called_once()
 
 
 @pytest.mark.asyncio

@@ -407,7 +407,7 @@ async def subscribe_stream(
                         break
                     full_document = change.get("fullDocument") or {}
                     group_id = full_document.get("group_id", None) or ""
-                    logger.debug(
+                    logger.info(
                         f"{ICON}✳️ Change detected in {collection_name} {group_id}",
                         extra={"notification": False, "change": change},
                     )

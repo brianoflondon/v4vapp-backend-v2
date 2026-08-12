@@ -179,8 +179,8 @@ async def get_hive_witness_details(
                     mark_hive_api_endpoint_healthy(api_url)
                     # Cache the result in Redis
                     try:
-                        InternalConfig.redis_decoded.setex(
-                            name=cache_key, value=json.dumps(answer), time=1800
+                        InternalConfig.redis_decoded.set(
+                            name=cache_key, value=json.dumps(answer), ex=1800
                         )
                     except Exception as redis_error:
                         logger.warning(f"Failed to cache witness details in Redis: {redis_error}")
@@ -336,10 +336,10 @@ async def get_witness_voters(
                 page += 1
 
             try:
-                InternalConfig.redis_decoded.setex(
+                InternalConfig.redis_decoded.set(
                     name=cache_key,
                     value=json.dumps(voters),
-                    time=1800,  # Cache for 30 minutes
+                    ex=1800,  # Cache for 30 minutes
                 )
             except Exception as redis_error:
                 logger.warning(
@@ -418,9 +418,9 @@ async def check_witness_vote(hive_accname: str, witness_name: str) -> bool:
                 mark_hive_api_endpoint_healthy(api_url)
                 witness_votes = answer.get("witness_votes", [])
                 if witness_name in witness_votes:
-                    InternalConfig.redis_decoded.setex(name=cache_key, value="True", time=600)
+                    InternalConfig.redis_decoded.set(name=cache_key, value="True", ex=600)
                     return True
-                InternalConfig.redis_decoded.setex(name=cache_key, value="False", time=600)
+                InternalConfig.redis_decoded.set(name=cache_key, value="False", ex=600)
                 return False
 
         except httpx.HTTPStatusError as e:

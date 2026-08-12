@@ -619,10 +619,10 @@ class AllQuotes(BaseModel):
         cache_times = (
             TESTING_CACHE_TIMES if InternalConfig().config.development.enabled else CACHE_TIMES
         )
-        redis_client.setex(
-            "cryptoprices:cryptoprices:all_quote_class_quote",
-            time=cache_times["Global"],
+        redis_client.set(
+            name="cryptoprices:cryptoprices:all_quote_class_quote",
             value=cache_data_pickle,
+            ex=cache_times["Global"],
         )
         if store_db:
             await self.db_store_quote()
@@ -974,7 +974,7 @@ class QuoteService(ABC):
                 cache_times = CACHE_TIMES
             expiry = cache_times[self.__class__.__name__]
             redis_client = InternalConfig.redis
-            redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
+            redis_client.set(name=key, value=pickle.dumps(quote), ex=expiry)
         except Exception as e:
             logger.warning(
                 f"{ICON} Failed to set cache for {key}: {e}",

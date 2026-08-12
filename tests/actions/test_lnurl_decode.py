@@ -117,7 +117,7 @@ async def test_decode_any_lightning_string(monkeypatch: pytest.MonkeyPatch):
     base_path_original = Path("config/")
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", base_path_original)
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
-    lnd_client = LNDClient(connection_name="voltage")
+    lnd_client = LNDClient(connection_name="umbrel")
 
     # Prevent external HTTP calls during this test by patching the proxy
     async def fake_proxy(url: str, failure: dict):

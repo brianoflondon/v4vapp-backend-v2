@@ -5,7 +5,6 @@ Manages the admin interface navigation menu and breadcrumbs.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 
 
 @dataclass
@@ -17,7 +16,7 @@ class NavigationItem:
     icon: str
     description: str
     active: bool = False
-    badge: Optional[str] = None
+    badge: str | None = None
     badge_color: str = "primary"
 
 
@@ -86,7 +85,7 @@ class NavigationManager:
                 badge_color="warning",
             ),
             NavigationItem(
-                name="Replay Hive Deposit",
+                name="Replay",
                 url="/admin/replay-deposit",
                 icon="🔁",
                 description="Retry failed HBD/HIVE deposit follow-on Lightning pays without reversing the deposit",
@@ -114,7 +113,7 @@ class NavigationManager:
             # ),
         ]
 
-    def get_navigation_items(self, current_path: str = "") -> List[NavigationItem]:
+    def get_navigation_items(self, current_path: str = "") -> list[NavigationItem]:
         """Get navigation items with active state."""
 
         def _is_match(path: str, url: str) -> bool:
@@ -153,7 +152,7 @@ class NavigationManager:
                 return True
         return False
 
-    def get_breadcrumbs(self, current_path: str) -> List[Dict[str, str]]:
+    def get_breadcrumbs(self, current_path: str) -> list[dict[str, str]]:
         """Generate breadcrumbs based on current path"""
         breadcrumbs = [{"name": "Admin", "url": "/admin"}]
 

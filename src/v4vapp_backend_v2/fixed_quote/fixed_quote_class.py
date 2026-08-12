@@ -143,10 +143,10 @@ class FixedHiveQuote(BaseModel):
         # For very small cache times we don't add the 60s buffer (tests expect
         # short-lived keys). For normal/long cache_time keep the buffer.
         ttl = cache_time if cache_time < 60 else cache_time + 60
-        _ = redis_client.setex(
-            f"fixed_quote:{fixed_quote.unique_id}",
-            time=ttl,
+        _ = redis_client.set(
+            name=f"fixed_quote:{fixed_quote.unique_id}",
             value=fixed_quote.model_dump_json(exclude_none=True),
+            ex=ttl,
         )
         logger.info(
             f"Fixed quote created and cached with ID: {fixed_quote.unique_id}",

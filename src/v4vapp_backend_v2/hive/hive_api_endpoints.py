@@ -61,7 +61,11 @@ def mark_hive_api_endpoint_failed(
             "error": str(error) if error else "",
             "failed_at": int(time()),
         }
-        redis_client.setex(_endpoint_redis_key(endpoint), ttl_seconds, json.dumps(payload))
+        redis_client.set(
+            name=_endpoint_redis_key(endpoint),
+            value=json.dumps(payload),
+            ex=ttl_seconds,
+        )
         logger.warning(
             f"{ICON} Marked endpoint as failed: {endpoint} (error: {error})",
             extra={"notification": False},
@@ -156,10 +160,10 @@ async def working_api_endpoints(
             recently_checked = redis_client.get(REDIS_HIVE_API_ENDPOINT_REFRESH_KEY)
             if recently_checked:
                 return get_hive_api_endpoints(shuffle_endpoints=False)
-            redis_client.setex(
-                REDIS_HIVE_API_ENDPOINT_REFRESH_KEY,
-                refresh_interval_seconds,
-                str(int(time())),
+            redis_client.set(
+                name=REDIS_HIVE_API_ENDPOINT_REFRESH_KEY,
+                value=str(int(time())),
+                ex=refresh_interval_seconds,
             )
         except Exception as redis_error:
             logger.warning(
