@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import List
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
@@ -43,7 +42,7 @@ from v4vapp_backend_v2.process.process_magi import (
 
 async def process_payment_success(
     payment: Payment, initiating_op: TrackedAny, nobroadcast: bool = False
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Processes a successful payment by handling both Keepsats and Hive transfers.
 
@@ -277,7 +276,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}_{ledger_type.value}",
         op_type=payment.op_type,
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         description=f"Send {payment.value_sat_rounded} sats to Node {payment.destination} (fee: {payment.fee_sat_rounded})",
         debit=LiabilityAccount(
             name="VSC Liability",
@@ -332,7 +331,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
                 ledger_type=ledger_type,
                 group_id=f"{payment.group_id}_{ledger_type.value}",
                 op_type=payment.op_type,
-                timestamp=datetime.now(tz=timezone.utc),
+                timestamp=datetime.now(tz=UTC),
                 description=description,
                 debit=ExpenseAccount(
                     name=expense_rule.expense_account_name, sub=pay_dest, contra=False
@@ -365,7 +364,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}_{ledger_type.value}",
             op_type=payment.op_type,
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             description=f"Fee Expenses Lightning fee: {payment.fee_msat / 1000:,.0f} sats",
             debit=ExpenseAccount(
                 name="Fee Expenses Lightning",

@@ -239,11 +239,11 @@ def ignore_changes(change: Mapping[str, Any], collection_name: str) -> bool:
     # it returns True when every element of the left‑hand set appears in the
     # right‑hand set.
     if set(updated_fields) <= set(IGNORED_UPDATE_FIELDS):
-        logger.debug(
+        logger.info(
             f"{ICON} Ignoring change with only ignored fields updated: {set(updated_fields)} in {collection_name}",
         )
         return True
-    logger.debug(f"{ICON} Processing changes to: {set(updated_fields)} in {collection_name}")
+    logger.info(f"{ICON} Processing changes to: {set(updated_fields)} in {collection_name}")
     return False
 
 
@@ -407,7 +407,7 @@ async def subscribe_stream(
                         break
                     full_document = change.get("fullDocument") or {}
                     group_id = full_document.get("group_id", None) or ""
-                    logger.debug(
+                    logger.info(
                         f"{ICON}✳️ Change detected in {collection_name} {group_id}",
                         extra={"notification": False, "change": change},
                     )
