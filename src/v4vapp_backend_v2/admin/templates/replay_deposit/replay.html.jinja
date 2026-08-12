@@ -84,6 +84,18 @@
 </div>
 
 <div class="replay-panel">
+    <h6 class="mb-2">Safe order of operations</h6>
+    <ol class="mb-0 small">
+        <li>Confirm invoice unpaid and not expired; confirm Legion GetInfo works.</li>
+        <li>Search the <code>cust_h_in</code> deposit (e.g. <code>8075_6900b2_1</code>).</li>
+        <li>Prefer <strong>Clear replies + retry follow-on pay</strong> — deposit stays on books.</li>
+        <li>Watch for payment success, <code>withdraw_l</code> / convert entries, change HBD/HIVE out.</li>
+        <li>Only full reverse+reprocess if retry path cannot run; never double-deposit.</li>
+    </ol>
+</div>
+
+
+<div class="replay-panel">
     <h3 class="mb-2">
         <i class="bi bi-arrow-repeat me-2"></i>
         Replay Lightning Payment
@@ -126,6 +138,52 @@
                 </tr>
             </thead>
             <tbody id="payment-results-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="replay-panel">
+    <h3 class="mb-2">
+        <i class="bi bi-arrow-repeat me-2"></i>
+        Replay Lightning Invoice
+    </h3>
+    <p class="text-muted mb-3">
+        Scan settled invoices that look like balance adjustments or funding and manually replay them through the invoice processor.
+        Select found invoices and then process them through <code>process_tracked_event</code>.
+    </p>
+    <div class="row g-2 align-items-end">
+        <div class="col-md-8">
+            <label class="form-label">Invoice scan</label>
+            <input type="text" class="form-control mono" id="invoice_scan_limit" value="50">
+            <div class="form-text">Max number of invoices to scan from the invoices collection.</div>
+        </div>
+        <div class="col-md-4 d-flex gap-2 flex-wrap">
+            <button class="btn btn-outline-info flex-grow-1" onclick="scanInvoices()">
+                <i class="bi bi-arrow-repeat me-1"></i> Scan invoices
+            </button>
+            <button class="btn btn-info flex-grow-1" onclick="processSelectedInvoices()" id="btn-process-invoices" disabled>
+                <i class="bi bi-play-fill me-1"></i> Process selected
+            </button>
+        </div>
+    </div>
+    <div class="form-text">Scan invoices that are settled, unprocessed, and memoed as Balance Adjustment or funding.</div>
+</div>
+
+<div class="replay-panel" id="invoice-results-panel" style="display:none;">
+    <h5 class="mb-3">Invoice candidates</h5>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="invoice-select-all" onchange="toggleAllInvoices(this)"></th>
+                    <th>Short ID</th>
+                    <th>Memo</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody id="invoice-results-body"></tbody>
         </table>
     </div>
 </div>
@@ -230,16 +288,7 @@
     </details>
 </div>
 
-<div class="replay-panel">
-    <h6 class="mb-2">Safe order of operations</h6>
-    <ol class="mb-0 small">
-        <li>Confirm invoice unpaid and not expired; confirm Legion GetInfo works.</li>
-        <li>Search the <code>cust_h_in</code> deposit (e.g. <code>8075_6900b2_1</code>).</li>
-        <li>Prefer <strong>Clear replies + retry follow-on pay</strong> — deposit stays on books.</li>
-        <li>Watch for payment success, <code>withdraw_l</code> / convert entries, change HBD/HIVE out.</li>
-        <li>Only full reverse+reprocess if retry path cannot run; never double-deposit.</li>
-    </ol>
-</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -482,6 +531,89 @@
             cb.checked = source.checked;
         });
         document.getElementById('btn-process-payments').disabled = !source.checked;
+    }
+
+    async function scanInvoices() {
+        clearStatus();
+        setStatus('Scanning invoices…', 'secondary');
+        const limit = document.getElementById('invoice_scan_limit').value || '50';
+        try {
+            const res = await fetch('/admin/replay-deposit/api/scan-invoices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ limit }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.ok === false) {
+                setStatus(`Scan failed: ${esc(data.error || res.statusText)}`, 'danger');
+                return;
+            }
+            const tbody = document.getElementById('invoice-results-body');
+            tbody.innerHTML = '';
+            document.getElementById('invoice-results-panel').style.display = 'block';
+            const invoices = data.invoices || [];
+            if (!invoices.length) {
+                setStatus('No invoice candidates found.', 'warning');
+                document.getElementById('btn-process-invoices').disabled = true;
+                return;
+            }
+            clearStatus();
+            document.getElementById('btn-process-invoices').disabled = false;
+            for (const inv of invoices) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="checkbox" class="invoice-select" data-group-id="${escAttr(inv.group_id)}"></td>
+                    <td class="mono">${esc(inv.short_id)}</td>
+                    <td class="mono">${esc(inv.memo || '')}</td>
+                    <td class="mono">${esc(inv.amount != null ? inv.amount : '')}</td>
+                    <td class="mono">${esc(inv.status || '')}</td>
+                    <td class="small">${esc((inv.creation_date || '').replace ? inv.creation_date.replace('T', ' ').slice(0, 19) : '')}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+            const selectAll = document.getElementById('invoice-select-all');
+            selectAll.checked = false;
+            selectAll.disabled = false;
+        } catch (e) {
+            setStatus('Scan failed: ' + esc(e), 'danger');
+        }
+    }
+
+    async function processSelectedInvoices() {
+        const checkboxes = Array.from(document.querySelectorAll('.invoice-select')).filter(cb => cb.checked);
+        if (!checkboxes.length) {
+            setStatus('Select at least one invoice to process.', 'warning');
+            return;
+        }
+        const groupIds = checkboxes.map(cb => cb.getAttribute('data-group-id'));
+        if (!confirm(`Process ${groupIds.length} selected invoice(s)?`)) return;
+        setStatus('Processing selected invoices…', 'secondary');
+        try {
+            const res = await fetch('/admin/replay-deposit/api/process-invoices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ group_ids: groupIds }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.ok === false) {
+                setStatus(`Process failed: ${esc(data.error || res.statusText)}`, 'danger');
+                return;
+            }
+            setStatus(`Processed ${data.processed} of ${data.requested} invoices.`, data.errors.length ? 'warning' : 'success');
+            if (data.errors && data.errors.length) {
+                console.warn('processSelectedInvoices errors', data.errors);
+            }
+        } catch (e) {
+            setStatus('Process failed: ' + esc(e), 'danger');
+        }
+    }
+
+    function toggleAllInvoices(source) {
+        const checkboxes = document.querySelectorAll('.invoice-select');
+        checkboxes.forEach(cb => {
+            cb.checked = source.checked;
+        });
+        document.getElementById('btn-process-invoices').disabled = !source.checked;
     }
 
     async function processSelectedPayments() {

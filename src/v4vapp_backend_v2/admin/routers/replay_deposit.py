@@ -527,7 +527,7 @@ async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
     db = InternalConfig.db
     query = {
         "process_time": {"$exists": False},
-        "invoice_description": {"$regex": "balance adjustment|funding", "$options": "i"}
+        "invoice_description": {"$regex": "balance adjustment|funding", "$options": "i"},
     }
     cursor = (
         db["payments"]
@@ -576,6 +576,111 @@ async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
         "ok": True,
         "scanned": scanned,
         "payments": payments,
+    })
+
+
+@router.post("/api/scan-invoices")
+async def scan_invoices(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
+    """Scan settled balance adjustment/funding invoices and return matching candidates."""
+    limit = 50
+    try:
+        limit = max(1, min(int(payload.get("limit", 50)), 200))
+    except Exception:
+        limit = 50
+
+    db = InternalConfig.db
+    query = {
+        "state": "SETTLED",
+        "process_time": {"$exists": False},
+        "$or": [
+            {"memo": "Balance Adjustment"},
+            {"custom_records.keysend_message": "Balance Adjustment"},
+            {"memo": "funding"},
+        ],
+    }
+    cursor = (
+        db["invoices"]
+        .find(
+            query,
+            {
+                "group_id": 1,
+                "short_id": 1,
+                "memo": 1,
+                "state": 1,
+                "creation_date": 1,
+                "value_sat": 1,
+                "value_msat": 1,
+                "value": 1,
+            },
+        )
+        .sort("add_index", -1)
+        .limit(limit)
+    )
+
+    invoices: list[dict[str, Any]] = []
+    scanned = 0
+    async for doc in cursor:
+        scanned += 1
+        creation_date = doc.get("creation_date")
+        if creation_date and hasattr(creation_date, "isoformat"):
+            creation_date = creation_date.isoformat()
+        amount = doc.get("value_sat") or doc.get("value") or None
+        if amount is None and doc.get("value_msat") is not None:
+            try:
+                amount = int(doc.get("value_msat") // 1000)
+            except Exception:
+                amount = None
+        invoices.append({
+            "group_id": doc.get("group_id"),
+            "short_id": doc.get("short_id"),
+            "memo": doc.get("memo"),
+            "status": doc.get("state"),
+            "creation_date": creation_date,
+            "amount": amount,
+        })
+
+    return JSONResponse({
+        "ok": True,
+        "scanned": scanned,
+        "invoices": invoices,
+    })
+
+
+@router.post("/api/process-invoices")
+async def process_invoices(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
+    """Process selected invoices via process_tracked_event."""
+    group_ids = payload.get("group_ids", [])
+    if not isinstance(group_ids, list) or not group_ids:
+        return JSONResponse(
+            {"ok": False, "error": "group_ids must be a non-empty list"}, status_code=400
+        )
+
+    db = InternalConfig.db
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for group_id in group_ids:
+        try:
+            doc = await db["invoices"].find_one({"group_id": group_id})
+            if not doc:
+                errors.append({"group_id": group_id, "error": "not found"})
+                continue
+            op = tracked_any_filter(doc)
+            ledger_entries = await process_tracked_event(op)
+            results.append({
+                "group_id": group_id,
+                "short_id": getattr(op, "short_id", None),
+                "processed_entries": len(ledger_entries),
+            })
+        except Exception as e:
+            logger.error(f"Admin process_invoices failed for {group_id}: {e}")
+            errors.append({"group_id": group_id, "error": str(e)})
+
+    return JSONResponse({
+        "ok": True,
+        "requested": len(group_ids),
+        "processed": len(results),
+        "results": results,
+        "errors": errors,
     })
 
 

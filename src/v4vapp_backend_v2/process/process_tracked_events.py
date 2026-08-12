@@ -98,6 +98,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
     """
     finalize = True
     retry_task = None
+    start = timer()
     async with LockStr(f"{CUST_ID_LOCK_PREFIX}_{tracked_op.group_id_p}").locked(
         timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
     ):
@@ -107,6 +108,10 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
                 f"Ledger entry for {tracked_op.short_id} already exists. {existing_entry.group_id}",
                 extra={"notification": False},
             )
+            if tracked_op.process_time is None:
+                await perform_finalize(
+                    tracked_op=tracked_op, start=start, ledger_entries=[existing_entry]
+                )
             return [existing_entry]
 
         ledger_entries: list[LedgerEntry] = []
@@ -155,7 +160,6 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
             f"Customer ID {cust_id} {tracked_op.op_type} processing: {tracked_op.log_str}"
         )
         logger.debug(f"{'=*=' * 10} {cust_id} {'=*=' * 10}")
-        start = timer()
         try:
             async with LockStr(f"{CUST_ID_LOCK_PREFIX}_{cust_id}").locked(
                 timeout=CUST_ID_LOCK_TIMEOUT,
@@ -239,28 +243,56 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
 
         finally:
             if finalize:
-                process_time = timer() - start
-                tracked_op.process_time = process_time
-                await tracked_op.save()
-                logger.debug(f"{ICON} {'+++' * 10} {cust_id} {'+++' * 10}")
-                logger.debug(f"{ICON} {tracked_op.log_str}")
-                ledger_entries_log_extra = []
-                for entry in ledger_entries:
-                    ledger_log_extra = entry.log_extra.copy()
-                    ledger_entries_log_extra.append(ledger_log_extra)
-                    logger.debug(
-                        f"{ICON} {entry.log_str}",
-                        extra={"notification": False, **ledger_log_extra},
-                    )
-                logger.info(
-                    f"{SUCCESS_ICON} {process_time:>7,.2f} s {tracked_op.log_str}",
-                    extra={
-                        "notification": False,
-                        "ledger_items": ledger_entries_log_extra,
-                    },
+                await perform_finalize(
+                    tracked_op=tracked_op, start=start, ledger_entries=ledger_entries
                 )
-                logger.debug(f"{ICON} {'+++' * 10} {cust_id} {'+++' * 10}")
-                # DEBUG section
+
+
+async def perform_finalize(
+    tracked_op: TrackedAny, start: float, ledger_entries: list[LedgerEntry]
+):
+    """
+    Finalizes the processing of a tracked operation by calculating the processing time,
+    saving it to the tracked operation, and logging the results.
+
+    Args:
+        tracked_op (TrackedAny): The tracked operation that was processed.
+        start (float): The start time of the processing, used to calculate the total time taken.
+        ledger_entries (list[LedgerEntry]): The list of ledger entries created during processing.
+
+    This function is called at the end of processing a tracked operation to ensure that
+    the processing time is recorded and relevant information is logged for debugging and
+    monitoring purposes.
+
+    Side effects:
+        - Updates the `process_time` attribute of the tracked operation.
+        - Saves the tracked operation to persist the processing time.
+        - Logs detailed information about the processing, including the tracked operation
+          and any ledger entries created.
+
+    """
+    cust_id = getattr(tracked_op, "cust_id", "unknown_cust_id")
+    process_time = timer() - start
+    tracked_op.process_time = process_time
+    await tracked_op.save()
+    logger.debug(f"{ICON} {'+++' * 10} {cust_id} {'+++' * 10}")
+    logger.debug(f"{ICON} {tracked_op.log_str}")
+    ledger_entries_log_extra = []
+    for entry in ledger_entries:
+        ledger_log_extra = entry.log_extra.copy()
+        ledger_entries_log_extra.append(ledger_log_extra)
+        logger.debug(
+            f"{ICON} {entry.log_str}",
+            extra={"notification": False, **ledger_log_extra},
+        )
+    logger.info(
+        f"{SUCCESS_ICON} {process_time:>7,.2f} s {tracked_op.log_str}",
+        extra={
+            "notification": False,
+            "ledger_items": ledger_entries_log_extra,
+        },
+    )
+    logger.debug(f"{ICON} {'+++' * 10} {tracked_op.cust_id} {'+++' * 10}")
 
 
 # MARK: Lightning Transactions
@@ -396,7 +428,7 @@ async def process_lightning_payment(
         await payment.update_conv()
     node_name = InternalConfig().node_name
     if check_funding_balance_adjustment(payment):
-        # Treat this as an outbound Owner's loan Funding to Treasury Lightning
+        # Treat this as an inbound Owner's loan Funding to External Lightning Payments
         ledger_type = LedgerType.FUNDING
         group_id = f"{payment.group_id}_{ledger_type.value}"
         ledger_entry = LedgerEntry(
