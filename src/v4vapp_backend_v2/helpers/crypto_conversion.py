@@ -299,7 +299,10 @@ class CryptoConv(BaseModel):
 
     def limit_test(self) -> bool:
         """
-        Check if the conversion is within the limits.
+        Check if this conversion's msats value falls within min/max invoice payment limits.
+
+        Prefer `limit_test(invoice_principal_msats)` when gating Hive→Lightning payments:
+        deposit conversions include fee headroom and must not be compared to invoice max.
 
         Returns:
             bool: True if the conversion is within limits, False otherwise.
@@ -315,7 +318,9 @@ class CryptoConv(BaseModel):
     @computed_field
     def in_limits(self) -> bool:
         """
-        Check if the conversion is within the limits.
+        Whether `self.msats` is within min/max invoice payment limits.
+
+        Not used to gate Hive→Lightning invoice payments (those use invoice principal).
 
         Returns:
             bool: True if the conversion is within limits, False otherwise.

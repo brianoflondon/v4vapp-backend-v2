@@ -16,7 +16,11 @@ from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_kee
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
-from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
+from v4vapp_backend_v2.helpers.service_fees import (
+    V4VMaximumInvoice,
+    V4VMinimumInvoice,
+    limit_test,
+)
 from v4vapp_backend_v2.hive.hive_extras import (
     HiveAccountNameOnExchangesList,
     HiveConversionLimits,
@@ -505,17 +509,29 @@ async def follow_on_transfer(
         await lnd_client.disconnect()
 
 
+def invoice_principal_msats(pay_req: PayReq, max_send_msats: Decimal) -> Decimal:
+    """
+    Amount used for min/max invoice payment limits.
+
+    Fixed-amount invoices: BOLT11 / LNURL invoice principal (`value_msat`).
+    Zero-value invoices: the amount we will attach/send (`max_send_msats`), which is
+    already net of service and estimated routing fees — not the Hive deposit conversion.
+    """
+    if pay_req.is_zero_value:
+        return Decimal(max_send_msats)
+    return Decimal(pay_req.value_msat)
+
+
 async def decode_incoming_and_checks(
     tracked_op: TrackedTransferWithCustomJson, lnd_client: LNDClient
 ) -> PayReq | None:
     """
     This asynchronous function processes a Lightning payment request contained in the `d_memo` field of a `TrackedTransfer` object.
     It performs the following steps:
-    - Logs the incoming payment request.
-    - Initializes the LND client using internal configuration.
     - Ensures conversion details are present; attempts to update them if missing.
     - Decodes the Lightning payment request and validates its structure.
-    - Checks conversion limits and user-specific payment limits.
+    - Checks min/max invoice limits against the invoice principal (not the Hive deposit).
+    - Checks amount-sent surplus / Keepsats balance and user rolling conversion limits.
     - Raises a `HiveTransferError` if any validation or decoding step fails.
 
     Args:
@@ -539,16 +555,6 @@ async def decode_incoming_and_checks(
             extra={"notification": False, **tracked_op.log_extra},
         )
         raise HiveTransferError("Conversion details not found for operation")
-
-    if not tracked_op.paywithsats:
-        try:
-            tracked_op.conv.limit_test()
-        except (V4VMinimumInvoice, V4VMaximumInvoice) as e:
-            logger.error(
-                f"Conversion limits exceeded for operation {tracked_op.short_id} {tracked_op.group_id_p}: {e}",
-                extra={"notification": False, **tracked_op.log_extra},
-            )
-            raise HiveTransferError(f"Conversion limits: {e}")
 
     try:
         max_send_msats = tracked_op.max_send_amount_msats()
@@ -589,7 +595,18 @@ async def decode_incoming_and_checks(
         )
         raise HiveTransferError(message)
 
-    # NOTE: this will not use the limit tests (maybe that is OK?) this is not a conversion operation
+    # Min/max invoice limits apply to Lightning principal only — not Hive deposit conversion
+    # (deposit must exceed principal to cover service + routing fees).
+    try:
+        principal_msats = invoice_principal_msats(pay_req, Decimal(max_send_msats))
+        limit_test(principal_msats)
+    except (V4VMinimumInvoice, V4VMaximumInvoice) as e:
+        logger.error(
+            f"Conversion limits exceeded for operation {tracked_op.short_id} {tracked_op.group_id_p}: {e}",
+            extra={"notification": False, **tracked_op.log_extra},
+        )
+        raise HiveTransferError(f"Conversion limits: {e}")
+
     if (
         tracked_op.paywithsats
     ):  # Custom Json operations are always paywithsats if they have a memo.
@@ -640,10 +657,9 @@ async def check_amount_sent(
             raise HiveTransferError("Conversion not set in operation.")
 
     if pay_req.is_zero_value:
-        if tracked_op.conv.in_limits:  # Computed field, treat like a property.
-            return ""
-        else:
-            return "Payment request has zero value, but conversion limits exceeded."
+        # Min/max invoice limits for zero-value invoices are enforced in
+        # decode_incoming_and_checks against max_send (principal), not deposit conv.
+        return ""
 
     surplus_msats = tracked_op.max_send_amount_msats() - pay_req.value_msat
     if surplus_msats < -5_000:  # Allow a 5 sat buffer for rounding errors (5,000 msats, 5 sats)
