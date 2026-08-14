@@ -37,7 +37,7 @@ def calculate_fee_msats(msats: Decimal) -> Decimal:
     fee = ((config_data.conv_fee_percent + MARGIN_SPREAD) * msats) + (
         config_data.conv_fee_sats * 1_000
     )
-    return fee.quantize(Decimal("1"), rounding=ROUND_HALF_UP)  # Round to nearest integer
+    return fee.quantize(Decimal(1), rounding=ROUND_HALF_UP)  # Round to nearest integer
 
 
 def calculate_fee_estimate_msats(msats: Decimal) -> Decimal:
@@ -62,24 +62,31 @@ def calculate_fee_estimate_msats(msats: Decimal) -> Decimal:
     fee_estimate = Decimal(lnd_config.lightning_fee_base_msats) + (
         msats * Decimal(lnd_config.lightning_fee_estimate_ppm) / 1_000_000
     )
-    return fee_estimate.quantize(Decimal("1"), rounding=ROUND_HALF_UP)  # Round to nearest integer
+    return fee_estimate.quantize(Decimal(1), rounding=ROUND_HALF_UP)  # Round to nearest integer
 
 
-def limit_test(msats: Decimal = Decimal(0.0)) -> bool:
+def limit_test(msats: Decimal = Decimal(0)) -> bool:
     """
-    Checks if the given amount in millisatoshis (msats) is within the allowed invoice payment limits.
+    Checks if an invoice principal in millisatoshis is within configured payment limits.
 
-        msats (Decimal, optional): The amount in millisatoshis to check. Defaults to 0.0.
+    Callers must pass the Lightning invoice principal (BOLT11/LNURL `value_msat`, or the
+    amount attached to a zero-value invoice). Do not pass the full Hive/HBD deposit
+    conversion: deposits intentionally exceed principal to cover service and routing fees.
 
-        bool: True if the amount is within the configured minimum and maximum invoice payment limits.
+    Args:
+        msats: Invoice principal in millisatoshis.
+
+    Returns:
+        True if the principal is within min and max invoice payment limits.
+
     Raises:
         V4VMinimumInvoice: If the amount is less than the configured minimum invoice payment in satoshis.
         V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
     """
     config_data = V4VConfig().data
     sats = Decimal(Decimal(msats) / Decimal(1000)).quantize(
-        Decimal("1"), rounding=ROUND_CEILING
-    )  # Convert msats to sats and round to nearest integer
+        Decimal(1), rounding=ROUND_CEILING
+    )  # Convert msats to sats; ceiling so fractional msats cannot slip under a limit
     if sats < config_data.minimum_invoice_payment_sats:
         raise V4VMinimumInvoice(
             f"{sats:,.0f} sats is below minimum invoice of {config_data.minimum_invoice_payment_sats:,.0f} sats"
