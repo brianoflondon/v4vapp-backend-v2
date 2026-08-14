@@ -602,10 +602,10 @@ async def decode_incoming_and_checks(
         limit_test(principal_msats)
     except (V4VMinimumInvoice, V4VMaximumInvoice) as e:
         logger.error(
-            f"Conversion limits exceeded for operation {tracked_op.short_id} {tracked_op.group_id_p}: {e}",
+            f"Lightning invoice principal limits exceeded for operation {tracked_op.short_id} {tracked_op.group_id_p}: {e}",
             extra={"notification": False, **tracked_op.log_extra},
         )
-        raise HiveTransferError(f"Conversion limits: {e}")
+        raise HiveTransferError(f"Invoice payment limits: {e}")
 
     if (
         tracked_op.paywithsats
