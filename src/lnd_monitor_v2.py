@@ -128,6 +128,15 @@ def should_ignore_payment_index(payment_index: int | None, floors: LndIndexFloor
 startup_complete_event = asyncio.Event()
 shutdown_event = asyncio.Event()
 
+# Live TrackPayments / SubscribeInvoices can hang without the task dying.
+# After this many watchdog polls with LND ahead of Mongo, exit 1 so Docker
+# restarts the container.
+SUBSCRIPTION_LAG_POLLS_BEFORE_EXIT = 3
+# Newest-first page used to find a SETTLED invoice by r_hash (not max add_index).
+INVOICE_LAG_SCAN = 32
+
+_active_lnd_client: LNDClient | None = None
+
 
 @dataclass
 class StatusObject:
@@ -137,6 +146,123 @@ class StatusObject:
 
 
 STATUS_OBJ = StatusObject()
+
+
+def _task_still_running(name: str) -> bool:
+    return any(t.get_name() == name and not t.done() for t in asyncio.all_tasks())
+
+
+async def _payment_subscription_lag_message(lnd_client: LNDClient) -> str | None:
+    """
+    Detect a hung TrackPayments stream: LND has a newer payment_index than Mongo.
+
+    Quiet nodes (no new payments) are healthy. Only lag is a failure.
+    Returns None if the check cannot run (RPC/DB error).
+    """
+    try:
+        request = lnrpc.ListPaymentsRequest(
+            include_incomplete=True,
+            index_offset=0,
+            max_payments=1,
+            reversed=True,
+        )
+        payments_raw = await lnd_client.call(
+            lnd_client.lightning_stub.ListPayments,
+            request,
+        )
+        list_payments = ListPaymentsResponse(payments_raw)
+        lnd_index = (
+            int(list_payments.payments[0].payment_index or 0) if list_payments.payments else 0
+        )
+        mongo_index = 0
+        cursor = Payment.collection().find({}).sort([("payment_index", -1)]).limit(1)
+        async for ans in cursor:
+            mongo_index = int(ans.get("payment_index") or 0)
+            break
+    except Exception:  # noqa: BLE001 — do not fail health on a transient RPC/DB blip
+        return None
+    if lnd_index > mongo_index:
+        return f"payments_loop hung (LND payment_index {lnd_index} > Mongo {mongo_index})"
+    return None
+
+
+def _mongo_invoice_is_settled(doc: dict[str, Any] | None) -> bool:
+    if not doc:
+        return False
+    return doc.get("state") == InvoiceState.SETTLED or bool(doc.get("settled"))
+
+
+async def _invoice_subscription_lag_message(lnd_client: LNDClient) -> str | None:
+    """
+    Detect a hung SubscribeInvoices stream by LND's newest invoice r_hash.
+
+    Do not compare max add_index: expired OPEN invoices are pruned from Mongo
+    and add_index / settle_index are independent sequences.
+
+    - Newest invoice (reversed ListInvoices[0]): r_hash must exist in Mongo.
+    - Any SETTLED invoice in that page: same r_hash must be SETTLED in Mongo.
+    """
+    try:
+        request = lnrpc.ListInvoiceRequest(
+            pending_only=False,
+            index_offset=0,
+            num_max_invoices=INVOICE_LAG_SCAN,
+            reversed=True,
+        )
+        invoices_raw = await lnd_client.call(
+            lnd_client.lightning_stub.ListInvoices,
+            request,
+        )
+        listed = ListInvoiceResponse(invoices_raw)
+        invoices = listed.invoices
+        if not invoices:
+            return None
+        try:
+            conn_name = getattr(getattr(lnd_client, "connection", None), "name", None)
+            floors = get_lnd_index_floors(conn_name if isinstance(conn_name, str) else None)
+        except Exception:  # noqa: BLE001
+            floors = LndIndexFloors()
+
+        newest = invoices[0]
+        if not should_ignore_invoice_index(newest.add_index, floors):
+            mongo = await Invoice.collection().find_one({"r_hash": newest.r_hash})
+            if mongo is None:
+                short_hash = (newest.r_hash or "")[:12]
+                return (
+                    f"invoices_loop hung (LND newest r_hash {short_hash}… "
+                    f"add_index {newest.add_index} missing from Mongo)"
+                )
+            if newest.state == InvoiceState.SETTLED and not _mongo_invoice_is_settled(mongo):
+                short_hash = (newest.r_hash or "")[:12]
+                return (
+                    f"invoices_loop hung (LND newest r_hash {short_hash}… "
+                    f"SETTLED on LND, not SETTLED in Mongo)"
+                )
+
+        for inv in invoices:
+            if inv.state != InvoiceState.SETTLED:
+                continue
+            if floors.settle_index > 0 and int(inv.settle_index or 0) <= floors.settle_index:
+                continue
+            mongo = await Invoice.collection().find_one({"r_hash": inv.r_hash})
+            if mongo is None or not _mongo_invoice_is_settled(mongo):
+                short_hash = (inv.r_hash or "")[:12]
+                return (
+                    f"invoices_loop hung (LND settled r_hash {short_hash}… "
+                    f"missing or still OPEN in Mongo)"
+                )
+    except Exception:  # noqa: BLE001 — do not fail health on a transient RPC/DB blip
+        return None
+    return None
+
+
+async def _subscription_lag_messages(lnd_client: LNDClient) -> list[str]:
+    messages: list[str] = []
+    for checker in (_payment_subscription_lag_message, _invoice_subscription_lag_message):
+        msg = await checker(lnd_client)
+        if msg:
+            messages.append(msg)
+    return messages
 
 
 async def health_check() -> dict[str, Any]:
@@ -164,12 +290,16 @@ async def health_check() -> dict[str, Any]:
         logger.info(f"{ICON} LND Monitor Startup not complete", extra={"notification": False})
         return STATUS_OBJ.__dict__
     for task in check_for_tasks:
-        if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
+        if not _task_still_running(task):
             exceptions.append(f"{task} task is not running")
             logger.warning(
                 f"{ICON} {task} task is not running",
                 extra={"notification": True, "error_code": "hive_monitor_task_failure"},
             )
+
+    # Hung gRPC streams stay as running tasks; compare LND tip vs Mongo.
+    if _active_lnd_client and not _task_still_running("synchronize_db"):
+        exceptions.extend(await _subscription_lag_messages(_active_lnd_client))
 
     if exceptions:
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
@@ -1529,6 +1659,7 @@ async def main_async_start(connection_name: str) -> None:
         version=__version__,
     )  # Use a port from config if needed
 
+    global _active_lnd_client
     lnd_client = None
     running_tasks: list[asyncio.Task] = []
     try:
@@ -1544,6 +1675,7 @@ async def main_async_start(connection_name: str) -> None:
 
         lnd_events_group = LndEventsGroup()
         async with LNDClient(connection_name) as lnd_client:
+            _active_lnd_client = lnd_client
             if lnd_client.get_info:
                 logger.info(
                     f"{lnd_client.icon} Node: {lnd_client.get_info.alias} "
@@ -1604,7 +1736,7 @@ async def main_async_start(connection_name: str) -> None:
             ]
             running_tasks.append(
                 asyncio.create_task(
-                    _task_watchdog(critical_tasks, shutdown_event),
+                    _task_watchdog(critical_tasks, shutdown_event, lnd_client),
                     name="task_watchdog",
                 )
             )
@@ -1671,6 +1803,7 @@ async def main_async_start(connection_name: str) -> None:
 async def _task_watchdog(
     critical_tasks: list[asyncio.Task],
     shutdown_event: asyncio.Event,
+    lnd_client: LNDClient,
     poll_interval: float = 10.0,
 ) -> None:
     """Watch critical tasks and trigger a non-zero exit if any die unexpectedly.
@@ -1680,7 +1813,11 @@ async def _task_watchdog(
     a failure exit code — so 'restart: on-failure' never fires.  This watchdog
     detects that situation, logs the dead tasks, then calls sys.exit(1) so
     Docker will restart the container.
+
+    Also exits if TrackPayments or SubscribeInvoices is hung (LND ahead of Mongo)
+    for SUBSCRIPTION_LAG_POLLS_BEFORE_EXIT consecutive polls.
     """
+    consecutive_subscription_lag = 0
     while not shutdown_event.is_set():
         await asyncio.sleep(poll_interval)
         if shutdown_event.is_set():
@@ -1698,6 +1835,30 @@ async def _task_watchdog(
             # Brief pause so the logger can flush the error before we exit
             await asyncio.sleep(2)
             sys.exit(1)
+
+        if startup_complete_event.is_set() and not _task_still_running("synchronize_db"):
+            lags = await _subscription_lag_messages(lnd_client)
+            if lags:
+                consecutive_subscription_lag += 1
+                lag = "; ".join(lags)
+                logger.warning(
+                    f"{ICON} {lag} ({consecutive_subscription_lag}/"
+                    f"{SUBSCRIPTION_LAG_POLLS_BEFORE_EXIT})",
+                    extra={"notification": False, "error_code": "lnd_subscription_lag"},
+                )
+                if consecutive_subscription_lag >= SUBSCRIPTION_LAG_POLLS_BEFORE_EXIT:
+                    logger.error(
+                        f"{ICON} {lag}. Triggering restart.",
+                        extra={
+                            "notification": True,
+                            "error_code": "lnd_subscription_lag",
+                        },
+                    )
+                    shutdown_event.set()
+                    await asyncio.sleep(2)
+                    sys.exit(1)
+            else:
+                consecutive_subscription_lag = 0
 
 
 async def _background_sync(lnd_client: LNDClient) -> None:
