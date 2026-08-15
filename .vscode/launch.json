@@ -163,6 +163,19 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Production Legion Monitor v2",
+            "type": "debugpy",
+            "consoleName": "Production Legion Monitor v2",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "--config",
+                "production.fromhome.config.yaml"
+            ],
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Hive Monitor v4vapp no Sale",
             "type": "debugpy",
             "consoleName": "Hive Monitor v4vapp no SALE",
@@ -257,19 +270,6 @@
             "args": [
                 "--config",
                 "umbrel.config.yaml"
-            ],
-            "console": "integratedTerminal",
-            "python": "${workspaceFolder}/.venv/bin/python"
-        },
-        {
-            "name": "Voltage Monitor v2",
-            "type": "debugpy",
-            "consoleName": "Voltage Monitor v2",
-            "request": "launch",
-            "program": "src/lnd_monitor_v2.py",
-            "args": [
-                "--config",
-                "voltage.config.yaml"
             ],
             "console": "integratedTerminal",
             "python": "${workspaceFolder}/.venv/bin/python"
