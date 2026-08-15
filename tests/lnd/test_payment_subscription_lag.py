@@ -1,5 +1,6 @@
 """Hung TrackPayments / SubscribeInvoices detection: LND tip ahead of Mongo."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -12,6 +13,8 @@ from lnd_monitor_v2 import (
     _invoice_subscription_lag_message,
     _lnd_invoice_is_prunable,
     _payment_subscription_lag_message,
+    _reconnect_after_stream_drop,
+    shutdown_event,
 )
 from v4vapp_backend_v2.models.invoice_models import InvoiceState
 
@@ -276,3 +279,34 @@ def test_lnd_invoice_is_prunable_matches_retention_window():
         ),
         now=now,
     )
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stream_reconnects_unless_shutting_down():
+    shutdown_event.clear()
+    lnd_client = MagicMock()
+    lnd_client.icon = "⛱️"
+    lnd_client.check_connection = AsyncMock()
+    await _reconnect_after_stream_drop(
+        lnd_client,
+        call_name="SubscribeInvoices",
+        cancelled=asyncio.CancelledError("channel closed"),
+    )
+    lnd_client.check_connection.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stream_reraises_during_shutdown():
+    shutdown_event.set()
+    try:
+        lnd_client = MagicMock()
+        lnd_client.check_connection = AsyncMock()
+        with pytest.raises(asyncio.CancelledError):
+            await _reconnect_after_stream_drop(
+                lnd_client,
+                call_name="SubscribeInvoices",
+                cancelled=asyncio.CancelledError("shutdown"),
+            )
+        lnd_client.check_connection.assert_not_awaited()
+    finally:
+        shutdown_event.clear()

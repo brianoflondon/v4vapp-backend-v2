@@ -127,6 +127,9 @@ def should_ignore_payment_index(payment_index: int | None, floors: LndIndexFloor
 # Define a global flag to track shutdown and startup completion
 startup_complete_event = asyncio.Event()
 shutdown_event = asyncio.Event()
+# Set by the watchdog so main() can sys.exit(1). sys.exit inside an asyncio
+# Task does not terminate the process, so Docker never restarts the container.
+_failed_restart_requested = False
 
 # Live TrackPayments / SubscribeInvoices can hang without the task dying.
 # After this many watchdog polls with LND ahead of Mongo, exit 1 so Docker
@@ -154,6 +157,38 @@ STATUS_OBJ = StatusObject()
 
 def _task_still_running(name: str) -> bool:
     return any(t.get_name() == name and not t.done() for t in asyncio.all_tasks())
+
+
+def _request_failed_restart() -> None:
+    """Ask main() to exit 1 after cleanup. Safe to call from an asyncio task."""
+    global _failed_restart_requested
+    _failed_restart_requested = True
+    shutdown_event.set()
+
+
+async def _reconnect_after_stream_drop(
+    lnd_client: LNDClient,
+    *,
+    call_name: str,
+    original_error: AioRpcError | None = None,
+    cancelled: BaseException | None = None,
+) -> None:
+    """Rebuild the shared LND channel after a dropped subscription.
+
+    Closing the channel cancels sibling streams with CancelledError. That is
+    not a shutdown — resubscribe unless ``shutdown_event`` is already set.
+    """
+    if shutdown_event.is_set():
+        if cancelled is not None:
+            raise cancelled
+        return
+    if cancelled is not None:
+        logger.warning(
+            f"{lnd_client.icon} {call_name} cancelled (likely LND channel rebuild); "
+            "resubscribing after reconnect",
+            extra={"notification": False},
+        )
+    await lnd_client.check_connection(original_error=original_error, call_name=call_name)
 
 
 def _index_floors_for_client(lnd_client: LNDClient) -> LndIndexFloors:
@@ -896,19 +931,25 @@ async def invoices_loop(
                     lnd_events_group=lnd_events_group,
                 )
         except LNDSubscriptionError as e:
-            await lnd_client.check_connection(
-                original_error=e.original_error
-                if hasattr(e, "original_error") and isinstance(e.original_error, AioRpcError)
-                else None,
-                call_name="SubscribeInvoices",
+            orig = (
+                e.original_error
+                if isinstance(getattr(e, "original_error", None), AioRpcError)
+                else None
+            )
+            await _reconnect_after_stream_drop(
+                lnd_client, call_name="SubscribeInvoices", original_error=orig
             )
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
             logger.error("🔴 Connection error in invoices_loop", exc_info=e, stack_info=True)
             raise e
-        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        except KeyboardInterrupt as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
+        except asyncio.CancelledError as e:
+            await _reconnect_after_stream_drop(
+                lnd_client, call_name="SubscribeInvoices", cancelled=e
+            )
         except Exception as e:
             logger.exception(e)
 
@@ -941,19 +982,23 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
                     lnd_events_group=lnd_events_group,
                 )
         except LNDSubscriptionError as e:
-            await lnd_client.check_connection(
-                original_error=e.original_error
-                if hasattr(e, "original_error") and isinstance(e.original_error, AioRpcError)
-                else None,
-                call_name="TrackPayments",
+            orig = (
+                e.original_error
+                if isinstance(getattr(e, "original_error", None), AioRpcError)
+                else None
+            )
+            await _reconnect_after_stream_drop(
+                lnd_client, call_name="TrackPayments", original_error=orig
             )
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
             logger.error("🔴 Connection error in payments_loop", exc_info=e, stack_info=True)
             raise e
-        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        except KeyboardInterrupt as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
+        except asyncio.CancelledError as e:
+            await _reconnect_after_stream_drop(lnd_client, call_name="TrackPayments", cancelled=e)
         except Exception as e:
             logger.exception(e)
 
@@ -978,19 +1023,25 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
                     lnd_events_group=lnd_events_group,
                 )
         except LNDSubscriptionError as e:
-            await lnd_client.check_connection(
-                original_error=e.original_error
-                if hasattr(e, "original_error") and isinstance(e.original_error, AioRpcError)
-                else None,
-                call_name="SubscribeHtlcEvents",
+            orig = (
+                e.original_error
+                if isinstance(getattr(e, "original_error", None), AioRpcError)
+                else None
+            )
+            await _reconnect_after_stream_drop(
+                lnd_client, call_name="SubscribeHtlcEvents", original_error=orig
             )
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
-            logger.error("🔴 Connection error in payments_loop", exc_info=e, stack_info=True)
+            logger.error("🔴 Connection error in htlc_events_loop", exc_info=e, stack_info=True)
             raise e
-        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        except KeyboardInterrupt as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
+        except asyncio.CancelledError as e:
+            await _reconnect_after_stream_drop(
+                lnd_client, call_name="SubscribeHtlcEvents", cancelled=e
+            )
         except Exception as e:
             logger.exception(e)
 
@@ -1149,19 +1200,25 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                     )
 
         except LNDSubscriptionError as e:
-            await lnd_client.check_connection(
-                original_error=e.original_error
-                if hasattr(e, "original_error") and isinstance(e.original_error, AioRpcError)
-                else None,
-                call_name="SubscribeHtlcEvents",
+            orig = (
+                e.original_error
+                if isinstance(getattr(e, "original_error", None), AioRpcError)
+                else None
+            )
+            await _reconnect_after_stream_drop(
+                lnd_client, call_name="SubscribeChannelEvents", original_error=orig
             )
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
             logger.error("🔴 Connection error in channel_events_loop", exc_info=e, stack_info=True)
             raise e
-        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        except KeyboardInterrupt as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
+        except asyncio.CancelledError as e:
+            await _reconnect_after_stream_drop(
+                lnd_client, call_name="SubscribeChannelEvents", cancelled=e
+            )
         except Exception as e:
             logger.exception(e)
 
@@ -1336,11 +1393,13 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 insert_one = invoice.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv"}
                 )
-                bulk_updates.append({
-                    "filter": {"r_hash": invoice.r_hash},
-                    "update": {"$set": insert_one},
-                    "upsert": True,
-                })
+                bulk_updates.append(
+                    {
+                        "filter": {"r_hash": invoice.r_hash},
+                        "update": {"$set": insert_one},
+                        "upsert": True,
+                    }
+                )
             try:
                 if bulk_updates:
                     result = await Invoice.collection().bulk_write(
@@ -1491,11 +1550,13 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 insert_one = payment.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
                 )
-                bulk_updates.append({
-                    "filter": query,
-                    "update": {"$set": insert_one},
-                    "upsert": True,
-                })
+                bulk_updates.append(
+                    {
+                        "filter": query,
+                        "update": {"$set": insert_one},
+                        "upsert": True,
+                    }
+                )
             try:
                 if bulk_updates:
                     result = await Payment.collection().bulk_write(
@@ -1872,8 +1933,8 @@ async def _task_watchdog(
     When a critical streaming task dies outside of a normal shutdown, the main
     process stays alive (blocked on shutdown_event.wait) and Docker never sees
     a failure exit code — so 'restart: on-failure' never fires.  This watchdog
-    detects that situation, logs the dead tasks, then calls sys.exit(1) so
-    Docker will restart the container.
+    detects that situation, logs the dead tasks, then asks main() to exit 1.
+    ``sys.exit`` inside an asyncio Task does not terminate the process.
 
     Also exits if TrackPayments or SubscribeInvoices is hung (LND ahead of Mongo)
     for SUBSCRIPTION_LAG_POLLS_BEFORE_EXIT consecutive polls.
@@ -1892,10 +1953,10 @@ async def _task_watchdog(
                     f"(exception: {exc}). Triggering restart.",
                     extra={"notification": True, "error_code": "hive_monitor_task_failure"},
                 )
-            shutdown_event.set()
+            _request_failed_restart()
             # Brief pause so the logger can flush the error before we exit
             await asyncio.sleep(2)
-            sys.exit(1)
+            return
 
         if startup_complete_event.is_set() and not _task_still_running("synchronize_db"):
             lags = await _subscription_lag_messages(lnd_client)
@@ -1915,9 +1976,9 @@ async def _task_watchdog(
                             "error_code": "lnd_subscription_lag",
                         },
                     )
-                    shutdown_event.set()
+                    _request_failed_restart()
                     await asyncio.sleep(2)
-                    sys.exit(1)
+                    return
             else:
                 consecutive_subscription_lag = 0
 
@@ -2072,6 +2133,8 @@ def main(
     )
     asyncio.run(main_async_start(lnd_node))
     logger.info("👋 Goodbye!")
+    if _failed_restart_requested:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
