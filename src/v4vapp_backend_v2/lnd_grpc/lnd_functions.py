@@ -561,10 +561,16 @@ async def send_lightning_to_pay_req(
     if payment_dict:
         try:
             payment = Payment.model_validate(payment_dict)
+            fee_limit_percentage = (
+                (Decimal(payment.fee_msat) / Decimal(fee_limit_msat) * 100)
+                if payment.fee_msat
+                else Decimal(0)
+            )
             logger.info(
-                f"{payment_id} {payment.log_str}",
+                f"{payment_id} {payment.log_str} (fee limit: {fee_limit_percentage:,.0f} %)",
                 extra={
                     "notification": False,
+                    "fee_limit_percentage": fee_limit_percentage,
                     **payment.log_extra,
                 },
             )
