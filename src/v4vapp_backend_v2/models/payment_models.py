@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
-from typing import Any, ClassVar, Dict, List, Optional, override
+from typing import Any, ClassVar, override
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -41,18 +41,18 @@ class Hop(BaseModel):
     fee_msat: BSONInt64 | None = None
     pub_key: str
     tlv_payload: bool | None = None
-    metadata: Optional[bytes] = None
-    blinding_point: Optional[bytes] = None
-    encrypted_data: Optional[bytes] = None
-    total_amt_msat: Optional[BSONInt64] = None
-    custom_records: Dict[str, str] | None = None
+    metadata: bytes | None = None
+    blinding_point: bytes | None = None
+    encrypted_data: bytes | None = None
+    total_amt_msat: BSONInt64 | None = None
+    custom_records: dict[str, str] | None = None
 
 
 class Route(BaseModel):
     total_time_lock: int
     total_fees: BSONInt64 | None = None
     total_amt: BSONInt64
-    hops: List[Hop]
+    hops: list[Hop]
     total_fees_msat: BSONInt64 | None = None
     total_amt_msat: BSONInt64
 
@@ -62,9 +62,9 @@ class HTLCAttempt(BaseModel):
     status: str | None = None
     attempt_time_ns: datetime | None = None
     resolve_time_ns: datetime | None = None
-    preimage: Optional[str] = None
-    route: Optional[Route] = None
-    failure: Optional[dict] = None
+    preimage: str | None = None
+    route: Route | None = None
+    failure: dict | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -119,7 +119,7 @@ class Payment(TrackedBaseModel):
     # Attributes from Payment
     payment_hash: str = ""
     value: BSONInt64 = BSONInt64(0)
-    creation_date: datetime = datetime.now(tz=timezone.utc)
+    creation_date: datetime = datetime.now(tz=UTC)
     fee: BSONInt64 = BSONInt64(0)
     payment_preimage: str = ""
     value_sat: BSONInt64 = BSONInt64(0)
@@ -135,8 +135,8 @@ class Payment(TrackedBaseModel):
     creation_time_ns: datetime | None = None  # This is a datetime object, not an int
     payment_index: BSONInt64 = BSONInt64(0)
     failure_reason: str = ""
-    htlcs: List[HTLCAttempt] | None = None
-    first_hop_custom_record: List[FirstHopCustomRecords] | None = None
+    htlcs: list[HTLCAttempt] | None = None
+    first_hop_custom_record: list[FirstHopCustomRecords] | None = None
 
     conv_fee: CryptoConv | None = Field(
         default=None, description="Conversion of the fee for this payment"
@@ -338,7 +338,7 @@ class Payment(TrackedBaseModel):
         return InternalConfig.db["payments"]
 
     @property
-    def group_id_query(self) -> Dict[str, str]:
+    def group_id_query(self) -> dict[str, str]:
         return {"payment_hash": self.payment_hash}
 
     @computed_field
@@ -363,7 +363,7 @@ class Payment(TrackedBaseModel):
         return self.group_id_p[:10]
 
     @property
-    def destination_pub_keys(self) -> List[str | None]:
+    def destination_pub_keys(self) -> list[str | None]:
         """
         Retrieves the public keys of the destination hops in the HTLC route.
         """
@@ -389,7 +389,7 @@ class Payment(TrackedBaseModel):
         Returns the value of the payment in millisatoshis, rounded to the nearest integer.
         """
         sats = Decimal(self.value_msat) / Decimal(1000)
-        return sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return sats.quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
     @property
     def fee_sat_rounded(self) -> Decimal:
@@ -397,7 +397,7 @@ class Payment(TrackedBaseModel):
         Returns the fee of the payment in sats, rounded to the nearest integer.
         """
         sats = Decimal(self.fee_msat) / Decimal(1000)
-        return sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return sats.quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
     @property
     def log_str(self) -> str:
@@ -431,7 +431,7 @@ class Payment(TrackedBaseModel):
         """
         timestamp = self.creation_time_ns or self.creation_date
         if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(tzinfo=timezone.utc)
+            timestamp = timestamp.replace(tzinfo=UTC)
         return timestamp
 
     @property
@@ -452,7 +452,7 @@ class Payment(TrackedBaseModel):
         Returns:
             float: The age of the invoice in seconds.
         """
-        return (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds()
+        return (datetime.now(tz=UTC) - self.timestamp).total_seconds()
 
     @property
     def age_str(self) -> str:
@@ -480,7 +480,7 @@ class Payment(TrackedBaseModel):
 class ListPaymentsResponse(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    payments: List[Payment]
+    payments: list[Payment]
     first_index_offset: BSONInt64
     last_index_offset: BSONInt64
     total_num_payments: BSONInt64 = BSONInt64(0)
