@@ -42,13 +42,21 @@ def _patch_payments(monkeypatch, *, lnd_index: int, mongo_docs: list, floors=Non
         "lnd_monitor_v2.ListPaymentsResponse",
         lambda _raw: SimpleNamespace(payments=[SimpleNamespace(payment_index=lnd_index)]),
     )
+    # classmethod: accept the bound cls argument
     monkeypatch.setattr(
         "lnd_monitor_v2.Payment.collection",
-        lambda: SimpleNamespace(find=lambda *_a, **_k: _FakeCursor(mongo_docs)),
+        lambda *_a, **_k: SimpleNamespace(find=lambda *_fa, **_fk: _FakeCursor(mongo_docs)),
     )
     monkeypatch.setattr(
         "lnd_monitor_v2.get_lnd_index_floors",
         lambda *_a, **_k: floors if floors is not None else LndIndexFloors(),
+    )
+
+
+def _patch_invoice_collection(monkeypatch, collection):
+    monkeypatch.setattr(
+        "lnd_monitor_v2.Invoice.collection",
+        lambda *_a, **_k: collection,
     )
 
 
@@ -99,6 +107,8 @@ async def test_payment_lag_when_lnd_tip_above_start_payment_index_and_mongo_empt
     msg = await _payment_subscription_lag_message(lnd_client)
     assert msg is not None
     assert "2" in msg
+    assert "baseline 1" in msg
+    assert "start_payment_index 1" in msg
 
 
 def _invoice(
@@ -132,7 +142,7 @@ async def test_invoice_lag_when_newest_r_hash_missing(monkeypatch):
     monkeypatch.setattr("lnd_monitor_v2.get_lnd_index_floors", lambda *_a, **_k: LndIndexFloors())
     collection = MagicMock()
     collection.find_one = AsyncMock(return_value=None)
-    monkeypatch.setattr("lnd_monitor_v2.Invoice.collection", lambda: collection)
+    _patch_invoice_collection(monkeypatch, collection)
     msg = await _invoice_subscription_lag_message(lnd_client)
     assert msg is not None
     assert "abc123newest" in msg
@@ -151,7 +161,7 @@ async def test_invoice_ok_when_newest_r_hash_present(monkeypatch):
     monkeypatch.setattr("lnd_monitor_v2.get_lnd_index_floors", lambda *_a, **_k: LndIndexFloors())
     collection = MagicMock()
     collection.find_one = AsyncMock(return_value={"r_hash": "abc123newest00", "state": "OPEN"})
-    monkeypatch.setattr("lnd_monitor_v2.Invoice.collection", lambda: collection)
+    _patch_invoice_collection(monkeypatch, collection)
     assert await _invoice_subscription_lag_message(lnd_client) is None
 
 
@@ -169,7 +179,7 @@ async def test_invoice_lag_when_settled_r_hash_still_open_in_mongo(monkeypatch):
     monkeypatch.setattr("lnd_monitor_v2.get_lnd_index_floors", lambda *_a, **_k: LndIndexFloors())
     collection = MagicMock()
     collection.find_one = AsyncMock(return_value={"r_hash": "def456settled0", "state": "OPEN"})
-    monkeypatch.setattr("lnd_monitor_v2.Invoice.collection", lambda: collection)
+    _patch_invoice_collection(monkeypatch, collection)
     msg = await _invoice_subscription_lag_message(lnd_client)
     assert msg is not None
     assert "def456settle" in msg
@@ -200,7 +210,7 @@ async def test_invoice_no_lag_when_newest_add_index_at_start_add_index(monkeypat
     )
     collection = MagicMock()
     collection.find_one = AsyncMock(return_value=None)
-    monkeypatch.setattr("lnd_monitor_v2.Invoice.collection", lambda: collection)
+    _patch_invoice_collection(monkeypatch, collection)
     assert await _invoice_subscription_lag_message(lnd_client) is None
     collection.find_one.assert_not_awaited()
 
@@ -218,7 +228,7 @@ async def test_invoice_no_lag_when_newest_is_pruned_expired_unsettled(monkeypatc
     monkeypatch.setattr("lnd_monitor_v2.get_lnd_index_floors", lambda *_a, **_k: LndIndexFloors())
     collection = MagicMock()
     collection.find_one = AsyncMock(return_value=None)
-    monkeypatch.setattr("lnd_monitor_v2.Invoice.collection", lambda: collection)
+    _patch_invoice_collection(monkeypatch, collection)
     assert await _invoice_subscription_lag_message(lnd_client) is None
 
 
@@ -235,7 +245,7 @@ async def test_invoice_lag_when_newest_missing_and_still_within_retention(monkey
     monkeypatch.setattr("lnd_monitor_v2.get_lnd_index_floors", lambda *_a, **_k: LndIndexFloors())
     collection = MagicMock()
     collection.find_one = AsyncMock(return_value=None)
-    monkeypatch.setattr("lnd_monitor_v2.Invoice.collection", lambda: collection)
+    _patch_invoice_collection(monkeypatch, collection)
     msg = await _invoice_subscription_lag_message(lnd_client)
     assert msg is not None
     assert "missing from Mongo" in msg
@@ -257,7 +267,7 @@ async def test_invoice_no_lag_when_settled_add_index_at_or_below_floor(monkeypat
     )
     collection = MagicMock()
     collection.find_one = AsyncMock(return_value=None)
-    monkeypatch.setattr("lnd_monitor_v2.Invoice.collection", lambda: collection)
+    _patch_invoice_collection(monkeypatch, collection)
     assert await _invoice_subscription_lag_message(lnd_client) is None
     collection.find_one.assert_not_awaited()
 

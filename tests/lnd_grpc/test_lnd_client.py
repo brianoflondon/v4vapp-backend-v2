@@ -237,24 +237,28 @@ async def test_check_connection_skips_rebuild_when_already_healthy(set_base_conf
 
 
 @pytest.mark.asyncio
-async def test_check_connection_second_waiter_does_not_close_restored_channel(
+async def test_check_connection_second_waiter_does_not_rebuild_twice(
     set_base_config_path: None,
 ):
-    """Two loops calling check_connection must not rebuild twice."""
+    """Two loops calling check_connection must serialize and rebuild once."""
     client = LNDClient(connection_name="example")
-    client.error_state = False
-    client.lightning_stub = MagicMock()
-    client.lightning_stub.WalletBalance = AsyncMock(return_value=MagicMock())
-    client.channel = MagicMock()
-    client.channel.close = AsyncMock()
+    client.error_state = True
+    client._wallet_balance_ok = AsyncMock(return_value=True)
+    rebuild = AsyncMock()
+
+    async def slow_rebuild(**_kwargs):
+        await asyncio.sleep(0.05)
+        client.error_state = False
+
+    rebuild.side_effect = slow_rebuild
+    client._rebuild_channel_until_healthy = rebuild
 
     await asyncio.gather(
         client.check_connection(call_name="SubscribeInvoices"),
         client.check_connection(call_name="SubscribeHtlcEvents"),
     )
 
-    assert client.channel.close.await_count == 0
-    assert client.lightning_stub.WalletBalance.await_count >= 2
+    assert rebuild.await_count == 1
 
 
 @pytest.mark.asyncio

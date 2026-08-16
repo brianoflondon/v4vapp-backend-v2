@@ -273,7 +273,10 @@ async def _payment_subscription_lag_message(lnd_client: LNDClient) -> str | None
     # Exclusive floor: payment_index <= start_payment_index is never in Mongo.
     baseline = max(mongo_index, floors.payment_index)
     if lnd_index > baseline:
-        return f"payments_loop hung (LND payment_index {lnd_index} > Mongo {mongo_index})"
+        return (
+            f"payments_loop hung (LND payment_index {lnd_index} > baseline {baseline} "
+            f"[Mongo {mongo_index}, start_payment_index {floors.payment_index}])"
+        )
     return None
 
 
@@ -355,12 +358,11 @@ async def _invoice_subscription_lag_message(lnd_client: LNDClient) -> str | None
 
 
 async def _subscription_lag_messages(lnd_client: LNDClient) -> list[str]:
-    messages: list[str] = []
-    for checker in (_payment_subscription_lag_message, _invoice_subscription_lag_message):
-        msg = await checker(lnd_client)
-        if msg:
-            messages.append(msg)
-    return messages
+    results = await asyncio.gather(
+        _payment_subscription_lag_message(lnd_client),
+        _invoice_subscription_lag_message(lnd_client),
+    )
+    return [msg for msg in results if msg]
 
 
 async def health_check() -> dict[str, Any]:

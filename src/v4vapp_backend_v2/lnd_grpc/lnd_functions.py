@@ -484,7 +484,10 @@ async def send_lightning_to_pay_req(
         )
     # Must prevent 0 fee limit which is an unlimited fee.
     fee_limit_msat = max(fee_limit_msat, 1000)
-    logger.info(f"Fee limit: {fee_limit_msat / 1000:.0f} sats")
+    payment_id = f"{lnd_client.icon} {pay_req.pay_req_str[:14]}"
+    logger.info(
+        f"{payment_id} Fee limit: {fee_limit_msat / 1000:.0f} sats ({payment_amount_msat / 1000:.,0f} sats * {fee_limit_ppm} ppm + {lnd_config.lightning_fee_base_msats} base)",
+    )
     failure_reason = "Unknown Failure"
     # Construct the SendPaymentRequest parameters
     request_params = request_params | {
@@ -499,7 +502,6 @@ async def send_lightning_to_pay_req(
         request_params["amt_msat"] = int(amount_msat)
 
     payment_dict = {}
-    payment_id = f"{lnd_client.icon} {pay_req.pay_req_str[:14]}"
     error_message = ""
     response_queue = asyncio.Queue()
     logging_task = asyncio.create_task(log_payment_in_process(payment_id, response_queue))
