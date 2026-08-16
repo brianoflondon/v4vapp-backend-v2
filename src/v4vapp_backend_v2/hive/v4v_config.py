@@ -1,10 +1,9 @@
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from time import sleep
-from typing import List
 
 import httpx
 from nectar.account import Account
@@ -50,10 +49,10 @@ class V4VConfigData(BaseModel):
     """Class for fetching and storing some config settings on Hive"""
 
     hive_return_fee: Decimal = Field(
-        Decimal(0.002), description="Fee for returning Hive transactions."
+        Decimal("0.002"), description="Fee for returning Hive transactions."
     )
     conv_fee_percent: Decimal = Field(
-        Decimal(0.019), description="Conversion fee percentage for transactions."
+        Decimal("0.019"), description="Conversion fee percentage for transactions."
     )
     conv_fee_sats: Decimal = Field(
         Decimal(50), description="Conversion fee in satoshis for transactions."
@@ -84,9 +83,9 @@ class V4VConfigData(BaseModel):
     v4v_frontend_iri: str = Field("", description="IRI for the V4V frontend.")
     v4v_api_iri: str = Field("", description="IRI for the V4V API.")
     v4v_fees_streaming_sats_to_hive_percent: Decimal = Field(
-        Decimal(0.019), description="Fee percentage for streaming sats to Hive."
+        Decimal("0.019"), description="Fee percentage for streaming sats to Hive."
     )
-    lightning_rate_limits: List[V4VConfigRateLimits] = Field(
+    lightning_rate_limits: list[V4VConfigRateLimits] = Field(
         default_factory=lambda: [
             V4VConfigRateLimits(hours=4, sats=Decimal(600_000)),
             V4VConfigRateLimits(hours=72, sats=Decimal(1_200_000)),
@@ -136,7 +135,7 @@ class V4VConfig:
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(V4VConfig, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self, server_accname: str = "", hive: Hive | None = None, *args, **kwargs):
@@ -177,7 +176,7 @@ class V4VConfig:
 
         """
         if self.timestamp and self.data and isinstance(self.data, V4VConfigData):
-            if (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds() > 3600:
+            if (datetime.now(tz=UTC) - self.timestamp).total_seconds() > 3600:
                 logger.info(
                     f"{ICON} HiveConfig data is older than 1 hour, fetching new data.",
                     extra={**self.log_extra},
@@ -241,7 +240,7 @@ class V4VConfig:
                 existing_hive_config_raw = metadata.get(CONFIG_ROOT_KEY)
                 if existing_hive_config_raw:
                     self.data = V4VConfigData.model_validate(existing_hive_config_raw)
-                    self.timestamp = datetime.now(tz=timezone.utc)
+                    self.timestamp = datetime.now(tz=UTC)
                     logger.debug(
                         f"{ICON} Fetched settings from Hive. {self.server_accname}",
                         extra={**self.log_extra},
@@ -329,7 +328,7 @@ class V4VConfig:
             **(existing_metadata or {}),
             CONFIG_ROOT_KEY: converted_data,
         }
-        self.timestamp = datetime.now(tz=timezone.utc)
+        self.timestamp = datetime.now(tz=UTC)
         # Overwrite hive params into the Config.
         try:
             logger.info(f"{ICON} Updating Hive settings", extra={"hive_config": new_meta})
@@ -442,9 +441,9 @@ class V4VConfig:
                     )
                     continue  # Try the next endpoint
             except httpx.HTTPError as e:
-                logger.error(
+                logger.warning(
                     f"{ICON} HTTP error while fetching metadata from {endpoint}: {e}",
-                    extra={**self.log_extra},
+                    extra={"notification": False, **self.log_extra},
                 )
                 continue  # Try the next endpoint
             except Exception as e:
