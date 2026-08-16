@@ -486,7 +486,7 @@ async def send_lightning_to_pay_req(
     fee_limit_msat = max(fee_limit_msat, 1000)
     payment_id = f"{lnd_client.icon} {pay_req.pay_req_str[:14]}"
     logger.info(
-        f"{payment_id} Fee limit: {fee_limit_msat / 1000:.0f} sats ({payment_amount_msat / 1000:.,0f} sats * {fee_limit_ppm} ppm + {lnd_config.lightning_fee_base_msats} base)",
+        f"{payment_id} Fee limit: {fee_limit_msat / 1000:.0f} sats ({payment_amount_msat / 1000:,.0f} sats * {fee_limit_ppm} ppm + {lnd_config.lightning_fee_base_msats} base)",
     )
     failure_reason = "Unknown Failure"
     # Construct the SendPaymentRequest parameters
