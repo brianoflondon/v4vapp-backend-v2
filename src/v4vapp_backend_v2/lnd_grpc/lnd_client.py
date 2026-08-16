@@ -58,6 +58,8 @@ class LNDClient:
         self.error_code: str | None = None
         self.connection_check_task: asyncio.Task[Any] | None = None
         self.get_info: lnrpc.GetInfoResponse | None = None
+        # Created lazily: LNDClient may be constructed before an event loop exists.
+        self._reconnect_lock: asyncio.Lock | None = None
         self.setup()
 
     async def __aenter__(self):
@@ -73,7 +75,10 @@ class LNDClient:
             # `async with LNDClient(...)` invocation; callers typically continue
             # using the client and any subsequent RPC will trigger its own
             # error handling.  Log a simple warning without a stack trace.
-            logger.warning(f"{ICON} Could not fetch node info during __aenter__: {e}", extra={"notification": False})
+            logger.warning(
+                f"{ICON} Could not fetch node info during __aenter__: {e}",
+                extra={"notification": False},
+            )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -194,14 +199,52 @@ class LNDClient:
             self.channel = None
             logger.info(f"{ICON} {self.icon} Disconnected from LND")
 
+    def _ensure_reconnect_lock(self) -> asyncio.Lock:
+        if self._reconnect_lock is None:
+            self._reconnect_lock = asyncio.Lock()
+        return self._reconnect_lock
+
+    async def _wallet_balance_ok(self, timeout: float = 5.0) -> bool:
+        if self.lightning_stub is None:
+            return False
+        try:
+            await asyncio.wait_for(
+                self.lightning_stub.WalletBalance(lnrpc.WalletBalanceRequest()),
+                timeout=timeout,
+            )
+            return True
+        except Exception:
+            return False
+
     async def check_connection(
         self,
         original_error: AioRpcError | None = None,
         call_name: str = "",
         max_tries: int = 200,
     ):
+        """Rebuild the gRPC channel after a dropped stream.
+
+        All subscription loops share one client/channel. Serialize reconnects so
+        one loop's ``channel.close()`` cannot cancel the others mid-subscribe,
+        and skip the rebuild if another waiter already restored the connection.
+        """
+        async with self._ensure_reconnect_lock():
+            # Another loop may have finished reconnecting while we waited.
+            if not self.error_state and await self._wallet_balance_ok():
+                return
+            await self._rebuild_channel_until_healthy(
+                original_error=original_error,
+                call_name=call_name,
+                max_tries=max_tries,
+            )
+
+    async def _rebuild_channel_until_healthy(
+        self,
+        original_error: AioRpcError | None,
+        call_name: str,
+        max_tries: int,
+    ) -> None:
         error_count = 0
-        back_off_time = 1
         if self.lightning_stub is None:
             self.setup()
         while True:
@@ -211,7 +254,10 @@ class LNDClient:
             self.setup()
             try:
                 if self.lightning_stub is not None:
-                    _ = await self.lightning_stub.WalletBalance(lnrpc.WalletBalanceRequest())
+                    _ = await asyncio.wait_for(
+                        self.lightning_stub.WalletBalance(lnrpc.WalletBalanceRequest()),
+                        timeout=5.0,
+                    )
                     if original_error is not None:
                         logger.warning(
                             f"{ICON} {self.icon} Connection to LND is OK after Error "
@@ -228,22 +274,27 @@ class LNDClient:
                     return
                 else:
                     logger.warning(f"{ICON} {self.icon} LNDClient stub is None")
-            except AioRpcError as e:
-                if original_error is not None:
-                    message = original_error.debug_error_string()
-                else:
-                    message = (
-                        f"{ICON} {self.icon} Error in {call_name} RPC call: {get_error_code(e)}"
-                    )
-                    original_error = e
-                logger.error(
-                    message,
-                    extra={
+            except (AioRpcError, TimeoutError) as e:
+                if isinstance(e, AioRpcError):
+                    if original_error is not None:
+                        message = original_error.debug_error_string()
+                    else:
+                        message = (
+                            f"{ICON} {self.icon} Error in {call_name} RPC call: "
+                            f"{get_error_code(e)}"
+                        )
+                        original_error = e
+                    extra = {
                         "notification": True,
                         "error_code": get_error_code(e),
                         "error_details": error_to_dict(e),
-                    },
-                )
+                    }
+                else:
+                    message = (
+                        f"{ICON} {self.icon} Timeout probing LND in {call_name} (WalletBalance)"
+                    )
+                    extra = {"notification": True}
+                logger.error(message, extra=extra)
                 self.error_state = True
             error_count += 1
             if error_count >= max_tries:

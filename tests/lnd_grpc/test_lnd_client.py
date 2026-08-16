@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -218,6 +219,46 @@ async def test_node_get_info_fail(set_base_config_path: None):
         lnd_client = LNDClient(connection_name="example")
         with pytest.raises(LNDConnectionError):
             _ = await lnd_client.node_get_info
+
+
+@pytest.mark.asyncio
+async def test_check_connection_skips_rebuild_when_already_healthy(set_base_config_path: None):
+    client = LNDClient(connection_name="example")
+    client.error_state = False
+    client.lightning_stub = MagicMock()
+    client.lightning_stub.WalletBalance = AsyncMock(return_value=MagicMock())
+    client.channel = MagicMock()
+    client.channel.close = AsyncMock()
+
+    await client.check_connection(call_name="SubscribeInvoices")
+
+    client.lightning_stub.WalletBalance.assert_awaited()
+    client.channel.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_check_connection_second_waiter_does_not_rebuild_twice(
+    set_base_config_path: None,
+):
+    """Two loops calling check_connection must serialize and rebuild once."""
+    client = LNDClient(connection_name="example")
+    client.error_state = True
+    client._wallet_balance_ok = AsyncMock(return_value=True)
+    rebuild = AsyncMock()
+
+    async def slow_rebuild(**_kwargs):
+        await asyncio.sleep(0.05)
+        client.error_state = False
+
+    rebuild.side_effect = slow_rebuild
+    client._rebuild_channel_until_healthy = rebuild
+
+    await asyncio.gather(
+        client.check_connection(call_name="SubscribeInvoices"),
+        client.check_connection(call_name="SubscribeHtlcEvents"),
+    )
+
+    assert rebuild.await_count == 1
 
 
 @pytest.mark.asyncio

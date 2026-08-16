@@ -120,6 +120,7 @@ async def check_binance_balances():
         version=__version__,
     )  # Use a port from config if needed
     asyncio.create_task(status_api.start(), name="status_api")
+    logger.info(f"{ICON} Status API started on port {health_check_port}")
     while not shutdown_event.is_set():
         try:
             if shutdown_event.is_set():
@@ -283,7 +284,7 @@ async def testnet_rebalance(hive_qty: Decimal, hive_target: Decimal):
             quote_asset="BTC",
             direction=RebalanceDirection.BUY_BASE_WITH_QUOTE,
             qty=quantity_to_rebalance,
-            transaction_id=str("binance_monitor_rebalance_to_target"),
+            transaction_id="binance_monitor_rebalance_to_target",
         )
         logger.info(
             f"{ICON} Testnet rebalance placed: {result}",
