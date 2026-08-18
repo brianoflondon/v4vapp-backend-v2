@@ -1,5 +1,11 @@
 name: Pytest
 
+# One job on purpose. Unit and integration used to be separate jobs with
+# `needs: test`, so every green run paid for two runners, two Redis
+# containers, two Mongo replica sets, and two .venv caches (different keys).
+# Integration is ~10s of admin-interface tests; the second job's setup was
+# ~2.5x longer than the tests. Markers stay for a faster local loop:
+#   uv run pytest -m "not integration and not live_nectar"
 on:
   push:
     branches:
@@ -20,6 +26,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
+      HIVE_MEMO_TEST_KEY: ${{ secrets.HIVE_MEMO_TEST_KEY }}
+      # Live Hive/Nectar stability probes are local-only (network + long runtime).
+      NECTAR_STABILITY: "0"
+      PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
     services:
       redis:
         image: redis:latest
@@ -29,45 +41,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v6
+      # Official uv action: installs uv, sets Python 3.12, caches the uv store
+      # (~/.cache/uv). That cache rebuilds a venv cheaply; caching .venv itself
+      # is brittle across Python patch bumps.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: "3.12"
+          enable-cache: true
 
-      # Install UV
-      - name: Install UV
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install dependencies
+        run: uv sync --locked --group dev
 
-      # Cache virtual environment
-      - name: Cache UV virtual environment
-        id: cache-venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-venv-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('uv.lock') }}
-
-      # Set up virtual environment and sync dependencies
-      - name: Set up UV environment and install dependencies
-        if: steps.cache-venv.outputs.cache-hit != 'true'
-        run: |
-          uv venv --python 3.12
-          uv sync --group dev
-
-      # Ensure UV is available and sync if cache is hit
-      - name: Sync UV dependencies (post-cache)
-        run: |
-          uv sync --group dev
-
-      # Check UV version
-      - name: Check UV version
-        run: uv --version
-
-      # List installed packages
-      - name: List installed packages
-        run: uv pip list
-
-      # Start MongoDB with replica set
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.12.1
         with:
@@ -75,113 +60,21 @@ jobs:
           mongodb-replica-set: rsPytest
           mongodb-port: 37017
 
-      # Set PYTHONPATH
-      - name: Set PYTHONPATH
-        run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
-
-      - name: Add project root to PYTHONPATH
-        run: echo "PYTHONPATH=$PYTHONPATH:$(pwd)" >> $GITHUB_ENV
-
-      # Run tests
+      # Fail-fast: unit first, then the small integration suite on the same
+      # runner / venv / Redis / Mongo. No second job.
       - name: Run unit/fast tests
-        env:
-          HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
-          HIVE_MEMO_TEST_KEY: ${{ secrets.HIVE_MEMO_TEST_KEY }}
-          # Never enable live Hive/Nectar stability probes in CI.
-          NECTAR_STABILITY: "0"
         run: |
           uv run pytest -m "not integration and not live_nectar" \
             --ignore=tests/hive/test_nectar_long_running_stability.py \
             --durations=20
 
-      # Print service container logs only if tests fail
-      - name: Print service container logs
-        if: failure()
-        run: |
-          echo "MongoDB logs:"
-          docker logs $(docker ps -q --filter "ancestor=mongo:8.0")
-          echo "Redis logs:"
-          docker logs $(docker ps -q --filter "ancestor=redis:latest")
-
-  integration:
-    runs-on: ubuntu-latest
-    needs: test
-    services:
-      redis:
-        image: redis:latest
-        ports:
-          - "6379:6379"
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      # Install UV
-      - name: Install UV
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      # Cache UV virtual environment
-      - name: Cache UV virtual environment
-        id: cache-venv-integration
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-venv-integration-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('uv.lock') }}
-
-      # Set up virtual environment and sync dependencies
-      - name: Set up UV environment and install dependencies
-        if: steps.cache-venv-integration.outputs.cache-hit != 'true'
-        run: |
-          uv venv --python 3.12
-          uv sync --group dev
-
-      # Ensure UV is available and sync if cache is hit
-      - name: Sync UV dependencies (post-cache)
-        run: |
-          uv sync --group dev
-
-      # Check UV version
-      - name: Check UV version
-        run: uv --version
-
-      # List installed packages
-      - name: List installed packages
-        run: uv pip list
-
-      # Start MongoDB with replica set
-      - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.12.1
-        with:
-          mongodb-version: "8.0"
-          mongodb-replica-set: rsPytest
-          mongodb-port: 37017
-
-      # Set PYTHONPATH
-      - name: Set PYTHONPATH
-        run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
-
-      - name: Add project root to PYTHONPATH
-        run: echo "PYTHONPATH=$PYTHONPATH:$(pwd)" >> $GITHUB_ENV
-
-      # Run integration tests
-      - name: Test integration with pytest
-        env:
-          HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
-          HIVE_MEMO_TEST_KEY: ${{ secrets.HIVE_MEMO_TEST_KEY }}
-          # Live Nectar stability suite is opt-in local only (network + long runtime).
-          NECTAR_STABILITY: "0"
+      - name: Run integration tests
         run: |
           uv run pytest -m "integration and not live_nectar" \
             --ignore=tests/hive/test_nectar_long_running_stability.py \
             --durations=20
 
-      # Print service container logs only if tests fail
-      - name: Print service container logs (integration)
+      - name: Print service container logs
         if: failure()
         run: |
           echo "MongoDB logs:"
