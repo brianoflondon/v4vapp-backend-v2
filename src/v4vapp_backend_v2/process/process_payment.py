@@ -365,7 +365,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
             group_id=f"{payment.group_id}_{ledger_type.value}",
             op_type=payment.op_type,
             timestamp=datetime.now(tz=UTC),
-            description=f"Lightning Fee: {payment.fee_msat / 1000:,.0f} sats to {payment.destination}",
+            description=f"Lightning Fee: {payment.fee_msat / 1000:,.0f} sats to {payment.destination_p}",
             debit=ExpenseAccount(
                 name="Fee Expenses Lightning",
                 sub=node_name,  # This is paid from the node
