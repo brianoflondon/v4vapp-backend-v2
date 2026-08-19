@@ -18,3 +18,40 @@ tailscale:
 
 telegram:
   chat_id: -1111111
+
+# Secrets live in this YAML (same as lnd_config / hive_config). Do not commit real values.
+dash_config:
+  default: testnet
+  connections:
+    testnet:
+      icon: 💠
+      rpc_url: http://127.0.0.1:19998
+      rpc_user: dashrpc
+      rpc_password: change-me
+      rpc_wallet: watch
+      network: testnet
+      xpub: tpub...account-level-xpub...
+      master_fingerprint: "00000000"
+      poll_interval_s: 10
+      settle_policy: instantsend_or_chainlock
+      min_conf: 2
+      settle_grace_s: 3600
+      underpay_bps: 100
+      underpay_duffs: 50000
+      descriptor_range_end: 100000
+      watch_batch: 500
+      dust_duffs: 5460
+      payouts_enabled: false
+      routing_fee_sats: 300
+      coingecko_url: https://api.coingecko.com/api/v3/simple/price
+    mainnet:
+      rpc_url: http://127.0.0.1:9998
+      rpc_user: dashrpc
+      rpc_password: change-me
+      rpc_wallet: watch
+      network: mainnet
+      xpub: xpub...account-level-xpub...
+      master_fingerprint: "00000000"
+      settle_policy: instantsend_or_chainlock
+      min_conf: 6
+

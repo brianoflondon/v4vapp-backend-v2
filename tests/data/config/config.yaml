@@ -24,6 +24,26 @@ logging:
     - nectar
 ########### TEST CONFIG NO SECRETS #################
 
+dash_config:
+  default: testnet
+  connections:
+    testnet:
+      icon: 💠
+      rpc_url: http://127.0.0.1:19998
+      rpc_user: dashrpc
+      rpc_password: ""
+      rpc_wallet: watch
+      network: testnet
+      # BIP39 test mnemonic (abandon...about) — not a secret
+      xpub: tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba
+      master_fingerprint: "73c5da0a"
+      poll_interval_s: 10
+      settle_policy: instantsend_or_chainlock
+      min_conf: 2
+      routing_fee_sats: 300
+
+########### TEST CONFIG NO SECRETS #################
+
 lnd_config:
   default: example
   connections:
