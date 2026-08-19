@@ -6,9 +6,10 @@ import logging.handlers
 import os
 import sys
 import time
+from decimal import Decimal
 from enum import StrEnum, auto
 from pathlib import Path
-from typing import Any, ClassVar, Protocol
+from typing import Any, ClassVar, Literal, Protocol
 
 from dotenv import load_dotenv
 from packaging import version
@@ -232,6 +233,54 @@ class LndConfig(BaseConfig):
 
     def connection_config(self, name: str | None = None) -> LndConnectionConfig | None:
         """Return the named connection config, or the default connection if name is None."""
+        conn_name = name or self.default
+        if not conn_name:
+            return None
+        return self.connections.get(conn_name)
+
+
+DashNetwork = Literal["mainnet", "testnet", "regtest"]
+DashSettlePolicy = Literal["instantsend_or_chainlock", "conf_n"]
+
+
+class DashConnectionConfig(BaseConfig):
+    """Watch-only Dash Core RPC + BIP44 xpub for one network."""
+
+    icon: str = "💠"
+    rpc_url: str = ""
+    rpc_user: str = ""
+    rpc_password: str = ""
+    rpc_wallet: str = "watch"
+    network: DashNetwork = "testnet"
+    xpub: str = ""
+    xpub_file: str = ""
+    master_fingerprint: str = ""
+    mnemonic_file: str = ""
+    poll_interval_s: int = 10
+    settle_policy: DashSettlePolicy = "instantsend_or_chainlock"
+    min_conf: int = 2
+    settle_grace_s: int = 3600
+    underpay_bps: int = 100
+    underpay_duffs: Decimal = Decimal(50_000)
+    descriptor_range_end: int = 100_000
+    watch_batch: int = 500
+    dust_duffs: Decimal = Decimal(5460)
+    payouts_enabled: bool = False
+    routing_fee_sats: Decimal = Decimal(300)
+    coingecko_url: str = "https://api.coingecko.com/api/v3/simple/price"
+
+    @property
+    def rpc_configured(self) -> bool:
+        return bool(self.rpc_url and self.rpc_password and self.rpc_password != "change-me")
+
+
+class DashConfig(BaseConfig):
+    """Named Dash connections, matching lnd_config."""
+
+    default: str = ""
+    connections: dict[str, DashConnectionConfig] = {}
+
+    def connection_config(self, name: str | None = None) -> DashConnectionConfig | None:
         conn_name = name or self.default
         if not conn_name:
             return None
@@ -552,9 +601,9 @@ class HiveConfig(BaseConfig):
         for name, acc in self.hive_accs.items():
             acc.name = name
         if self.custom_json_prefix:
-            self.custom_json_ids_tracked.extend([
-                f"{self.custom_json_prefix}{suffix}" for suffix in ["_transfer", "_notification"]
-            ])
+            self.custom_json_ids_tracked.extend(
+                [f"{self.custom_json_prefix}{suffix}" for suffix in ["_transfer", "_notification"]]
+            )
         filter_duplicates = set(self.custom_json_ids_tracked)
         self.custom_json_ids_tracked = list(filter_duplicates)
         # TODO: #306 We can check that the auto_rebalance account (if set) is an exchange account
@@ -900,6 +949,7 @@ class Config(BaseModel):
     """
     version (str): The version of the configuration. Default is an empty string.
     lnd_config (LndConfig): Configuration for LND connections.
+    dash_config (DashConfig): Configuration for Dash Core RPC connections.
     dbs_config (DbsConfig): Configuration for database connections.
     redis (RedisConnectionConfig): Configuration for Redis connection.
     notification_bots (dict[str, NotificationBotConfig]): Dictionary of notification bot configurations.
@@ -931,6 +981,7 @@ class Config(BaseModel):
     development: DevelopmentConfig = DevelopmentConfig()
 
     lnd_config: LndConfig = LndConfig()
+    dash_config: DashConfig = DashConfig()
     dbs_config: DbsConfig = DbsConfig()
 
     redis: RedisConnectionConfig = RedisConnectionConfig()
@@ -966,6 +1017,16 @@ class Config(BaseModel):
         if self.lnd_config.default and self.lnd_config.default not in self.lnd_config.connections:
             raise ValueError(
                 f"Default lnd connection: {self.lnd_config.default} not found in lnd_connections"
+            )
+
+        # Check default Dash connection
+        if (
+            self.dash_config.default
+            and self.dash_config.default not in self.dash_config.connections
+        ):
+            raise ValueError(
+                f"Default dash connection: {self.dash_config.default} not found "
+                "in dash_config.connections"
             )
 
         # Check default database connection
