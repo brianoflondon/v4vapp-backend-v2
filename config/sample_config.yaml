@@ -43,7 +43,6 @@ dash_config:
       dust_duffs: 5460
       payouts_enabled: false
       routing_fee_sats: 300
-      coingecko_url: https://api.coingecko.com/api/v3/simple/price
     mainnet:
       rpc_url: http://127.0.0.1:9998
       rpc_user: dashrpc

@@ -267,7 +267,6 @@ class DashConnectionConfig(BaseConfig):
     dust_duffs: Decimal = Decimal(5460)
     payouts_enabled: bool = False
     routing_fee_sats: Decimal = Decimal(300)
-    coingecko_url: str = "https://api.coingecko.com/api/v3/simple/price"
 
     @property
     def rpc_configured(self) -> bool:
