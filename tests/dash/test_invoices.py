@@ -151,7 +151,10 @@ def _conn() -> DashConnectionConfig:
 
 @pytest.fixture
 def invoice_client(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, _Db]:
-    monkeypatch.setattr("v4vapp_backend_v2.dash.routers.fetch_quote", lambda conn=None: _quote())
+    async def _fake_fetch_quote():
+        return _quote()
+
+    monkeypatch.setattr("v4vapp_backend_v2.dash.routers.fetch_quote", _fake_fetch_quote)
     monkeypatch.setattr(
         "v4vapp_backend_v2.dash.routers.fetch_hive_config",
         lambda: DEFAULT_CONFIG,

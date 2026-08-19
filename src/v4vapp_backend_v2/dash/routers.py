@@ -200,7 +200,7 @@ async def create_invoice(
 
     fees = calculate_invoice_fees(body.sats, hive)
     try:
-        raw_quote = fetch_quote(conn=conn)
+        raw_quote = await fetch_quote()
         priced = quote_for_sats(fees.sats_collect, raw_quote)
     except ApiError:
         raise
