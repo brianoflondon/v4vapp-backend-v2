@@ -101,7 +101,7 @@
         Replay Lightning Payment
     </h3>
     <p class="text-muted mb-3">
-        Scan payments that look like balance adjustments or funding and manually replay them through the payment processor.
+        Scan payments tagged <code>v4v-funding</code> or <code>v4v-balance-adjustment</code> and manually replay them through the payment processor.
         Select found payments and then process them through <code>process_tracked_event</code>.
     </p>
     <div class="row g-2 align-items-end">
@@ -119,7 +119,7 @@
             </button>
         </div>
     </div>
-    <div class="form-text">Scan payments that have no <code>process_time</code> and invoice_description matching balance adjustment or funding.</div>
+    <div class="form-text">Scan payments that have no <code>process_time</code> and invoice_description matching <code>v4v-funding</code> or <code>v4v-balance-adjustment</code>.</div>
 </div>
 
 <div class="replay-panel" id="payment-results-panel" style="display:none;">
@@ -148,7 +148,7 @@
         Replay Lightning Invoice
     </h3>
     <p class="text-muted mb-3">
-        Scan settled invoices that look like balance adjustments or funding and manually replay them through the invoice processor.
+        Scan settled invoices tagged <code>v4v-funding</code> or <code>v4v-balance-adjustment</code> and manually replay them through the invoice processor.
         Select found invoices and then process them through <code>process_tracked_event</code>.
     </p>
     <div class="row g-2 align-items-end">
@@ -166,7 +166,7 @@
             </button>
         </div>
     </div>
-    <div class="form-text">Scan invoices that are settled, unprocessed, and memoed as Balance Adjustment or funding.</div>
+    <div class="form-text">Scan invoices that are settled, unprocessed, and memoed as <code>v4v-funding</code> or <code>v4v-balance-adjustment</code>.</div>
 </div>
 
 <div class="replay-panel" id="invoice-results-panel" style="display:none;">

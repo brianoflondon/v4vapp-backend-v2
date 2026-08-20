@@ -28,6 +28,7 @@ has been sent.
 """
 
 import asyncio
+import re
 from timeit import default_timer as timer
 from uuid import uuid4
 
@@ -77,6 +78,11 @@ CUST_ID_LOCK_PREFIX = "pte"
 CUST_ID_LOCK_TIMEOUT = 30  # seconds
 # used only for the cust_id lock so if a customer's transfer genuinely takes a long time,
 # a different transaction can be started.
+
+# Operator-only Lightning memo tags for owner-loan FUNDING ledger entries.
+# Customer invoices must not trip this path; generic words like "funding" are ignored.
+FUNDING_MEMO_TAGS: tuple[str, ...] = ("v4v-funding", "v4v-balance-adjustment")
+FUNDING_MEMO_REGEX = "|".join(re.escape(tag) for tag in FUNDING_MEMO_TAGS)
 
 
 async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> list[LedgerEntry]:
@@ -308,12 +314,12 @@ async def process_lightning_invoice(
 
     This function handles incoming Lightning invoices, updating the ledger entry with
     the appropriate credit and debit information based on the invoice details. If the
-    invoice memo contains specific keywords (e.g., "Funding"), it assigns the correct
-    asset and liability accounts. For other cases, it raises a NotImplementedError.
+    invoice memo contains ``v4v-funding`` or ``v4v-balance-adjustment``, it assigns the
+    correct asset and liability accounts. For other cases, it raises a NotImplementedError.
 
-    Special: If the memo contains "Funding" or "Balance Adjustment", it records this as an incoming
-    Owner's loan, debiting the External Lightning Payments asset account and crediting the
-    Owner Loan Payable liability account.
+    Special: If the memo contains ``v4v-funding`` or ``v4v-balance-adjustment``, it records
+    this as an incoming Owner's loan, debiting the External Lightning Payments asset account
+    and crediting the Owner Loan Payable liability account.
 
     Args:
         invoice (Invoice): The Lightning invoice object containing payment details.
@@ -368,15 +374,16 @@ async def process_lightning_invoice(
 
 def check_funding_balance_adjustment(transaction: Invoice | Payment) -> bool:
     """
-    Checks if the given invoice is a funding or balance adjustment invoice.
+    True when the Lightning memo is an operator owner-loan tag.
 
-    This function examines the memo of the invoice to determine if it contains
-    keywords indicating that it is related to funding or balance adjustments.
+    Only the tokens ``v4v-funding`` and ``v4v-balance-adjustment`` match
+    (case-insensitive, may appear in a longer memo). Generic phrases such as
+    ``Campaign funding`` do not.
 
     Args:
-        invoice (Invoice | Payment): The Lightning invoice or payment object to check.
+        transaction: Lightning invoice or outbound payment to inspect.
     Returns:
-        bool: True if the invoice is a funding or balance adjustment invoice, False otherwise.
+        True if this is an operator funding / balance-adjustment event.
     """
     memo_lower = ""
     if isinstance(transaction, Payment):
@@ -396,7 +403,7 @@ def check_funding_balance_adjustment(transaction: Invoice | Payment) -> bool:
         if transaction.is_lndtohive or transaction.is_magisats:
             return False
 
-    return "funding" in memo_lower or "balance adjustment" in memo_lower
+    return any(tag in memo_lower for tag in FUNDING_MEMO_TAGS)
 
 
 # MARK: Payment (outbound Lightning)
@@ -410,8 +417,8 @@ async def process_lightning_payment(
 
     This function handles outgoing Lightning payments, updating the ledger entry with
     the appropriate credit and debit information based on the payment details. If the
-    payment memo contains specific keywords (e.g., "Funding"), it assigns the correct
-    asset and liability accounts. For other cases, it raises a NotImplementedError.
+    payment memo contains ``v4v-funding`` or ``v4v-balance-adjustment``, it assigns the
+    correct asset and liability accounts. For other cases, it raises a NotImplementedError.
 
     Payment verification moved to he
 
