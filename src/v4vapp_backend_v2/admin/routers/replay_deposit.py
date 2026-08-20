@@ -28,7 +28,10 @@ from v4vapp_backend_v2.hive_models.op_all import OP_MAP
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
+from v4vapp_backend_v2.process.process_tracked_events import (
+    FUNDING_MEMO_REGEX,
+    process_tracked_event,
+)
 from v4vapp_backend_v2.process.process_transfer import HiveTransferError, follow_on_transfer
 
 router = APIRouter()
@@ -517,7 +520,7 @@ async def inspect_deposit(short_id: str = "", group_id: str = "") -> JSONRespons
 
 @router.post("/api/scan-payments")
 async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
-    """Scan payments for Balance Adjustment or funding and return matching payment candidates."""
+    """Scan payments tagged v4v-funding or v4v-balance-adjustment."""
     limit = 50
     try:
         limit = max(1, min(int(payload.get("limit", 50)), 200))
@@ -526,8 +529,15 @@ async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
 
     db = InternalConfig.db
     query = {
+        "status": "SUCCEEDED",
         "process_time": {"$exists": False},
-        "invoice_description": {"$regex": "balance adjustment|funding", "$options": "i"},
+        "invoice_description": {"$regex": FUNDING_MEMO_REGEX, "$options": "i"},
+        # Owner-loan only: skip payments that already have a customer attached.
+        "$or": [
+            {"cust_id": {"$exists": False}},
+            {"cust_id": None},
+            {"cust_id": ""},
+        ],
     }
     cursor = (
         db["payments"]
@@ -581,7 +591,7 @@ async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
 
 @router.post("/api/scan-invoices")
 async def scan_invoices(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
-    """Scan settled balance adjustment/funding invoices and return matching candidates."""
+    """Scan settled invoices tagged v4v-funding or v4v-balance-adjustment."""
     limit = 50
     try:
         limit = max(1, min(int(payload.get("limit", 50)), 200))
@@ -593,9 +603,13 @@ async def scan_invoices(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
         "state": "SETTLED",
         "process_time": {"$exists": False},
         "$or": [
-            {"memo": "Balance Adjustment"},
-            {"custom_records.keysend_message": "Balance Adjustment"},
-            {"memo": "funding"},
+            {"memo": {"$regex": FUNDING_MEMO_REGEX, "$options": "i"}},
+            {
+                "custom_records.keysend_message": {
+                    "$regex": FUNDING_MEMO_REGEX,
+                    "$options": "i",
+                }
+            },
         ],
     }
     cursor = (
