@@ -532,6 +532,12 @@ async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
         "status": "SUCCEEDED",
         "process_time": {"$exists": False},
         "invoice_description": {"$regex": FUNDING_MEMO_REGEX, "$options": "i"},
+        # Owner-loan only: skip payments that already have a customer attached.
+        "$or": [
+            {"cust_id": {"$exists": False}},
+            {"cust_id": None},
+            {"cust_id": ""},
+        ],
     }
     cursor = (
         db["payments"]

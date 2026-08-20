@@ -85,6 +85,13 @@ FUNDING_MEMO_TAGS: tuple[str, ...] = ("v4v-funding", "v4v-balance-adjustment")
 FUNDING_MEMO_REGEX = "|".join(re.escape(tag) for tag in FUNDING_MEMO_TAGS)
 
 
+def _has_valid_cust_id(cust_id: object | None) -> bool:
+    """True when a customer identity is actually set (non-empty after strip)."""
+    if cust_id is None:
+        return False
+    return bool(str(cust_id).strip())
+
+
 async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> list[LedgerEntry]:
     """
     Processes a tracked operation and creates a ledger entry if applicable.
@@ -380,6 +387,9 @@ def check_funding_balance_adjustment(transaction: Invoice | Payment) -> bool:
     (case-insensitive, may appear in a longer memo). Generic phrases such as
     ``Campaign funding`` do not.
 
+    Outbound payments with a non-empty ``cust_id`` are never owner-loan events;
+    they are customer spends even if the destination invoice memo contains a tag.
+
     Args:
         transaction: Lightning invoice or outbound payment to inspect.
     Returns:
@@ -388,6 +398,8 @@ def check_funding_balance_adjustment(transaction: Invoice | Payment) -> bool:
     memo_lower = ""
     if isinstance(transaction, Payment):
         if transaction.status != PaymentStatus.SUCCEEDED:
+            return False
+        if _has_valid_cust_id(transaction.cust_id):
             return False
         if not transaction.invoice_description:
             return False

@@ -14,8 +14,12 @@ from v4vapp_backend_v2.process.process_tracked_events import (
 )
 
 
-def _payment(description: str | None, status: PaymentStatus = PaymentStatus.SUCCEEDED) -> Payment:
-    return Payment(status=status, invoice_description=description)
+def _payment(
+    description: str | None,
+    status: PaymentStatus = PaymentStatus.SUCCEEDED,
+    cust_id: str | None = None,
+) -> Payment:
+    return Payment(status=status, invoice_description=description, cust_id=cust_id)
 
 
 def _invoice(
@@ -65,6 +69,22 @@ def test_in_flight_payment_with_operator_tag_does_not_match() -> None:
         check_funding_balance_adjustment(_payment("v4v-funding", status=PaymentStatus.IN_FLIGHT))
         is False
     )
+
+
+def test_payment_with_cust_id_is_never_owner_loan() -> None:
+    """Customer Keepsats pays must not book as FUNDING, even with an operator tag."""
+    assert check_funding_balance_adjustment(_payment("v4v-funding", cust_id="oadissin")) is False
+    assert (
+        check_funding_balance_adjustment(
+            _payment("Campaign funding: cmt192vmg030nno0ke9nytja2", cust_id="oadissin")
+        )
+        is False
+    )
+
+
+@pytest.mark.parametrize("cust_id", [None, "", "   "])
+def test_operator_tag_matches_when_cust_id_is_unset(cust_id: str | None) -> None:
+    assert check_funding_balance_adjustment(_payment("v4v-funding", cust_id=cust_id)) is True
 
 
 @pytest.mark.parametrize("tag", FUNDING_MEMO_TAGS)
