@@ -101,7 +101,7 @@
         Replay Lightning Payment
     </h3>
     <p class="text-muted mb-3">
-        Scan payments tagged <code>v4v-funding</code> or <code>v4v-balance-adjustment</code> and manually replay them through the payment processor.
+        Scan succeeded payments with no <code>process_time</code> and manually replay them through the payment processor.
         Select found payments and then process them through <code>process_tracked_event</code>.
     </p>
     <div class="row g-2 align-items-end">
@@ -119,7 +119,7 @@
             </button>
         </div>
     </div>
-    <div class="form-text">Scan payments that have no <code>process_time</code> and invoice_description matching <code>v4v-funding</code> or <code>v4v-balance-adjustment</code>.</div>
+    <div class="form-text">Scan payments that succeeded and have no <code>process_time</code>. Delete <code>process_time</code> on a payment document to make it show up.</div>
 </div>
 
 <div class="replay-panel" id="payment-results-panel" style="display:none;">

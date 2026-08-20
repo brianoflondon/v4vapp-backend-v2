@@ -518,9 +518,17 @@ async def inspect_deposit(short_id: str = "", group_id: str = "") -> JSONRespons
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+# Admin replay lists every succeeded payment that has not been processed yet.
+# Memo tags and cust_id are owner-loan gates in process_tracked_event, not scan filters.
+UNPROCESSED_SUCCEEDED_PAYMENT_QUERY: dict[str, Any] = {
+    "status": "SUCCEEDED",
+    "process_time": {"$exists": False},
+}
+
+
 @router.post("/api/scan-payments")
 async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
-    """Scan payments tagged v4v-funding or v4v-balance-adjustment."""
+    """Scan succeeded payments that have no process_time."""
     limit = 50
     try:
         limit = max(1, min(int(payload.get("limit", 50)), 200))
@@ -528,17 +536,7 @@ async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
         limit = 50
 
     db = InternalConfig.db
-    query = {
-        "status": "SUCCEEDED",
-        "process_time": {"$exists": False},
-        "invoice_description": {"$regex": FUNDING_MEMO_REGEX, "$options": "i"},
-        # Owner-loan only: skip payments that already have a customer attached.
-        "$or": [
-            {"cust_id": {"$exists": False}},
-            {"cust_id": None},
-            {"cust_id": ""},
-        ],
-    }
+    query = UNPROCESSED_SUCCEEDED_PAYMENT_QUERY
     cursor = (
         db["payments"]
         .find(
