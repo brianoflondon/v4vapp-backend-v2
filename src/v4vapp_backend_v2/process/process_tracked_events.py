@@ -420,7 +420,8 @@ async def process_lightning_payment(
     payment memo contains ``v4v-funding`` or ``v4v-balance-adjustment``, it assigns the
     correct asset and liability accounts. For other cases, it raises a NotImplementedError.
 
-    Payment verification moved to he
+    Payment verification moved to the `process_payment_success` function, which is called
+    when the payment is successful.
 
     Args:
         payment (Payment): The Lightning payment object containing payment details.

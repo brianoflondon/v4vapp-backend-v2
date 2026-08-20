@@ -529,6 +529,7 @@ async def scan_payments(payload: dict[str, Any] = PAYLOAD_BODY) -> JSONResponse:
 
     db = InternalConfig.db
     query = {
+        "status": "SUCCEEDED",
         "process_time": {"$exists": False},
         "invoice_description": {"$regex": FUNDING_MEMO_REGEX, "$options": "i"},
     }
