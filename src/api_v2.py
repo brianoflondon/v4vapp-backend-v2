@@ -57,6 +57,7 @@ def create_lifespan(config_filename: str):
         db_conn = DBConn()
         await db_conn.setup_database()
         await start_dash(app)
+        logger.info(f"{ICON} Dashd connection established.", extra={"notification": False})
         logger.info(
             f"{ICON} API v2 Started. Version: {__version__}", extra={"notification": False}
         )
