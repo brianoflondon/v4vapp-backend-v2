@@ -85,3 +85,17 @@ async def load_wallet_state(
     db: AsyncDatabase[dict[str, Any]], network: DashNetwork
 ) -> dict[str, Any] | None:
     return await db[COL_WALLET_STATE].find_one({"_id": network})
+
+
+async def persist_watcher_heartbeat(
+    db: AsyncDatabase[dict[str, Any]],
+    *,
+    network: DashNetwork,
+    watcher: dict[str, Any],
+    dashd: dict[str, Any] | None = None,
+) -> None:
+    """Store dash_monitor tick age on the wallet_state row so api_v2 health can read it."""
+    payload: dict[str, Any] = {"watcher": watcher, "updated_at": datetime.now(UTC)}
+    if dashd is not None:
+        payload["dashd"] = dashd
+    await db[COL_WALLET_STATE].update_one({"_id": network}, {"$set": payload})
