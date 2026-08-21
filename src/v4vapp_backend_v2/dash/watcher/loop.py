@@ -12,6 +12,7 @@ from v4vapp_backend_v2.config.setup import DashConnectionConfig, logger
 from v4vapp_backend_v2.dash.amounts import rpc_dash_to_duffs, to_decimal
 from v4vapp_backend_v2.dash.collections import COL_INVOICES
 from v4vapp_backend_v2.dash.dashd.rpc import Dashd, DashdError
+from v4vapp_backend_v2.dash.db.wallet_state import persist_watcher_heartbeat
 from v4vapp_backend_v2.dash.models.invoice import DashInvoiceState
 from v4vapp_backend_v2.dash.watcher.settlement import (
     WATCH_STATES,
@@ -60,10 +61,49 @@ async def run_watcher(
         except Exception as exc:
             state.last_error = str(exc)
             logger.exception(f"{ICON} watcher tick failed", extra={"ticks": state.ticks})
+        await _persist_heartbeat(db, dashd, conn, state)
         try:
             await asyncio.wait_for(stop.wait(), timeout=conn.poll_interval_s)
         except TimeoutError:
             continue
+
+
+async def _persist_heartbeat(
+    db: Any, dashd: Dashd, conn: DashConnectionConfig, state: WatcherState
+) -> None:
+    try:
+        dashd_info = await _snapshot_dashd(dashd)
+        await persist_watcher_heartbeat(
+            db,
+            network=conn.network,
+            watcher={
+                "last_tick_at": state.last_tick_at,
+                "last_error": state.last_error,
+                "open_invoices": state.open_invoices,
+                "ticks": state.ticks,
+                "stuck": state.stuck,
+            },
+            dashd=dashd_info,
+        )
+    except Exception as exc:
+        logger.warning(f"{ICON} watcher heartbeat persist failed: {exc}")
+
+
+async def _snapshot_dashd(dashd: Dashd) -> dict[str, Any]:
+    try:
+        info = await dashd.getblockchaininfo()
+        ibd = bool(info.get("initialblockdownload"))
+        return {
+            "chain": info.get("chain"),
+            "blocks": info.get("blocks"),
+            "headers": info.get("headers"),
+            "verificationprogress": info.get("verificationprogress"),
+            "initialblockdownload": ibd,
+            "pruned": info.get("pruned"),
+            "synced": not ibd,
+        }
+    except Exception:
+        return {"error": True}
 
 
 async def tick(

@@ -369,3 +369,26 @@ def test_dash_health_disabled_without_conn() -> None:
     response = client.get("/v2/dash/health")
     assert response.status_code == 200
     assert response.json()["status"] == "disabled"
+
+
+def test_dash_health_reads_monitor_heartbeat(invoice_client: tuple[TestClient, _Db]) -> None:
+    client, db = invoice_client
+    now = datetime.now(UTC)
+    db[COL_WALLET_STATE].docs[0]["watcher"] = {
+        "last_tick_at": now,
+        "last_error": None,
+        "open_invoices": 1,
+        "ticks": 3,
+        "stuck": 0,
+    }
+    db[COL_WALLET_STATE].docs[0]["dashd"] = {
+        "synced": True,
+        "initialblockdownload": False,
+        "blocks": 100,
+    }
+    response = client.get("/v2/dash/health")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["watcher"]["open_invoices"] == 1
+    assert body["dashd"]["synced"] is True

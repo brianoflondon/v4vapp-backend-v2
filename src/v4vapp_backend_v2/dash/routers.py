@@ -10,7 +10,6 @@ from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DashConnectionConfig, logger
 from v4vapp_backend_v2.dash.amounts import to_decimal
 from v4vapp_backend_v2.dash.collections import COL_INVOICES
-from v4vapp_backend_v2.dash.dashd.rpc import Dashd
 from v4vapp_backend_v2.dash.db.wallet_state import (
     WalletStateMismatch,
     allocate_receive_index,
@@ -29,6 +28,11 @@ from v4vapp_backend_v2.dash.models.invoice import (
     payment_uri,
 )
 from v4vapp_backend_v2.dash.quotes.service import fetch_quote, quote_for_sats
+from v4vapp_backend_v2.dash.runtime import (
+    assemble_dash_health,
+    watcher_info_from_doc,
+    watcher_info_from_state,
+)
 from v4vapp_backend_v2.dash.settings import default_min_conf
 from v4vapp_backend_v2.dash.wallet.hd import derive_receive
 from v4vapp_backend_v2.dash.watcher.loop import WatcherState
@@ -81,13 +85,15 @@ async def dash_health(request: Request) -> dict[str, Any]:
     mongo_ok: bool | None = None
     wallet: dict[str, Any] | None = None
     dashd_info: dict[str, Any] | None = None
+    watcher_info: dict[str, Any] | None = None
     db = getattr(request.app.state, "dash_db", None)
-    dashd: Dashd | None = getattr(request.app.state, "dashd", None)
-    watcher: WatcherState | None = getattr(request.app.state, "watcher", None)
+    in_proc: WatcherState | None = getattr(request.app.state, "watcher", None)
 
     if db is not None:
         try:
-            await db.client.admin.command("ping")
+            client = getattr(db, "client", None)
+            if client is not None:
+                await client.admin.command("ping")
             mongo_ok = True
             if conn is not None:
                 state = await load_wallet_state(db, conn.network)
@@ -97,60 +103,22 @@ async def dash_health(request: Request) -> dict[str, Any]:
                         "next_receive_index": int(state.get("next_receive_index", 0)),
                         "descriptor_range_end": int(state.get("descriptor_range_end", 0)),
                     }
+                    watcher_info = watcher_info_from_doc(state.get("watcher"))
+                    dashd_info = state.get("dashd")
         except Exception:
             mongo_ok = False
 
-    if dashd is not None:
-        try:
-            info = await dashd.getblockchaininfo()
-            ibd = bool(info.get("initialblockdownload"))
-            dashd_info = {
-                "chain": info.get("chain"),
-                "blocks": info.get("blocks"),
-                "headers": info.get("headers"),
-                "verificationprogress": info.get("verificationprogress"),
-                "initialblockdownload": ibd,
-                "pruned": info.get("pruned"),
-                "synced": not ibd,
-            }
-        except Exception:
-            dashd_info = {"error": True}
+    if in_proc is not None and in_proc.last_tick_at is not None:
+        watcher_info = watcher_info_from_state(in_proc)
 
-    watcher_info: dict[str, Any] | None = None
-    if watcher is not None:
-        age = None
-        if watcher.last_tick_at is not None:
-            age = (datetime.now(UTC) - watcher.last_tick_at).total_seconds()
-        watcher_info = {
-            "last_tick_age_s": age,
-            "open_invoices": watcher.open_invoices,
-            "last_error": watcher.last_error,
-        }
-
-    rpc_wanted = bool(conn is not None and conn.rpc_configured)
-    ibd = bool(dashd_info is not None and dashd_info.get("initialblockdownload"))
-    if mongo_ok is False or (dashd_info is not None and dashd_info.get("error")):
-        status = "error"
-    elif ibd or (rpc_wanted and dashd is None) or (watcher is not None and watcher.last_error):
-        status = "degraded"
-    elif conn is None:
-        status = "disabled"
-    else:
-        status = "ok"
-
-    body: dict[str, Any] = {
-        "status": status,
-        "version": __version__,
-        "network": conn.network if conn is not None else None,
-        "mongo": mongo_ok,
-    }
-    if wallet is not None:
-        body["wallet"] = wallet
-    if dashd_info is not None:
-        body["dashd"] = dashd_info
-    if watcher_info is not None:
-        body["watcher"] = watcher_info
-    return body
+    return assemble_dash_health(
+        version=__version__,
+        conn=conn,
+        mongo_ok=mongo_ok,
+        wallet=wallet,
+        dashd_info=dashd_info,
+        watcher_info=watcher_info,
+    )
 
 
 @router.post("/invoices", status_code=201)

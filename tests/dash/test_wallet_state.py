@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -7,6 +8,7 @@ from v4vapp_backend_v2.dash.db.wallet_state import (
     WalletStateMismatch,
     allocate_receive_index,
     ensure_wallet_state,
+    persist_watcher_heartbeat,
 )
 
 XPUB = "xpub-test-not-real"
@@ -37,6 +39,12 @@ class _Coll:
             doc[key] = int(doc.get(key, 0)) + int(value)
         doc.update(update.get("$set", {}))
         return before
+
+    async def update_one(self, query: dict[str, Any], update: dict[str, Any]) -> None:
+        doc = self.docs.get(query["_id"])
+        if doc is None:
+            return
+        doc.update(update.get("$set", {}))
 
 
 class _Db:
@@ -105,3 +113,31 @@ async def test_allocate_increments() -> None:
     assert first == 0
     assert second == 1
     assert db.coll.docs["mainnet"]["next_receive_index"] == 2
+
+
+@pytest.mark.asyncio
+async def test_persist_watcher_heartbeat() -> None:
+    db = _Db()
+    await ensure_wallet_state(
+        db,  # type: ignore[arg-type]
+        network="testnet",
+        account_xpub=XPUB,
+        fingerprint=FP,
+        descriptor_range_end=100000,
+    )
+    now = datetime.now(UTC)
+    await persist_watcher_heartbeat(
+        db,  # type: ignore[arg-type]
+        network="testnet",
+        watcher={
+            "last_tick_at": now,
+            "last_error": None,
+            "open_invoices": 2,
+            "ticks": 5,
+            "stuck": 0,
+        },
+        dashd={"synced": True, "blocks": 12},
+    )
+    stored = db.coll.docs["testnet"]
+    assert stored["watcher"]["open_invoices"] == 2
+    assert stored["dashd"]["synced"] is True
