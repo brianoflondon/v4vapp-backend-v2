@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from pymongo.errors import DuplicateKeyError
 
 from v4vapp_backend_v2.config.setup import DashConnectionConfig
-from v4vapp_backend_v2.dash.collections import COL_INVOICES, COL_WALLET_STATE
+from v4vapp_backend_v2.dash.collections import COL_INVOICES, COL_PAYOUTS, COL_WALLET_STATE
 from v4vapp_backend_v2.dash.errors import register_dash_exception_handlers
 from v4vapp_backend_v2.dash.limits.hive_config import DEFAULT_CONFIG
 from v4vapp_backend_v2.dash.models.invoice import DashInvoiceState
@@ -69,6 +69,12 @@ class _Coll:
         self.docs.append(stored)
         return _InsertOne(stored["_id"])
 
+    async def update_one(self, query: dict[str, Any], update: dict[str, Any]) -> None:
+        for doc in self.docs:
+            if self._match(doc, query):
+                doc.update(update.get("$set", {}))
+                return
+
     async def find_one_and_update(
         self,
         query: dict[str, Any],
@@ -116,7 +122,11 @@ class _Cursor:
 
 class _Db:
     def __init__(self) -> None:
-        self.cols = {COL_INVOICES: _Coll(), COL_WALLET_STATE: _Coll()}
+        self.cols = {
+            COL_INVOICES: _Coll(),
+            COL_WALLET_STATE: _Coll(),
+            COL_PAYOUTS: _Coll(),
+        }
 
     def __getitem__(self, name: str) -> _Coll:
         return self.cols[name]
@@ -286,11 +296,18 @@ def test_list_invoices(invoice_client: tuple[TestClient, _Db]) -> None:
     assert len(listed.json()["items"]) == 1
 
 
-def test_payouts_are_501(invoice_client: tuple[TestClient, _Db]) -> None:
+def test_payouts_disabled_without_flag(invoice_client: tuple[TestClient, _Db]) -> None:
     client, _db = invoice_client
-    response = client.post("/v2/dash/payouts", json={})
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "not_implemented"
+    response = client.post(
+        "/v2/dash/payouts",
+        json={
+            "external_id": "payout:1",
+            "address": "yRd4FhXfVGHXpsuZXPNkMrfD9GVj46pnjt",
+            "duffs": 10_000_000,
+        },
+    )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "payouts_disabled"
 
 
 def test_quote_math_still_matches_create() -> None:

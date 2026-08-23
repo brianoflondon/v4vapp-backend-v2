@@ -68,17 +68,28 @@ async def ensure_wallet_state(
 
 async def allocate_receive_index(db: AsyncDatabase[dict[str, Any]], network: DashNetwork) -> int:
     """Atomically take the current next_receive_index and increment it."""
+    return await _allocate_index(db, network, "next_receive_index")
+
+
+async def allocate_change_index(db: AsyncDatabase[dict[str, Any]], network: DashNetwork) -> int:
+    """Atomically take the current next_change_index and increment it."""
+    return await _allocate_index(db, network, "next_change_index")
+
+
+async def _allocate_index(
+    db: AsyncDatabase[dict[str, Any]], network: DashNetwork, field: str
+) -> int:
     doc = await db[COL_WALLET_STATE].find_one_and_update(
         {"_id": network},
         {
-            "$inc": {"next_receive_index": 1},
+            "$inc": {field: 1},
             "$set": {"updated_at": datetime.now(UTC)},
         },
         return_document=ReturnDocument.BEFORE,
     )
     if doc is None:
         raise WalletStateMismatch(f"dash_wallet_state[{network}] is missing")
-    return int(doc["next_receive_index"])
+    return int(doc.get(field) or 0)
 
 
 async def load_wallet_state(
