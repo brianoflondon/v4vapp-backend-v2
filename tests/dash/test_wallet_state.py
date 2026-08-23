@@ -6,6 +6,7 @@ import pytest
 from v4vapp_backend_v2.dash.collections import COL_WALLET_STATE
 from v4vapp_backend_v2.dash.db.wallet_state import (
     WalletStateMismatch,
+    allocate_change_index,
     allocate_receive_index,
     ensure_wallet_state,
     persist_watcher_heartbeat,
@@ -113,6 +114,10 @@ async def test_allocate_increments() -> None:
     assert first == 0
     assert second == 1
     assert db.coll.docs["mainnet"]["next_receive_index"] == 2
+    c0 = await allocate_change_index(db, "mainnet")  # type: ignore[arg-type]
+    c1 = await allocate_change_index(db, "mainnet")  # type: ignore[arg-type]
+    assert c0 == 0
+    assert c1 == 1
 
 
 @pytest.mark.asyncio

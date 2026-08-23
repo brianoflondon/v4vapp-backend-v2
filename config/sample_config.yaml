@@ -42,6 +42,7 @@ dash_config:
       watch_batch: 500
       dust_duffs: 5460
       payouts_enabled: false
+      # mnemonic_file: /path/to/dash.mnemonic   # required to sign POST /v2/dash/payouts
       routing_fee_sats: 300
     mainnet:
       rpc_url: http://127.0.0.1:9998

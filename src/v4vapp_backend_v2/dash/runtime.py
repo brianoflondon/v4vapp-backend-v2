@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,12 +15,35 @@ from v4vapp_backend_v2.dash.dashd.bootstrap import bootstrap_watch_wallet
 from v4vapp_backend_v2.dash.dashd.rpc import Dashd, DashdError
 from v4vapp_backend_v2.dash.db.indexes import ensure_indexes
 from v4vapp_backend_v2.dash.db.wallet_state import ensure_wallet_state
+from v4vapp_backend_v2.dash.errors import ApiError
 from v4vapp_backend_v2.dash.keys import load_xpub_material
 from v4vapp_backend_v2.dash.models.wallet import XpubMaterial
 from v4vapp_backend_v2.dash.watcher.loop import WatcherState, run_watcher
 
 ICON = "💠"
 _RPC_RETRY_S = 10.0
+
+
+@asynccontextmanager
+async def dashd_session(
+    conn: DashConnectionConfig, existing: Dashd | None = None
+) -> AsyncIterator[Dashd]:
+    """Reuse app.state.dashd if tests injected one; otherwise a short-lived RPC client."""
+    if existing is not None:
+        yield existing
+        return
+    if not conn.rpc_configured:
+        raise ApiError(503, "wallet_unavailable", "Dash RPC is not configured")
+    dashd = Dashd(
+        conn.rpc_url,
+        user=conn.rpc_user,
+        password=conn.rpc_password,
+        wallet=conn.rpc_wallet,
+    )
+    try:
+        yield dashd
+    finally:
+        await dashd.aclose()
 
 
 async def connect_dashd(conn: DashConnectionConfig, material: XpubMaterial | None) -> Dashd:

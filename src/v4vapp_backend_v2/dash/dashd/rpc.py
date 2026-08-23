@@ -74,6 +74,7 @@ class Dashd:
                 "listdescriptors",
                 "listunspent",
                 "gettransaction",
+                "lockunspent",
             }
             if method in wallet_methods and (
                 code == -32601
@@ -156,3 +157,39 @@ class Dashd:
         if not isinstance(result, dict):
             raise DashdError("gettransaction returned a non-object")
         return result
+
+    async def validateaddress(self, address: str) -> dict[str, Any]:
+        result = await self.node("validateaddress", address)
+        if not isinstance(result, dict):
+            raise DashdError("validateaddress returned a non-object")
+        return result
+
+    async def estimatesmartfee(self, conf_target: int = 1) -> dict[str, Any]:
+        result = await self.node("estimatesmartfee", conf_target)
+        if not isinstance(result, dict):
+            raise DashdError("estimatesmartfee returned a non-object")
+        return result
+
+    async def createrawtransaction(
+        self, inputs: list[dict[str, Any]], outputs: dict[str, Any]
+    ) -> str:
+        result = await self.node("createrawtransaction", inputs, outputs)
+        if not isinstance(result, str) or not result:
+            raise DashdError("createrawtransaction returned a non-hex")
+        return result
+
+    async def signrawtransactionwithkey(self, raw_hex: str, keys: list[str]) -> dict[str, Any]:
+        result = await self.node("signrawtransactionwithkey", raw_hex, keys)
+        if not isinstance(result, dict):
+            raise DashdError("signrawtransactionwithkey returned a non-object")
+        return result
+
+    async def sendrawtransaction(self, raw_hex: str) -> str:
+        result = await self.node("sendrawtransaction", raw_hex)
+        if not isinstance(result, str) or not result:
+            raise DashdError("sendrawtransaction returned a non-txid")
+        return result
+
+    async def lockunspent(self, unlock: bool, outputs: list[dict[str, Any]]) -> bool:
+        result = await self.wallet("lockunspent", unlock, outputs)
+        return bool(result)

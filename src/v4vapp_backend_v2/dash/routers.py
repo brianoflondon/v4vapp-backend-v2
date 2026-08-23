@@ -9,14 +9,14 @@ from pymongo.errors import DuplicateKeyError
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DashConnectionConfig, logger
 from v4vapp_backend_v2.dash.amounts import to_decimal
-from v4vapp_backend_v2.dash.collections import COL_INVOICES
+from v4vapp_backend_v2.dash.collections import COL_INVOICES, COL_PAYOUTS
 from v4vapp_backend_v2.dash.db.wallet_state import (
     WalletStateMismatch,
     allocate_receive_index,
     load_wallet_state,
 )
 from v4vapp_backend_v2.dash.errors import ApiError
-from v4vapp_backend_v2.dash.keys import load_xpub_material
+from v4vapp_backend_v2.dash.keys import load_mnemonic, load_xpub_material
 from v4vapp_backend_v2.dash.limits.check import check_cust_rate_limit
 from v4vapp_backend_v2.dash.limits.hive_config import calculate_invoice_fees, fetch_hive_config
 from v4vapp_backend_v2.dash.models.invoice import (
@@ -27,14 +27,23 @@ from v4vapp_backend_v2.dash.models.invoice import (
     doc_to_out,
     payment_uri,
 )
+from v4vapp_backend_v2.dash.models.payout import PayoutCreate, PayoutOut, doc_to_payout
+from v4vapp_backend_v2.dash.models.wallet_out import WalletOut
+from v4vapp_backend_v2.dash.payouts.send import (
+    broadcast_payout,
+    persistable_payout,
+    refresh_payout_state,
+)
 from v4vapp_backend_v2.dash.quotes.service import fetch_quote, quote_for_sats
 from v4vapp_backend_v2.dash.runtime import (
     assemble_dash_health,
+    dashd_session,
     watcher_info_from_doc,
     watcher_info_from_state,
 )
 from v4vapp_backend_v2.dash.settings import default_min_conf
 from v4vapp_backend_v2.dash.wallet.hd import derive_receive
+from v4vapp_backend_v2.dash.wallet.snapshot import wallet_snapshot
 from v4vapp_backend_v2.dash.watcher.loop import WatcherState
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 
@@ -376,9 +385,196 @@ async def cancel_invoice(invoice_id: str, request: Request) -> InvoiceOut:
     return doc_to_out(doc)
 
 
-@router.post("/payouts")
-async def create_payout() -> None:
-    raise ApiError(501, "not_implemented", "Outgoing payouts are not enabled")
+@router.get(
+    "/wallet",
+    response_model=WalletOut,
+    summary="Dash wallet balance and HD state",
+)
+async def get_wallet(
+    request: Request,
+    include_utxos: bool = Query(
+        default=False,
+        description="If true, include each watched UTXO (txid, address, duffs, locks).",
+    ),
+) -> WalletOut:
+    """
+    Snapshot of the watch-only Dash wallet this service controls.
+
+    **Balances (integer duffs, 1 DASH = 1e8 duffs)**
+
+    | Field | Meaning |
+    |---|---|
+    | `duffs_total` | All watched UTXOs |
+    | `duffs_spendable` | InstantSend/ChainLock (or enough confs). Skips OPEN/DETECTED invoices |
+    | `duffs_incoming` | On unpaid invoice addresses (do not spend) |
+    | `duffs_unconfirmed` | 0-conf without InstantSend |
+
+    `can_sign` is true only when `payouts_enabled` and `mnemonic_file` matches the xpub.
+    Pay-out is `POST /v2/dash/payouts`.
+    """
+    conn = _conn(request)
+    db = _db(request)
+    async with dashd_session(conn, getattr(request.app.state, "dashd", None)) as dashd:
+        return await wallet_snapshot(
+            db=db, dashd=dashd, conn=conn, include_utxos=include_utxos
+        )
+
+
+@router.post(
+    "/payouts",
+    status_code=201,
+    response_model=PayoutOut,
+    summary="Pay Dash to a P2PKH address",
+    responses={
+        201: {"description": "Broadcast. `txid` is set; state is `BROADCAST`."},
+        200: {
+            "description": "Idempotent replay of the same external_id + params.",
+            "model": PayoutOut,
+        },
+        422: {
+            "description": "Invalid address, both/neither amount fields, or insufficient funds."
+        },
+        503: {
+            "description": "Payouts disabled, mnemonic missing/mismatch, or dashd error."
+        },
+    },
+)
+async def create_payout(
+    body: PayoutCreate,
+    request: Request,
+    response: Response,
+) -> PayoutOut:
+    """
+    Send Dash from this service's HD wallet to `address`.
+
+    Provide **exactly one** of `duffs` or `sats`. `sats` is converted at a fresh
+    quote (ceil). `subtract_fee` false (default) means the destination receives
+    the full amount and this wallet pays the miner fee.
+
+    Requires `payouts_enabled: true` and a `mnemonic_file` whose seed matches
+    the watch-only xpub. Signing uses `signrawtransactionwithkey` (keys stay
+    out of dashd). OPEN/DETECTED invoice UTXOs are never selected.
+
+    Same `external_id` + same address and amount is idempotent (HTTP 200).
+    """
+    request.state.external_id = body.external_id
+    if body.cust_id is not None:
+        request.state.cust_id = body.cust_id
+    conn = _conn(request)
+    db = _db(request)
+    if not conn.payouts_enabled or not load_mnemonic(conn):
+        raise ApiError(503, "payouts_disabled", "Outgoing Dash payouts are not enabled")
+
+    dest_duffs = body.duffs
+    sats = body.sats
+    if dest_duffs is None:
+        try:
+            raw_quote = await fetch_quote()
+            priced = quote_for_sats(to_decimal(sats), raw_quote)
+            dest_duffs = priced.duffs_quoted
+        except ApiError:
+            raise
+        except Exception as exc:
+            raise ApiError(422, "quote_unavailable", str(exc)) from exc
+
+    existing = await db[COL_PAYOUTS].find_one({"external_id": body.external_id})
+    if existing is not None:
+        same = (
+            existing.get("address") == body.address
+            and to_decimal(existing.get("duffs") or 0) == to_decimal(dest_duffs)
+            and bool(existing.get("subtract_fee")) == body.subtract_fee
+        )
+        if same:
+            response.status_code = 200
+            return doc_to_payout(existing)
+        raise ApiError(
+            409, "duplicate_external_id", "external_id already used with different params"
+        )
+
+    async with dashd_session(conn, getattr(request.app.state, "dashd", None)) as dashd:
+        try:
+            info = await dashd.validateaddress(body.address)
+            address_valid = bool(info.get("isvalid"))
+        except Exception:
+            address_valid = _address_prefix_ok(body.address, conn.network)
+        extra = await broadcast_payout(
+            db=db,
+            dashd=dashd,
+            conn=conn,
+            body=body,
+            dest_duffs=to_decimal(dest_duffs),
+            address_valid=address_valid,
+        )
+
+    doc = persistable_payout(
+        body=body,
+        network=conn.network,
+        dest_duffs=to_decimal(dest_duffs),
+        sats=to_decimal(sats) if sats is not None else None,
+        extra=extra,
+    )
+    try:
+        result = await db[COL_PAYOUTS].insert_one(doc)
+    except DuplicateKeyError as exc:
+        raise ApiError(409, "duplicate_external_id", "external_id already exists") from exc
+    doc["_id"] = result.inserted_id
+    logger.info(
+        f"{ICON} payout broadcast",
+        extra={
+            "payout_id": str(doc["_id"]),
+            "external_id": body.external_id,
+            "txid": extra.get("txid"),
+            "duffs": str(dest_duffs),
+        },
+    )
+    return doc_to_payout(doc)
+
+
+@router.get("/payouts/by-external/{external_id:path}", response_model=PayoutOut)
+async def get_payout_by_external(external_id: str, request: Request) -> PayoutOut:
+    """Look up a payout by the `external_id` you passed at create."""
+    request.state.external_id = external_id
+    return await _load_payout(request, {"external_id": external_id})
+
+
+@router.get("/payouts/{payout_id}", response_model=PayoutOut)
+async def get_payout(payout_id: str, request: Request) -> PayoutOut:
+    """Fetch a payout. If still `BROADCAST`, refreshes InstantSend/ChainLock from dashd."""
+    return await _load_payout(request, {"_id": _as_object_id(payout_id)})
+
+
+async def _load_payout(request: Request, query: dict) -> PayoutOut:
+    db = _db(request)
+    doc = await db[COL_PAYOUTS].find_one(query)
+    if doc is None:
+        raise ApiError(404, "not_found", "payout not found")
+    conn = _conn(request)
+    try:
+        async with dashd_session(conn, getattr(request.app.state, "dashd", None)) as dashd:
+            refreshed = await refresh_payout_state(dashd, doc)
+            if refreshed.get("state") != doc.get("state"):
+                await db[COL_PAYOUTS].update_one(
+                    {"_id": doc["_id"]},
+                    {
+                        "$set": {
+                            "state": refreshed["state"],
+                            "confirmed_at": refreshed.get("confirmed_at"),
+                            "updated_at": refreshed.get("updated_at"),
+                        }
+                    },
+                )
+                doc = refreshed
+    except ApiError:
+        raise
+    except Exception as exc:
+        logger.debug(f"{ICON} payout refresh skipped: {exc}")
+    return doc_to_payout(doc)
+
+
+def _address_prefix_ok(address: str, network: str) -> bool:
+    if network == "mainnet":
+        return address.startswith("X")
+    return address.startswith("y")
 
 
 def _split_cursor(cursor: str) -> tuple[datetime, str]:
