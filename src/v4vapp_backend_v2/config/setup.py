@@ -1158,6 +1158,30 @@ class InternalConfig:
         """
         return InternalConfig.error_code_manager
 
+    @property
+    def quiet_mode(self) -> bool:
+        """
+        Property to check if the application is running in quiet mode.
+        Quiet mode suppresses console output for logging.
+        Shortcut for self.config.logging.notification_quiet_mode.
+
+        Returns:
+            bool: True if quiet mode is enabled, False otherwise.
+        """
+        return self.config.logging.notification_quiet_mode
+
+    @property
+    def noisy_mode(self) -> bool:
+        """
+        Property to check if the application is running in noisy mode.
+        Noisy mode enables verbose console output for logging.
+        Shortcut for self.config.logging.notification_noisy_mode.
+
+        Returns:
+            bool: True if noisy mode is enabled, False otherwise.
+        """
+        return not self.config.logging.notification_quiet_mode
+
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)

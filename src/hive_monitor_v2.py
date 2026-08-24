@@ -939,7 +939,7 @@ async def combined_logging(
         None
     """
 
-    if InternalConfig().config.logging.notification_quiet_mode:
+    if InternalConfig().quiet_mode:
         notification = False
 
     if db_store:
@@ -1226,7 +1226,7 @@ def main(
         extra={"notification": False},
     )
     logger.info(
-        f"{ICON} Notification quiet mode: {InternalConfig().config.logging.notification_quiet_mode}",
+        f"{ICON} Notification quiet mode: {InternalConfig().quiet_mode}",
         extra={"notification": False},
     )
     # sleep for a random amount of time 0.1 to 0.8 seconds

@@ -331,7 +331,7 @@ async def follow_on_transfer(
             logger.info(
                 f"{ICON} Lightning payment sent for § {tracked_op.short_id}  {payment.value_sat_rounded:,.0f} sats, Payment: {payment.short_id}",
                 extra={
-                    "notification": True,
+                    "notification": InternalConfig().noisy_mode,
                     **tracked_op.log_extra,
                     **payment.log_extra,
                 },
@@ -380,9 +380,7 @@ async def follow_on_transfer(
 
     except LNDPaymentStreamError as e:
         return_details.action = ReturnAction.HOLD
-        return_details.reason_str = (
-            f"Lightning payment status uncertain after stream disconnect: {e} {tracked_op.short_id}"
-        )
+        return_details.reason_str = f"Lightning payment status uncertain after stream disconnect: {e} {tracked_op.short_id}"
         logger.warning(
             return_details.reason_str,
             extra={"notification": True, **tracked_op.log_extra},
