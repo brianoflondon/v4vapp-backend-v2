@@ -16,7 +16,7 @@ from v4vapp_backend_v2.dash.dashd.rpc import Dashd, DashdError
 from v4vapp_backend_v2.dash.db.indexes import ensure_indexes
 from v4vapp_backend_v2.dash.db.wallet_state import ensure_wallet_state
 from v4vapp_backend_v2.dash.errors import ApiError
-from v4vapp_backend_v2.dash.keys import load_xpub_material
+from v4vapp_backend_v2.dash.keys import check_dash_spend_keys, load_xpub_material
 from v4vapp_backend_v2.dash.models.wallet import XpubMaterial
 from v4vapp_backend_v2.dash.watcher.loop import WatcherState, run_watcher
 
@@ -87,7 +87,39 @@ async def ensure_dash_db(db: Any, conn: DashConnectionConfig) -> XpubMaterial | 
             )
         except Exception as exc:
             logger.warning(f"{ICON} dash wallet state setup failed: {exc}")
+    log_dash_spend_keys(conn, material)
     return material
+
+
+def log_dash_spend_keys(conn: DashConnectionConfig, material: XpubMaterial | None) -> None:
+    """Log fingerprint and payout readiness. Never logs mnemonic or xpub."""
+    check = check_dash_spend_keys(conn)
+    fp = check.fingerprint or (
+        material.master_fingerprint.lower() if material is not None else ""
+    )
+    extra = {
+        "network": conn.network,
+        "fingerprint": fp,
+        "payouts_enabled": check.payouts_enabled,
+        "can_sign": check.can_sign,
+        "notification": False,
+    }
+    if check.problem:
+        logger.error(
+            f"{ICON} dash payouts not ready fingerprint={fp} {check.problem}",
+            extra={**extra, "err": check.problem},
+        )
+        return
+    if check.can_sign:
+        logger.info(
+            f"{ICON} dash payouts ready fingerprint={fp} network={conn.network}",
+            extra=extra,
+        )
+    else:
+        logger.info(
+            f"{ICON} dash watch-only fingerprint={fp} network={conn.network}",
+            extra=extra,
+        )
 
 
 async def run_dashd_with_reconnect(
