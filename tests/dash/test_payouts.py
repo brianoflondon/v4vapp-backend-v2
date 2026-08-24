@@ -208,3 +208,37 @@ def test_payout_rejects_both_amounts(
 def test_wif_roundtrip_abandon_mnemonic() -> None:
     wif = wif_from_mnemonic(TEST_MNEMONIC, "testnet", 0, change=0)
     assert wif.startswith(("c", "9"))
+
+
+def test_load_mnemonic_skips_comments(tmp_path: Path) -> None:
+    from v4vapp_backend_v2.dash.keys import load_mnemonic
+
+    path = tmp_path / "seed.mnemonic"
+    path.write_text("# testnet only\n\n" + TEST_MNEMONIC + "\n")
+    conn = _conn(payouts=True, mnemonic_file=str(path))
+    assert load_mnemonic(conn) == TEST_MNEMONIC
+
+
+def test_check_dash_spend_keys_match(tmp_path: Path) -> None:
+    from v4vapp_backend_v2.dash.keys import check_dash_spend_keys
+
+    path = tmp_path / "seed.mnemonic"
+    path.write_text(TEST_MNEMONIC)
+    conn = _conn(payouts=True, mnemonic_file=str(path))
+    check = check_dash_spend_keys(conn)
+    assert check.can_sign is True
+    assert check.fingerprint == MASTER_FINGERPRINT
+    assert check.problem is None
+
+
+def test_check_dash_spend_keys_mismatch(tmp_path: Path) -> None:
+    from v4vapp_backend_v2.dash.keys import check_dash_spend_keys
+
+    path = tmp_path / "seed.mnemonic"
+    path.write_text(
+        "legal winner thank year wave sausage worth useful legal winner thank yellow"
+    )
+    conn = _conn(payouts=True, mnemonic_file=str(path))
+    check = check_dash_spend_keys(conn)
+    assert check.can_sign is False
+    assert check.problem is not None

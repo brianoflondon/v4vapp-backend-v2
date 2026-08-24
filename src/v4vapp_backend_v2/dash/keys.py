@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from v4vapp_backend_v2.config.setup import DashConnectionConfig
@@ -27,20 +28,82 @@ def load_xpub_material(conn: DashConnectionConfig) -> XpubMaterial | None:
 
 
 def load_mnemonic(conn: DashConnectionConfig) -> str | None:
-    """BIP39 words from mnemonic_file. None if payouts are not configured to sign."""
+    """BIP39 words from mnemonic_file. Blank lines and `#` comments are ignored."""
     if not conn.mnemonic_file:
         return None
     path = Path(conn.mnemonic_file)
     if not path.is_file():
         return None
-    text = " ".join(path.read_text(encoding="utf-8").split())
+    words: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        words.extend(line.split())
+    text = " ".join(words)
     return text or None
 
 
 def mnemonic_matches_xpub(mnemonic: str, conn: DashConnectionConfig) -> bool:
     """Refuse to sign if the seed does not match the watch-only xpub."""
-    derived = material_from_mnemonic(mnemonic, conn.network)
+    try:
+        derived = material_from_mnemonic(mnemonic, conn.network)
+    except ValueError:
+        return False
     stored_fp = (conn.master_fingerprint or "").lower()
     fp_ok = not stored_fp or derived.master_fingerprint.lower() == stored_fp
     xpub_ok = not conn.xpub or derived.account_xpub == conn.xpub
     return fp_ok and xpub_ok
+
+
+@dataclass(frozen=True)
+class DashSpendCheck:
+    fingerprint: str
+    payouts_enabled: bool
+    mnemonic_present: bool
+    can_sign: bool
+    problem: str | None = None
+
+
+def check_dash_spend_keys(conn: DashConnectionConfig) -> DashSpendCheck:
+    """Startup/payout gate. Never returns the mnemonic or xpub."""
+    fp = (conn.master_fingerprint or "").lower()
+    mnemonic = load_mnemonic(conn)
+    if not conn.payouts_enabled:
+        return DashSpendCheck(
+            fingerprint=fp,
+            payouts_enabled=False,
+            mnemonic_present=bool(mnemonic),
+            can_sign=False,
+            problem=None,
+        )
+    if not conn.mnemonic_file:
+        return DashSpendCheck(fp, True, False, False, "mnemonic_file is not set")
+    if not Path(conn.mnemonic_file).is_file():
+        return DashSpendCheck(
+            fp, True, False, False, f"mnemonic_file not found: {conn.mnemonic_file}"
+        )
+    if not mnemonic:
+        return DashSpendCheck(fp, True, False, False, "mnemonic_file has no seed words")
+    try:
+        derived = material_from_mnemonic(mnemonic, conn.network)
+    except ValueError:
+        return DashSpendCheck(fp, True, True, False, "mnemonic is not valid BIP39")
+    derived_fp = derived.master_fingerprint.lower()
+    if fp and derived_fp != fp:
+        return DashSpendCheck(
+            fp,
+            True,
+            True,
+            False,
+            f"mnemonic fingerprint {derived_fp} != config {fp}",
+        )
+    if conn.xpub and derived.account_xpub != conn.xpub:
+        return DashSpendCheck(
+            derived_fp or fp,
+            True,
+            True,
+            False,
+            "mnemonic does not derive the configured xpub",
+        )
+    return DashSpendCheck(derived_fp or fp, True, True, True, None)
