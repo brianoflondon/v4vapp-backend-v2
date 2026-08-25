@@ -935,9 +935,11 @@ async def combined_logging(
         None
     """
 
-    if InternalConfig().quiet_mode:
+    if InternalConfig().quiet_mode and notification:
         notification = False
-        if isinstance(op, (AccountWitnessVote, ProducerReward, ProducerMissed)):
+        # The check for notification above, means we only alter set notifications,
+        # that is how we know objects of the following type are the relevant ones.
+        if isinstance(op, (ProducerMissed, AccountWitnessVote, ProducerReward)):
             notification = True
 
     if db_store:
