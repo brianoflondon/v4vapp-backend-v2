@@ -686,7 +686,7 @@ async def all_ops_loop(
                 consecutive_empty_restarts = 0
                 last_progress_mono = timer()
                 STATUS_OBJ.last_progress_at = datetime.now(tz=UTC)
-                new_block, marker = block_counter.inc(op.raw_op)
+                _, marker = block_counter.inc(op.raw_op)
 
                 if watch_witnesses and isinstance(op, AccountWitnessVote):
                     op.get_voter_details()
@@ -726,14 +726,10 @@ async def all_ops_loop(
                     log_it = True
                     db_store = True
 
-                elif (
-                    isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
-                ) and op.is_watched:
+                elif (isinstance(op, (LimitOrderCreate, FillOrder))) and op.is_watched:
                     await maybe_update_quote()
                     await op.update_conv()
-                    notification = (
-                        False if isinstance(op, FillOrder) and not op.completed_order else True
-                    )
+                    notification = not (isinstance(op, FillOrder) and not op.completed_order)
                     log_it = True
                     db_store = True
 
@@ -851,12 +847,12 @@ async def all_ops_loop(
                 if aclose is not None:
                     try:
                         await asyncio.wait_for(aclose(), timeout=2.0)
-                    except Exception:
+                    except Exception:  # noqa: S110
                         pass
             # Do not restart if we’re shutting down (graceful or fatal).
             if shutdown_event.is_set():
                 logger.info(f"{ICON} Shutdown requested; exiting all_ops_loop.")
-                return
+                return  # noqa: B012
 
             # Prefer in-memory progress; STATUS_OBJ is updated on every processed op.
             if getattr(STATUS_OBJ, "last_good_block", None):
@@ -873,14 +869,14 @@ async def all_ops_loop(
                     f"{consecutive_empty_restarts} consecutive stream restarts with no ops "
                     f"(limit {MAX_CONSECUTIVE_EMPTY_STREAM_RESTARTS})"
                 )
-                return
+                return  # noqa: B012
             if consecutive_empty_restarts >= 2 and stall_s >= MAX_PROGRESS_STALL_SECONDS:
                 request_fatal_restart(
                     f"no stream progress for {stall_s:.0f}s after "
                     f"{consecutive_empty_restarts} empty restarts "
                     f"(limit {MAX_PROGRESS_STALL_SECONDS:.0f}s)"
                 )
-                return
+                return  # noqa: B012
 
             previous_url = getattr(getattr(hive_client, "rpc", None), "url", "unknown")
             reason = "after error" if loop_error else "stream ended"
@@ -896,8 +892,8 @@ async def all_ops_loop(
                 old_client = hive_client
                 keys = InternalConfig().config.hive_config.memo_keys
 
-                def _close_and_make() -> Hive:
-                    close_hive_client(old_client)
+                def _close_and_make(client=old_client, keys=keys) -> Hive:
+                    close_hive_client(client)
                     return make_stream_hive(keys=keys)
 
                 hive_client = await asyncio.wait_for(
@@ -941,6 +937,8 @@ async def combined_logging(
 
     if InternalConfig().quiet_mode:
         notification = False
+        if isinstance(op, (AccountWitnessVote, ProducerReward, ProducerMissed)):
+            notification = True
 
     if db_store:
         asyncio.create_task(db_store_op(op))
@@ -1109,7 +1107,7 @@ async def main_async_start(
             from v4vapp_backend_v2.helpers.async_wrapper import thread_pool
 
             thread_pool.shutdown(wait=False, cancel_futures=True)
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         await asyncio.sleep(0.3)
         if force_restart:
@@ -1127,13 +1125,13 @@ async def main_async_start(
 @app.command()
 def main(
     watch_users: Annotated[
-        list[str],
+        list[str] | None,
         typer.Option(
             "--user",
             help="Hive User(s) to watch for transactions, can have multiple",
             show_default=True,
         ),
-    ] = [],
+    ] = None,
     watch_only: Annotated[
         bool,
         typer.Option(
@@ -1143,13 +1141,13 @@ def main(
         ),
     ] = False,
     watch_witnesses: Annotated[
-        list[str],
+        list[str] | None,
         typer.Option(
             "--witness",
             help="Hive Witness(es) to watch for transactions",
             show_default=True,
         ),
-    ] = [],
+    ] = None,
     database: Annotated[
         str,
         typer.Argument(help=("The database to monitor.")),

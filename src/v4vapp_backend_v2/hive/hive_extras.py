@@ -23,7 +23,6 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.decorators import time_decorator
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_not_development_accounts,
@@ -248,7 +247,7 @@ def _best_effort(action: Callable[[], Any], *args: Any, **kwargs: Any) -> None:
     """Run teardown/cleanup that must never raise (BLE001/S110 by design)."""
     try:
         action(*args, **kwargs)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return
 
 
@@ -265,7 +264,7 @@ def _stop_pool_manager(pool_mgr: Any) -> None:
         _best_effort(monitor.join, 0.5)
     try:
         pool_mgr.monitor_interval = 0.0
-    except Exception:  # noqa: BLE001
+    except Exception:
         return
 
 
@@ -290,7 +289,7 @@ def _disarm_node_pool_monitor(hive: Any) -> None:
         ):
             return
         _stop_pool_manager(pool_mgr)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return
 
 
@@ -312,7 +311,7 @@ def close_hive_client(hive: Any = None) -> None:
     # Mark closed so callers/zombies can detect intentional teardown.
     try:
         hive._v4v_hive_closed = True
-    except Exception:  # noqa: BLE001, S110
+    except Exception:  # noqa: S110
         pass
 
     # Capture rpc before Hive.close() nulls it.
@@ -323,7 +322,7 @@ def close_hive_client(hive: Any = None) -> None:
     if callable(hive_close) and not isinstance(hive, type):
         try:
             hive_close()
-        except Exception:  # noqa: BLE001, S110 — fall through to rpc/session teardown
+        except Exception:  # noqa: S110
             pass
         else:
             return
@@ -341,7 +340,7 @@ def close_hive_client(hive: Any = None) -> None:
                 pool_mgr = rpc.__dict__.get("_failover_pool_manager")
             _stop_pool_manager(pool_mgr)
             rpc.close()
-        except Exception:  # noqa: BLE001, S110 — fall through to manual session close
+        except Exception:  # noqa: S110
             pass
         else:
             return
@@ -353,7 +352,7 @@ def close_hive_client(hive: Any = None) -> None:
             from nectarapi import graphenerpc as _grpc
 
             shared = getattr(_grpc, "_shared_httpx_client", None)
-        except Exception:  # noqa: BLE001
+        except Exception:
             shared = None
 
         session = None
@@ -370,9 +369,9 @@ def close_hive_client(hive: Any = None) -> None:
             rpc.__dict__.pop("_failover_pool_manager", None)
         try:
             rpc.session = None
-        except Exception:  # noqa: BLE001
+        except Exception:
             return
-    except Exception:  # noqa: BLE001
+    except Exception:
         return
 
 
@@ -485,12 +484,12 @@ def get_good_nodes() -> list[str]:
                     value=json.dumps(good_nodes),
                     ex=3600,
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(
                     f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
                 )
             return good_nodes
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(
                 f"Failed to fetch good nodes from {url}: {e}",
                 extra={"notification": False},
@@ -775,7 +774,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         _hive_internal_market_last_success_at = now
         _hive_internal_market_cooldown_until = None
         return answer
-    except Exception as ex:  # noqa: BLE001 — market API is best-effort quote path
+    except Exception as ex:
         # logging.exception(ex)
         logger.info(
             f"Calling Market API on Hive: {market['blockchain_instance'].data['last_node']}"
@@ -821,7 +820,7 @@ async def account_hive_balances_async(hive_accname: str = "") -> dict[str, Amoun
                         "HBD_fmt": f"{balances[1].amount:,.3f}",
                     }
             mark_hive_api_endpoint_failed(endpoint, error="invalid balance payload")
-        except Exception as e:  # noqa: BLE001 — try next balance-api endpoint
+        except Exception as e:
             mark_hive_api_endpoint_failed(endpoint, error=e)
             logger.warning(
                 f"Balance API unavailable for {endpoint}, trying next endpoint: {e}",
@@ -854,7 +853,7 @@ def account_hive_balances(hive_accname: str = "") -> dict[str, Amount | str]:
         hive_account = Account(hive_accname, blockchain_instance=hive)
         available = hive_account.balances.get("available", None)
         balances = list(available) if available is not None else None
-    except Exception as e:  # noqa: BLE001 — fall through to zero balances
+    except Exception as e:
         rpc = getattr(hive, "rpc", None) if hive is not None else None
         url = str(getattr(rpc, "url", "unknown")) if rpc is not None else "unknown"
         logger.error(f"Error In Hive {url}: {e}", extra={"hive_accname": hive_accname})
@@ -966,7 +965,7 @@ def decode_memo(
         logger.debug(f"MissingKeyError: {e}")
         return memo
 
-    except Exception as e:  # noqa: BLE001 — return raw memo on any decode failure
+    except Exception as e:
         logger.error(f"Problem in decode_memo: {e}", extra={"trx_id": trx_id, "memo": memo})
         logger.error(memo)
         logger.exception(e)
@@ -1549,7 +1548,7 @@ def witness_signing_key(witness_name: str) -> str | None:
             )
             return None
         return witness_info["signing_key"]
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(
             f"{ICON} Error retrieving signing key for witness {witness_name}: {e}",
             extra={"notification": False},
