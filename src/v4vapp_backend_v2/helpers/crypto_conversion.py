@@ -10,6 +10,7 @@ from nectar.amount import Amount
 from pydantic import BaseModel, Field, computed_field, field_validator
 
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.service_fees import calculate_fee_msats, limit_test
@@ -44,8 +45,11 @@ class CryptoConv(BaseModel):
     msats: Decimal = Field(Decimal(0), description="Converted value in milliSats")
     msats_fee: Decimal = Field(Decimal(0), description="Service fee in milliSats")
     btc: Decimal = Field(Decimal(0), description="Converted value in Bitcoin")
+    dash: Decimal = Field(Decimal(0), description="Converted value in DASH")
+    duffs: Decimal = Field(Decimal(0), description="Converted value in duffs (1 DASH = 1e8 duffs)")
     sats_hive: Decimal = Field(Decimal(0), description="Sats per HIVE")
     sats_hbd: Decimal = Field(Decimal(0), description="Sats per HBD")
+    sats_dash: Decimal = Field(Decimal(0), description="Sats per DASH")
     conv_from: Currency = Field(
         Currency.HIVE, description="The currency from which the conversion is made"
     )
@@ -89,6 +93,11 @@ class CryptoConv(BaseModel):
         """
         return self.msats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
+    @property
+    def duffs_rounded(self) -> Decimal:
+        """Integer duffs for ledger amounts (ROUND_HALF_UP)."""
+        return self.duffs.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
     @field_validator(
         "hive",
         "hbd",
@@ -96,10 +105,13 @@ class CryptoConv(BaseModel):
         "btc",
         "sats_hive",
         "sats_hbd",
+        "sats_dash",
         "sats",
         "msats",
         "msats_fee",
         "btc",
+        "dash",
+        "duffs",
         "value",
         mode="before",
     )
@@ -119,6 +131,8 @@ class CryptoConv(BaseModel):
         "msats": 500,
         "btc": 5e-9,
         "msats_fee": 2000,  # the fee is so tiny I don't want failures for this
+        "dash": 1e-5,
+        "duffs": 1.0,
     }
 
     REL_TOL: ClassVar[float] = 1e-7
@@ -211,7 +225,14 @@ class CryptoConv(BaseModel):
 
     def __neg__(self):
         # List of fields NOT to invert
-        rate_fields = {"sats_hive", "sats_hbd", "conv_from", "source", "fetch_date"}
+        rate_fields = {
+            "sats_hive",
+            "sats_hbd",
+            "sats_dash",
+            "conv_from",
+            "source",
+            "fetch_date",
+        }
         values = self.model_dump()
         for key in values:
             if key not in rate_fields and isinstance(values[key], (int, float, Decimal)):
@@ -221,7 +242,14 @@ class CryptoConv(BaseModel):
     def __mul__(self, other):
         if isinstance(other, (int, float, Decimal)):
             values = self.model_dump()
-            rate_fields = {"sats_hive", "sats_hbd", "conv_from", "source", "fetch_date"}
+            rate_fields = {
+                "sats_hive",
+                "sats_hbd",
+                "sats_dash",
+                "conv_from",
+                "source",
+                "fetch_date",
+            }
             for key in values:
                 if key not in rate_fields and isinstance(values[key], (int, float, Decimal)):
                     values[key] = values[key] * other
@@ -266,6 +294,14 @@ class CryptoConv(BaseModel):
                 other.msats_fee,
                 rel_tol=self.REL_TOL,
                 abs_tol=self.UNIT_TOLERANCE["msats_fee"],
+            ):
+                return False
+            if not isclose(
+                self.dash, other.dash, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["dash"]
+            ):
+                return False
+            if not isclose(
+                self.duffs, other.duffs, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["duffs"]
             ):
                 return False
             return True
@@ -400,6 +436,10 @@ class CryptoConv(BaseModel):
             return self.usd
         elif currency == Currency.BTC:
             return self.btc
+        elif currency == Currency.DASH:
+            return self.dash
+        elif currency == Currency.DUFFS:
+            return self.duffs
 
         return self.hive
 
@@ -450,6 +490,10 @@ class CryptoConv(BaseModel):
             return f"{self.msats:,.0f} msats"
         elif currency == Currency.BTC:
             return f"{self.btc:.8f} BTC"
+        elif currency == Currency.DASH:
+            return f"{self.dash:,.3f} DASH"
+        elif currency == Currency.DUFFS:
+            return f"{self.dash:,.3f} DASH"
 
         return f"{self.hive:.3f} HIVE"
 
@@ -541,9 +585,13 @@ class CryptoConversion(BaseModel):
     sats: Decimal = Decimal(0)
     msats: Decimal = Decimal(0)
     btc: Decimal = Decimal(0)
+    dash: Decimal = Decimal(0)
+    duffs: Decimal = Decimal(0)
     msats_fee: Decimal = Decimal(0)
 
-    @field_validator("value", "hive", "hbd", "usd", "btc", "sats", "msats", mode="before")
+    @field_validator(
+        "value", "hive", "hbd", "usd", "btc", "sats", "msats", "dash", "duffs", mode="before"
+    )
     @classmethod
     def convert_to_decimal(cls, v) -> Decimal | Any:
         if isinstance(v, (int, float)):
@@ -624,6 +672,14 @@ class CryptoConversion(BaseModel):
                 f"CryptoConversion: sats_usd_p is 0, cannot convert from USD. "
                 f"Quote source: {self.quote.source}"
             )
+        if self.conv_from in (
+            Currency.DASH,
+            Currency.DUFFS,
+        ) and self.quote.sats_per_dash_p == Decimal(0):
+            logger.warning(
+                f"CryptoConversion: sats_per_dash_p is 0, cannot convert from "
+                f"{self.conv_from.value.upper()}. Quote source: {self.quote.source}"
+            )
 
         try:
             if self.conv_from == Currency.MSATS:
@@ -636,6 +692,14 @@ class CryptoConversion(BaseModel):
                 self.msats = Decimal(self.value) * self.quote.sats_hbd_p * Decimal(1000)
             elif self.conv_from == Currency.USD:
                 self.msats = Decimal(self.value) * self.quote.sats_usd_p * Decimal(1000)
+            elif self.conv_from == Currency.DASH:
+                self.dash = Decimal(self.value)
+                self.duffs = self.dash * DUFFS_PER_DASH
+                self.msats = self.dash * self.quote.sats_per_dash_p * Decimal(1000)
+            elif self.conv_from == Currency.DUFFS:
+                self.duffs = Decimal(self.value)
+                self.dash = self.duffs / DUFFS_PER_DASH
+                self.msats = self.dash * self.quote.sats_per_dash_p * Decimal(1000)
             else:
                 raise ValueError("Unsupported conversion currency")
 
@@ -684,6 +748,14 @@ class CryptoConversion(BaseModel):
                 self.hive = hive_val.quantize(quantizer, rounding=ROUND_HALF_UP)
 
             self.msats_fee = calculate_fee_msats(self.msats)
+
+            if self.conv_from not in (Currency.DASH, Currency.DUFFS):
+                if self.quote.sats_per_dash_p == 0:
+                    self.dash = Decimal(0)
+                    self.duffs = Decimal(0)
+                else:
+                    self.dash = self.msats / (self.quote.sats_per_dash_p * Decimal(1000))
+                    self.duffs = self.dash * DUFFS_PER_DASH
         except ZeroDivisionError as e:
             # Handle division by zero if the quote is not available
             logger.warning(
@@ -696,6 +768,8 @@ class CryptoConversion(BaseModel):
             self.usd = Decimal(0)
             self.hbd = Decimal(0)
             self.hive = Decimal(0)
+            self.dash = Decimal(0)
+            self.duffs = Decimal(0)
             self.msats_fee = Decimal(0)
 
     @property
@@ -709,8 +783,11 @@ class CryptoConversion(BaseModel):
             msats=self.msats,
             msats_fee=self.msats_fee,
             btc=self.btc,
+            dash=self.dash,
+            duffs=self.duffs,
             sats_hive=self.quote.sats_hive_p,
             sats_hbd=self.quote.sats_hbd_p,
+            sats_dash=self.quote.sats_per_dash_p,
             conv_from=self.conv_from,
             value=self.value,
             source=self.quote.source,
@@ -728,8 +805,11 @@ class CryptoConversion(BaseModel):
             Currency.MAGISATS: float(self.sats),
             Currency.BTC: float(self.btc),
             Currency.MSATS: float(self.msats),
+            Currency.DASH: float(self.dash),
+            Currency.DUFFS: float(self.duffs),
             "sats_hive": float(self.quote.sats_hive_p),  # type: ignore
             "sats_hbd": float(self.quote.sats_hbd_p),  # type: ignore
+            "sats_dash": float(self.quote.sats_per_dash_p),
             "conv_from": self.conv_from,
             "value": float(self.value),
         }

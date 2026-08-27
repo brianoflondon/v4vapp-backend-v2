@@ -124,6 +124,8 @@ class CurrencyPair(StrEnum):
     HIVE_HBD = "hive_hbd"
     SATS_HIVE = "hive_sats"
     SATS_HBD = "hbd_sats"
+    DASH_USD = "dash_usd"
+    SATS_DASH = "sats_dash"
 
 
 class HiveRatesDB(BaseModel):
@@ -149,6 +151,8 @@ class HiveRatesDB(BaseModel):
     sats_hive: Decimal
     sats_usd: Decimal
     sats_hbd: Decimal
+    dash_usd: Decimal = Decimal(0)
+    sats_dash: Decimal = Decimal(0)
 
     @field_validator(
         "hive_usd",
@@ -158,10 +162,14 @@ class HiveRatesDB(BaseModel):
         "sats_hive",
         "sats_usd",
         "sats_hbd",
+        "dash_usd",
+        "sats_dash",
         mode="before",
     )
     @classmethod
     def convert_to_decimal(cls, v):
+        if v is None:
+            return Decimal(0)
         if isinstance(v, (int, float)):
             return Decimal(str(v))
         if isinstance(v, Decimal128):  # Handle MongoDB Decimal128
@@ -811,6 +819,8 @@ class AllQuotes(BaseModel):
             sats_usd=self.quote.sats_usd,
             sats_hbd=self.quote.sats_hbd_p,
             hive_hbd=Decimal(str(self.quote.hive_hbd)),
+            dash_usd=Decimal(str(self.quote.dash_usd)),
+            sats_dash=self.quote.sats_per_dash_p,
         )
 
     async def db_store_quote(self, store_db: bool = True) -> HiveRatesDB:
@@ -990,6 +1000,8 @@ def hive_rates_db_record(quote) -> HiveRatesDB:
         sats_usd=quote.sats_usd,
         sats_hbd=quote.sats_hbd_p,
         hive_hbd=Decimal(str(quote.hive_hbd)),
+        dash_usd=Decimal(str(quote.dash_usd)),
+        sats_dash=quote.sats_per_dash_p,
     )
 
 
