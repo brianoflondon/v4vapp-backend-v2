@@ -722,11 +722,12 @@ class CryptoConversion(BaseModel):
                 )
 
             if self.quote.sats_hbd_p == 0:
-                logger.warning(
-                    f"CryptoConversion: sats_hbd_p is 0, HBD will be 0. "
-                    f"Quote source: {self.quote.source}",
-                    extra={"notification": False},
-                )
+                if self.conv_from not in (Currency.DASH, Currency.DUFFS):
+                    logger.warning(
+                        f"CryptoConversion: sats_hbd_p is 0, HBD will be 0. "
+                        f"Quote source: {self.quote.source}",
+                        extra={"notification": False},
+                    )
                 self.hbd = Decimal(0)
             else:
                 self.hbd = Decimal(
@@ -734,11 +735,12 @@ class CryptoConversion(BaseModel):
                 )
 
             if self.quote.sats_hive_p == 0:
-                logger.warning(
-                    f"CryptoConversion: sats_hive_p is 0, HIVE will be 0. "
-                    f"Quote source: {self.quote.source}",
-                    extra={"notification": False},
-                )
+                if self.conv_from not in (Currency.DASH, Currency.DUFFS):
+                    logger.warning(
+                        f"CryptoConversion: sats_hive_p is 0, HIVE will be 0. "
+                        f"Quote source: {self.quote.source}",
+                        extra={"notification": False},
+                    )
                 self.hive = Decimal(0)
             else:
                 # Use Decimal.quantize with ROUND_HALF_UP to ensure .5 always rounds up

@@ -1,0 +1,185 @@
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+import pytest
+from bson import ObjectId
+
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
+from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
+from v4vapp_backend_v2.dash.collections import COL_INVOICES
+from v4vapp_backend_v2.dash.models.invoice import DashInvoiceState
+from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.process.process_dash import (
+    conv_group_id,
+    fee_group_id,
+    post_invoice_settlement,
+    quote_from_invoice_snapshot,
+)
+
+
+@pytest.fixture(autouse=True)
+def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        Path(test_config_path, "logging/"),
+    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    yield
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+
+
+class _InvoiceColl:
+    def __init__(self) -> None:
+        self.updates: list[tuple[Any, Any]] = []
+
+    async def update_one(self, query: dict[str, Any], update: dict[str, Any]) -> None:
+        self.updates.append((query, update))
+
+
+class _Db:
+    def __init__(self) -> None:
+        self.coll = _InvoiceColl()
+
+    def __getitem__(self, name: str) -> _InvoiceColl:
+        assert name == COL_INVOICES
+        return self.coll
+
+
+def _settled_doc(**overrides: Any) -> dict[str, Any]:
+    invoice_id = ObjectId()
+    doc: dict[str, Any] = {
+        "_id": invoice_id,
+        "external_id": "ext-1",
+        "cust_id": "hive-customer",
+        "state": DashInvoiceState.SETTLED.value,
+        "network": "testnet",
+        "memo": "pay ln",
+        "sats_requested": Decimal(25000),
+        "sats_collect": Decimal(25150),
+        "sats_credited": Decimal(25000),
+        "duffs_quoted": Decimal(80000000),
+        "duffs_received": Decimal(80000000),
+        "fees": {
+            "conv_fee_sats": Decimal(100),
+            "routing_fee_sats": Decimal(50),
+            "total_fee_sats": Decimal(150),
+            "sats_collect": Decimal(25150),
+            "conv_fee_percent": "0.002",
+            "conv_fee_base_sats": Decimal(50),
+        },
+        "quote": {
+            "source": "test",
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "btc_usd": "83000",
+            "dash_usd": "32.5",
+            "dash_btc": "0.00039157",
+            "sats_per_dash": "39156.6265",
+            "ttl_s": 60,
+        },
+        "settled_at": datetime(2026, 1, 1, 12, tzinfo=UTC),
+    }
+    doc.update(overrides)
+    return doc
+
+
+@pytest.fixture
+def ledger_store(monkeypatch: pytest.MonkeyPatch) -> list[LedgerEntry]:
+    saved: list[LedgerEntry] = []
+
+    async def fake_save(self: LedgerEntry, ignore_duplicates: bool = False, **_kwargs: Any):
+        if any(existing.group_id == self.group_id for existing in saved):
+            if ignore_duplicates:
+                return None
+            raise RuntimeError("duplicate")
+        saved.append(self)
+        return object()
+
+    async def fake_load(group_id: str) -> LedgerEntry | None:
+        for entry in saved:
+            if entry.group_id == group_id:
+                return entry
+        return None
+
+    monkeypatch.setattr(LedgerEntry, "save", fake_save)
+    monkeypatch.setattr(LedgerEntry, "load", fake_load)
+    return saved
+
+
+@pytest.mark.asyncio
+async def test_open_invoice_posts_nothing(ledger_store: list[LedgerEntry]):
+    doc = _settled_doc(state=DashInvoiceState.OPEN.value, sats_credited=None)
+    entries = await post_invoice_settlement(doc)
+    assert entries == []
+    assert ledger_store == []
+
+
+@pytest.mark.asyncio
+async def test_settled_invoice_posts_conversion_and_fee(ledger_store: list[LedgerEntry]):
+    doc = _settled_doc()
+    db = _Db()
+    entries = await post_invoice_settlement(doc, db=db)
+    assert len(entries) == 2
+    conv, fee = entries
+    assert conv.ledger_type is LedgerType.CONV_DASH_TO_SATS
+    assert conv.group_id == conv_group_id(str(doc["_id"]))
+    assert conv.debit_unit is Currency.DUFFS
+    assert conv.credit_unit is Currency.MSATS
+    assert conv.debit.name == "Treasury Dash"
+    assert conv.debit.sub == "dash-testnet"
+    assert conv.credit.name == "VSC Liability"
+    assert conv.credit.sub != "hive-customer"
+    assert conv.cust_id != "hive-customer"
+    assert conv.debit_amount == Decimal(80000000)
+    assert fee.ledger_type is LedgerType.FEE_INCOME
+    assert fee.group_id == fee_group_id(str(doc["_id"]))
+    assert fee.credit.name == "Fee Income Dash"
+    assert fee.debit_amount == Decimal(150) * Decimal(1000)
+    assert len(db.coll.updates) == 1
+    stamped = db.coll.updates[0][1]["$set"]
+    assert stamped["ledger_group_id"] == conv.group_id
+    assert "ledger_posted_at" in stamped
+
+
+@pytest.mark.asyncio
+async def test_second_call_does_not_double_post(ledger_store: list[LedgerEntry]):
+    doc = _settled_doc()
+    first = await post_invoice_settlement(doc)
+    second = await post_invoice_settlement(doc)
+    assert len(ledger_store) == 2
+    assert [e.group_id for e in second] == [e.group_id for e in first]
+
+
+@pytest.mark.asyncio
+async def test_no_fee_when_total_fee_zero(ledger_store: list[LedgerEntry]):
+    doc = _settled_doc(
+        fees={"total_fee_sats": Decimal(0)},
+        sats_collect=Decimal(25000),
+    )
+    entries = await post_invoice_settlement(doc)
+    assert len(entries) == 1
+    assert entries[0].ledger_type is LedgerType.CONV_DASH_TO_SATS
+
+
+def test_quote_snapshot_does_not_live_fetch():
+    quote = quote_from_invoice_snapshot(
+        {
+            "source": "locked",
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "btc_usd": "83000",
+            "dash_usd": "32.5",
+            "dash_btc": "0.00039157",
+            "sats_per_dash": "39156.6265",
+            "ttl_s": 60,
+        }
+    )
+    assert quote.source == "locked"
+    assert quote.dash_usd == Decimal("32.5")
+    assert quote.sats_per_dash_p > 0
+
+
+def test_one_dash_duffs_constant():
+    assert DUFFS_PER_DASH == Decimal(100_000_000)
