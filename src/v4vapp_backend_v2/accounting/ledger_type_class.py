@@ -25,6 +25,7 @@ class LedgerType(StrEnum):
 
     CONV_HIVE_TO_KEEPSATS = "h_conv_k"  # Conversion from Hive to Keepsats
     CONV_KEEPSATS_TO_HIVE = "k_conv_h"  # Conversion from Keepsats to Hive
+    CONV_DASH_TO_SATS = "d_conv_s"  # Conversion from treasury Dash to sats payable
 
     # These two are deprecated; need new test data.
     WITHDRAW_HIVE = "withdraw_h"  # Withdrawal to a customer's liability account
@@ -163,6 +164,7 @@ LedgerTypeIcon: dict[LedgerType, str] = {
     LedgerType.WITHDRAW_LIGHTNING: "⚡",  # Withdrawal to send to lightning invoice
     LedgerType.RECEIVE_LIGHTNING: "⚡",  # Receive Lightning payment
     LedgerType.CONV_CUSTOMER: "🔄",  # Conversion from Keepsats to Hive
+    LedgerType.CONV_DASH_TO_SATS: "💠",  # Treasury Dash inbound conversion to sats
     LedgerType.RECLASSIFY_VSC_HIVE: "🔄",  # Reclassify VSC Liability (server) balance
     LedgerType.RECLASSIFY_VSC_SATS: "🔄",  # Reclassify VSC Sats (server) balance
     LedgerType.OPENING_BALANCE: "📂",  # Opening balance entry
@@ -177,6 +179,7 @@ LedgerTypeStr: dict[LedgerType, str] = {
     LedgerType.CUSTOM_JSON_FEE: "Fee",  # Custom JSON fee notification
     LedgerType.CUSTOM_JSON_FEE_REFUND: "Fee Refund",  # Custom JSON fee refund notification
     LedgerType.CONV_CUSTOMER: "Conversion",  # Conversion to/from Keepsats to Hive
+    LedgerType.CONV_DASH_TO_SATS: "Dash Conversion",
     LedgerType.CUSTOMER_HIVE_OUT: "Withdraw",  # Customer withdrawal from Hive account
     LedgerType.CUSTOMER_HIVE_IN: "Deposit",  # Customer deposit into Hive
     LedgerType.WITHDRAW_LIGHTNING: "Send",  # Withdrawal to send to lightning invoice
