@@ -209,7 +209,10 @@ async def _apply_invoice(
         extra = _invoice_extra(inv, decision)
         if decision.txids:
             extra["txid"] = decision.txids[-1].get("txid")
-        logger.info(f"{ICON} invoice settled", extra=extra)
+        logger.info(
+            f"{ICON} Dash invoice settled {inv.get('_id')} duffs: {decision.duffs_received:,.0f} sats: {decision.sats_credited:,.0f}",
+            extra=extra,
+        )
 
 
 async def _enrich(
