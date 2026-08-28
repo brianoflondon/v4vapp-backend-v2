@@ -16,6 +16,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import (
     LedgerTypeIcon,
     LedgerTypeStr,
 )
+from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.currency_class import Currency
 
@@ -241,7 +242,7 @@ class AccountBalanceLine(BaseModel):
 class LedgerAccountDetails(LedgerAccount):
     """
     LedgerAccountDetails extends LedgerAccount to provide detailed balance information for multiple currencies,
-    including HIVE, HBD, USD, MSATS, and SATS. It maintains running totals and conversion summaries for each currency,
+    including HIVE, HBD, DASH, USD, MSATS, and SATS. It maintains running totals and conversion summaries for each currency,
     and provides a formatted printout for Keepsats integration.
     Attributes:
         balances (Dict[Currency, List[AccountBalanceLine]]): Mapping of currency to its balance lines.
@@ -278,6 +279,8 @@ class LedgerAccountDetails(LedgerAccount):
     usd: Decimal = Field(Decimal(0), description="Latest running total for USD currency")
     msats: Decimal = Field(Decimal(0), description="Latest running total for MSATS currency")
     sats: Decimal = Field(Decimal(0), description="Latest running total for SATS currency")
+    duffs: Decimal = Field(Decimal(0), description="Latest running total for Dash duffs")
+    dash: Decimal = Field(Decimal(0), description="Latest running total for DASH (duffs / 1e8)")
     magi_btc_sats: Decimal = Field(
         Decimal(0), description="Latest running total for MAGI BTC in SATS"
     )
@@ -338,6 +341,12 @@ class LedgerAccountDetails(LedgerAccount):
             self.sats = Decimal(self.msats / Decimal(1000)).quantize(
                 Decimal(1), rounding="ROUND_DOWN"
             )
+        if Currency.DUFFS in self.balances:
+            self.duffs = self.balances[Currency.DUFFS][-1].amount_running_total
+            self.conv_total += self.balances[Currency.DUFFS][-1].conv_running_total
+            self.dash = (self.duffs / DUFFS_PER_DASH).quantize(
+                Decimal("0.001"), rounding="ROUND_HALF_UP"
+            )
 
         for currency, balance_lines in self.balances.items():
             if balance_lines:
@@ -390,7 +399,7 @@ class LedgerAccountDetails(LedgerAccount):
 
         Call this after mutating `amount_running_total` / `conv_running_total` on
         balance rows (e.g. after applying an opening-balance offset) so that
-        `hive`, `hbd`, `msats`, `sats`, `balances_net`, and `balances_totals`
+        `hive`, `hbd`, `msats`, `sats`, `dash`, `duffs`, `balances_net`, and `balances_totals`
         all reflect the updated values.
         """
         self.hive = Decimal(0)
@@ -398,6 +407,8 @@ class LedgerAccountDetails(LedgerAccount):
         self.usd = Decimal(0)
         self.msats = Decimal(0)
         self.sats = Decimal(0)
+        self.duffs = Decimal(0)
+        self.dash = Decimal(0)
         self.conv_total = ConvertedSummary()
 
         if self.balances.get(Currency.HIVE):
@@ -420,6 +431,12 @@ class LedgerAccountDetails(LedgerAccount):
             self.conv_total += self.balances[Currency.MSATS][-1].conv_running_total
             self.sats = Decimal(self.msats / Decimal(1000)).quantize(
                 Decimal(1), rounding="ROUND_HALF_UP"
+            )
+        if self.balances.get(Currency.DUFFS):
+            self.duffs = self.balances[Currency.DUFFS][-1].amount_running_total
+            self.conv_total += self.balances[Currency.DUFFS][-1].conv_running_total
+            self.dash = (self.duffs / DUFFS_PER_DASH).quantize(
+                Decimal("0.001"), rounding="ROUND_HALF_UP"
             )
 
         for currency, balance_lines in self.balances.items():
@@ -449,6 +466,8 @@ class LedgerAccountDetails(LedgerAccount):
             conv_summary = self.balances_totals[Currency.MSATS]
             sats_value = int(conv_summary.sats) if conv_summary.sats else 0
             main_value = f"{sats_value:,}"
+        elif Currency.DUFFS in self.balances_totals:
+            main_value = f"{self.dash:.3f}"
 
         table_data.append([account_name_str, main_value])
 
@@ -461,6 +480,13 @@ class LedgerAccountDetails(LedgerAccount):
                 sats_value = int(conv_summary.sats) if conv_summary.sats else 0
                 value = f"{sats_value:,}"
                 table_data.append(["SATS", value])
+            elif currency == Currency.DUFFS:
+                dash_value = (
+                    (conv_summary.dash if conv_summary.dash else Decimal(0))
+                    if hasattr(conv_summary, "dash")
+                    else Decimal(0)
+                )
+                table_data.append(["DASH", f"{dash_value:.3f}"])
 
         return tabulate(table_data, headers=["Account/Currency", "Balance"], tablefmt="fancy_grid")
 
@@ -527,6 +553,7 @@ class LedgerAccountDetails(LedgerAccount):
         net_usd_q = self.usd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
         net_hbd_q = self.hbd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
         net_sats_q = self.sats.quantize(Decimal(1), rounding="ROUND_DOWN")
+        net_dash_q = self.dash.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
         net_magi_msats_q = self.magi_btc_msats.quantize(Decimal(1), rounding="ROUND_HALF_UP")
         net_magisats_q = self.magi_btc_sats.quantize(Decimal(1), rounding="ROUND_DOWN")
         return {
@@ -536,6 +563,8 @@ class LedgerAccountDetails(LedgerAccount):
             "net_usd": float(net_usd_q),
             "net_hbd": float(net_hbd_q),
             "net_sats": float(net_sats_q),
+            "net_dash": float(net_dash_q),
+            "net_duffs": float(self.duffs),
             "net_magisats": float(net_magisats_q),
             "net_magi_msats": float(net_magi_msats_q),
             "in_progress_sats": float(in_progress_sats),

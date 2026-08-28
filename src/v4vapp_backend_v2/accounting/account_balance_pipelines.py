@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta, timezone
-from typing import Any, List, Mapping, Sequence, Set
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 
@@ -947,6 +948,7 @@ def list_all_ledger_types_pipeline() -> Sequence[Mapping[str, Any]]:
 #     ])
 #     return pipeline
 
+
 def one_account_transactions_pipeline(
     account: LedgerAccount | None = None,
     account_name: str | None = None,
@@ -955,7 +957,7 @@ def one_account_transactions_pipeline(
     age: timedelta | None = None,
     from_date: datetime | None = None,
     filter: Mapping[str, Any] | None = None,
-    cust_ids: Set[str] | None = None,
+    cust_ids: set[str] | None = None,
     hide_reversed: bool = True,
 ) -> Sequence[Mapping[str, Any]]:
     """
@@ -1000,16 +1002,16 @@ def one_account_transactions_pipeline(
 
     if from_date is not None:
         if as_of_date is None:
-            as_of_date = datetime.now(tz=timezone.utc)
+            as_of_date = datetime.now(tz=UTC)
         date_range_query = {"$gt": from_date, "$lte": as_of_date}
     elif age:
         if not as_of_date:
-            as_of_date = datetime.now(tz=timezone.utc)
+            as_of_date = datetime.now(tz=UTC)
         date_range_query = {"$gte": as_of_date - age, "$lte": as_of_date}
     else:
         date_range_query = {"$exists": True} if as_of_date is None else {"$lte": as_of_date}
 
-    pipeline: List[Mapping[str, Any]] = []
+    pipeline: list[Mapping[str, Any]] = []
     match: dict[str, Any] = {}
     if hide_reversed:
         match["reversed"] = {"$exists": False}
@@ -1023,13 +1025,14 @@ def one_account_transactions_pipeline(
 
     pipeline.append({"$match": match})
 
-    pipeline.extend([
-        {
-            "$facet": {
-                "debits_view": [
-                    facet_debit_match,
-                    {
-                        **{  # same projection as before
+    pipeline.extend(
+        [
+            {
+                "$facet": {
+                    "debits_view": [
+                        facet_debit_match,
+                        {
+                            # same projection as before
                             "$project": {
                                 "_id": 0,
                                 "account_type": "$debit.account_type",
@@ -1054,13 +1057,11 @@ def one_account_transactions_pipeline(
                                 "link": 1,
                                 "side": "debit",
                             }
-                        }
-                    },
-                ],
-                "credits_view": [
-                    facet_credit_match,
-                    {
-                        **{
+                        },
+                    ],
+                    "credits_view": [
+                        facet_credit_match,
+                        {
                             "$project": {
                                 "_id": 0,
                                 "account_type": "$credit.account_type",
@@ -1085,67 +1086,77 @@ def one_account_transactions_pipeline(
                                 "link": 1,
                                 "side": "credit",
                             }
+                        },
+                    ],
+                }
+            },
+            {"$project": {"combined": {"$concatArrays": ["$debits_view", "$credits_view"]}}},
+            {"$unwind": "$combined"},
+            {"$replaceRoot": {"newRoot": "$combined"}},
+            # Group + sort items (no running totals on server)
+            {
+                "$group": {
+                    "_id": {
+                        "account_type": "$account_type",
+                        "name": "$name",
+                        "sub": "$sub",
+                        "contra": "$contra",
+                    },
+                    "items": {"$push": "$$ROOT"},
+                }
+            },
+            {
+                "$project": {
+                    "items": {"$sortArray": {"input": "$items", "sortBy": {"timestamp": 1}}}
+                }
+            },
+            # Final shape exactly like the old pipeline (minus running totals)
+            {
+                "$project": {
+                    "_id": 0,
+                    "account_type": "$_id.account_type",
+                    "name": "$_id.name",
+                    "sub": "$_id.sub",
+                    "contra": "$_id.contra",
+                    "balances": {
+                        "$arrayToObject": {
+                            "$map": {
+                                "input": {
+                                    "$setUnion": [
+                                        {
+                                            "$map": {
+                                                "input": "$items",
+                                                "as": "it",
+                                                "in": "$$it.unit",
+                                            }
+                                        }
+                                    ]
+                                },
+                                "as": "unit",
+                                "in": {
+                                    "k": "$$unit",
+                                    "v": {
+                                        "$filter": {
+                                            "input": "$items",
+                                            "as": "item",
+                                            "cond": {"$eq": ["$$item.unit", "$$unit"]},
+                                        }
+                                    },
+                                },
+                            }
                         }
                     },
-                ],
-            }
-        },
-        {"$project": {"combined": {"$concatArrays": ["$debits_view", "$credits_view"]}}},
-        {"$unwind": "$combined"},
-        {"$replaceRoot": {"newRoot": "$combined"}},
-        # Group + sort items (no running totals on server)
-        {
-            "$group": {
-                "_id": {
-                    "account_type": "$account_type",
-                    "name": "$name",
-                    "sub": "$sub",
-                    "contra": "$contra",
-                },
-                "items": {"$push": "$$ROOT"},
-            }
-        },
-        {"$project": {"items": {"$sortArray": {"input": "$items", "sortBy": {"timestamp": 1}}}}},
-        # Final shape exactly like the old pipeline (minus running totals)
-        {
-            "$project": {
-                "_id": 0,
-                "account_type": "$_id.account_type",
-                "name": "$_id.name",
-                "sub": "$_id.sub",
-                "contra": "$_id.contra",
-                "balances": {
-                    "$arrayToObject": {
-                        "$map": {
-                            "input": {
-                                "$setUnion": [
-                                    {"$map": {"input": "$items", "as": "it", "in": "$$it.unit"}}
-                                ]
-                            },
-                            "as": "unit",
-                            "in": {
-                                "k": "$$unit",
-                                "v": {
-                                    "$filter": {
-                                        "input": "$items",
-                                        "as": "item",
-                                        "cond": {"$eq": ["$$item.unit", "$$unit"]},
-                                    }
-                                },
-                            },
-                        }
-                    }
-                },
-            }
-        },
-        {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
-    ])
+                }
+            },
+            {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
+        ]
+    )
     return pipeline
 
 
 def all_account_balances_summary_pipeline(
     account_name: str | None = None,
-    cust_ids: Set[str] | None = None,
+    cust_ids: set[str] | None = None,
     as_of_date: datetime | None = None,
     hide_reversed: bool = True,
 ) -> Sequence[Mapping[str, Any]]:
@@ -1167,7 +1178,7 @@ def all_account_balances_summary_pipeline(
     Returns:
         A MongoDB aggregation pipeline returning documents with:
         account_type, name, sub, unit, total_amount,
-        total_conv_{hive,hbd,usd,sats,msats}, max_timestamp,
+        total_conv_{hive,hbd,usd,sats,msats,dash,duffs}, max_timestamp,
         count, has_non_opening.
     """
     # --- facet match queries ---
@@ -1194,7 +1205,7 @@ def all_account_balances_summary_pipeline(
     if cust_ids is not None:
         match["all_cust_ids"] = {"$in": list(cust_ids)}
 
-    pipeline: List[Mapping[str, Any]] = [
+    pipeline: list[Mapping[str, Any]] = [
         {"$match": match},
         {
             "$facet": {
@@ -1252,6 +1263,8 @@ def all_account_balances_summary_pipeline(
                 "total_conv_usd": {"$sum": "$conv_signed.usd"},
                 "total_conv_sats": {"$sum": "$conv_signed.sats"},
                 "total_conv_msats": {"$sum": "$conv_signed.msats"},
+                "total_conv_dash": {"$sum": "$conv_signed.dash"},
+                "total_conv_duffs": {"$sum": "$conv_signed.duffs"},
                 "max_timestamp": {"$max": "$timestamp"},
                 "count": {"$sum": 1},
                 "has_non_opening": {
@@ -1273,6 +1286,8 @@ def all_account_balances_summary_pipeline(
                 "total_conv_usd": 1,
                 "total_conv_sats": 1,
                 "total_conv_msats": 1,
+                "total_conv_dash": 1,
+                "total_conv_duffs": 1,
                 "max_timestamp": 1,
                 "count": 1,
                 "has_non_opening": 1,
