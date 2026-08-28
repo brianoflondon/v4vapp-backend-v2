@@ -6,6 +6,8 @@ hook the Dash watcher.
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -21,7 +23,9 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
 )
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.dash.amounts import to_decimal
+from v4vapp_backend_v2.conversion.exchange_process import rebalance_queue_task
+from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
+from v4vapp_backend_v2.dash.amounts import dash_from_duffs, to_decimal
 from v4vapp_backend_v2.dash.collections import COL_INVOICES
 from v4vapp_backend_v2.dash.models.invoice import DashInvoiceState
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -31,6 +35,19 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 ICON = "💠"
 OP_TYPE = "dash_invoice"
 SETTLED_STATES = {DashInvoiceState.SETTLED.value, DashInvoiceState.OVERPAID.value}
+
+
+@dataclass(frozen=True)
+class DashRebalanceOp:
+    """Tracking handle so Binance Convert rebalance can book against this invoice."""
+
+    group_id: str
+    short_id: str
+    cust_id: str
+
+    @property
+    def log_extra(self) -> dict[str, Any]:
+        return {"group_id": self.group_id, "short_id": self.short_id, "cust_id": self.cust_id}
 
 
 def quote_from_invoice_snapshot(snapshot: dict[str, Any]) -> QuoteResponse:
@@ -163,7 +180,42 @@ async def post_invoice_settlement(
             },
         )
 
+    _queue_dash_sell(
+        duffs_received=duffs_received,
+        invoice_id=invoice_id,
+        short_id=short_id,
+        server_id=server_id,
+        currency=Currency.DASH,
+    )
+
     return entries
+
+
+def _queue_dash_sell(
+    *,
+    duffs_received: Decimal,
+    invoice_id: str,
+    short_id: str,
+    server_id: str,
+    currency: Currency,
+) -> None:
+    dash_qty = dash_from_duffs(duffs_received)
+    if dash_qty <= 0:
+        return
+    asyncio.create_task(
+        rebalance_queue_task(
+            direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
+            currency=currency,
+            hive_qty=dash_qty,
+            tracked_op=DashRebalanceOp(
+                group_id=invoice_id,
+                short_id=short_id,
+                cust_id=server_id,
+            ),
+            base_asset="DASH",
+            quote_asset="BTC",
+        )
+    )
 
 
 async def _load_posted(invoice_id: str) -> list[LedgerEntry]:
