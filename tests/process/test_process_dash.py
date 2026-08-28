@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -7,7 +8,8 @@ import pytest
 from bson import ObjectId
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
+from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
+from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH, dash_from_duffs
 from v4vapp_backend_v2.dash.collections import COL_INVOICES
 from v4vapp_backend_v2.dash.models.invoice import DashInvoiceState
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -106,6 +108,14 @@ def ledger_store(monkeypatch: pytest.MonkeyPatch) -> list[LedgerEntry]:
 
     monkeypatch.setattr(LedgerEntry, "save", fake_save)
     monkeypatch.setattr(LedgerEntry, "load", fake_load)
+
+    def _drop_task(coro):
+        coro.close()
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.asyncio.create_task",
+        _drop_task,
+    )
     return saved
 
 
@@ -183,3 +193,57 @@ def test_quote_snapshot_does_not_live_fetch():
 
 def test_one_dash_duffs_constant():
     assert DUFFS_PER_DASH == Decimal(100_000_000)
+
+
+@pytest.mark.asyncio
+async def test_settled_invoice_queues_dash_btc_sell(
+    ledger_store: list[LedgerEntry], monkeypatch: pytest.MonkeyPatch
+):
+    captured: dict[str, Any] = {}
+
+    def fake_queue(**kwargs: Any) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash._queue_dash_sell",
+        fake_queue,
+    )
+    doc = _settled_doc()
+    await post_invoice_settlement(doc)
+    assert captured["duffs_received"] == Decimal(80000000)
+    assert captured["currency"] is Currency.DASH
+    assert captured["server_id"]
+    assert captured["invoice_id"] == str(doc["_id"])
+    assert dash_from_duffs(captured["duffs_received"]) == Decimal("0.8")
+
+
+@pytest.mark.asyncio
+async def test_queue_dash_sell_calls_rebalance_with_dash_pair(monkeypatch: pytest.MonkeyPatch):
+    from v4vapp_backend_v2.process.process_dash import _queue_dash_sell
+
+    captured: dict[str, Any] = {}
+
+    async def fake_rebalance(**kwargs: Any):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.rebalance_queue_task",
+        fake_rebalance,
+    )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.asyncio.create_task",
+        asyncio.create_task,
+    )
+    _queue_dash_sell(
+        duffs_received=DUFFS_PER_DASH,
+        invoice_id="inv1",
+        short_id="ext-1",
+        server_id="server",
+        currency=Currency.DASH,
+    )
+    await asyncio.sleep(0)
+    assert captured["base_asset"] == "DASH"
+    assert captured["quote_asset"] == "BTC"
+    assert captured["direction"] is RebalanceDirection.SELL_BASE_FOR_QUOTE
+    assert captured["hive_qty"] == Decimal(1)
+    assert captured["tracked_op"].cust_id == "server"

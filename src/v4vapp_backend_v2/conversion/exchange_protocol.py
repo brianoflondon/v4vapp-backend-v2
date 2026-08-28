@@ -8,14 +8,14 @@ without coupling to a specific implementation.
 
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Any, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 
 # Conversion constant: 1 BTC = 100,000,000 satoshis
-SATS_PER_BTC = Decimal("100000000")
+SATS_PER_BTC = Decimal(100000000)
 
 
 def format_base_asset(value: Decimal, asset: str) -> str:
@@ -32,7 +32,7 @@ def format_base_asset(value: Decimal, asset: str) -> str:
     Returns:
         Formatted string like "100.123 HIVE"
     """
-    if asset.upper() in ("HIVE", "HBD"):
+    if asset.upper() in ("HIVE", "HBD", "DASH"):
         return f"{value:.3f} {asset}"
     return f"{value:.8f} {asset}"
 
@@ -54,7 +54,7 @@ def format_quote_asset(value: Decimal, asset: str) -> str:
     if asset.upper() == "BTC":
         sats = int(value * SATS_PER_BTC)
         return f"{sats:,} sats"
-    if asset.upper() in ("HIVE", "HBD"):
+    if asset.upper() in ("HIVE", "HBD", "DASH"):
         return f"{value:,.3f} {asset}"
     return f"{value:,.8f} {asset}"
 
@@ -87,7 +87,7 @@ class ExchangeOrderResult(BaseModel):
     quote_asset: str = ""  # e.g., "BTC" - set by adapter if known
 
     # Quote response capturing the effective exchange rate from this trade
-    trade_quote: Optional[QuoteResponse] = None
+    trade_quote: QuoteResponse | None = None
 
     def _get_assets(self) -> tuple[str, str]:
         """Get base and quote assets, inferring from symbol if not set."""
@@ -115,7 +115,7 @@ class ExchangeOrderResult(BaseModel):
         )
 
     @property
-    def log_extra(self) -> Dict[str, Any]:
+    def log_extra(self) -> dict[str, Any]:
         """Dictionary of key order details for structured logging."""
         return {"exchange_order_result": self.model_dump()}
 
@@ -135,31 +135,27 @@ class ExchangeMinimums(BaseModel):
 
     min_qty: Decimal  # Minimum quantity (LOT_SIZE)
     min_notional: Decimal  # Minimum order value in quote asset
-    step_size: Decimal = Decimal("0")  # Quantity step size (optional)
+    step_size: Decimal = Decimal(0)  # Quantity step size (optional)
 
 
 class ExchangeError(Exception):
     """Base exception for exchange operations."""
 
-    pass
 
 
 class ExchangeConnectionError(ExchangeError):
     """Raised when connection to exchange fails."""
 
-    pass
 
 
 class ExchangeBelowMinimumError(ExchangeError):
     """Raised when order is below exchange minimums."""
 
-    pass
 
 
 class ExchangeInsufficientBalanceError(ExchangeError):
     """Raised when account has insufficient balance."""
 
-    pass
 
 
 @runtime_checkable
@@ -201,7 +197,7 @@ class ExchangeProtocol(Protocol):
         """
         ...
 
-    def get_balances(self, assets: list[str]) -> Dict[str, Decimal]:
+    def get_balances(self, assets: list[str]) -> dict[str, Decimal]:
         """
         Get available balances for multiple assets in a single call.
 
@@ -293,19 +289,16 @@ class BaseExchangeAdapter(ABC):
     @abstractmethod
     def exchange_name(self) -> str:
         """Return the name of the exchange."""
-        pass
 
     @abstractmethod
     def get_min_order_requirements(self, base_asset: str, quote_asset: str) -> ExchangeMinimums:
         """Get minimum order requirements for a trading pair."""
-        pass
 
     @abstractmethod
     def get_balance(self, asset: str) -> Decimal:
         """Get the available balance for an asset."""
-        pass
 
-    def get_balances(self, assets: list[str]) -> Dict[str, Decimal]:
+    def get_balances(self, assets: list[str]) -> dict[str, Decimal]:
         """
         Get available balances for multiple assets in a single call.
 
@@ -319,7 +312,7 @@ class BaseExchangeAdapter(ABC):
             Dict mapping asset symbols to their available balances.
             Includes a 'SATS' key if 'BTC' is requested (BTC * 1e8).
         """
-        result: Dict[str, Decimal] = {}
+        result: dict[str, Decimal] = {}
         for asset in assets:
             result[asset] = self.get_balance(asset)
         if "BTC" in result:
@@ -329,7 +322,6 @@ class BaseExchangeAdapter(ABC):
     @abstractmethod
     def get_current_price(self, base_asset: str, quote_asset: str) -> Decimal:
         """Get the current market price for a trading pair."""
-        pass
 
     @abstractmethod
     def market_sell(
@@ -340,7 +332,6 @@ class BaseExchangeAdapter(ABC):
         client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         """Execute a market sell order."""
-        pass
 
     @abstractmethod
     def market_buy(
@@ -351,7 +342,6 @@ class BaseExchangeAdapter(ABC):
         client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         """Execute a market buy order."""
-        pass
 
     def build_symbol(self, base_asset: str, quote_asset: str) -> str:
         """
