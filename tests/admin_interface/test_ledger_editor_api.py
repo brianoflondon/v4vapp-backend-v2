@@ -6,7 +6,7 @@ and /api/presets endpoints on the ledger editor router.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -43,17 +43,17 @@ def _make_dummy_entry(**overrides):
     defaults = dict(
         group_id="test_g1",
         short_id="test_g1",
-        timestamp=datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
         ledger_type=LedgerType.EXCHANGE_TO_NODE,
         description="Test entry",
         user_memo="memo",
         cust_id="voltage",
         debit=AssetAccount(name="External Lightning Payments", sub="voltage"),
         credit=AssetAccount(name="Exchange Holdings", sub="binance_convert"),
-        debit_amount=Decimal("1000"),
+        debit_amount=Decimal(1000),
         debit_unit=Currency.MSATS,
         debit_conv=CryptoConv(),
-        credit_amount=Decimal("1000"),
+        credit_amount=Decimal(1000),
         credit_unit=Currency.MSATS,
         credit_conv=CryptoConv(),
         reversed=None,
@@ -94,7 +94,7 @@ class TestLoadEntry:
 
     @pytest.mark.asyncio
     async def test_load_entry_reversed(self, monkeypatch):
-        rev = datetime(2025, 7, 1, tzinfo=timezone.utc)
+        rev = datetime(2025, 7, 1, tzinfo=UTC)
         entry = _make_dummy_entry(reversed=rev)
         monkeypatch.setattr(LedgerEntry, "load", AsyncMock(return_value=entry))
         resp = await load_entry(group_id="test_g1")
@@ -236,7 +236,7 @@ class TestUpdateEntry:
 
     @pytest.mark.asyncio
     async def test_update_reversed_clear(self, monkeypatch):
-        entry = _make_dummy_entry(reversed=datetime.now(tz=timezone.utc))
+        entry = _make_dummy_entry(reversed=datetime.now(tz=UTC))
         monkeypatch.setattr(LedgerEntry, "load", AsyncMock(return_value=entry))
         mock_save = AsyncMock(return_value=MagicMock())
         monkeypatch.setattr(LedgerEntry, "save", mock_save)
@@ -448,6 +448,28 @@ class TestCreateEntry:
         assert entry.credit_amount == 5_000_000
 
     @pytest.mark.asyncio
+    async def test_create_dash_normalised_to_duffs(self, monkeypatch):
+        """When currency=dash, amount should be ×1e8 and unit stored as duffs."""
+        dummy_conv = CryptoConv()
+        mock_conversion = MagicMock()
+        mock_conversion.get_quote = AsyncMock()
+        mock_conversion.conversion = dummy_conv
+        monkeypatch.setattr(
+            "v4vapp_backend_v2.admin.routers.ledger_editor.CryptoConversion",
+            lambda **kwargs: mock_conversion,
+        )
+
+        entry, error = await _validate_and_build_entry(
+            self._valid_payload(amount=1.5, currency="dash")
+        )
+        assert error is None
+        assert entry is not None
+        assert entry.debit_unit.value == "duffs"
+        assert entry.credit_unit.value == "duffs"
+        assert entry.debit_amount == 150_000_000  # 1.5 DASH × 1e8
+        assert entry.credit_amount == 150_000_000
+
+    @pytest.mark.asyncio
     async def test_create_hive_not_normalised(self, monkeypatch):
         """hive should be stored as-is, not converted."""
         dummy_conv = CryptoConv()
@@ -469,7 +491,7 @@ class TestCreateEntry:
 
     @pytest.mark.asyncio
     async def test_create_disallowed_currency_usd(self):
-        """USD should be rejected — only sats, hive, hbd allowed."""
+        """USD should be rejected — only sats, hive, hbd, dash allowed."""
         entry, error = await _validate_and_build_entry(self._valid_payload(currency="usd"))
         assert entry is None
         assert "cannot be stored directly" in error

@@ -359,13 +359,14 @@ async def fixed_quote(
 async def binance() -> dict[str, str | int | float]:
     try:
         adapter = get_exchange_adapter()
-        balances = adapter.get_balances(["BTC", "HIVE", "USDT"])
+        balances = adapter.get_balances(["BTC", "HIVE", "DASH", "USDT"])
         logger.debug(f"{ICON} Binance balances: {balances}")
     except ExchangeConnectionError:
         return {"error": "Bad connection"}
     return {
         "BTC": float(balances.get("BTC", 0.0)),
         "HIVE": float(balances.get("HIVE", 0.0)),
+        "DASH": float(balances.get("DASH", 0.0)),
         "USDT": float(balances.get("USDT", 0.0)),
         "SATS": int(balances.get("SATS", 0)),
     }
@@ -389,7 +390,12 @@ async def sats_to_hive(
         conv = CryptoConversion(
             conv_from=Currency.SATS, value=sats, quote=all_quotes.quote
         ).conversion
-        answer = {"HIVE": conv.hive, "HBD": conv.hbd, "details": conv.model_dump()}
+        answer = {
+            "HIVE": conv.hive,
+            "HBD": conv.hbd,
+            "DASH": conv.dash,
+            "details": conv.model_dump(),
+        }
         return answer
     except Exception as e:
         logger.error(f"Error converting sats to Hive: {e}")

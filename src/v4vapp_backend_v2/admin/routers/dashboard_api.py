@@ -10,6 +10,7 @@ import asyncio
 from asyncio import TaskGroup
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -28,11 +29,18 @@ from v4vapp_backend_v2.accounting.sanity_checks import (
 )
 from v4vapp_backend_v2.accounting.trading_pnl import generate_trading_pnl_report
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.conversion.exchange_protocol import (
+    ExchangeConnectionError,
+    get_exchange_adapter,
+)
+from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
+from v4vapp_backend_v2.dash.settings import dash_connection
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances_async
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
 from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
+from v4vapp_backend_v2.process.process_dash import treasury_sub
 
 router = APIRouter()
 
@@ -209,6 +217,52 @@ async def dashboard_lnd_info() -> JSONResponse:
     return JSONResponse({"lnd_info": info})
 
 
+@router.get("/exchange-balances")
+async def dashboard_exchange_balances() -> JSONResponse:
+    """Binance wallet snapshot plus Treasury Dash ledger balance."""
+    info: dict[str, Any] = {
+        "BTC": "N/A",
+        "HIVE": "N/A",
+        "DASH": "N/A",
+        "SATS": "N/A",
+        "USDT": "N/A",
+        "treasury_dash": "N/A",
+        "treasury_dash_sub": "",
+        "error": None,
+    }
+    try:
+        adapter = get_exchange_adapter()
+        balances = adapter.get_balances(["BTC", "HIVE", "DASH", "USDT"])
+        info["BTC"] = f"{float(balances.get('BTC', 0)):.8f}"
+        info["HIVE"] = f"{float(balances.get('HIVE', 0)):,.3f}"
+        info["DASH"] = f"{float(balances.get('DASH', 0)):,.3f}"
+        info["USDT"] = f"{float(balances.get('USDT', 0)):,.2f}"
+        info["SATS"] = f"{int(balances.get('SATS', 0)):,}"
+    except ExchangeConnectionError as e:
+        info["error"] = str(e)
+    except Exception as e:
+        logger.warning(f"Exchange balances failed: {e}", extra={"notification": False})
+        info["error"] = str(e)
+
+    try:
+        conn = dash_connection()
+        sub = treasury_sub(conn.network if conn else None)
+        info["treasury_dash_sub"] = sub
+        details = await one_account_balance(
+            account=AssetAccount(name="Treasury Dash", sub=sub),
+            as_of_date=datetime.now(UTC),
+        )
+        dash_amt = getattr(details, "dash", None) if details else None
+        if dash_amt is None and details and getattr(details, "duffs", None):
+            dash_amt = details.duffs / DUFFS_PER_DASH
+        if dash_amt is not None:
+            info["treasury_dash"] = f"{float(dash_amt):,.3f}"
+    except Exception as e:
+        logger.warning(f"Treasury Dash lookup failed: {e}", extra={"notification": False})
+
+    return JSONResponse({"exchange": info})
+
+
 @router.get("/financial-summary")
 async def dashboard_financial_summary() -> JSONResponse:
     """Fetch P&L and Trading PnL summaries in parallel."""
@@ -240,10 +294,12 @@ async def dashboard_financial_summary() -> JSONResponse:
     profit_loss_usd = pl_task.result()
     trading_pnl_usd = tp_task.result()
 
-    return JSONResponse({
-        "profit_loss_usd": profit_loss_usd,
-        "trading_pnl_usd": trading_pnl_usd,
-    })
+    return JSONResponse(
+        {
+            "profit_loss_usd": profit_loss_usd,
+            "trading_pnl_usd": trading_pnl_usd,
+        }
+    )
 
 
 @router.get("/sanity")
@@ -296,22 +352,28 @@ async def dashboard_sanity() -> JSONResponse:
     # Serialize sanity results
     results_data = []
     for name, result in sanity_results.results:
-        results_data.append({
-            "name": name,
-            "is_valid": result.is_valid,
-            "details": result.details,
-        })
+        results_data.append(
+            {
+                "name": name,
+                "is_valid": result.is_valid,
+                "details": result.details,
+            }
+        )
 
     failed_data = []
     for name, result in sanity_results.failed:
-        failed_data.append({
-            "name": name,
-            "details": result.details,
-        })
+        failed_data.append(
+            {
+                "name": name,
+                "details": result.details,
+            }
+        )
 
-    return JSONResponse({
-        "server_balance_check": server_balance_check,
-        "sanity_results": results_data,
-        "sanity_failed": failed_data,
-        "pending_transactions": pending_transactions,
-    })
+    return JSONResponse(
+        {
+            "server_balance_check": server_balance_check,
+            "sanity_results": results_data,
+            "sanity_failed": failed_data,
+            "pending_transactions": pending_transactions,
+        }
+    )
