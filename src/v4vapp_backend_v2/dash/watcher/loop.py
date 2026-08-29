@@ -60,7 +60,10 @@ async def run_watcher(
             state.last_error = None
         except Exception as exc:
             state.last_error = str(exc)
-            logger.exception(f"{ICON} watcher tick failed", extra={"ticks": state.ticks})
+            logger.warning(
+                f"{ICON} watcher tick failed: {exc}",
+                extra={"ticks": state.ticks, "notification": False},
+            )
         await _persist_heartbeat(db, dashd, conn, state)
         try:
             await asyncio.wait_for(stop.wait(), timeout=conn.poll_interval_s)
@@ -86,7 +89,10 @@ async def _persist_heartbeat(
             dashd=dashd_info,
         )
     except Exception as exc:
-        logger.warning(f"{ICON} watcher heartbeat persist failed: {exc}")
+        logger.warning(
+            f"{ICON} watcher heartbeat persist failed: {exc}",
+            extra={"notification": False},
+        )
 
 
 async def _snapshot_dashd(dashd: Dashd) -> dict[str, Any]:
@@ -130,7 +136,9 @@ async def tick(
             state.last_error = str(exc)
             state.last_tick_at = datetime.now(UTC)
             state.ticks += 1
-            logger.error(f"{ICON} listunspent failed: {exc}")
+            logger.warning(
+                f"{ICON} listunspent failed: {exc}", extra={"notification": False}
+            )
             return
         for utxo in raw:
             addr = utxo.get("address")

@@ -143,7 +143,11 @@ async def run_dashd_with_reconnect(
                 except (httpx.TransportError, DashdError) as exc:
                     logger.warning(
                         f"{ICON} dashd rpc unavailable",
-                        extra={"rpc_url": conn.rpc_url, "err": str(exc)},
+                        extra={
+                            "rpc_url": conn.rpc_url,
+                            "err": str(exc),
+                            "notification": False,
+                        },
                     )
                     try:
                         await asyncio.wait_for(stop.wait(), timeout=delay)
