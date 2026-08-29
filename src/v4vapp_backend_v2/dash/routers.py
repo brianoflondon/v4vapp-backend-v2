@@ -25,7 +25,7 @@ from v4vapp_backend_v2.dash.models.invoice import (
     InvoiceListOut,
     InvoiceOut,
     doc_to_out,
-    payment_uri,
+    invoice_payment_uris,
 )
 from v4vapp_backend_v2.dash.models.payout import PayoutCreate, PayoutOut, doc_to_payout
 from v4vapp_backend_v2.dash.models.wallet_out import WalletOut
@@ -199,6 +199,7 @@ async def create_invoice(
     now = datetime.now(UTC)
     expires_at = now + timedelta(seconds=body.expires_in_s)
     settle_deadline_at = expires_at + timedelta(seconds=conn.settle_grace_s)
+    uri_bip21, uri_dashpay = invoice_payment_uris(address, priced.dash_quoted)
     doc: dict[str, Any] = {
         "external_id": body.external_id,
         "cust_id": body.cust_id,
@@ -206,7 +207,8 @@ async def create_invoice(
         "lightning_invoice": body.lightning_invoice,
         "state": DashInvoiceState.OPEN.value,
         "address": address,
-        "uri": payment_uri(address, priced.dash_quoted),
+        "uri_bip21": uri_bip21,
+        "uri_dashpay": uri_dashpay,
         "network": conn.network,
         "path": derivation.path,
         "account": derivation.account,

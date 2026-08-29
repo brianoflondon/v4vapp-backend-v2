@@ -2,12 +2,14 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
+from urllib.parse import quote
 
 from pydantic import BaseModel, Field, field_serializer
 
 from v4vapp_backend_v2.config.setup import DashNetwork, DashSettlePolicy
 from v4vapp_backend_v2.dash.amounts import json_amount, to_decimal
 from v4vapp_backend_v2.dash.models.wallet import Derivation
+from v4vapp_backend_v2.dash.settings import wallet_sender
 
 
 class DashInvoiceState(StrEnum):
@@ -97,7 +99,8 @@ class InvoiceOut(BaseModel):
     external_id: str
     state: DashInvoiceState
     address: str
-    uri: str
+    uri_bip21: str
+    uri_dashpay: str
     network: DashNetwork
     sats_requested: Decimal
     sats_collect: Decimal | None = None
@@ -140,8 +143,40 @@ class InvoiceListOut(BaseModel):
     next_cursor: str | None = None
 
 
-def payment_uri(address: str, dash_quoted: str) -> str:
+def payment_uri_bip21(address: str, dash_quoted: str) -> str:
+    """BIP21 payment URI: `dash:<address>?amount=<amount>`."""
     return f"dash:{address}?amount={dash_quoted}"
+
+
+def payment_uri_dashpay(
+    address: str,
+    dash_quoted: str,
+    sender: str | None = None,
+) -> str:
+    """Dash iOS / DashPay wallet payment URL (`dashwallet://` scheme).
+
+        dashwallet://pay=<address>&amount=<amount>&sender=<sender>
+
+    `sender` is only the app name shown to the payer. Settlement is on-chain;
+    this API does not handle the wallet's optional `://callback=payack` return.
+    """
+    label = wallet_sender() if sender is None else sender
+    return (
+        f"dashwallet://pay={quote(address, safe='')}"
+        f"&amount={quote(dash_quoted, safe='')}"
+        f"&sender={quote(label, safe='')}"
+    )
+
+
+def invoice_payment_uris(
+    address: str,
+    dash_quoted: str,
+    sender: str | None = None,
+) -> tuple[str, str]:
+    return (
+        payment_uri_bip21(address, dash_quoted),
+        payment_uri_dashpay(address, dash_quoted, sender=sender),
+    )
 
 
 def doc_to_out(doc: dict[str, Any]) -> InvoiceOut:
@@ -149,19 +184,23 @@ def doc_to_out(doc: dict[str, Any]) -> InvoiceOut:
     der = doc["derivation"]
     policy = doc["policy"]
     state = DashInvoiceState(doc["state"])
+    address = doc["address"]
+    dash_quoted = doc["dash_quoted"]
+    uri_bip21, uri_dashpay = invoice_payment_uris(address, dash_quoted)
     return InvoiceOut(
         invoice_id=str(doc["_id"]),
         external_id=doc["external_id"],
         state=state,
-        address=doc["address"],
-        uri=doc["uri"],
+        address=address,
+        uri_bip21=uri_bip21,
+        uri_dashpay=uri_dashpay,
         network=doc["network"],
         sats_requested=to_decimal(doc["sats_requested"]),
         sats_collect=to_decimal(doc["sats_collect"])
         if doc.get("sats_collect") is not None
         else None,
         duffs_quoted=to_decimal(doc["duffs_quoted"]),
-        dash_quoted=doc["dash_quoted"],
+        dash_quoted=dash_quoted,
         fees=InvoiceFeesOut.model_validate(doc["fees"]) if doc.get("fees") else None,
         duffs_received=to_decimal(doc.get("duffs_received") or 0),
         sats_credited=(

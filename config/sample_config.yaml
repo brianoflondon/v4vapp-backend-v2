@@ -22,6 +22,9 @@ telegram:
 # Secrets live in this YAML (same as lnd_config / hive_config). Do not commit real values.
 dash_config:
   default: testnet
+  # Display name in DashPay / Dash iOS URIs (`sender=`). Shown to the payer only.
+  # Not a callback URL — settlement is on-chain. Default: v4v.app
+  dash_wallet_sender: v4v.app
   connections:
     testnet:
       icon: 💠
