@@ -54,7 +54,10 @@ class Dashd:
             "method": method,
             "params": params,
         }
-        response = await self._client.post(url, json=payload, auth=self._auth)
+        try:
+            response = await self._client.post(url, json=payload, auth=self._auth)
+        except httpx.TransportError as exc:
+            raise DashdError(f"dashd RPC {method} {type(exc).__name__}: {exc}") from exc
         if response.status_code == 401:
             raise DashdError("dashd RPC unauthorized", code=401)
         try:

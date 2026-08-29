@@ -6,6 +6,7 @@ from bson import ObjectId
 
 from v4vapp_backend_v2.config.setup import DashConnectionConfig
 from v4vapp_backend_v2.dash.collections import COL_INVOICES
+from v4vapp_backend_v2.dash.dashd.rpc import DashdError
 from v4vapp_backend_v2.dash.models.invoice import DashInvoiceState
 from v4vapp_backend_v2.dash.watcher.loop import WatcherState, tick
 
@@ -147,3 +148,36 @@ async def test_tick_settle_logs_invoice_extras(
     assert rec.address == "yAddr1"
     assert rec.duffs_received == 50_000_000
     assert rec.txid == "aa"
+
+
+class _FailingListunspent:
+    async def listunspent(self, *args: object) -> list[dict[str, Any]]:
+        raise DashdError("dashd RPC listunspent ConnectError: All connection attempts failed")
+
+    async def gettransaction(self, txid: str) -> dict[str, Any]:
+        raise AssertionError("gettransaction should not run after listunspent fails")
+
+
+@pytest.mark.asyncio
+async def test_tick_listunspent_failure_is_quiet(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    db = _Db([_invoice()])
+    state = WatcherState()
+
+    class _FrozenDateTime:
+        @staticmethod
+        def now(tz: object = None) -> datetime:
+            return NOW
+
+    monkeypatch.setattr("v4vapp_backend_v2.dash.watcher.loop.datetime", _FrozenDateTime)
+    caplog.set_level("WARNING", logger="backend")
+    await tick(db=db, dashd=_FailingListunspent(), conn=_conn(), state=state)
+    assert state.last_error is not None
+    assert "ConnectError" in state.last_error
+    assert state.ticks == 1
+    assert state.last_tick_at == NOW
+    assert db.col.updates == []
+    recs = [r for r in caplog.records if "listunspent failed" in r.getMessage()]
+    assert recs
+    assert getattr(recs[-1], "notification", True) is False

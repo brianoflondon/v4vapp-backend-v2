@@ -53,6 +53,18 @@ async def test_wallet_disabled_mapping() -> None:
 
 
 @pytest.mark.asyncio
+async def test_transport_error_is_dashd_error() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("All connection attempts failed")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    dashd = Dashd("http://dashd:9998", user="u", password="p", client=client)
+    with pytest.raises(DashdError, match="ConnectError"):
+        await dashd.listunspent()
+    await dashd.aclose()
+
+
+@pytest.mark.asyncio
 async def test_unauthorized() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(401, text="nope")
