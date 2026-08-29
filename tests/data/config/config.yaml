@@ -26,6 +26,7 @@ logging:
 
 dash_config:
   default: testnet
+  dash_wallet_sender: v4v.app
   connections:
     testnet:
       icon: 💠

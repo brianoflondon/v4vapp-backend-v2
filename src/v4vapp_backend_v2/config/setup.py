@@ -277,6 +277,7 @@ class DashConfig(BaseConfig):
     """Named Dash connections, matching lnd_config."""
 
     default: str = ""
+    dash_wallet_sender: str = "v4v.app"
     connections: dict[str, DashConnectionConfig] = {}
 
     def connection_config(self, name: str | None = None) -> DashConnectionConfig | None:

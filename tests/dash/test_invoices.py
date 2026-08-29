@@ -12,7 +12,11 @@ from v4vapp_backend_v2.config.setup import DashConnectionConfig
 from v4vapp_backend_v2.dash.collections import COL_INVOICES, COL_PAYOUTS, COL_WALLET_STATE
 from v4vapp_backend_v2.dash.errors import register_dash_exception_handlers
 from v4vapp_backend_v2.dash.limits.hive_config import DEFAULT_CONFIG
-from v4vapp_backend_v2.dash.models.invoice import DashInvoiceState
+from v4vapp_backend_v2.dash.models.invoice import (
+    DashInvoiceState,
+    payment_uri_bip21,
+    payment_uri_dashpay,
+)
 from v4vapp_backend_v2.dash.models.quote import Quote
 from v4vapp_backend_v2.dash.quotes.service import quote_for_sats
 from v4vapp_backend_v2.dash.routers import router as dash_router
@@ -220,7 +224,16 @@ def test_create_invoice_returns_y_address_and_quoted_duffs(
     assert body["fees"]["total_fee_sats"] == 1_075
     assert body["fees"]["routing_fee_sats"] == 300
     assert body["duffs_quoted"] == 52_150_000
-    assert body["uri"].startswith("dash:y")
+    assert body["uri_bip21"].startswith("dash:y")
+    assert f"?amount={body['dash_quoted']}" in body["uri_bip21"]
+    assert body["uri_dashpay"].startswith("dashwallet://pay=")
+    assert f"&amount={body['dash_quoted']}" in body["uri_dashpay"]
+    assert body["uri_dashpay"].endswith("&sender=v4v.app")
+    assert "uri" not in body
+    stored = db[COL_INVOICES].docs[0]
+    assert stored["uri_bip21"] == body["uri_bip21"]
+    assert stored["uri_dashpay"] == body["uri_dashpay"]
+    assert "uri" not in stored
     assert body["derivation"]["path"] == "m/44'/1'/0'/0/0"
     assert body["policy"]["settle_policy"] == "instantsend_or_chainlock"
     assert body["policy"]["accept_instantsend"] is True
@@ -313,6 +326,34 @@ def test_payouts_disabled_without_flag(invoice_client: tuple[TestClient, _Db]) -
 def test_quote_math_still_matches_create() -> None:
     priced = quote_for_sats(25_000, _quote())
     assert priced.duffs_quoted == 50_000_000
+
+
+def test_payment_uri_bip21() -> None:
+    assert (
+        payment_uri_bip21("yfzgG4M7DsVic2bhCKfgSrMgVo4RLa9r5Y", "0.01234567")
+        == "dash:yfzgG4M7DsVic2bhCKfgSrMgVo4RLa9r5Y?amount=0.01234567"
+    )
+
+
+def test_payment_uri_dashpay_uses_ios_scheme_and_sender() -> None:
+    uri = payment_uri_dashpay(
+        "yfzgG4M7DsVic2bhCKfgSrMgVo4RLa9r5Y",
+        "0.01234567",
+        sender="v4v.app",
+    )
+    assert uri == (
+        "dashwallet://pay=yfzgG4M7DsVic2bhCKfgSrMgVo4RLa9r5Y&amount=0.01234567&sender=v4v.app"
+    )
+
+
+def test_payment_uri_dashpay_defaults_sender_to_config() -> None:
+    uri = payment_uri_dashpay("Xabc", "1.00")
+    assert uri.endswith("&sender=v4v.app")
+
+
+def test_payment_uri_dashpay_encodes_sender() -> None:
+    uri = payment_uri_dashpay("Xabc", "1.00", sender="my app")
+    assert uri == "dashwallet://pay=Xabc&amount=1.00&sender=my%20app"
 
 
 def test_rejects_above_hive_maximum(invoice_client: tuple[TestClient, _Db]) -> None:
