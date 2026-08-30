@@ -16,11 +16,12 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.process.process_dash import (
     conv_group_id,
     fee_group_id,
+    invoice_group_key,
     invoice_short_id,
     park_dash_test_payment,
+    park_group_id,
     post_invoice_settlement,
     quote_from_invoice_snapshot,
-    park_group_id,
 )
 
 
@@ -59,6 +60,7 @@ def _settled_doc(**overrides: Any) -> dict[str, Any]:
     doc: dict[str, Any] = {
         "_id": invoice_id,
         "external_id": "ext-1",
+        "address": "yTestDashAddress11111111111111111",
         "cust_id": "hive-customer",
         "state": DashInvoiceState.SETTLED.value,
         "network": "testnet",
@@ -138,19 +140,20 @@ async def test_settled_invoice_posts_conversion_and_fee(ledger_store: list[Ledge
     assert len(entries) == 2
     conv, fee = entries
     assert conv.ledger_type is LedgerType.CONV_DASH_TO_SATS
-    assert conv.group_id == conv_group_id(str(doc["_id"]))
+    assert conv.group_id == conv_group_id(invoice_group_key(doc))
     assert conv.debit_unit is Currency.DUFFS
     assert conv.credit_unit is Currency.MSATS
     assert conv.debit.name == "Treasury Dash"
     assert conv.debit.sub == "dash-testnet"
     assert conv.credit.name == "VSC Liability"
-    assert conv.short_id == invoice_short_id(str(doc["_id"]))
+    assert conv.short_id == invoice_short_id(invoice_group_key(doc))
+    assert conv.short_id == doc["address"][:8]
     assert len(conv.short_id) == 8
     assert conv.credit.sub != "hive-customer"
     assert conv.cust_id != "hive-customer"
     assert conv.debit_amount == Decimal(80000000)
     assert fee.ledger_type is LedgerType.FEE_INCOME
-    assert fee.group_id == fee_group_id(str(doc["_id"]))
+    assert fee.group_id == fee_group_id(invoice_group_key(doc))
     assert fee.credit.name == "Fee Income Dash"
     assert fee.debit_amount == Decimal(150) * Decimal(1000)
     assert len(db.coll.updates) == 1
@@ -218,7 +221,7 @@ async def test_settled_invoice_queues_dash_btc_sell(
     assert captured["duffs_received"] == Decimal(80000000)
     assert captured["currency"] is Currency.DASH
     assert captured["server_id"]
-    assert captured["invoice_id"] == str(doc["_id"])
+    assert captured["invoice_id"] == invoice_group_key(doc)
     assert dash_from_duffs(captured["duffs_received"]) == Decimal("0.8")
 
 
@@ -305,7 +308,7 @@ async def test_pay_probes_when_payouts_disabled(monkeypatch: pytest.MonkeyPatch)
     doc = _settled_doc(lightning_invoice="lnbc250u1ptestinvoice")
     await pay_dash_lightning(doc)
     assert captured["probe_only"] is True
-    assert captured["group_id"] == str(doc["_id"])
+    assert captured["group_id"] == invoice_group_key(doc)
     assert captured["amount_msat"] == Decimal(25_000_000)
 
 
@@ -359,8 +362,8 @@ async def test_park_moves_net_sats_to_dash_payment_tests(
     entry = await park_dash_test_payment(doc)
     assert entry is not None
     assert entry.ledger_type is LedgerType.DASH_TEST_PAY
-    assert entry.group_id == park_group_id(str(doc["_id"]))
-    assert entry.short_id == invoice_short_id(str(doc["_id"]))
+    assert entry.group_id == park_group_id(invoice_group_key(doc))
+    assert entry.short_id == invoice_short_id(invoice_group_key(doc))
     assert entry.debit.name == "VSC Liability"
     assert entry.debit.sub == InternalConfig().server_id
     assert entry.credit.name == "Dash Payment Tests"

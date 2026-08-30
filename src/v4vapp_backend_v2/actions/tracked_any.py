@@ -229,10 +229,12 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
                 answer = DiscriminatedTracked.model_validate(value)
                 return answer.value
 
-        try:
-            dash_doc = await db[COL_INVOICES].find_one({"_id": ObjectId(group_id)})
-        except (InvalidId, Exception):
-            dash_doc = None
+        dash_doc = await db[COL_INVOICES].find_one({"address": group_id})
+        if dash_doc is None:
+            try:
+                dash_doc = await db[COL_INVOICES].find_one({"_id": ObjectId(group_id)})
+            except (InvalidId, Exception):
+                dash_doc = None
         if dash_doc:
             if "_id" in dash_doc:
                 dash_doc["invoice_id"] = str(dash_doc["_id"])

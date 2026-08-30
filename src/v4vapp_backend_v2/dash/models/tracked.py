@@ -30,6 +30,7 @@ class DashInvoiceEvent(TrackedBaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     invoice_id: str = Field(..., description="Mongo _id of the dash invoice")
+    address: str = ""
     external_id: str = ""
     state: str = ""
     lightning_invoice: str | None = None
@@ -75,14 +76,16 @@ class DashInvoiceEvent(TrackedBaseModel):
     @computed_field
     @property
     def group_id(self) -> str:
-        return self.invoice_id
+        return self.address or self.invoice_id
 
     @property
     def group_id_p(self) -> str:
-        return self.invoice_id
+        return self.address or self.invoice_id
 
     @property
     def group_id_query(self) -> dict[str, Any]:
+        if self.address:
+            return {"address": self.address}
         try:
             return {"_id": ObjectId(self.invoice_id)}
         except Exception:
@@ -91,7 +94,7 @@ class DashInvoiceEvent(TrackedBaseModel):
     @computed_field
     @property
     def short_id(self) -> str:
-        return self.invoice_id[:8]
+        return (self.address or self.invoice_id)[:8]
 
     @property
     def short_id_p(self) -> str:
@@ -120,10 +123,11 @@ class DashInvoiceEvent(TrackedBaseModel):
     def log_extra(self) -> dict[str, Any]:
         return {
             "invoice_id": self.invoice_id,
+            "address": self.address,
             "external_id": self.external_id,
             "state": self.state,
             "cust_id": self.cust_id,
-            "group_id": self.invoice_id,
+            "group_id": self.group_id,
             "short_id": self.short_id,
         }
 

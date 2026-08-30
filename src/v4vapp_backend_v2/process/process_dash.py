@@ -70,21 +70,29 @@ def quote_from_invoice_snapshot(snapshot: dict[str, Any]) -> QuoteResponse:
     )
 
 
-def conv_group_id(invoice_id: str) -> str:
-    return f"{invoice_id}_{LedgerType.CONV_DASH_TO_SATS.value}"
+def invoice_group_key(invoice_doc: dict[str, Any]) -> str:
+    """Ledger group_id stem: Dash receive address, else Mongo _id."""
+    address = str(invoice_doc.get("address") or "").strip()
+    if address:
+        return address
+    return str(invoice_doc.get("_id") or "")
 
 
-def fee_group_id(invoice_id: str) -> str:
-    return f"{invoice_id}_{LedgerType.FEE_INCOME.value}"
+def conv_group_id(group_key: str) -> str:
+    return f"{group_key}_{LedgerType.CONV_DASH_TO_SATS.value}"
 
 
-def park_group_id(invoice_id: str) -> str:
-    return f"{invoice_id}_{LedgerType.DASH_TEST_PAY.value}"
+def fee_group_id(group_key: str) -> str:
+    return f"{group_key}_{LedgerType.FEE_INCOME.value}"
 
 
-def invoice_short_id(invoice_id: str) -> str:
-    """Ledger short_id is the first 8 chars of the invoice/group id."""
-    return str(invoice_id)[:8]
+def park_group_id(group_key: str) -> str:
+    return f"{group_key}_{LedgerType.DASH_TEST_PAY.value}"
+
+
+def invoice_short_id(group_key: str) -> str:
+    """Ledger short_id is the first 8 chars of the Dash address (group key)."""
+    return str(group_key)[:8]
 
 
 def treasury_sub(network: str | None) -> str:
@@ -116,7 +124,8 @@ async def post_invoice_settlement(
         return []
 
     invoice_id = str(invoice_doc["_id"])
-    existing = await _load_posted(invoice_id)
+    group_key = invoice_group_key(invoice_doc)
+    existing = await _load_posted(group_key)
     if existing:
         return existing
 
@@ -127,7 +136,7 @@ async def post_invoice_settlement(
     fee_sats = _fee_sats(invoice_doc)
     server_id = InternalConfig().server_id
     sub = treasury_sub(invoice_doc.get("network"))
-    short_id = invoice_short_id(invoice_id)
+    short_id = invoice_short_id(group_key)
     now = datetime.now(tz=UTC)
     memo = invoice_doc.get("memo") or ""
 
@@ -136,7 +145,7 @@ async def post_invoice_settlement(
         short_id=short_id,
         op_type=OP_TYPE,
         ledger_type=LedgerType.CONV_DASH_TO_SATS,
-        group_id=conv_group_id(invoice_id),
+        group_id=conv_group_id(group_key),
         timestamp=invoice_doc.get("settled_at") or now,
         description=(
             f"Convert inbound {dash_conv.formatted_amount(Currency.DASH)} "
@@ -163,7 +172,7 @@ async def post_invoice_settlement(
             short_id=short_id,
             op_type=OP_TYPE,
             ledger_type=LedgerType.FEE_INCOME,
-            group_id=fee_group_id(invoice_id),
+            group_id=fee_group_id(group_key),
             timestamp=invoice_doc.get("settled_at") or now,
             description=f"Fee income {fee_sats:,.0f} sats on Dash inbound {short_id}",
             debit=LiabilityAccount(name="VSC Liability", sub=server_id),
@@ -182,7 +191,7 @@ async def post_invoice_settlement(
         logger.info(
             f"{ICON} Dash received {duffs_received} duffs vs quoted {quoted} "
             f"(sats_credited={sats_credited})",
-            extra={"invoice_id": invoice_id, "notification": False},
+            extra={"invoice_id": invoice_id, "address": group_key, "notification": False},
         )
 
     if db is not None:
@@ -198,7 +207,7 @@ async def post_invoice_settlement(
 
     _queue_dash_sell(
         duffs_received=duffs_received,
-        invoice_id=invoice_id,
+        invoice_id=group_key,
         short_id=short_id,
         server_id=server_id,
         currency=Currency.DASH,
@@ -242,7 +251,8 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
         return
 
     invoice_id = str(invoice_doc["_id"])
-    short_id = invoice_short_id(invoice_id)
+    group_key = invoice_group_key(invoice_doc)
+    short_id = invoice_short_id(group_key)
     sats = to_decimal(invoice_doc.get("sats_credited") or invoice_doc.get("sats_requested") or 0)
     amount_msat = sats * Decimal(1000)
     probe_only = lightning_probe_only()
@@ -255,7 +265,7 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
         payment = await send_lightning_to_pay_req(
             pay_req=pay_req,
             lnd_client=lnd_client,
-            group_id=invoice_id,
+            group_id=group_key,
             cust_id=cust_id,
             chat_message=f"Dash inbound {short_id}",
             amount_msat=amount_msat,
@@ -299,10 +309,10 @@ async def park_dash_test_payment(invoice_doc: dict[str, Any]) -> LedgerEntry | N
     Used when Lightning is probe-only (``payouts_enabled: false``) so test
     inbound Dash does not accumulate on the server VSC Liability account.
     """
-    invoice_id = str(invoice_doc.get("_id") or "")
-    if not invoice_id:
+    group_key = invoice_group_key(invoice_doc)
+    if not group_key:
         return None
-    existing = await LedgerEntry.load(park_group_id(invoice_id))
+    existing = await LedgerEntry.load(park_group_id(group_key))
     if existing is not None:
         return existing
 
@@ -318,14 +328,14 @@ async def park_dash_test_payment(invoice_doc: dict[str, Any]) -> LedgerEntry | N
         conv_from=Currency.MSATS, value=net_msats, quote=quote
     ).conversion
     server_id = InternalConfig().server_id
-    short_id = invoice_short_id(invoice_id)
+    short_id = invoice_short_id(group_key)
     now = datetime.now(tz=UTC)
     entry = LedgerEntry(
         cust_id=server_id,
         short_id=short_id,
         op_type=OP_TYPE,
         ledger_type=LedgerType.DASH_TEST_PAY,
-        group_id=park_group_id(invoice_id),
+        group_id=park_group_id(group_key),
         timestamp=invoice_doc.get("settled_at") or now,
         description=(
             f"Park {park_conv.sats_rounded:,.0f} sats on Dash Payment Tests "
@@ -361,17 +371,25 @@ async def process_dash_invoice(event: Any) -> list[LedgerEntry]:
 
     from v4vapp_backend_v2.dash.models.tracked import DashInvoiceEvent
 
-    invoice_id = getattr(event, "invoice_id", None) or getattr(event, "group_id_p", None)
+    invoice_id = getattr(event, "invoice_id", None)
+    group_key = getattr(event, "group_id_p", None) or getattr(event, "address", None)
     doc: dict[str, Any] | None = None
     db = getattr(InternalConfig, "db", None)
-    if db is not None and invoice_id:
-        try:
-            doc = await db[COL_INVOICES].find_one({"_id": ObjectId(str(invoice_id))})
-        except Exception:
-            doc = None
+    if db is not None:
+        if group_key:
+            try:
+                doc = await db[COL_INVOICES].find_one({"address": str(group_key)})
+            except Exception:
+                doc = None
+        if doc is None and invoice_id:
+            try:
+                doc = await db[COL_INVOICES].find_one({"_id": ObjectId(str(invoice_id))})
+            except Exception:
+                doc = None
     if doc is None and isinstance(event, DashInvoiceEvent):
         doc = {
             "_id": invoice_id,
+            "address": event.address,
             "external_id": event.external_id,
             "cust_id": event.cust_id,
             "state": event.state,
