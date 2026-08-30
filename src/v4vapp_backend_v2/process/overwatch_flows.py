@@ -1135,8 +1135,8 @@ EXTERNAL_TO_MAGISATS_FLOW = FlowDefinition(
 # probes) the bolt11 stored on the invoice.
 #
 # While Dash ``payouts_enabled`` is false, Lightning is probe-only: no
-# WITHDRAW_LIGHTNING ledger is posted. Payment stages are optional so the
-# flow completes on settlement; they fill in when real payouts are enabled.
+# WITHDRAW_LIGHTNING ledger is posted. Net sats are parked on Asset
+# Dash Payment Tests (d_test_p). Payment stages are optional.
 #
 # Primary events (same short_id as trigger — invoice external_id / _id):
 #   1. dash_invoice op (trigger)
@@ -1170,6 +1170,13 @@ DASH_TO_LIGHTNING_FLOW = FlowDefinition(
             name="fee_income",
             event_type="ledger",
             ledger_type=LedgerType.FEE_INCOME,
+            group="primary",
+            required=False,
+        ),
+        FlowStage(
+            name="dash_test_pay",
+            event_type="ledger",
+            ledger_type=LedgerType.DASH_TEST_PAY,
             group="primary",
             required=False,
         ),

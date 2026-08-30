@@ -129,6 +129,7 @@ class AssetAccount(LedgerAccount):
         "Treasury Lightning",
         "Treasury Keepsats",
         "Treasury Dash",
+        "Dash Payment Tests",
         "Exchange Holdings",
         "Exchange Deposits Hive",
         "Exchange Deposits Lightning",

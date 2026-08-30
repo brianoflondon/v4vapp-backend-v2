@@ -91,7 +91,7 @@ class DashInvoiceEvent(TrackedBaseModel):
     @computed_field
     @property
     def short_id(self) -> str:
-        return self.external_id or self.invoice_id[:8]
+        return self.invoice_id[:8]
 
     @property
     def short_id_p(self) -> str:
