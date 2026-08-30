@@ -1,7 +1,10 @@
-"""Book settled Dash invoices onto the ledger.
+"""Book settled Dash invoices onto the ledger and probe/pay the bolt11.
 
-Callable from process_tracked_event later. Does not pay bolt11 and does not
-hook the Dash watcher.
+``process_dash_invoice`` is called from ``process_tracked_event`` when
+db_monitor sees a SETTLED/OVERPAID ``dash_invoices`` document.
+
+Lightning is sent with ``probe_only=True`` while Dash ``payouts_enabled`` is
+false (current config). Flip that flag to send the real payment.
 """
 
 from __future__ import annotations
@@ -22,15 +25,19 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryDuplicateException,
 )
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.exchange_process import rebalance_queue_task
 from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
 from v4vapp_backend_v2.dash.amounts import dash_from_duffs, to_decimal
 from v4vapp_backend_v2.dash.collections import COL_INVOICES
 from v4vapp_backend_v2.dash.models.invoice import DashInvoiceState
+from v4vapp_backend_v2.dash.settings import dash_connection
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import LNDPaymentError, send_lightning_to_pay_req
 
 ICON = "💠"
 OP_TYPE = "dash_invoice"
@@ -188,6 +195,142 @@ async def post_invoice_settlement(
         currency=Currency.DASH,
     )
 
+    return entries
+
+
+def lightning_probe_only() -> bool:
+    """True unless Dash connection has payouts_enabled.
+
+    Current config has ``payouts_enabled: false``, so Lightning is probe-only.
+    """
+    conn = dash_connection()
+    return conn is None or not conn.payouts_enabled
+
+
+def _is_probe_success(error: LNDPaymentError) -> bool:
+    text = str(error).upper()
+    return "INCORRECT_PAYMENT_DETAILS" in text
+
+
+async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
+    """Decode the invoice bolt11 and send (or probe) Lightning.
+
+    Probe-only while ``payouts_enabled`` is false. Failures are logged; Dash
+    settlement is not rolled back.
+    """
+    bolt11 = invoice_doc.get("lightning_invoice")
+    if not bolt11:
+        return
+    if invoice_doc.get("lightning_sent_at") or invoice_doc.get("lightning_probed_at"):
+        return
+
+    lnd_config = InternalConfig().config.lnd_config
+    if not lnd_config or not lnd_config.default:
+        logger.warning(
+            f"{ICON} skip lightning: LND not configured",
+            extra={"invoice_id": str(invoice_doc.get("_id"))},
+        )
+        return
+
+    invoice_id = str(invoice_doc["_id"])
+    short_id = str(invoice_doc.get("external_id") or invoice_id)
+    sats = to_decimal(invoice_doc.get("sats_credited") or invoice_doc.get("sats_requested") or 0)
+    amount_msat = sats * Decimal(1000)
+    probe_only = lightning_probe_only()
+    cust_id = str(invoice_doc.get("cust_id") or "")
+    db = InternalConfig.db if hasattr(InternalConfig, "db") else None
+
+    lnd_client = LNDClient(connection_name=lnd_config.default)
+    try:
+        pay_req = await decode_any_lightning_string(input=str(bolt11), lnd_client=lnd_client)
+        payment = await send_lightning_to_pay_req(
+            pay_req=pay_req,
+            lnd_client=lnd_client,
+            group_id=invoice_id,
+            cust_id=cust_id,
+            chat_message=f"Dash inbound {short_id}",
+            amount_msat=amount_msat,
+            probe_only=probe_only,
+        )
+        stamp = "lightning_probed_at" if probe_only else "lightning_sent_at"
+        await _stamp_lightning(db, invoice_doc, stamp)
+        logger.info(
+            f"{ICON} Lightning {'probe' if probe_only else 'payment'} "
+            f"{payment.status} for Dash {short_id}",
+            extra={"notification": False, "invoice_id": invoice_id, "probe_only": probe_only},
+        )
+    except LNDPaymentError as e:
+        if probe_only and _is_probe_success(e):
+            await _stamp_lightning(db, invoice_doc, "lightning_probed_at")
+            logger.info(
+                f"{ICON} Lightning probe reached destination for Dash {short_id}",
+                extra={"notification": False, "invoice_id": invoice_id, "error": str(e)},
+            )
+            return
+        logger.warning(
+            f"{ICON} Lightning {'probe' if probe_only else 'payment'} failed "
+            f"for Dash {short_id}: {e}",
+            extra={"notification": True, "invoice_id": invoice_id, "error": str(e)},
+        )
+    except LnurlException as e:
+        logger.warning(
+            f"{ICON} Could not decode lightning invoice for Dash {short_id}: {e}",
+            extra={"invoice_id": invoice_id, "error": str(e)},
+        )
+    except Exception as e:
+        logger.exception(
+            f"{ICON} Lightning send error for Dash {short_id}: {e}",
+            extra={"invoice_id": invoice_id, "error": str(e)},
+        )
+
+
+async def _stamp_lightning(db: Any, invoice_doc: dict[str, Any], field: str) -> None:
+    if db is None or invoice_doc.get("_id") is None:
+        return
+    try:
+        await db[COL_INVOICES].update_one(
+            {"_id": invoice_doc["_id"]},
+            {"$set": {field: datetime.now(tz=UTC)}},
+        )
+    except Exception as e:
+        logger.debug(f"{ICON} could not stamp {field}: {e}", extra={"notification": False})
+
+
+async def process_dash_invoice(event: Any) -> list[LedgerEntry]:
+    """Post settlement ledger entries then probe/pay the bolt11."""
+    from bson import ObjectId
+
+    from v4vapp_backend_v2.dash.models.tracked import DashInvoiceEvent
+
+    invoice_id = getattr(event, "invoice_id", None) or getattr(event, "group_id_p", None)
+    doc: dict[str, Any] | None = None
+    db = getattr(InternalConfig, "db", None)
+    if db is not None and invoice_id:
+        try:
+            doc = await db[COL_INVOICES].find_one({"_id": ObjectId(str(invoice_id))})
+        except Exception:
+            doc = None
+    if doc is None and isinstance(event, DashInvoiceEvent):
+        doc = {
+            "_id": invoice_id,
+            "external_id": event.external_id,
+            "cust_id": event.cust_id,
+            "state": event.state,
+            "network": event.network,
+            "memo": event.memo,
+            "lightning_invoice": event.lightning_invoice,
+            "sats_requested": event.sats_requested,
+            "sats_credited": event.sats_credited,
+            "duffs_received": event.duffs_received,
+            "quote": event.quote,
+            "settled_at": event.settled_at,
+        }
+    if not doc:
+        logger.warning(f"{ICON} process_dash_invoice: missing invoice document")
+        return []
+
+    entries = await post_invoice_settlement(doc, db=db)
+    await pay_dash_lightning(doc)
     return entries
 
 

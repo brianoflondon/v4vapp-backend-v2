@@ -490,9 +490,7 @@ class CryptoConv(BaseModel):
             return f"{self.msats:,.0f} msats"
         elif currency == Currency.BTC:
             return f"{self.btc:.8f} BTC"
-        elif currency == Currency.DASH:
-            return f"{self.dash:,.3f} DASH"
-        elif currency == Currency.DUFFS:
+        elif currency == Currency.DASH or currency == Currency.DUFFS:
             return f"{self.dash:,.3f} DASH"
 
         return f"{self.hive:.3f} HIVE"
@@ -510,6 +508,8 @@ class CryptoConv(BaseModel):
             return f"{self.hive:,.3f} HIVE / {self.sats:,.0f} sats ({self.sats_hive:,.0f})"
         elif self.conv_from == Currency.HBD:
             return f"{self.hbd:,.3f} HBD / {self.sats:,.0f} sats ({self.sats_hive:,.0f})"
+        elif self.conv_from in (Currency.DASH, Currency.DUFFS):
+            return f"{self.dash:,.3f} DASH / {self.sats:,.0f} sats"
         else:
             return f"{self.hive:,.3f} HIVE / {self.sats:,.0f} sats ({self.sats_hive:,.0f})"
 
