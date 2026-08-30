@@ -49,5 +49,6 @@ def test_tracked_any_filter_builds_dash_event():
     assert event.invoice_id == str(invoice_id)
     assert event.op_type == "dash_invoice"
     assert event.lightning_invoice == "lnbc250u1ptestinvoice"
-    assert event.short_id == str(invoice_id)[:8]
-    assert event.group_id_p == str(invoice_id)
+    assert event.address == "yDashAddress111"
+    assert event.group_id_p == "yDashAddress111"
+    assert event.short_id == "yDashAdd"
