@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from math import isclose
 from typing import Any, ClassVar
@@ -74,7 +74,7 @@ class CryptoConv(BaseModel):
         - 4999.5 -> 5000 (rounds UP)
         - 4999.6 -> 5000
         """
-        return self.sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return self.sats.quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
     @property
     def msats_rounded(self) -> Decimal:
@@ -91,12 +91,12 @@ class CryptoConv(BaseModel):
         - 4544449.5 -> 4544450  (rounds UP)
         - 4544449.839963 -> 4544450
         """
-        return self.msats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return self.msats.quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
     @property
     def duffs_rounded(self) -> Decimal:
         """Integer duffs for ledger amounts (ROUND_HALF_UP)."""
-        return self.duffs.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return self.duffs.quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
     @field_validator(
         "hive",
@@ -202,12 +202,12 @@ class CryptoConv(BaseModel):
                 data["hbd"] = data.get("value", value)
                 data["hive"] = data.get("converted_value", converted_value)
             data["source"] = "Hive Internal Trade"
-            data["fetch_date"] = data.get("fetch_date", timestamp) or datetime.now(tz=timezone.utc)
+            data["fetch_date"] = data.get("fetch_date", timestamp) or datetime.now(tz=UTC)
             quote = data.get("quote", quote)
             # TODO: #109 implement a way to look up historical quote
             if quote and quote.sats_usd > 0:
                 data["source"] = quote.source
-                data["fetch_date"] = quote.fetch_date or datetime.now(tz=timezone.utc)
+                data["fetch_date"] = quote.fetch_date or datetime.now(tz=UTC)
                 data["sats_hive"] = quote.sats_hive_p
                 data["sats_hbd"] = quote.sats_hbd_p
                 data["sats"] = Decimal(data["hive"]) * quote.sats_hive_p
@@ -605,7 +605,7 @@ class CryptoConversion(BaseModel):
     def __init__(
         self,
         amount: Amount | AmountPyd | None = None,
-        value: float | int | Decimal = Decimal(),
+        value: float | Decimal = Decimal(),
         conv_from: Currency | None = None,
         quote: QuoteResponse | None = None,
         **kwargs,
