@@ -22,10 +22,14 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 
 def test_dash_account_names_validate():
     treasury = AssetAccount(name="Treasury Dash", sub="dash-mainnet")
+    tests = AssetAccount(name="Dash Payment Tests", sub="devser.v4vapp")
     fee_income = RevenueAccount(name="Fee Income Dash", sub="dash-mainnet")
     fee_expense = ExpenseAccount(name="Fee Expenses Dash", sub="dash-mainnet")
     assert treasury.account_type == AccountType.ASSET
+    assert tests.account_type == AccountType.ASSET
     assert "Treasury Dash" in AssetAccount.allowed_names()
+    assert "Dash Payment Tests" in AssetAccount.allowed_names()
+    assert tests.sub == "devser.v4vapp"
     assert "Fee Income Dash" in RevenueAccount.allowed_names()
     assert "Fee Expenses Dash" in ExpenseAccount.allowed_names()
     assert treasury.sub == "dash-mainnet"
@@ -35,7 +39,9 @@ def test_dash_account_names_validate():
 
 def test_conv_dash_to_sats_ledger_type():
     assert LedgerType.CONV_DASH_TO_SATS.value == "d_conv_s"
+    assert LedgerType.DASH_TEST_PAY.value == "d_test_p"
     assert len(LedgerType.CONV_DASH_TO_SATS.value) <= 10
+    assert len(LedgerType.DASH_TEST_PAY.value) <= 10
     details = ledger_type_details_for_value("d_conv_s")
     assert details is not None
     assert details.ledger_type is LedgerType.CONV_DASH_TO_SATS

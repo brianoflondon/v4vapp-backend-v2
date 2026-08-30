@@ -73,6 +73,7 @@ class TestDashToLightningDefinition:
         assert "withdraw_lightning" in optional
         assert "fee_expense" in optional
         assert "fee_income" in optional
+        assert "dash_test_pay" in optional
 
 
 class TestDashToLightningProgress:

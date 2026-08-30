@@ -78,6 +78,15 @@ def fee_group_id(invoice_id: str) -> str:
     return f"{invoice_id}_{LedgerType.FEE_INCOME.value}"
 
 
+def park_group_id(invoice_id: str) -> str:
+    return f"{invoice_id}_{LedgerType.DASH_TEST_PAY.value}"
+
+
+def invoice_short_id(invoice_id: str) -> str:
+    """Ledger short_id is the first 8 chars of the invoice/group id."""
+    return str(invoice_id)[:8]
+
+
 def treasury_sub(network: str | None) -> str:
     return f"dash-{network or 'mainnet'}"
 
@@ -118,7 +127,7 @@ async def post_invoice_settlement(
     fee_sats = _fee_sats(invoice_doc)
     server_id = InternalConfig().server_id
     sub = treasury_sub(invoice_doc.get("network"))
-    short_id = str(invoice_doc.get("external_id") or invoice_id)
+    short_id = invoice_short_id(invoice_id)
     now = datetime.now(tz=UTC)
     memo = invoice_doc.get("memo") or ""
 
@@ -233,7 +242,7 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
         return
 
     invoice_id = str(invoice_doc["_id"])
-    short_id = str(invoice_doc.get("external_id") or invoice_id)
+    short_id = invoice_short_id(invoice_id)
     sats = to_decimal(invoice_doc.get("sats_credited") or invoice_doc.get("sats_requested") or 0)
     amount_msat = sats * Decimal(1000)
     probe_only = lightning_probe_only()
@@ -284,6 +293,56 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
         )
 
 
+async def park_dash_test_payment(invoice_doc: dict[str, Any]) -> LedgerEntry | None:
+    """Move net sats off VSC Liability onto Asset Dash Payment Tests (server).
+
+    Used when Lightning is probe-only (``payouts_enabled: false``) so test
+    inbound Dash does not accumulate on the server VSC Liability account.
+    """
+    invoice_id = str(invoice_doc.get("_id") or "")
+    if not invoice_id:
+        return None
+    existing = await LedgerEntry.load(park_group_id(invoice_id))
+    if existing is not None:
+        return existing
+
+    sats_credited = invoice_doc.get("sats_credited")
+    if sats_credited is None:
+        return None
+    net_msats = to_decimal(sats_credited) * Decimal(1000)
+    if net_msats <= 0:
+        return None
+
+    quote = quote_from_invoice_snapshot(invoice_doc["quote"])
+    park_conv = CryptoConversion(
+        conv_from=Currency.MSATS, value=net_msats, quote=quote
+    ).conversion
+    server_id = InternalConfig().server_id
+    short_id = invoice_short_id(invoice_id)
+    now = datetime.now(tz=UTC)
+    entry = LedgerEntry(
+        cust_id=server_id,
+        short_id=short_id,
+        op_type=OP_TYPE,
+        ledger_type=LedgerType.DASH_TEST_PAY,
+        group_id=park_group_id(invoice_id),
+        timestamp=invoice_doc.get("settled_at") or now,
+        description=(
+            f"Park {park_conv.sats_rounded:,.0f} sats on Dash Payment Tests "
+            f"after probe-only Lightning {short_id}"
+        ),
+        debit=LiabilityAccount(name="VSC Liability", sub=server_id),
+        debit_unit=Currency.MSATS,
+        debit_amount=park_conv.msats,
+        debit_conv=park_conv,
+        credit=AssetAccount(name="Dash Payment Tests", sub=server_id),
+        credit_unit=Currency.MSATS,
+        credit_amount=park_conv.msats,
+        credit_conv=park_conv,
+    )
+    return await _save_or_load(entry)
+
+
 async def _stamp_lightning(db: Any, invoice_doc: dict[str, Any], field: str) -> None:
     if db is None or invoice_doc.get("_id") is None:
         return
@@ -331,6 +390,10 @@ async def process_dash_invoice(event: Any) -> list[LedgerEntry]:
 
     entries = await post_invoice_settlement(doc, db=db)
     await pay_dash_lightning(doc)
+    if lightning_probe_only():
+        parked = await park_dash_test_payment(doc)
+        if parked is not None:
+            entries.append(parked)
     return entries
 
 
@@ -369,6 +432,9 @@ async def _load_posted(invoice_id: str) -> list[LedgerEntry]:
     fee = await LedgerEntry.load(fee_group_id(invoice_id))
     if fee is not None:
         entries.append(fee)
+    parked = await LedgerEntry.load(park_group_id(invoice_id))
+    if parked is not None:
+        entries.append(parked)
     return entries
 
 

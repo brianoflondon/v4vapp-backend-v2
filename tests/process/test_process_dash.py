@@ -16,8 +16,11 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.process.process_dash import (
     conv_group_id,
     fee_group_id,
+    invoice_short_id,
+    park_dash_test_payment,
     post_invoice_settlement,
     quote_from_invoice_snapshot,
+    park_group_id,
 )
 
 
@@ -141,6 +144,8 @@ async def test_settled_invoice_posts_conversion_and_fee(ledger_store: list[Ledge
     assert conv.debit.name == "Treasury Dash"
     assert conv.debit.sub == "dash-testnet"
     assert conv.credit.name == "VSC Liability"
+    assert conv.short_id == invoice_short_id(str(doc["_id"]))
+    assert len(conv.short_id) == 8
     assert conv.credit.sub != "hive-customer"
     assert conv.cust_id != "hive-customer"
     assert conv.debit_amount == Decimal(80000000)
@@ -342,6 +347,28 @@ async def test_pay_sends_when_payouts_enabled(monkeypatch: pytest.MonkeyPatch):
     doc = _settled_doc(lightning_invoice="lnbc250u1ptestinvoice")
     await pay_dash_lightning(doc)
     assert captured["probe_only"] is False
+
+
+@pytest.mark.asyncio
+async def test_park_moves_net_sats_to_dash_payment_tests(
+    ledger_store: list[LedgerEntry],
+):
+    from v4vapp_backend_v2.config.setup import InternalConfig
+
+    doc = _settled_doc()
+    entry = await park_dash_test_payment(doc)
+    assert entry is not None
+    assert entry.ledger_type is LedgerType.DASH_TEST_PAY
+    assert entry.group_id == park_group_id(str(doc["_id"]))
+    assert entry.short_id == invoice_short_id(str(doc["_id"]))
+    assert entry.debit.name == "VSC Liability"
+    assert entry.debit.sub == InternalConfig().server_id
+    assert entry.credit.name == "Dash Payment Tests"
+    assert entry.credit.sub == InternalConfig().server_id
+    assert entry.debit_amount == Decimal(25000) * Decimal(1000)
+    again = await park_dash_test_payment(doc)
+    assert again.group_id == entry.group_id
+    assert len(ledger_store) == 1
 
 
 @pytest.mark.asyncio
