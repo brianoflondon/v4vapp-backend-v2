@@ -10,6 +10,7 @@ on-chain or off-chain operation) and routes it to the appropriate handler:
   ``FillOrder``, ``CustomJson``) → :func:`~v4vapp_backend_v2.process.process_hive.process_hive_op`
 - **Inbound Lightning invoices** (``Invoice``) → :func:`process_lightning_invoice`
 - **Outbound Lightning payments** (``Payment``) → :func:`process_lightning_payment`
+- **Settled Dash invoices** (``DashInvoiceEvent``) → :func:`process_dash_invoice`
 - **Forward events** (``TrackedForwardEvent``) →
   :func:`~v4vapp_backend_v2.process.process_forward_events.process_forward`
 - **Witness events** (``ProducerReward``, ``ProducerMissed``) →
@@ -42,6 +43,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.dash.models.tracked import DashInvoiceEvent
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case
 from v4vapp_backend_v2.hive.hive_extras import HiveNotEnoughHiveInAccount
@@ -63,6 +65,7 @@ from v4vapp_backend_v2.models.payment_models import Payment, PaymentStatus
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
+from v4vapp_backend_v2.process.process_dash import process_dash_invoice
 from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError
 from v4vapp_backend_v2.process.process_forward_events import process_forward
 from v4vapp_backend_v2.process.process_hive import process_hive_op
@@ -199,6 +202,8 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
                     ledger_entries = await process_magi_btc_transfer_event(
                         magi_transfer=tracked_op
                     )
+                elif isinstance(tracked_op, DashInvoiceEvent):
+                    ledger_entries = await process_dash_invoice(tracked_op)
                 else:
                     logger.warning(
                         f"Unknown tracked object type: {type(tracked_op)}",

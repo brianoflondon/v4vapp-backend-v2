@@ -247,3 +247,109 @@ async def test_queue_dash_sell_calls_rebalance_with_dash_pair(monkeypatch: pytes
     assert captured["direction"] is RebalanceDirection.SELL_BASE_FOR_QUOTE
     assert captured["hive_qty"] == Decimal(1)
     assert captured["tracked_op"].cust_id == "server"
+
+
+@pytest.mark.asyncio
+async def test_pay_skips_when_no_bolt11(monkeypatch: pytest.MonkeyPatch):
+    from v4vapp_backend_v2.process.process_dash import pay_dash_lightning
+
+    called = False
+
+    async def boom(**_kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr("v4vapp_backend_v2.process.process_dash.decode_any_lightning_string", boom)
+    await pay_dash_lightning(_settled_doc())
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_pay_probes_when_payouts_disabled(monkeypatch: pytest.MonkeyPatch):
+    from v4vapp_backend_v2.lnd_grpc.lnd_functions import LNDPaymentError
+    from v4vapp_backend_v2.process.process_dash import (
+        lightning_probe_only,
+        pay_dash_lightning,
+    )
+
+    assert lightning_probe_only() is True
+    captured: dict[str, Any] = {}
+
+    class _PayReq:
+        value_msat = 25_000_000
+
+    async def fake_decode(**_kwargs):
+        return _PayReq()
+
+    async def fake_send(**kwargs):
+        captured.update(kwargs)
+        raise LNDPaymentError("lnbc FAILED: FAILURE_REASON_INCORRECT_PAYMENT_DETAILS")
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.decode_any_lightning_string",
+        fake_decode,
+    )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.send_lightning_to_pay_req",
+        fake_send,
+    )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.LNDClient",
+        lambda **_k: object(),
+    )
+    doc = _settled_doc(lightning_invoice="lnbc250u1ptestinvoice")
+    await pay_dash_lightning(doc)
+    assert captured["probe_only"] is True
+    assert captured["group_id"] == str(doc["_id"])
+    assert captured["amount_msat"] == Decimal(25_000_000)
+
+
+@pytest.mark.asyncio
+async def test_pay_sends_when_payouts_enabled(monkeypatch: pytest.MonkeyPatch):
+    from v4vapp_backend_v2.process.process_dash import pay_dash_lightning
+
+    captured: dict[str, Any] = {}
+
+    class _PayReq:
+        value_msat = 25_000_000
+
+    class _Payment:
+        status = "SUCCEEDED"
+
+    async def fake_decode(**_kwargs):
+        return _PayReq()
+
+    async def fake_send(**kwargs):
+        captured.update(kwargs)
+        return _Payment()
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.decode_any_lightning_string",
+        fake_decode,
+    )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.send_lightning_to_pay_req",
+        fake_send,
+    )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.LNDClient",
+        lambda **_k: object(),
+    )
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.lightning_probe_only",
+        lambda: False,
+    )
+    doc = _settled_doc(lightning_invoice="lnbc250u1ptestinvoice")
+    await pay_dash_lightning(doc)
+    assert captured["probe_only"] is False
+
+
+@pytest.mark.asyncio
+async def test_pay_skips_after_probe_stamp():
+    from v4vapp_backend_v2.process.process_dash import pay_dash_lightning
+
+    doc = _settled_doc(
+        lightning_invoice="lnbc250u1ptestinvoice",
+        lightning_probed_at=datetime.now(tz=UTC),
+    )
+    await pay_dash_lightning(doc)
