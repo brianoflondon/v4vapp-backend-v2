@@ -266,6 +266,7 @@ class DashConnectionConfig(BaseConfig):
     watch_batch: int = 500
     dust_duffs: Decimal = Decimal(5460)
     payouts_enabled: bool = False
+    lightning_payments_enabled: bool = False
     routing_fee_sats: Decimal = Decimal(300)
 
     @property

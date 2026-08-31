@@ -222,7 +222,7 @@ def lightning_probe_only() -> bool:
     Current config has ``payouts_enabled: false``, so Lightning is probe-only.
     """
     conn = dash_connection()
-    return conn is None or not conn.payouts_enabled
+    return conn is None or not conn.lightning_payments_enabled
 
 
 def _is_probe_success(error: LNDPaymentError) -> bool:
