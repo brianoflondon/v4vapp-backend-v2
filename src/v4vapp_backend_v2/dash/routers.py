@@ -10,11 +10,7 @@ from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DashConnectionConfig, logger
 from v4vapp_backend_v2.dash.amounts import to_decimal
 from v4vapp_backend_v2.dash.collections import COL_INVOICES, COL_PAYOUTS
-from v4vapp_backend_v2.dash.db.wallet_state import (
-    WalletStateMismatch,
-    allocate_receive_index,
-    load_wallet_state,
-)
+from v4vapp_backend_v2.dash.db.wallet_state import load_wallet_state
 from v4vapp_backend_v2.dash.errors import ApiError
 from v4vapp_backend_v2.dash.keys import load_mnemonic, load_xpub_material
 from v4vapp_backend_v2.dash.limits.check import check_cust_rate_limit
@@ -42,7 +38,7 @@ from v4vapp_backend_v2.dash.runtime import (
     watcher_info_from_state,
 )
 from v4vapp_backend_v2.dash.settings import default_min_conf
-from v4vapp_backend_v2.dash.wallet.hd import derive_receive
+from v4vapp_backend_v2.dash.wallet.allocate import allocate_empty_receive
 from v4vapp_backend_v2.dash.wallet.snapshot import wallet_snapshot
 from v4vapp_backend_v2.dash.watcher.loop import WatcherState
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
@@ -187,15 +183,14 @@ async def create_invoice(
     if body.cust_id:
         await check_cust_rate_limit(db, cust_id=body.cust_id, extra_sats=body.sats)
 
-    try:
-        index = await allocate_receive_index(db, conn.network)
-    except WalletStateMismatch as exc:
-        raise ApiError(503, "wallet_unavailable", str(exc)) from exc
-
-    if index >= conn.descriptor_range_end:
-        raise ApiError(503, "index_exhausted", "receive index is past the descriptor range")
-
-    address, derivation = derive_receive(material.account_xpub, conn.network, index)
+    async with dashd_session(conn, getattr(request.app.state, "dashd", None)) as dashd:
+        index, address, derivation = await allocate_empty_receive(
+            db,
+            dashd,
+            network=conn.network,
+            account_xpub=material.account_xpub,
+            range_end=conn.descriptor_range_end,
+        )
     now = datetime.now(UTC)
     expires_at = now + timedelta(seconds=body.expires_in_s)
     settle_deadline_at = expires_at + timedelta(seconds=conn.settle_grace_s)
@@ -417,9 +412,7 @@ async def get_wallet(
     conn = _conn(request)
     db = _db(request)
     async with dashd_session(conn, getattr(request.app.state, "dashd", None)) as dashd:
-        return await wallet_snapshot(
-            db=db, dashd=dashd, conn=conn, include_utxos=include_utxos
-        )
+        return await wallet_snapshot(db=db, dashd=dashd, conn=conn, include_utxos=include_utxos)
 
 
 @router.post(
@@ -436,9 +429,7 @@ async def get_wallet(
         422: {
             "description": "Invalid address, both/neither amount fields, or insufficient funds."
         },
-        503: {
-            "description": "Payouts disabled, mnemonic missing/mismatch, or dashd error."
-        },
+        503: {"description": "Payouts disabled, mnemonic missing/mismatch, or dashd error."},
     },
 )
 async def create_payout(
