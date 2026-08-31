@@ -324,6 +324,7 @@ async def test_pay_probes_when_payouts_disabled(monkeypatch: pytest.MonkeyPatch)
     assert captured["probe_only"] is True
     assert captured["group_id"] == invoice_group_key(doc)
     assert captured["amount_msat"] == Decimal(25_000_000)
+    assert captured["cust_id"] == doc["cust_id"]
 
 
 @pytest.mark.asyncio
@@ -366,6 +367,7 @@ async def test_pay_sends_when_payouts_enabled(monkeypatch: pytest.MonkeyPatch):
     probed = await pay_dash_lightning(doc)
     assert probed is False
     assert captured["probe_only"] is False
+    assert captured["cust_id"] == doc["cust_id"]
 
 
 @pytest.mark.asyncio

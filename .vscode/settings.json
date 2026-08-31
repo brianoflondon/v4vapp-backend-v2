@@ -75,13 +75,7 @@
         "xpub"
     ],
     "python.testing.pytestArgs": [
-        "tests",
-        "-rs",
-        "--capture=no",
-        "--verbose",
-        // "--disable-warnings",
-        "--log-level=INFO",
-        "--log-cli-level=INFO"
+        "tests"
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,

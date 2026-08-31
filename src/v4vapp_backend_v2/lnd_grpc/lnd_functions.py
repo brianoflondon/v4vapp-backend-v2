@@ -263,7 +263,7 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
             if e.args[1]._details == "unable to find node":
                 logger.warning(f"{client.icon} get_node_info: {pub_key} not found")
                 return lnrpc.NodeInfo()
-        except Exception:
+        except Exception: #noqa: S110
             pass
         logger.exception(e)
         return lnrpc.NodeInfo()
