@@ -166,6 +166,9 @@ class Dashd:
             raise DashdError("gettransaction returned a non-object")
         return result
 
+    async def getrawtransaction(self, txid: str, verbose: bool = True) -> Any:
+        return await self.node("getrawtransaction", txid, verbose)
+
     async def validateaddress(self, address: str) -> dict[str, Any]:
         result = await self.node("validateaddress", address)
         if not isinstance(result, dict):
