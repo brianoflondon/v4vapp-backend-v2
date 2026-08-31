@@ -99,6 +99,19 @@ def treasury_sub(network: str | None) -> str:
     return f"dash-{network or 'mainnet'}"
 
 
+DASH_CUST_PREFIX = "dash_"
+
+
+def dash_ledger_cust_id(cust_id: str | None) -> str:
+    """VSC Liability sub for a Dash payment. API cust_id is stored as-is; prefix once here."""
+    text = str(cust_id or "").strip()
+    if not text:
+        return InternalConfig().server_id
+    if text.startswith(DASH_CUST_PREFIX):
+        return text
+    return f"{DASH_CUST_PREFIX}{text}"
+
+
 async def post_invoice_settlement(
     invoice_doc: dict[str, Any],
     *,
@@ -106,9 +119,9 @@ async def post_invoice_settlement(
 ) -> list[LedgerEntry]:
     """Post CONV_DASH_TO_SATS (and fee income) for a settled Dash invoice.
 
-    Credit VSC Liability (server) only — invoice cust_id is not a ledger owner.
-    Duplicate group_id is treated as success. Optional ``db`` stamps
-    ``ledger_posted_at`` / ``ledger_group_id`` on the invoice document.
+    Credit VSC Liability / ``dash_<invoice cust_id>`` so Lightning withdraw can
+    spend from the same sub. Duplicate group_id is treated as success.
+    Optional ``db`` stamps ``ledger_posted_at`` / ``ledger_group_id``.
     """
     state = str(invoice_doc.get("state") or "")
     if state not in SETTLED_STATES:
@@ -134,14 +147,14 @@ async def post_invoice_settlement(
         conv_from=Currency.DUFFS, value=duffs_received, quote=quote
     ).conversion
     fee_sats = _fee_sats(invoice_doc)
-    server_id = InternalConfig().server_id
+    ledger_cust = dash_ledger_cust_id(invoice_doc.get("cust_id"))
     sub = treasury_sub(invoice_doc.get("network"))
     short_id = invoice_short_id(group_key)
     now = datetime.now(tz=UTC)
     memo = invoice_doc.get("memo") or ""
 
     conv_entry = LedgerEntry(
-        cust_id=server_id,
+        cust_id=ledger_cust,
         short_id=short_id,
         op_type=OP_TYPE,
         ledger_type=LedgerType.CONV_DASH_TO_SATS,
@@ -155,7 +168,7 @@ async def post_invoice_settlement(
         debit_unit=Currency.DUFFS,
         debit_amount=dash_conv.duffs,
         debit_conv=dash_conv,
-        credit=LiabilityAccount(name="VSC Liability", sub=server_id),
+        credit=LiabilityAccount(name="VSC Liability", sub=ledger_cust),
         credit_unit=Currency.MSATS,
         credit_amount=dash_conv.msats,
         credit_conv=dash_conv,
@@ -168,14 +181,14 @@ async def post_invoice_settlement(
             conv_from=Currency.MSATS, value=fee_msats, quote=quote
         ).conversion
         fee_entry = LedgerEntry(
-            cust_id=server_id,
+            cust_id=ledger_cust,
             short_id=short_id,
             op_type=OP_TYPE,
             ledger_type=LedgerType.FEE_INCOME,
             group_id=fee_group_id(group_key),
             timestamp=invoice_doc.get("settled_at") or now,
             description=f"Fee income {fee_sats:,.0f} sats on Dash inbound {short_id}",
-            debit=LiabilityAccount(name="VSC Liability", sub=server_id),
+            debit=LiabilityAccount(name="VSC Liability", sub=ledger_cust),
             debit_unit=Currency.MSATS,
             debit_amount=fee_conv.msats,
             debit_conv=fee_conv,
@@ -209,7 +222,7 @@ async def post_invoice_settlement(
         duffs_received=duffs_received,
         invoice_id=group_key,
         short_id=short_id,
-        server_id=server_id,
+        server_id=InternalConfig().server_id,
         currency=Currency.DASH,
     )
 
@@ -266,7 +279,7 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> bool:
     short_id = invoice_short_id(group_key)
     sats = to_decimal(invoice_doc.get("sats_credited") or invoice_doc.get("sats_requested") or 0)
     amount_msat = sats * Decimal(1000)
-    cust_id = str(invoice_doc.get("cust_id") or "")
+    cust_id = dash_ledger_cust_id(invoice_doc.get("cust_id"))
     db = InternalConfig.db if hasattr(InternalConfig, "db") else None
 
     lnd_client = LNDClient(connection_name=lnd_config.default)
@@ -342,11 +355,11 @@ async def park_dash_test_payment(invoice_doc: dict[str, Any]) -> LedgerEntry | N
 
     quote = quote_from_invoice_snapshot(invoice_doc["quote"])
     park_conv = CryptoConversion(conv_from=Currency.MSATS, value=net_msats, quote=quote).conversion
-    server_id = InternalConfig().server_id
+    ledger_cust = dash_ledger_cust_id(invoice_doc.get("cust_id"))
     short_id = invoice_short_id(group_key)
     now = datetime.now(tz=UTC)
     entry = LedgerEntry(
-        cust_id=server_id,
+        cust_id=ledger_cust,
         short_id=short_id,
         op_type=OP_TYPE,
         ledger_type=LedgerType.DASH_TEST_PAY,
@@ -356,11 +369,11 @@ async def park_dash_test_payment(invoice_doc: dict[str, Any]) -> LedgerEntry | N
             f"Park {park_conv.sats_rounded:,.0f} sats on Dash Payment Tests "
             f"after probe-only Lightning {short_id}"
         ),
-        debit=LiabilityAccount(name="VSC Liability", sub=server_id),
+        debit=LiabilityAccount(name="VSC Liability", sub=ledger_cust),
         debit_unit=Currency.MSATS,
         debit_amount=park_conv.msats,
         debit_conv=park_conv,
-        credit=AssetAccount(name="Dash Payment Tests", sub=server_id),
+        credit=AssetAccount(name="Dash Payment Tests", sub=ledger_cust),
         credit_unit=Currency.MSATS,
         credit_amount=park_conv.msats,
         credit_conv=park_conv,
