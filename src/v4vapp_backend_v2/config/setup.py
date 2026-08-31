@@ -238,6 +238,10 @@ class LndConfig(BaseConfig):
             return None
         return self.connections.get(conn_name)
 
+    def default_connection_config(self) -> LndConnectionConfig | None:
+        """Return the default connection config, or None if not set."""
+        return self.connection_config(self.default)
+
 
 DashNetwork = Literal["mainnet", "testnet", "regtest"]
 DashSettlePolicy = Literal["instantsend_or_chainlock", "conf_n"]
@@ -602,9 +606,9 @@ class HiveConfig(BaseConfig):
         for name, acc in self.hive_accs.items():
             acc.name = name
         if self.custom_json_prefix:
-            self.custom_json_ids_tracked.extend(
-                [f"{self.custom_json_prefix}{suffix}" for suffix in ["_transfer", "_notification"]]
-            )
+            self.custom_json_ids_tracked.extend([
+                f"{self.custom_json_prefix}{suffix}" for suffix in ["_transfer", "_notification"]
+            ])
         filter_duplicates = set(self.custom_json_ids_tracked)
         self.custom_json_ids_tracked = list(filter_duplicates)
         # TODO: #306 We can check that the auto_rebalance account (if set) is an exchange account
@@ -1724,6 +1728,19 @@ class InternalConfig:
         """
         if self.config.lnd_config.default:
             return self.config.lnd_config.default
+        return ""
+
+    @property
+    def node_pubkey(self) -> str:
+        """
+        Retrieve the default Lightning node public key from the configuration.
+
+        Returns:
+            str: The node public key, which is the public key of the LND node.
+        """
+        lnd_config = self.config.lnd_config.default_connection_config()
+        if lnd_config:
+            return lnd_config.pub_key
         return ""
 
     @property

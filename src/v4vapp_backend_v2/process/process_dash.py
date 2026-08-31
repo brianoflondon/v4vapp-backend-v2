@@ -216,13 +216,18 @@ async def post_invoice_settlement(
     return entries
 
 
-def lightning_probe_only() -> bool:
+def lightning_probe_only(destination: str) -> bool:
     """True unless Dash connection has payouts_enabled.
 
     Current config has ``payouts_enabled: false``, so Lightning is probe-only.
+    Also check for self payment in development mode.
     """
     conn = dash_connection()
-    return conn is None or not conn.lightning_payments_enabled
+    if conn is None or not conn.lightning_payments_enabled:
+        return True
+    if InternalConfig().node_pubkey and destination != InternalConfig().node_pubkey:
+        return True
+    return True
 
 
 def _is_probe_success(error: LNDPaymentError) -> bool:
@@ -255,13 +260,13 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
     short_id = invoice_short_id(group_key)
     sats = to_decimal(invoice_doc.get("sats_credited") or invoice_doc.get("sats_requested") or 0)
     amount_msat = sats * Decimal(1000)
-    probe_only = lightning_probe_only()
     cust_id = str(invoice_doc.get("cust_id") or "")
     db = InternalConfig.db if hasattr(InternalConfig, "db") else None
 
     lnd_client = LNDClient(connection_name=lnd_config.default)
     try:
         pay_req = await decode_any_lightning_string(input=str(bolt11), lnd_client=lnd_client)
+        probe_only = lightning_probe_only(pay_req.destination)
         payment = await send_lightning_to_pay_req(
             pay_req=pay_req,
             lnd_client=lnd_client,
@@ -324,9 +329,7 @@ async def park_dash_test_payment(invoice_doc: dict[str, Any]) -> LedgerEntry | N
         return None
 
     quote = quote_from_invoice_snapshot(invoice_doc["quote"])
-    park_conv = CryptoConversion(
-        conv_from=Currency.MSATS, value=net_msats, quote=quote
-    ).conversion
+    park_conv = CryptoConversion(conv_from=Currency.MSATS, value=net_msats, quote=quote).conversion
     server_id = InternalConfig().server_id
     short_id = invoice_short_id(group_key)
     now = datetime.now(tz=UTC)
