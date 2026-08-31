@@ -30,8 +30,19 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.exchange_process import rebalance_queue_task
 from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
 from v4vapp_backend_v2.dash.amounts import dash_from_duffs, to_decimal
-from v4vapp_backend_v2.dash.collections import COL_INVOICES
+from v4vapp_backend_v2.dash.collections import COL_INVOICES, COL_PAYOUTS
+from v4vapp_backend_v2.dash.errors import ApiError
 from v4vapp_backend_v2.dash.models.invoice import DashInvoiceState
+from v4vapp_backend_v2.dash.models.payout import PayoutCreate
+from v4vapp_backend_v2.dash.payouts.send import broadcast_payout, persistable_payout
+from v4vapp_backend_v2.dash.refund import (
+    REFUND_FEE_SATS,
+    first_funding_txid,
+    funding_sender_address,
+    refund_duffs,
+    refund_payout_external_id,
+)
+from v4vapp_backend_v2.dash.runtime import dashd_session
 from v4vapp_backend_v2.dash.settings import dash_connection
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
@@ -42,6 +53,19 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import LNDPaymentError, send_light
 ICON = "💠"
 OP_TYPE = "dash_invoice"
 SETTLED_STATES = {DashInvoiceState.SETTLED.value, DashInvoiceState.OVERPAID.value}
+
+
+@dataclass
+class DashLightningResult:
+    """Outcome of the bolt11 send/probe so settlement can refund or park."""
+
+    probe_only: bool = False
+    paid: bool = False
+    attempted: bool = False
+
+    @property
+    def should_refund(self) -> bool:
+        return self.attempted and not self.paid
 
 
 @dataclass(frozen=True)
@@ -88,6 +112,14 @@ def fee_group_id(group_key: str) -> str:
 
 def park_group_id(group_key: str) -> str:
     return f"{group_key}_{LedgerType.DASH_TEST_PAY.value}"
+
+
+def refund_group_id(group_key: str) -> str:
+    return f"{group_key}_{LedgerType.DASH_REFUND.value}"
+
+
+def fail_fee_group_id(group_key: str) -> str:
+    return f"{group_key}_{LedgerType.DASH_FAIL_FEE.value}"
 
 
 def invoice_short_id(group_key: str) -> str:
@@ -252,19 +284,18 @@ def _is_probe_success(error: LNDPaymentError) -> bool:
     return "INCORRECT_PAYMENT_DETAILS" in text
 
 
-async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> bool:
+async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> DashLightningResult:
     """Decode the invoice bolt11 and send (or probe) Lightning.
 
-    Returns True when the attempt was probe-only (caller should park leftover
-    sats). Failures are logged; Dash settlement is not rolled back.
+    Probe-only and terminal send failures are not paid; the caller refunds Dash.
     """
     bolt11 = invoice_doc.get("lightning_invoice")
     if not bolt11:
-        return lightning_probe_only()
+        return DashLightningResult()
     if invoice_doc.get("lightning_sent_at"):
-        return False
+        return DashLightningResult(paid=True, attempted=True)
     if invoice_doc.get("lightning_probed_at"):
-        return True
+        return DashLightningResult(probe_only=True, attempted=True)
 
     lnd_config = InternalConfig().config.lnd_config
     if not lnd_config or not lnd_config.default:
@@ -272,7 +303,7 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> bool:
             f"{ICON} skip lightning: LND not configured",
             extra={"invoice_id": str(invoice_doc.get("_id"))},
         )
-        return True
+        return DashLightningResult()
 
     invoice_id = str(invoice_doc["_id"])
     group_key = invoice_group_key(invoice_doc)
@@ -304,7 +335,8 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> bool:
             f"{payment.status} for Dash {short_id}",
             extra={"notification": False, "invoice_id": invoice_id, "probe_only": probe_only},
         )
-        return probe_only
+        paid = (not probe_only) and str(getattr(payment, "status", "")).upper() == "SUCCEEDED"
+        return DashLightningResult(probe_only=probe_only, paid=paid, attempted=True)
     except LNDPaymentError as e:
         if probe_only and _is_probe_success(e):
             await _stamp_lightning(db, invoice_doc, "lightning_probed_at")
@@ -312,25 +344,194 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> bool:
                 f"{ICON} Lightning probe reached destination for Dash {short_id}",
                 extra={"notification": False, "invoice_id": invoice_id, "error": str(e)},
             )
-            return True
+            return DashLightningResult(probe_only=True, attempted=True)
         logger.warning(
             f"{ICON} Lightning {'probe' if probe_only else 'payment'} failed "
             f"for Dash {short_id}: {e}",
             extra={"notification": True, "invoice_id": invoice_id, "error": str(e)},
         )
-        return probe_only
+        stamp = "lightning_probed_at" if probe_only else None
+        if stamp:
+            await _stamp_lightning(db, invoice_doc, stamp)
+        return DashLightningResult(probe_only=probe_only, attempted=True)
     except LnurlException as e:
         logger.warning(
             f"{ICON} Could not decode lightning invoice for Dash {short_id}: {e}",
             extra={"invoice_id": invoice_id, "error": str(e)},
         )
-        return True
+        return DashLightningResult(attempted=True)
     except Exception as e:
         logger.exception(
             f"{ICON} Lightning send error for Dash {short_id}: {e}",
             extra={"invoice_id": invoice_id, "error": str(e)},
         )
-        return True
+        return DashLightningResult(attempted=True)
+
+
+async def refund_failed_lightning(invoice_doc: dict[str, Any]) -> list[LedgerEntry]:
+    """Send received Dash minus 100 sats back to the funding address; clear SATS liability."""
+    group_key = invoice_group_key(invoice_doc)
+    if not group_key or invoice_doc.get("lightning_refunded_at"):
+        return []
+    existing = await LedgerEntry.load(refund_group_id(group_key))
+    if existing is not None:
+        return [existing]
+
+    dest_duffs = refund_duffs(invoice_doc)
+    if dest_duffs <= 0:
+        logger.warning(
+            f"{ICON} Dash refund skipped: nothing left after {REFUND_FEE_SATS} sat fee",
+            extra={"invoice_id": str(invoice_doc.get("_id"))},
+        )
+        return []
+
+    conn = dash_connection()
+    db = getattr(InternalConfig, "db", None)
+    if conn is None or db is None:
+        logger.warning(f"{ICON} Dash refund skipped: Dash RPC or Mongo not configured")
+        return []
+
+    invoice_id = str(invoice_doc.get("_id") or "")
+    our_address = str(invoice_doc.get("address") or "")
+    txid = first_funding_txid(invoice_doc)
+    if not txid or not our_address:
+        logger.warning(
+            f"{ICON} Dash refund skipped: missing funding txid or address",
+            extra={"invoice_id": invoice_id},
+        )
+        return []
+
+    ledger_cust = dash_ledger_cust_id(invoice_doc.get("cust_id"))
+    short_id = invoice_short_id(group_key)
+    quote = quote_from_invoice_snapshot(invoice_doc["quote"])
+    now = datetime.now(tz=UTC)
+    sub = treasury_sub(invoice_doc.get("network"))
+    fail_fee_msats = REFUND_FEE_SATS * Decimal(1000)
+    remaining_msats = to_decimal(invoice_doc.get("sats_credited") or 0) * Decimal(1000)
+    if remaining_msats <= fail_fee_msats:
+        logger.warning(
+            f"{ICON} Dash refund skipped: credited sats cannot cover {REFUND_FEE_SATS} sat fee",
+            extra={"invoice_id": invoice_id},
+        )
+        return []
+
+    try:
+        async with dashd_session(conn) as dashd:
+            reply_to = await funding_sender_address(dashd, txid=txid, our_address=our_address)
+            if not reply_to:
+                logger.warning(
+                    f"{ICON} Dash refund skipped: could not resolve sender for {txid}",
+                    extra={"invoice_id": invoice_id},
+                )
+                return []
+            try:
+                info = await dashd.validateaddress(reply_to)
+                address_valid = bool(info.get("isvalid"))
+            except Exception:
+                address_valid = reply_to.startswith(("y", "X"))
+            body = PayoutCreate(
+                external_id=refund_payout_external_id(invoice_id),
+                address=reply_to,
+                duffs=dest_duffs,
+                subtract_fee=False,
+                cust_id=ledger_cust,
+                memo=f"LN fail refund {short_id}",
+            )
+            extra = await broadcast_payout(
+                db=db,
+                dashd=dashd,
+                conn=conn,
+                body=body,
+                dest_duffs=dest_duffs,
+                address_valid=address_valid,
+            )
+    except ApiError as exc:
+        logger.warning(
+            f"{ICON} Dash refund payout failed for {short_id}: {exc}",
+            extra={"invoice_id": invoice_id, "error": str(exc)},
+        )
+        return []
+
+    pay_doc = persistable_payout(
+        body=body,
+        network=conn.network,
+        dest_duffs=dest_duffs,
+        sats=None,
+        extra=extra,
+    )
+    try:
+        await db[COL_PAYOUTS].insert_one(pay_doc)
+    except Exception as exc:
+        logger.warning(f"{ICON} Dash refund payout doc not stored: {exc}")
+
+    fee_conv = CryptoConversion(
+        conv_from=Currency.MSATS, value=fail_fee_msats, quote=quote
+    ).conversion
+    refund_sats_msats = remaining_msats - fail_fee_msats
+    refund_conv = CryptoConversion(
+        conv_from=Currency.MSATS, value=refund_sats_msats, quote=quote
+    ).conversion
+    entries: list[LedgerEntry] = []
+    fee_entry = LedgerEntry(
+        cust_id=ledger_cust,
+        short_id=short_id,
+        op_type=OP_TYPE,
+        ledger_type=LedgerType.DASH_FAIL_FEE,
+        group_id=fail_fee_group_id(group_key),
+        timestamp=now,
+        description=(
+            f"Keep {REFUND_FEE_SATS:,.0f} sats of Dash after Lightning failed {short_id}"
+        ),
+        debit=LiabilityAccount(name="VSC Liability", sub=ledger_cust),
+        debit_unit=Currency.MSATS,
+        debit_amount=fee_conv.msats,
+        debit_conv=fee_conv,
+        credit=RevenueAccount(name="Fee Income Dash", sub=sub),
+        credit_unit=Currency.MSATS,
+        credit_amount=fee_conv.msats,
+        credit_conv=fee_conv,
+    )
+    entries.append(await _save_or_load(fee_entry))
+    refund_entry = LedgerEntry(
+        cust_id=ledger_cust,
+        short_id=short_id,
+        op_type=OP_TYPE,
+        ledger_type=LedgerType.DASH_REFUND,
+        group_id=refund_group_id(group_key),
+        timestamp=now,
+        description=(
+            f"Refund {refund_conv.formatted_amount(Currency.DASH)} after Lightning "
+            f"failed {short_id} to {reply_to}"
+        ),
+        debit=LiabilityAccount(name="VSC Liability", sub=ledger_cust),
+        debit_unit=Currency.MSATS,
+        debit_amount=refund_conv.msats,
+        debit_conv=refund_conv,
+        credit=AssetAccount(name="Treasury Dash", sub=sub),
+        credit_unit=Currency.DUFFS,
+        credit_amount=refund_conv.duffs,
+        credit_conv=refund_conv,
+    )
+    entries.append(await _save_or_load(refund_entry))
+    await _stamp_lightning(
+        db,
+        invoice_doc,
+        "lightning_refunded_at",
+        extra={
+            "refund_txid": extra.get("txid"),
+            "refund_address": reply_to,
+            "refund_duffs": int(dest_duffs),
+        },
+    )
+    logger.info(
+        f"{ICON} Dash refund {dest_duffs:,.0f} duffs to {reply_to} after Lightning fail {short_id}",
+        extra={
+            "invoice_id": invoice_id,
+            "refund_txid": extra.get("txid"),
+            "notification": True,
+        },
+    )
+    return entries
 
 
 async def park_dash_test_payment(invoice_doc: dict[str, Any]) -> LedgerEntry | None:
@@ -381,13 +582,21 @@ async def park_dash_test_payment(invoice_doc: dict[str, Any]) -> LedgerEntry | N
     return await _save_or_load(entry)
 
 
-async def _stamp_lightning(db: Any, invoice_doc: dict[str, Any], field: str) -> None:
+async def _stamp_lightning(
+    db: Any,
+    invoice_doc: dict[str, Any],
+    field: str,
+    extra: dict[str, Any] | None = None,
+) -> None:
     if db is None or invoice_doc.get("_id") is None:
         return
+    payload: dict[str, Any] = {field: datetime.now(tz=UTC)}
+    if extra:
+        payload.update(extra)
     try:
         await db[COL_INVOICES].update_one(
             {"_id": invoice_doc["_id"]},
-            {"$set": {field: datetime.now(tz=UTC)}},
+            {"$set": payload},
         )
     except Exception as e:
         logger.debug(f"{ICON} could not stamp {field}: {e}", extra={"notification": False})
@@ -435,11 +644,15 @@ async def process_dash_invoice(event: Any) -> list[LedgerEntry]:
         return []
 
     entries = await post_invoice_settlement(doc, db=db)
-    probed = await pay_dash_lightning(doc)
-    if probed:
-        parked = await park_dash_test_payment(doc)
-        if parked is not None:
-            entries.append(parked)
+    ln = await pay_dash_lightning(doc)
+    if ln.should_refund:
+        refunded = await refund_failed_lightning(doc)
+        if refunded:
+            entries.extend(refunded)
+        else:
+            parked = await park_dash_test_payment(doc)
+            if parked is not None:
+                entries.append(parked)
     return entries
 
 
@@ -481,6 +694,12 @@ async def _load_posted(invoice_id: str) -> list[LedgerEntry]:
     parked = await LedgerEntry.load(park_group_id(invoice_id))
     if parked is not None:
         entries.append(parked)
+    refunded = await LedgerEntry.load(refund_group_id(invoice_id))
+    if refunded is not None:
+        entries.append(refunded)
+    fail_fee = await LedgerEntry.load(fail_fee_group_id(invoice_id))
+    if fail_fee is not None:
+        entries.append(fail_fee)
     return entries
 
 

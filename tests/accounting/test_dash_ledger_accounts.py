@@ -40,8 +40,12 @@ def test_dash_account_names_validate():
 def test_conv_dash_to_sats_ledger_type():
     assert LedgerType.CONV_DASH_TO_SATS.value == "d_conv_s"
     assert LedgerType.DASH_TEST_PAY.value == "d_test_p"
+    assert LedgerType.DASH_REFUND.value == "d_refund"
+    assert LedgerType.DASH_FAIL_FEE.value == "d_fail_f"
     assert len(LedgerType.CONV_DASH_TO_SATS.value) <= 10
     assert len(LedgerType.DASH_TEST_PAY.value) <= 10
+    assert len(LedgerType.DASH_REFUND.value) <= 10
+    assert len(LedgerType.DASH_FAIL_FEE.value) <= 10
     details = ledger_type_details_for_value("d_conv_s")
     assert details is not None
     assert details.ledger_type is LedgerType.CONV_DASH_TO_SATS

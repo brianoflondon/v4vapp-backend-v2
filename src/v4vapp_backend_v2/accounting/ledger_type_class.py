@@ -27,6 +27,8 @@ class LedgerType(StrEnum):
     CONV_KEEPSATS_TO_HIVE = "k_conv_h"  # Conversion from Keepsats to Hive
     CONV_DASH_TO_SATS = "d_conv_s"  # Conversion from treasury Dash to sats payable
     DASH_TEST_PAY = "d_test_p"  # Park sats after a probe-only Dash lightning attempt
+    DASH_REFUND = "d_refund"  # Return Dash after Lightning payout failed
+    DASH_FAIL_FEE = "d_fail_f"  # 100 sat equivalent retained on failed Lightning payout
 
     # These two are deprecated; need new test data.
     WITHDRAW_HIVE = "withdraw_h"  # Withdrawal to a customer's liability account
@@ -127,10 +129,12 @@ class LedgerHierarchy:
         LedgerType.DEPOSIT_HIVE,
         LedgerType.DEPOSIT_LIGHTNING,
         LedgerType.WITHDRAW_LIGHTNING,
+        LedgerType.DASH_REFUND,
     ]
     fees = [
         LedgerType.FEE_INCOME,
         LedgerType.FEE_EXPENSE,
+        LedgerType.DASH_FAIL_FEE,
         LedgerType.CUSTOM_JSON_FEE,
         LedgerType.CUSTOM_JSON_FEE_REFUND,
     ]
@@ -167,6 +171,8 @@ LedgerTypeIcon: dict[LedgerType, str] = {
     LedgerType.CONV_CUSTOMER: "🔄",  # Conversion from Keepsats to Hive
     LedgerType.CONV_DASH_TO_SATS: "💠",  # Treasury Dash inbound conversion to sats
     LedgerType.DASH_TEST_PAY: "🧪",  # Probe-only Dash lightning park
+    LedgerType.DASH_REFUND: "↩️",  # Return Dash after Lightning payout failed
+    LedgerType.DASH_FAIL_FEE: "💵",  # Failure fee on Dash refund
     LedgerType.RECLASSIFY_VSC_HIVE: "🔄",  # Reclassify VSC Liability (server) balance
     LedgerType.RECLASSIFY_VSC_SATS: "🔄",  # Reclassify VSC Sats (server) balance
     LedgerType.OPENING_BALANCE: "📂",  # Opening balance entry
@@ -183,6 +189,8 @@ LedgerTypeStr: dict[LedgerType, str] = {
     LedgerType.CONV_CUSTOMER: "Conversion",  # Conversion to/from Keepsats to Hive
     LedgerType.CONV_DASH_TO_SATS: "Dash Conversion",
     LedgerType.DASH_TEST_PAY: "Dash Test Pay",
+    LedgerType.DASH_REFUND: "Dash Refund",
+    LedgerType.DASH_FAIL_FEE: "Dash Fail Fee",
     LedgerType.CUSTOMER_HIVE_OUT: "Withdraw",  # Customer withdrawal from Hive account
     LedgerType.CUSTOMER_HIVE_IN: "Deposit",  # Customer deposit into Hive
     LedgerType.WITHDRAW_LIGHTNING: "Send",  # Withdrawal to send to lightning invoice

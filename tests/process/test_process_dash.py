@@ -281,8 +281,10 @@ async def test_pay_skips_when_no_bolt11(monkeypatch: pytest.MonkeyPatch):
         called = True
 
     monkeypatch.setattr("v4vapp_backend_v2.process.process_dash.decode_any_lightning_string", boom)
-    await pay_dash_lightning(_settled_doc())
+    result = await pay_dash_lightning(_settled_doc())
     assert called is False
+    assert result.should_refund is False
+    assert result.attempted is False
 
 
 OUR_PUBKEY = "02" + "ab" * 32
@@ -332,8 +334,9 @@ async def test_pay_probes_when_payouts_disabled(monkeypatch: pytest.MonkeyPatch)
         lambda **_k: object(),
     )
     doc = _settled_doc(lightning_invoice="lnbc250u1ptestinvoice")
-    probed = await pay_dash_lightning(doc)
-    assert probed is True
+    result = await pay_dash_lightning(doc)
+    assert result.probe_only is True
+    assert result.should_refund is True
     assert captured["probe_only"] is True
     assert captured["group_id"] == invoice_group_key(doc)
     assert captured["amount_msat"] == Decimal(25_000_000)
@@ -377,10 +380,87 @@ async def test_pay_sends_when_payouts_enabled(monkeypatch: pytest.MonkeyPatch):
         lambda destination="": False,
     )
     doc = _settled_doc(lightning_invoice="lnbc250u1ptestinvoice")
-    probed = await pay_dash_lightning(doc)
-    assert probed is False
+    result = await pay_dash_lightning(doc)
+    assert result.paid is True
+    assert result.should_refund is False
     assert captured["probe_only"] is False
     assert captured["cust_id"] == "dash_hive-customer"
+
+
+@pytest.mark.asyncio
+async def test_refund_failed_lightning_posts_fee_and_sends_dash(
+    ledger_store: list[LedgerEntry],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from contextlib import asynccontextmanager
+    from datetime import UTC, datetime
+
+    from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+    from v4vapp_backend_v2.config.setup import InternalConfig
+    from v4vapp_backend_v2.dash.collections import COL_PAYOUTS
+    from v4vapp_backend_v2.process.process_dash import refund_failed_lightning
+
+    class _Payouts:
+        def __init__(self) -> None:
+            self.inserted: list[dict[str, Any]] = []
+
+        async def insert_one(self, doc: dict[str, Any]) -> None:
+            self.inserted.append(doc)
+
+    class _Invoices:
+        def __init__(self) -> None:
+            self.updates: list[Any] = []
+
+        async def update_one(self, query: Any, update: Any) -> None:
+            self.updates.append((query, update))
+
+    class _Db:
+        def __init__(self) -> None:
+            self.payouts = _Payouts()
+            self.invoices = _Invoices()
+
+        def __getitem__(self, name: str) -> Any:
+            return self.payouts if name == COL_PAYOUTS else self.invoices
+
+    db = _Db()
+    monkeypatch.setattr(InternalConfig, "db", db, raising=False)
+
+    @asynccontextmanager
+    async def fake_session(_conn: Any, existing: Any = None):
+        yield object()
+
+    async def fake_sender(*_a: Any, **_k: Any) -> str:
+        return "yRd4FhXfVGHXpsuZXPNkMrfD9GVj46pnjt"
+
+    async def fake_broadcast(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "state": "BROADCAST",
+            "txid": "cc" * 32,
+            "dash_amount": "0.79000000",
+            "fee_duffs": 1000,
+            "change_duffs": 0,
+            "broadcast_at": datetime.now(tz=UTC),
+        }
+
+    monkeypatch.setattr("v4vapp_backend_v2.process.process_dash.dashd_session", fake_session)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.funding_sender_address", fake_sender
+    )
+    monkeypatch.setattr("v4vapp_backend_v2.process.process_dash.broadcast_payout", fake_broadcast)
+    doc = _settled_doc(
+        lightning_invoice="lnbc250u1ptestinvoice",
+        txids=[{"txid": "aa" * 32, "vout": 0, "duffs": 80_000_000}],
+    )
+    entries = await refund_failed_lightning(doc)
+    types = [e.ledger_type for e in entries]
+    assert LedgerType.DASH_FAIL_FEE in types
+    assert LedgerType.DASH_REFUND in types
+    assert db.payouts.inserted
+    assert db.payouts.inserted[0]["address"] == "yRd4FhXfVGHXpsuZXPNkMrfD9GVj46pnjt"
+    fee = next(e for e in entries if e.ledger_type is LedgerType.DASH_FAIL_FEE)
+    assert fee.debit.sub == "dash_hive-customer"
+    refund = next(e for e in entries if e.ledger_type is LedgerType.DASH_REFUND)
+    assert refund.credit.name == "Treasury Dash"
 
 
 @pytest.mark.asyncio
@@ -411,8 +491,9 @@ async def test_pay_skips_after_probe_stamp():
         lightning_invoice="lnbc250u1ptestinvoice",
         lightning_probed_at=datetime.now(tz=UTC),
     )
-    probed = await pay_dash_lightning(doc)
-    assert probed is True
+    result = await pay_dash_lightning(doc)
+    assert result.should_refund is True
+    assert result.paid is False
 
 
 def test_dash_ledger_cust_id_prefixes_once():
