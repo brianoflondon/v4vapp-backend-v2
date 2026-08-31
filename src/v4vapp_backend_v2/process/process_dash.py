@@ -216,18 +216,22 @@ async def post_invoice_settlement(
     return entries
 
 
-def lightning_probe_only(destination: str) -> bool:
-    """True unless Dash connection has payouts_enabled.
+def lightning_probe_only(destination: str = "") -> bool:
+    """Whether Dash inbound Lightning should probe instead of paying.
 
-    Current config has ``payouts_enabled: false``, so Lightning is probe-only.
-    Also check for self payment in development mode.
+    Production always pays. In development: probe when Lightning payments are
+    off, or when the invoice destination is some other node. Self-pay
+    (destination == this node's pubkey) with payments on is a real send.
     """
+    if not InternalConfig().config.development.enabled:
+        return False
     conn = dash_connection()
     if conn is None or not conn.lightning_payments_enabled:
         return True
-    if InternalConfig().node_pubkey and destination != InternalConfig().node_pubkey:
-        return True
-    return True
+    node_pubkey = InternalConfig().node_pubkey or ""
+    dest = (destination or "").strip()
+    is_self_pay = bool(node_pubkey and dest == node_pubkey)
+    return not is_self_pay
 
 
 def _is_probe_success(error: LNDPaymentError) -> bool:
@@ -235,17 +239,19 @@ def _is_probe_success(error: LNDPaymentError) -> bool:
     return "INCORRECT_PAYMENT_DETAILS" in text
 
 
-async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
+async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> bool:
     """Decode the invoice bolt11 and send (or probe) Lightning.
 
-    Probe-only while ``payouts_enabled`` is false. Failures are logged; Dash
-    settlement is not rolled back.
+    Returns True when the attempt was probe-only (caller should park leftover
+    sats). Failures are logged; Dash settlement is not rolled back.
     """
     bolt11 = invoice_doc.get("lightning_invoice")
     if not bolt11:
-        return
-    if invoice_doc.get("lightning_sent_at") or invoice_doc.get("lightning_probed_at"):
-        return
+        return lightning_probe_only()
+    if invoice_doc.get("lightning_sent_at"):
+        return False
+    if invoice_doc.get("lightning_probed_at"):
+        return True
 
     lnd_config = InternalConfig().config.lnd_config
     if not lnd_config or not lnd_config.default:
@@ -253,7 +259,7 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
             f"{ICON} skip lightning: LND not configured",
             extra={"invoice_id": str(invoice_doc.get("_id"))},
         )
-        return
+        return True
 
     invoice_id = str(invoice_doc["_id"])
     group_key = invoice_group_key(invoice_doc)
@@ -264,9 +270,11 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
     db = InternalConfig.db if hasattr(InternalConfig, "db") else None
 
     lnd_client = LNDClient(connection_name=lnd_config.default)
+    probe_only = True
     try:
         pay_req = await decode_any_lightning_string(input=str(bolt11), lnd_client=lnd_client)
-        probe_only = lightning_probe_only(pay_req.destination)
+        dest = getattr(pay_req, "destination", None) or ""
+        probe_only = lightning_probe_only(dest)
         payment = await send_lightning_to_pay_req(
             pay_req=pay_req,
             lnd_client=lnd_client,
@@ -283,6 +291,7 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
             f"{payment.status} for Dash {short_id}",
             extra={"notification": False, "invoice_id": invoice_id, "probe_only": probe_only},
         )
+        return probe_only
     except LNDPaymentError as e:
         if probe_only and _is_probe_success(e):
             await _stamp_lightning(db, invoice_doc, "lightning_probed_at")
@@ -290,22 +299,25 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> None:
                 f"{ICON} Lightning probe reached destination for Dash {short_id}",
                 extra={"notification": False, "invoice_id": invoice_id, "error": str(e)},
             )
-            return
+            return True
         logger.warning(
             f"{ICON} Lightning {'probe' if probe_only else 'payment'} failed "
             f"for Dash {short_id}: {e}",
             extra={"notification": True, "invoice_id": invoice_id, "error": str(e)},
         )
+        return probe_only
     except LnurlException as e:
         logger.warning(
             f"{ICON} Could not decode lightning invoice for Dash {short_id}: {e}",
             extra={"invoice_id": invoice_id, "error": str(e)},
         )
+        return True
     except Exception as e:
         logger.exception(
             f"{ICON} Lightning send error for Dash {short_id}: {e}",
             extra={"invoice_id": invoice_id, "error": str(e)},
         )
+        return True
 
 
 async def park_dash_test_payment(invoice_doc: dict[str, Any]) -> LedgerEntry | None:
@@ -410,8 +422,8 @@ async def process_dash_invoice(event: Any) -> list[LedgerEntry]:
         return []
 
     entries = await post_invoice_settlement(doc, db=db)
-    await pay_dash_lightning(doc)
-    if lightning_probe_only():
+    probed = await pay_dash_lightning(doc)
+    if probed:
         parked = await park_dash_test_payment(doc)
         if parked is not None:
             entries.append(parked)
