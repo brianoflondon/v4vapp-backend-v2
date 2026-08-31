@@ -76,6 +76,7 @@ class Dashd:
                 "importdescriptors",
                 "listdescriptors",
                 "listunspent",
+                "getreceivedbyaddress",
                 "gettransaction",
                 "lockunspent",
             }
@@ -154,6 +155,10 @@ class Dashd:
         if not isinstance(result, list):
             raise DashdError("listunspent returned a non-list")
         return result
+
+    async def getreceivedbyaddress(self, address: str, minconf: int = 0) -> Any:
+        """Total DASH ever received on `address` (spent or unspent). Wallet must know it."""
+        return await self.wallet("getreceivedbyaddress", address, minconf)
 
     async def gettransaction(self, txid: str) -> dict[str, Any]:
         result = await self.wallet("gettransaction", txid)

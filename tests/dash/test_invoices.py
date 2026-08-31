@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pymongo.errors import DuplicateKeyError
 
+from tests.dash.test_hd import TESTNET_ADDRS
 from v4vapp_backend_v2.config.setup import DashConnectionConfig
 from v4vapp_backend_v2.dash.collections import COL_INVOICES, COL_PAYOUTS, COL_WALLET_STATE
 from v4vapp_backend_v2.dash.errors import register_dash_exception_handlers
@@ -136,6 +137,40 @@ class _Db:
         return self.cols[name]
 
 
+class _EmptyDashd:
+    """Watch-only stub: no UTXOs, never received. Optional occupied addresses."""
+
+    def __init__(
+        self,
+        *,
+        utxos_by_address: dict[str, list[dict[str, Any]]] | None = None,
+        received_by_address: dict[str, float] | None = None,
+    ) -> None:
+        self.utxos_by_address = utxos_by_address or {}
+        self.received_by_address = received_by_address or {}
+        self.listunspent_addrs: list[list[str]] = []
+
+    async def listunspent(
+        self,
+        minconf: int = 0,
+        maxconf: int = 9999999,
+        addresses: list[str] | None = None,
+        include_unsafe: bool = True,
+    ) -> list[dict[str, Any]]:
+        addrs = list(addresses or [])
+        self.listunspent_addrs.append(addrs)
+        out: list[dict[str, Any]] = []
+        for address in addrs:
+            out.extend(self.utxos_by_address.get(address, []))
+        return out
+
+    async def getreceivedbyaddress(self, address: str, minconf: int = 0) -> float:
+        return float(self.received_by_address.get(address, 0))
+
+    async def aclose(self) -> None:
+        return None
+
+
 def _quote() -> Quote:
     return Quote(
         source="coingecko",
@@ -196,10 +231,40 @@ def invoice_client(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, _Db]:
     app.include_router(dash_router)
     app.state.dash_db = db
     app.state.dash_conn = _conn()
-    app.state.dashd = None
+    app.state.dashd = _EmptyDashd()
     app.state.watcher = WatcherState()
     client = TestClient(app)
     return client, db
+
+
+def test_create_skips_receive_address_with_utxos(
+    invoice_client: tuple[TestClient, _Db],
+) -> None:
+    client, db = invoice_client
+    dirty = TESTNET_ADDRS[0]
+    client.app.state.dashd = _EmptyDashd(
+        utxos_by_address={
+            dirty: [
+                {
+                    "txid": "aa" * 32,
+                    "vout": 0,
+                    "address": dirty,
+                    "amount": 0.1306,
+                    "confirmations": 7500,
+                }
+            ]
+        }
+    )
+    response = client.post(
+        "/v2/dash/invoices",
+        json={"external_id": "hive:test:skip-utxo", "sats": 1000, "expires_in_s": 120},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["address"] == TESTNET_ADDRS[1]
+    assert body["derivation"]["index"] == 1
+    assert body["derivation"]["path"] == "m/44'/1'/0'/0/1"
+    assert db[COL_WALLET_STATE].docs[0]["next_receive_index"] == 2
 
 
 def test_create_invoice_returns_y_address_and_quoted_duffs(
