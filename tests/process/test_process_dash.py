@@ -272,6 +272,17 @@ async def test_pay_skips_when_no_bolt11(monkeypatch: pytest.MonkeyPatch):
     assert called is False
 
 
+OUR_PUBKEY = "02" + "ab" * 32
+OTHER_PUBKEY = "03" + "cd" * 32
+
+
+def _enable_dev(monkeypatch: pytest.MonkeyPatch) -> None:
+    from v4vapp_backend_v2.config.setup import InternalConfig
+
+    ic = InternalConfig()
+    monkeypatch.setattr(ic.config.development, "enabled", True)
+
+
 @pytest.mark.asyncio
 async def test_pay_probes_when_payouts_disabled(monkeypatch: pytest.MonkeyPatch):
     from v4vapp_backend_v2.lnd_grpc.lnd_functions import LNDPaymentError
@@ -280,11 +291,13 @@ async def test_pay_probes_when_payouts_disabled(monkeypatch: pytest.MonkeyPatch)
         pay_dash_lightning,
     )
 
-    assert lightning_probe_only() is True
+    _enable_dev(monkeypatch)
+    assert lightning_probe_only(OTHER_PUBKEY) is True
     captured: dict[str, Any] = {}
 
     class _PayReq:
         value_msat = 25_000_000
+        destination = OTHER_PUBKEY
 
     async def fake_decode(**_kwargs):
         return _PayReq()
@@ -306,7 +319,8 @@ async def test_pay_probes_when_payouts_disabled(monkeypatch: pytest.MonkeyPatch)
         lambda **_k: object(),
     )
     doc = _settled_doc(lightning_invoice="lnbc250u1ptestinvoice")
-    await pay_dash_lightning(doc)
+    probed = await pay_dash_lightning(doc)
+    assert probed is True
     assert captured["probe_only"] is True
     assert captured["group_id"] == invoice_group_key(doc)
     assert captured["amount_msat"] == Decimal(25_000_000)
@@ -320,6 +334,7 @@ async def test_pay_sends_when_payouts_enabled(monkeypatch: pytest.MonkeyPatch):
 
     class _PayReq:
         value_msat = 25_000_000
+        destination = OTHER_PUBKEY
 
     class _Payment:
         status = "SUCCEEDED"
@@ -345,10 +360,11 @@ async def test_pay_sends_when_payouts_enabled(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(
         "v4vapp_backend_v2.process.process_dash.lightning_probe_only",
-        lambda: False,
+        lambda destination="": False,
     )
     doc = _settled_doc(lightning_invoice="lnbc250u1ptestinvoice")
-    await pay_dash_lightning(doc)
+    probed = await pay_dash_lightning(doc)
+    assert probed is False
     assert captured["probe_only"] is False
 
 
@@ -382,4 +398,40 @@ async def test_pay_skips_after_probe_stamp():
         lightning_invoice="lnbc250u1ptestinvoice",
         lightning_probed_at=datetime.now(tz=UTC),
     )
-    await pay_dash_lightning(doc)
+    probed = await pay_dash_lightning(doc)
+    assert probed is True
+
+
+def test_lightning_probe_only_production_never_probes():
+    from v4vapp_backend_v2.process.process_dash import lightning_probe_only
+
+    assert lightning_probe_only(OUR_PUBKEY) is False
+    assert lightning_probe_only(OTHER_PUBKEY) is False
+    assert lightning_probe_only() is False
+
+
+def test_lightning_probe_only_dev_self_pay_and_external(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from types import SimpleNamespace
+
+    from v4vapp_backend_v2.config.setup import InternalConfig
+    from v4vapp_backend_v2.process.process_dash import lightning_probe_only
+
+    _enable_dev(monkeypatch)
+    ic = InternalConfig()
+    monkeypatch.setattr(type(ic), "node_pubkey", property(lambda self: OUR_PUBKEY))
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.process.process_dash.dash_connection",
+        lambda: SimpleNamespace(lightning_payments_enabled=True),
+    )
+    assert lightning_probe_only(OUR_PUBKEY) is False
+    assert lightning_probe_only(OTHER_PUBKEY) is True
+
+
+def test_lightning_probe_only_dev_payments_off(monkeypatch: pytest.MonkeyPatch):
+    from v4vapp_backend_v2.process.process_dash import lightning_probe_only
+
+    _enable_dev(monkeypatch)
+    assert lightning_probe_only(OTHER_PUBKEY) is True
+    assert lightning_probe_only(OUR_PUBKEY) is True
