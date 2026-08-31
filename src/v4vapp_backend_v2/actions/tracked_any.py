@@ -109,11 +109,12 @@ def get_tracked_any_type(value: Any) -> str:
         return "magi_btc_transfer_event"
     if isinstance(value, DashInvoiceEvent):
         return "dash_invoice"
-    if not isinstance(value, dict) and isinstance(
-        value, (OpAllTransfers, FillOrder, LimitOrderCreate, CustomJson)
+    if (
+        not isinstance(value, dict)
+        and isinstance(value, (OpAllTransfers, FillOrder, LimitOrderCreate, CustomJson))
+        and hasattr(value, "op_type")
     ):
-        if hasattr(value, "op_type"):
-            return value.op_type
+        return value.op_type
 
     raise ValueError(f"Invalid operation type {value}")
 
