@@ -1255,9 +1255,11 @@ class Overwatch:
     async def cancel_flows_for_trigger(self, trigger_group_id: str) -> int:
         """Cancel all candidate flows for a trigger that produced no ledger entries.
 
-        Called by the processing pipeline when a trigger op (e.g. a transfer)
-        turns out to be irrelevant — for example a transfer between untracked
-        accounts.  Returns the number of flows cancelled.
+        Called by the processing pipeline when a Hive transfer turns out to be
+        irrelevant (untracked accounts). CustomJson Lightning payments return
+        no ledgers from ``process_tracked_event`` because hold/withdraw entries
+        arrive later on the payment stream — those must not be cancelled here.
+        Returns the number of flows cancelled.
         """
         cancelled = 0
         for flow in list(self.active_flows):
