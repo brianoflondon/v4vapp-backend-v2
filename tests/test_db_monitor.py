@@ -232,6 +232,25 @@ async def test_process_op_overwatch_flag(monkeypatch):
     assert processed == [created_ops[-1]], "processing still happens when overwatch is on"
 
 
+def test_should_cancel_overwatch_on_empty_only_for_hive_transfers():
+    """Empty ledger results cancel Overwatch only for Hive transfers.
+
+    CustomJson Lightning payments return [] because hold/withdraw ledgers
+    arrive later on the payment stream; cancelling those candidates is the
+    keepsats_to_external tracking bug.
+    """
+    from db_monitor import should_cancel_overwatch_on_empty
+
+    assert should_cancel_overwatch_on_empty("transfer", 0) is True
+    assert should_cancel_overwatch_on_empty("recurrent_transfer", 0) is True
+    assert should_cancel_overwatch_on_empty("transfer_to_vesting", 0) is True
+    assert should_cancel_overwatch_on_empty("transfer", 1) is False
+    assert should_cancel_overwatch_on_empty("custom_json", 0) is False
+    assert should_cancel_overwatch_on_empty("invoice", 0) is False
+    assert should_cancel_overwatch_on_empty("payment", 0) is False
+    assert should_cancel_overwatch_on_empty(None, 0) is False
+
+
 @pytest.mark.asyncio
 async def test_process_op_ledger_path_respects_flag(monkeypatch):
     """Ledger entries should also skip the Overwatch call when disabled but
