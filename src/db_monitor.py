@@ -46,7 +46,18 @@ from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
 ICON = "🏆"
+# Only Hive transfers that produce no ledger entries should cancel Overwatch
+# candidates (untracked accounts). CustomJson / invoice / payment ops often
+# return [] because their ledgers are written later via other streams.
+_OVERWATCH_CANCEL_ON_EMPTY_OP_TYPES = frozenset(
+    {"transfer", "recurrent_transfer", "transfer_to_vesting"}
+)
 app = typer.Typer()
+
+
+def should_cancel_overwatch_on_empty(op_type: str | None, ledger_count: int) -> bool:
+    """True when an empty process_tracked_event result should drop Overwatch candidates."""
+    return ledger_count == 0 and op_type in _OVERWATCH_CANCEL_ON_EMPTY_OP_TYPES
 
 
 async def health_check() -> dict[str, Any]:
@@ -310,7 +321,9 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                         "mongo_id": mongo_id,
                     },
                 )
-                if overwatch_enabled() and len(ledger_entries) == 0:
+                if overwatch_enabled() and should_cancel_overwatch_on_empty(
+                    getattr(op, "op_type", None), len(ledger_entries)
+                ):
                     trigger_group_id = getattr(op, "group_id_p", None) or getattr(
                         op, "group_id", None
                     )

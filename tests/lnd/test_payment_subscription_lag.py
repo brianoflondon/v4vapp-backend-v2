@@ -17,6 +17,7 @@ from lnd_monitor_v2 import (
     shutdown_event,
 )
 from v4vapp_backend_v2.models.invoice_models import InvoiceState
+from v4vapp_backend_v2.models.payment_models import PaymentStatus
 
 
 class _FakeCursor:
@@ -37,10 +38,14 @@ class _FakeCursor:
         return _gen()
 
 
-def _patch_payments(monkeypatch, *, lnd_index: int, mongo_docs: list, floors=None):
+def _patch_payments(
+    monkeypatch, *, lnd_index: int, mongo_docs: list, floors=None, status=PaymentStatus.SUCCEEDED
+):
     monkeypatch.setattr(
         "lnd_monitor_v2.ListPaymentsResponse",
-        lambda _raw: SimpleNamespace(payments=[SimpleNamespace(payment_index=lnd_index)]),
+        lambda _raw: SimpleNamespace(
+            payments=[SimpleNamespace(payment_index=lnd_index, status=status)]
+        ),
     )
     # classmethod: accept the bound cls argument
     monkeypatch.setattr(
@@ -109,6 +114,64 @@ async def test_payment_lag_when_lnd_tip_above_start_payment_index_and_mongo_empt
     assert "2" in msg
     assert "baseline 1" in msg
     assert "start_payment_index 1" in msg
+
+
+@pytest.mark.asyncio
+async def test_no_lag_when_newest_payment_is_in_flight(monkeypatch):
+    """ListPayments assigns an index before TrackPayments persists IN_FLIGHT."""
+    lnd_client = MagicMock()
+    lnd_client.call = AsyncMock(return_value=SimpleNamespace())
+    _patch_payments(
+        monkeypatch,
+        lnd_index=12092,
+        mongo_docs=[{"payment_index": 12091}],
+        status=PaymentStatus.IN_FLIGHT,
+    )
+    assert await _payment_subscription_lag_message(lnd_client) is None
+
+
+@pytest.mark.asyncio
+async def test_no_lag_when_newest_payment_is_initiated(monkeypatch):
+    lnd_client = MagicMock()
+    lnd_client.call = AsyncMock(return_value=SimpleNamespace())
+    _patch_payments(
+        monkeypatch,
+        lnd_index=12092,
+        mongo_docs=[{"payment_index": 12091}],
+        status=PaymentStatus.INITIATED,
+    )
+    assert await _payment_subscription_lag_message(lnd_client) is None
+
+
+@pytest.mark.asyncio
+async def test_lag_when_status_missing_and_mongo_behind(monkeypatch):
+    """Unknown status keeps index comparison so a hung stream is still detected."""
+    lnd_client = MagicMock()
+    lnd_client.call = AsyncMock(return_value=SimpleNamespace())
+    _patch_payments(
+        monkeypatch,
+        lnd_index=12092,
+        mongo_docs=[{"payment_index": 12091}],
+        status=None,
+    )
+    msg = await _payment_subscription_lag_message(lnd_client)
+    assert msg is not None
+    assert "12092" in msg
+
+
+@pytest.mark.asyncio
+async def test_lag_when_newest_payment_failed_and_mongo_behind(monkeypatch):
+    lnd_client = MagicMock()
+    lnd_client.call = AsyncMock(return_value=SimpleNamespace())
+    _patch_payments(
+        monkeypatch,
+        lnd_index=12092,
+        mongo_docs=[{"payment_index": 12091}],
+        status=PaymentStatus.FAILED,
+    )
+    msg = await _payment_subscription_lag_message(lnd_client)
+    assert msg is not None
+    assert "12092" in msg
 
 
 def _invoice(

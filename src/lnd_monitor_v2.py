@@ -47,7 +47,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 )
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState, ListInvoiceResponse
 from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
-from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
+from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment, PaymentStatus
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 
 ICON = "⚡"
@@ -235,6 +235,20 @@ def _lnd_invoice_is_prunable(invoice: Any, now: datetime | None = None) -> bool:
     return expiry_date < as_of - TIMEDELTA_RETAIN_AFTER_EXPIRY
 
 
+_PAYMENT_LAG_INCOMPLETE_STATUSES = frozenset(
+    {PaymentStatus.IN_FLIGHT, PaymentStatus.INITIATED, PaymentStatus.UNKNOWN}
+)
+
+
+def _payment_status_is_incomplete(status: Any) -> bool:
+    """True when LND has assigned an index but the payment is not yet final."""
+    if status is None:
+        return False
+    if isinstance(status, PaymentStatus):
+        return status in _PAYMENT_LAG_INCOMPLETE_STATUSES
+    return str(status).upper() in {s.value for s in _PAYMENT_LAG_INCOMPLETE_STATUSES}
+
+
 async def _payment_subscription_lag_message(lnd_client: LNDClient) -> str | None:
     """
     Detect a hung TrackPayments stream: LND has a newer payment_index than Mongo.
@@ -242,6 +256,9 @@ async def _payment_subscription_lag_message(lnd_client: LNDClient) -> str | None
     Quiet nodes (no new payments) are healthy. Only lag is a failure.
     Payments at or below ``start_payment_index`` are never stored, so the
     configured floor is treated as Mongo's baseline on a fresh / cut-over DB.
+    Incomplete LND tips (IN_FLIGHT / INITIATED) are ignored: ListPayments
+    assigns an index before TrackPayments persists the document, so treating
+    that gap as hung restarts the monitor mid-payment.
     Returns None if the check cannot run (RPC/DB error).
     """
     try:
@@ -259,9 +276,12 @@ async def _payment_subscription_lag_message(lnd_client: LNDClient) -> str | None
             timeout=LAG_RPC_TIMEOUT_SECONDS,
         )
         list_payments = ListPaymentsResponse(payments_raw)
-        lnd_index = (
-            int(list_payments.payments[0].payment_index or 0) if list_payments.payments else 0
-        )
+        newest = list_payments.payments[0] if list_payments.payments else None
+        if newest is None:
+            return None
+        if _payment_status_is_incomplete(getattr(newest, "status", None)):
+            return None
+        lnd_index = int(newest.payment_index or 0)
         mongo_index = 0
         cursor = Payment.collection().find({}).sort([("payment_index", -1)]).limit(1)
         async for ans in cursor:
