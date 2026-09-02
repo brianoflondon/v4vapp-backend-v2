@@ -110,6 +110,33 @@ services:
       retries: 3
       start_period: 30s
 
+  dash-monitor:
+    container_name: dash-monitor
+    depends_on:
+      - v4vapp-backend-v2-base
+    image: v4vapp-backend-v2-base:latest
+    volumes:
+      - ./config:/app/config
+      - ./logs_docker:/app/logs
+    command: [
+      "python", "src/dash_monitor.py",
+      "--config", "${DOCKER_COMPOSE_CONFIG:-devdocker.config.yaml}",
+    ]
+    restart: on-failure:3
+    stop_grace_period: 20s
+    networks:
+      - v4vapp-backend
+    environment:
+      - PYTHONPATH=/app/src
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 
   api-v2:
     container_name: api-v2

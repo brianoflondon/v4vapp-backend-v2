@@ -26,6 +26,9 @@ from v4vapp_backend_v2.conversion.exchange_protocol import (
     ExchangeConnectionError,
     get_exchange_adapter,
 )
+from v4vapp_backend_v2.dash.errors import register_dash_exception_handlers
+from v4vapp_backend_v2.dash.lifespan import start_dash, stop_dash
+from v4vapp_backend_v2.dash.routers import router as dash_router
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -53,10 +56,14 @@ def create_lifespan(config_filename: str):
             await v4v_config.put()
         db_conn = DBConn()
         await db_conn.setup_database()
+        await start_dash(app)
         logger.info(
             f"{ICON} API v2 Started. Version: {__version__}", extra={"notification": False}
         )
-        yield
+        try:
+            yield
+        finally:
+            await stop_dash(app)
 
     return lifespan
 
@@ -352,13 +359,14 @@ async def fixed_quote(
 async def binance() -> dict[str, str | int | float]:
     try:
         adapter = get_exchange_adapter()
-        balances = adapter.get_balances(["BTC", "HIVE", "USDT"])
+        balances = adapter.get_balances(["BTC", "HIVE", "DASH", "USDT"])
         logger.debug(f"{ICON} Binance balances: {balances}")
     except ExchangeConnectionError:
         return {"error": "Bad connection"}
     return {
         "BTC": float(balances.get("BTC", 0.0)),
         "HIVE": float(balances.get("HIVE", 0.0)),
+        "DASH": float(balances.get("DASH", 0.0)),
         "USDT": float(balances.get("USDT", 0.0)),
         "SATS": int(balances.get("SATS", 0)),
     }
@@ -382,7 +390,12 @@ async def sats_to_hive(
         conv = CryptoConversion(
             conv_from=Currency.SATS, value=sats, quote=all_quotes.quote
         ).conversion
-        answer = {"HIVE": conv.hive, "HBD": conv.hbd, "details": conv.model_dump()}
+        answer = {
+            "HIVE": conv.hive,
+            "HBD": conv.hbd,
+            "DASH": conv.dash,
+            "details": conv.model_dump(),
+        }
         return answer
     except Exception as e:
         logger.error(f"Error converting sats to Hive: {e}")
@@ -666,6 +679,8 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
             "documentation": "/docs",
         }
 
+    register_dash_exception_handlers(app)
+    app.include_router(dash_router)
     app.include_router(magisats_v2_router, tags=["magisats"])
     app.include_router(crypto_v2_router, tags=["crypto"])
     app.include_router(crypto_v1_router, tags=["legacy"])

@@ -1,11 +1,14 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+
 from v4vapp_backend_v2.conversion.binance_swap_adapter import (
     BinanceSwapAdapter,
     ExchangeConnectionError,
     ExchangeMinimums,
 )
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 
 
 class DummyClient:
@@ -38,7 +41,7 @@ def test_min_qty_override(monkeypatch):
 
     # override defined in adapter should raise min_qty to at least 50
     assert isinstance(mins, ExchangeMinimums)
-    assert mins.min_qty >= Decimal("50"), "min_qty should be overridden to 50 HIVE"
+    assert mins.min_qty >= Decimal(50), "min_qty should be overridden to 50 HIVE"
 
 
 def test_min_qty_no_override_for_other_asset(monkeypatch):
@@ -77,4 +80,76 @@ def test_execute_swap_empty_quote_id_raises(monkeypatch):
     monkeypatch.setattr(adapter, "_get_client", lambda: DummyClientNoQuote([]))
 
     with pytest.raises(ExchangeConnectionError, match="missing quoteId"):
-        adapter.market_sell("HIVE", "BTC", Decimal("100"))
+        adapter.market_sell("HIVE", "BTC", Decimal(100))
+
+
+def test_min_qty_override_for_dash(monkeypatch):
+    adapter = BinanceSwapAdapter(testnet=False)
+    dummy_pairs = [
+        {
+            "fromAsset": "DASH",
+            "toAsset": "BTC",
+            "fromAssetMinAmount": "0.0001",
+            "toAssetMinAmount": "0",
+        }
+    ]
+    monkeypatch.setattr(adapter, "_get_client", lambda: DummyClient(dummy_pairs))
+    mins = adapter.get_min_order_requirements("DASH", "BTC")
+    assert mins.min_qty >= Decimal("0.5")
+
+
+def test_build_trade_quote_dash_btc(monkeypatch):
+    market = QuoteResponse(
+        hive_usd=Decimal("0.24"),
+        hbd_usd=Decimal(1),
+        btc_usd=Decimal(83000),
+        hive_hbd=Decimal("0.24"),
+        dash_usd=Decimal(30),
+        source="mkt",
+        fetch_date=datetime.now(tz=UTC),
+    )
+
+    class FakeAllQuotes:
+        quote = market
+
+        async def get_all_quotes(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.helpers.crypto_prices.AllQuotes",
+        FakeAllQuotes,
+    )
+    adapter = BinanceSwapAdapter(testnet=False)
+    ratio = Decimal("0.000391566")
+    quote = adapter._build_trade_quote("DASH", "BTC", ratio)
+    assert abs(quote.dash_usd - ratio * Decimal(83000)) < Decimal("0.01")
+    assert quote.hive_usd == market.hive_usd
+    assert quote.btc_usd == Decimal(83000)
+
+
+def test_build_trade_quote_btc_dash(monkeypatch):
+    market = QuoteResponse(
+        hive_usd=Decimal("0.24"),
+        hbd_usd=Decimal(1),
+        btc_usd=Decimal(83000),
+        hive_hbd=Decimal("0.24"),
+        dash_usd=Decimal(30),
+        source="mkt",
+        fetch_date=datetime.now(tz=UTC),
+    )
+
+    class FakeAllQuotes:
+        quote = market
+
+        async def get_all_quotes(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.helpers.crypto_prices.AllQuotes",
+        FakeAllQuotes,
+    )
+    adapter = BinanceSwapAdapter(testnet=False)
+    ratio = Decimal("2553.7")
+    quote = adapter._build_trade_quote("BTC", "DASH", ratio)
+    expected = (Decimal(1) / ratio) * Decimal(83000)
+    assert abs(quote.dash_usd - expected) < Decimal("0.01")

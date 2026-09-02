@@ -182,6 +182,7 @@ config/config_env.yaml
 config/*config.yaml
 config/*config.json
 config/mongo-keyfile
+config/secrets/*.mnemonic
 
 src/jupyter/data/*
 scripts/keepsats_data/*

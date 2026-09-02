@@ -1,9 +1,12 @@
 from typing import Annotated, Any
 
+from bson import ObjectId
+from bson.errors import InvalidId
 from pydantic import BaseModel, Discriminator, Tag, ValidationError
 
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.dash.collections import COL_INVOICES
+from v4vapp_backend_v2.dash.models.tracked import DashInvoiceEvent
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
@@ -89,6 +92,12 @@ def get_tracked_any_type(value: Any) -> str:
         if indexer_tx_hash and indexer_id:
             return "magi_btc_transfer_event"
 
+        if value.get("duffs_quoted") is not None and value.get("address"):
+            state = str(value.get("state") or "")
+            if state in ("SETTLED", "OVERPAID"):
+                return "dash_invoice"
+            raise ValueError(f"Dash invoice not settled: {state}")
+
     # Check for a Lightning Tracked Hive Event
     if isinstance(value, Invoice):
         return value.op_type or "invoice"
@@ -98,11 +107,14 @@ def get_tracked_any_type(value: Any) -> str:
         return "htlc_event"
     if isinstance(value, MagiBTCTransferEvent):
         return "magi_btc_transfer_event"
-    if not isinstance(value, dict) and isinstance(
-        value, (OpAllTransfers, FillOrder, LimitOrderCreate, CustomJson)
+    if isinstance(value, DashInvoiceEvent):
+        return "dash_invoice"
+    if (
+        not isinstance(value, dict)
+        and isinstance(value, (OpAllTransfers, FillOrder, LimitOrderCreate, CustomJson))
+        and hasattr(value, "op_type")
     ):
-        if hasattr(value, "op_type"):
-            return value.op_type
+        return value.op_type
 
     raise ValueError(f"Invalid operation type {value}")
 
@@ -140,7 +152,8 @@ TrackedAny = Annotated[
     | Annotated[ProducerMissed, Tag("producer_missed")]
     | Annotated[ProducerReward, Tag("producer_reward")]
     | Annotated[AccountWitnessVote, Tag("account_witness_vote")]
-    | Annotated[MagiBTCTransferEvent, Tag("magi_btc_transfer_event")],
+    | Annotated[MagiBTCTransferEvent, Tag("magi_btc_transfer_event")]
+    | Annotated[DashInvoiceEvent, Tag("dash_invoice")],
     Discriminator(get_tracked_any_type),
 ]
 
@@ -217,6 +230,19 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
                 answer = DiscriminatedTracked.model_validate(value)
                 return answer.value
 
+        dash_doc = await db[COL_INVOICES].find_one({"address": group_id})
+        if dash_doc is None:
+            try:
+                dash_doc = await db[COL_INVOICES].find_one({"_id": ObjectId(group_id)})
+            except (InvalidId, Exception):
+                dash_doc = None
+        if dash_doc:
+            if "_id" in dash_doc:
+                dash_doc["invoice_id"] = str(dash_doc["_id"])
+            value = {"value": dash_doc}
+            answer = DiscriminatedTracked.model_validate(value)
+            return answer.value
+
         if "_" in group_id:  # and not ("magi" in group_id or "m_" in group_id):
             # This is a for a hive_ops object
             collection_name = "hive_ops"
@@ -265,8 +291,9 @@ def tracked_any_filter(tracked: dict[str, Any]) -> TrackedAny:
         ValueError: If the object cannot be validated as one of the expected types.
 
     """
-    if "_id" in tracked:
-        del tracked["_id"]  # Remove _id field if present
+    if tracked.get("duffs_quoted") is not None and tracked.get("address") and "_id" in tracked:
+        tracked["invoice_id"] = str(tracked["_id"])
+    tracked.pop("_id", None)  # Remove _id field if present
 
     # Convert any bson Decimal128 fields to Decimal to make Pydantic happy
     tracked = convert_decimal128_to_decimal(tracked)

@@ -233,6 +233,11 @@ IGNORED_UPDATE_FIELDS = [
     "invoice_description",
     "vsc_call_not_needed",  # CustomJson field to mark VSC calls that can be ignored in processing
     "node_name",  # Node name will be on invoices, payments and htlc_events, but is not relevant to processing
+    "ledger_posted_at",
+    "ledger_group_id",
+    "lightning_probed_at",
+    "lightning_sent_at",
+    "tracked_at",
 ]
 
 
@@ -308,6 +313,14 @@ def db_monitor_pipelines() -> dict[str, Sequence[Mapping[str, Any]]]:
             }
         }
     ]
+    dash_invoices_pipeline: Sequence[Mapping[str, Any]] = [
+        {
+            "$match": {
+                "operationType": {"$ne": "delete"},
+                "fullDocument.state": {"$in": ["SETTLED", "OVERPAID"]},
+            }
+        }
+    ]
 
     return {
         "payments": payments_pipeline,
@@ -316,4 +329,5 @@ def db_monitor_pipelines() -> dict[str, Sequence[Mapping[str, Any]]]:
         "htlc_events": htlc_events_pipeline,
         "ledger": ledger_pipeline,
         "magi_btc": magi_btc_pipeline,
+        "dash_invoices": dash_invoices_pipeline,
     }

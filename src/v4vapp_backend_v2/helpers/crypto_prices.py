@@ -26,7 +26,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
 ALL_PRICES_COINGECKO = (
     "https://api.coingecko.com/api/v3/simple"
     "/price?ids=bitcoin,hive,"
-    "hive_dollar&vs_currencies=btc,usd,eur,aud"
+    "hive_dollar,dash&vs_currencies=btc,usd,eur,aud"
 )
 ALL_PRICES_COINMARKETCAP = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
 
@@ -124,6 +124,8 @@ class CurrencyPair(StrEnum):
     HIVE_HBD = "hive_hbd"
     SATS_HIVE = "hive_sats"
     SATS_HBD = "hbd_sats"
+    DASH_USD = "dash_usd"
+    SATS_DASH = "sats_dash"
 
 
 class HiveRatesDB(BaseModel):
@@ -149,6 +151,8 @@ class HiveRatesDB(BaseModel):
     sats_hive: Decimal
     sats_usd: Decimal
     sats_hbd: Decimal
+    dash_usd: Decimal = Decimal(0)
+    sats_dash: Decimal = Decimal(0)
 
     @field_validator(
         "hive_usd",
@@ -158,10 +162,14 @@ class HiveRatesDB(BaseModel):
         "sats_hive",
         "sats_usd",
         "sats_hbd",
+        "dash_usd",
+        "sats_dash",
         mode="before",
     )
     @classmethod
     def convert_to_decimal(cls, v):
+        if v is None:
+            return Decimal(0)
         if isinstance(v, (int, float)):
             return Decimal(str(v))
         if isinstance(v, Decimal128):  # Handle MongoDB Decimal128
@@ -201,6 +209,7 @@ class QuoteResponse(BaseModel):
     hbd_usd: Decimal = Decimal(0)
     btc_usd: Decimal = Decimal(0)
     hive_hbd: Decimal = Decimal(0)
+    dash_usd: Decimal = Decimal(0)
     raw_response: RawResponseType = Field(
         default={},
         description="The raw response to queries for this quote as received from the source",
@@ -211,7 +220,7 @@ class QuoteResponse(BaseModel):
     error: str = ""
     error_details: dict[str, Any] = {}
 
-    @field_validator("hive_usd", "hbd_usd", "btc_usd", "hive_hbd", mode="before")
+    @field_validator("hive_usd", "hbd_usd", "btc_usd", "hive_hbd", "dash_usd", mode="before")
     @classmethod
     def convert_to_decimal(cls, v):
         if isinstance(v, (int, float)):
@@ -242,6 +251,7 @@ class QuoteResponse(BaseModel):
         hbd_usd: Decimal | float | str = Decimal(0),
         btc_usd: Decimal | float | str = Decimal(0),
         hive_hbd: Decimal | float | str = Decimal(0),
+        dash_usd: Decimal | float | str = Decimal(0),
         raw_response: RawResponseType = {},
         source: str = "",
         fetch_date: datetime = datetime(1970, 1, 1, tzinfo=UTC),
@@ -254,6 +264,7 @@ class QuoteResponse(BaseModel):
         self.hbd_usd = Decimal(str(hbd_usd)) if hbd_usd != Decimal(0) else Decimal(0)
         self.btc_usd = Decimal(str(btc_usd)) if btc_usd != Decimal(0) else Decimal(0)
         self.hive_hbd = Decimal(str(hive_hbd)) if hive_hbd != Decimal(0) else Decimal(0)
+        self.dash_usd = Decimal(str(dash_usd)) if dash_usd != Decimal(0) else Decimal(0)
         self.raw_response = raw_response
         self.source = source
         # Normalize fetch_date (accept ISO strings and naive datetimes)
@@ -352,6 +363,32 @@ class QuoteResponse(BaseModel):
             Decimal: The value of sats_usd.
         """
         return self.sats_usd
+
+    @computed_field
+    def dash_btc(self) -> Decimal:
+        """DASH priced in BTC from dash_usd / btc_usd."""
+        if self.btc_usd == 0 or self.dash_usd == 0:
+            return Decimal(0)
+        return (Decimal(str(self.dash_usd)) / Decimal(str(self.btc_usd))).quantize(
+            Decimal("0.00000001"), rounding=ROUND_HALF_UP
+        )
+
+    @property
+    def dash_btc_p(self) -> Decimal:
+        return self.dash_btc
+
+    @computed_field
+    def sats_per_dash(self) -> Decimal:
+        """Satoshis per DASH (ceil-friendly full precision, 6 dp)."""
+        if self.dash_btc_p == 0:
+            return Decimal(0)
+        return (Decimal(SATS_PER_BTC) * self.dash_btc_p).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
+
+    @property
+    def sats_per_dash_p(self) -> Decimal:
+        return self.sats_per_dash
 
     @computed_field
     def age(self) -> float:
@@ -479,6 +516,7 @@ class AllQuotes(BaseModel):
                                 "Failed to calculate HBD/USD from hive_usd and hive_hbd; leaving hbd_usd as-is"
                             )
                     quote = QuoteResponse.model_validate(quote_dict)
+                quote = self._overlay_dash_usd(quote)
                 self.quote = quote
                 self.source = Binance.__name__
                 return quote
@@ -486,11 +524,33 @@ class AllQuotes(BaseModel):
                 # If Binance is not available, calculate average from other sources
                 avg_quote = self.calculate_average_quote()
                 if avg_quote:
+                    avg_quote = self._overlay_dash_usd(avg_quote)
                     self.quote = avg_quote
                     self.source = "Average"
                     return avg_quote
 
         return QuoteResponse(error="No valid quote found")
+
+    def _overlay_dash_usd(self, quote: QuoteResponse) -> QuoteResponse:
+        """If Binance (or average) has no DASHUSDT, fill dash_usd from CG/CMC."""
+        if quote.dash_usd > 0:
+            return quote
+        for name in (CoinGecko.__name__, CoinMarketCap.__name__):
+            other = self.quotes.get(name)
+            if other and not other.error and other.dash_usd > 0:
+                quote_dict = quote.model_dump()
+                quote_dict["dash_usd"] = other.dash_usd
+                return QuoteResponse.model_validate(quote_dict)
+        vals = [
+            q.dash_usd
+            for q in self.quotes.values()
+            if not q.error and q.dash_usd > 0
+        ]
+        if vals:
+            quote_dict = quote.model_dump()
+            quote_dict["dash_usd"] = sum(vals) / Decimal(len(vals))
+            return QuoteResponse.model_validate(quote_dict)
+        return quote
 
     async def get_binance_quote(self) -> QuoteResponse:
         """
@@ -728,6 +788,8 @@ class AllQuotes(BaseModel):
             "Hive_HBD": quote.hive_hbd,
             "sats_Hive": quote.sats_hive,
             "sats_HBD": quote.sats_hbd,
+            "DASH_USD": quote.dash_usd,
+            "sats_DASH": quote.sats_per_dash,
             "Hive_sats": float(Decimal(1) / quote.sats_hive_p) if quote.sats_hive_p else 0,
             "HBD_sats": float(Decimal(1) / quote.sats_hbd_p) if quote.sats_hbd_p else 0,
             "fetch_error": fetch_errors,
@@ -757,6 +819,8 @@ class AllQuotes(BaseModel):
             sats_usd=self.quote.sats_usd,
             sats_hbd=self.quote.sats_hbd_p,
             hive_hbd=Decimal(str(self.quote.hive_hbd)),
+            dash_usd=Decimal(str(self.quote.dash_usd)),
+            sats_dash=self.quote.sats_per_dash_p,
         )
 
     async def db_store_quote(self, store_db: bool = True) -> HiveRatesDB:
@@ -872,12 +936,19 @@ class AllQuotes(BaseModel):
         total_hbd_usd = sum(Decimal(str(quote.hbd_usd)) for quote in good_quotes)
         total_btc_usd = sum(Decimal(str(quote.btc_usd)) for quote in good_quotes)
         total_hive_hbd = sum(Decimal(str(quote.hive_hbd)) for quote in good_quotes)
+        dash_quotes = [quote for quote in good_quotes if quote.dash_usd > 0]
         count = Decimal(len(good_quotes))
 
         avg_hive_usd = total_hive_usd / count
         avg_hbd_usd = total_hbd_usd / count
         avg_btc_usd = total_btc_usd / count
         avg_hive_hbd = total_hive_hbd / count
+        if dash_quotes:
+            avg_dash_usd = sum(Decimal(str(q.dash_usd)) for q in dash_quotes) / Decimal(
+                len(dash_quotes)
+            )
+        else:
+            avg_dash_usd = Decimal(0)
 
         # get the latest fetch date of the quotes in good_quotes
         fetch_dates = [quote.fetch_date for quote in good_quotes]
@@ -891,6 +962,7 @@ class AllQuotes(BaseModel):
             hbd_usd=avg_hbd_usd,
             btc_usd=avg_btc_usd,
             hive_hbd=avg_hive_hbd,
+            dash_usd=avg_dash_usd,
             source=self.source,
             fetch_date=self.fetch_date,
             raw_response={},  # You can decide what to put here
@@ -928,6 +1000,8 @@ def hive_rates_db_record(quote) -> HiveRatesDB:
         sats_usd=quote.sats_usd,
         sats_hbd=quote.sats_hbd_p,
         hive_hbd=Decimal(str(quote.hive_hbd)),
+        dash_usd=Decimal(str(quote.dash_usd)),
+        sats_dash=quote.sats_per_dash_p,
     )
 
 
@@ -994,12 +1068,14 @@ class CoinGecko(QuoteService):
                 )
                 if response.status_code == 200:
                     pri = response.json()
+                    dash_usd_raw = (pri.get("dash") or {}).get("usd") or 0
                     quote_response = QuoteResponse(
                         hive_usd=Decimal(str(pri["hive"]["usd"])),
                         hbd_usd=Decimal(str(pri["hive_dollar"]["usd"])),
                         btc_usd=Decimal(str(pri["bitcoin"]["usd"])),
                         hive_hbd=Decimal(str(pri["hive"]["usd"]))
                         / Decimal(str(pri["hive_dollar"]["usd"])),
+                        dash_usd=Decimal(str(dash_usd_raw)),
                         raw_response=pri,
                         source=self.__class__.__name__,
                         fetch_date=datetime.now(tz=UTC),
@@ -1067,28 +1143,43 @@ class Binance(QuoteService):
             # raise Exception("debug")
             client = get_client()
             ticker_info = client.book_ticker(symbols=["HIVEUSDT", "BTCUSDT"])
-            medians = {}
+            if not isinstance(ticker_info, list):
+                ticker_info = [ticker_info]
+            try:
+                dash_ticker = client.book_ticker(symbols=["DASHUSDT"])
+                if isinstance(dash_ticker, list):
+                    ticker_info = ticker_info + dash_ticker
+                elif isinstance(dash_ticker, dict) and dash_ticker.get("symbol"):
+                    ticker_info.append(dash_ticker)
+            except Exception:
+                logger.debug(f"{ICON} Binance DASHUSDT unavailable; Hive/BTC quote continues")
+            by_symbol: dict[str, dict] = {}
             for ticker in ticker_info:
-                bid_price = float(ticker["bidPrice"])
-                ask_price = float(ticker["askPrice"])
-                median = (bid_price + ask_price) / 2
-                medians[ticker["symbol"]] = median
+                if isinstance(ticker, dict) and ticker.get("symbol"):
+                    by_symbol[str(ticker["symbol"])] = ticker
+            ticker_info = list(by_symbol.values())
+            medians: dict[str, Decimal] = {}
+            for ticker in ticker_info:
+                bid_price = Decimal(str(ticker["bidPrice"]))
+                ask_price = Decimal(str(ticker["askPrice"]))
+                medians[ticker["symbol"]] = (bid_price + ask_price) / Decimal(2)
 
             hive_usd = medians["HIVEUSDT"]
             hbd_usd = Decimal(1)
             btc_usd = medians["BTCUSDT"]
-            hive_hbd = Decimal(str(hive_usd)) / hbd_usd
+            hive_hbd = hive_usd / hbd_usd
+            dash_usd = medians.get("DASHUSDT", Decimal(0))
 
             # calc hive to btc price based on hiveusdt and btcusdt
-            hive_sats = (medians["HIVEUSDT"] / medians["BTCUSDT"]) * 1e8
-            # check
+            hive_sats = (hive_usd / btc_usd) * Decimal(SATS_PER_BTC)
             logger.debug(f"{ICON} Binance Hive to BTC price : {hive_sats:.1f}")
 
             quote_response = QuoteResponse(
-                hive_usd=Decimal(str(hive_usd)),
+                hive_usd=hive_usd,
                 hbd_usd=hbd_usd,
-                btc_usd=Decimal(str(btc_usd)),
-                hive_hbd=Decimal(str(hive_hbd)),
+                btc_usd=btc_usd,
+                hive_hbd=hive_hbd,
+                dash_usd=dash_usd,
                 raw_response=ticker_info,
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=UTC),
@@ -1116,6 +1207,7 @@ class CoinMarketCap(QuoteService):
             "BTC_USD": "1",
             "Hive_USD": "5370",
             "HBD_USD": "5375",
+            "DASH_USD": "131",
         }
         ids_str = [str(id) for _, id in cmc_ids.items()]
         call_ids = ",".join(ids_str)
@@ -1144,11 +1236,14 @@ class CoinMarketCap(QuoteService):
                 quote = resp_json["data"][cmc_ids["BTC_USD"]]["quote"]
                 BTC_USD = quote["USD"]["price"]
                 Hive_HBD = Decimal(str(Hive_USD)) / Decimal(str(HBD_USD))
+                dash_row = resp_json["data"].get(cmc_ids["DASH_USD"]) or {}
+                DASH_USD = ((dash_row.get("quote") or {}).get("USD") or {}).get("price") or 0
                 quote_response = QuoteResponse(
                     hive_usd=Decimal(str(Hive_USD)),
                     hbd_usd=Decimal(str(HBD_USD)),
                     btc_usd=Decimal(str(BTC_USD)),
                     hive_hbd=Decimal(str(Hive_HBD)),
+                    dash_usd=Decimal(str(DASH_USD)),
                     raw_response=resp_json,
                     source=self.__class__.__name__,
                     fetch_date=datetime.now(tz=UTC),

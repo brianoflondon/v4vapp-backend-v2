@@ -258,6 +258,7 @@
     {# Multi-unit VSC balances: never show only SATS when HBD/HIVE hold the real money. #}
     {% set _hbd = (details.hbd|float) if details and details.hbd is defined and details.hbd is not none else 0 %}
     {% set _hive = (details.hive|float) if details and details.hive is defined and details.hive is not none else 0 %}
+    {% set _dash = (details.dash|float) if details and details.dash is defined and details.dash is not none else 0 %}
     {% set _sats = (details.sats|float) if details and details.sats is defined and details.sats is not none else 0 %}
     {% set _msats = (details.msats|float) if details and details.msats is defined and details.msats is not none else 0 %}
     <div class="account-summary">
@@ -284,8 +285,14 @@
                     <div class="balance-value">{{ "{:,.3f}".format(_hive) }}</div>
                 </div>
                 {% endif %}
-                {# Show SATS when non-zero, or when no HBD/HIVE so empty-ish accounts still show something #}
-                {% if _sats != 0 or (_hbd == 0 and _hive == 0) %}
+                {% if _dash != 0 %}
+                <div class="balance-item">
+                    <div class="balance-label">DASH</div>
+                    <div class="balance-value">{{ "{:,.3f}".format(_dash) }}</div>
+                </div>
+                {% endif %}
+                {# Show SATS when non-zero, or when no HBD/HIVE/DASH so empty-ish accounts still show something #}
+                {% if _sats != 0 or (_hbd == 0 and _hive == 0 and _dash == 0) %}
                 <div class="balance-item">
                     <div class="balance-label">SATS</div>
                     <div class="balance-value">{{ "{:,}".format(_sats|round|int) }}</div>

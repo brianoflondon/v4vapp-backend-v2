@@ -15,6 +15,29 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Dash Invoice Web",
+            "type": "debugpy",
+            "consoleName": "Dash Invoice",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/dash-pay-ui/serve.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "DEV Dash Monitor",
+            "type": "debugpy",
+            "consoleName": "DEV Dash Monitor",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/dash_monitor.py",
+            "args": [
+                "--config",
+                "devhive.config.yaml"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "DEV API v2",
             "type": "debugpy",
             "consoleName": "DEV API",
