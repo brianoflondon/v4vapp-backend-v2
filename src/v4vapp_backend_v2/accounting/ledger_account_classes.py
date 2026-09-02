@@ -128,6 +128,7 @@ class AssetAccount(LedgerAccount):
         "Treasury Hive",
         "Treasury Lightning",
         "Treasury Keepsats",
+        "Treasury Dash",
         "Exchange Holdings",
         "Exchange Deposits Hive",
         "Exchange Deposits Lightning",
@@ -235,6 +236,7 @@ class RevenueAccount(LedgerAccount):
         "Fee Income Lightning",
         "Fee Income Keepsats",
         "Fee Income Magisats",
+        "Fee Income Dash",
         "DHF Income",
         "Other Income",
         "Routing Fee Income",
@@ -256,6 +258,7 @@ class RevenueAccount(LedgerAccount):
 ExpenseAccounts = Literal[
     "Fee Expenses Lightning",
     "Fee Expenses Hive",
+    "Fee Expenses Dash",
     "Exchange Fees Paid",
     "Withdrawal Fees Paid",
     "Testing Expenses",

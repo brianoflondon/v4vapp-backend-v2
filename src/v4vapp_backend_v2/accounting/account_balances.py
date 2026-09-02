@@ -1,8 +1,9 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from timeit import default_timer as timer
-from typing import Any, List, Mapping, Set, Tuple
+from typing import Any
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     account_notifications_pipeline,
@@ -42,6 +43,7 @@ from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
@@ -57,13 +59,16 @@ UNIT_TOLERANCE = {
     "HIVE": 0.001,
     "HBD": 0.001,
     "MSATS": 10,
+    "DUFFS": 1,
 }
+
+PRINTOUT_UNITS = [Currency.HBD, Currency.HIVE, Currency.DUFFS, Currency.MSATS]
 
 
 # I am not sure what the purpose of this code is, removed from code path.
 
 
-def _merge_groups(groups: List[LedgerAccountDetails]) -> LedgerAccountDetails:
+def _merge_groups(groups: list[LedgerAccountDetails]) -> LedgerAccountDetails:
     """Merge multiple LedgerAccountDetails objects belonging to the same
     account (typically differing only by the ``contra`` flag) into a single
     consolidated object.
@@ -128,12 +133,12 @@ def _merge_duplicate_accounts(account_balances: AccountBalances) -> AccountBalan
     one row per account, so we collapse those here.  The merge is performed in-
     memory and does *not* touch the database again.
     """
-    seen: dict[tuple, List[LedgerAccountDetails]] = {}
+    seen: dict[tuple, list[LedgerAccountDetails]] = {}
     for acct in account_balances.root:
         key = (acct.account_type, acct.name, acct.sub)
         seen.setdefault(key, []).append(acct)
 
-    merged_root: List[LedgerAccountDetails] = []
+    merged_root: list[LedgerAccountDetails] = []
     for groups in seen.values():
         if len(groups) == 1:
             merged_root.append(groups[0])
@@ -229,7 +234,7 @@ def _merge_duplicate_accounts(account_balances: AccountBalances) -> AccountBalan
 
 async def all_account_balances_summary(
     account_name: str | None = None,
-    cust_ids: Set[str] | None = None,
+    cust_ids: set[str] | None = None,
     as_of_date: datetime | None = None,
 ) -> AccountBalances:
     """Lightweight bulk balance query.
@@ -243,7 +248,7 @@ async def all_account_balances_summary(
     for that.
     """
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
+        as_of_date = datetime.now(tz=UTC)
     _t0 = timer()
     pipeline = all_account_balances_summary_pipeline(
         account_name=account_name,
@@ -285,6 +290,12 @@ async def all_account_balances_summary(
             existing["total_conv_usd"] += row["total_conv_usd"]
             existing["total_conv_sats"] += row["total_conv_sats"]
             existing["total_conv_msats"] += row["total_conv_msats"]
+            existing["total_conv_dash"] = existing.get("total_conv_dash", 0) + row.get(
+                "total_conv_dash", 0
+            )
+            existing["total_conv_duffs"] = existing.get("total_conv_duffs", 0) + row.get(
+                "total_conv_duffs", 0
+            )
             existing["count"] = existing.get("count", 0) + row.get("count", 0)
             if row.get("has_non_opening"):
                 existing["has_non_opening"] = True
@@ -307,7 +318,7 @@ async def all_account_balances_summary(
     in_progress = InProgressResults(results=all_held_result)
     _t3 = timer()
 
-    details_list: List[LedgerAccountDetails] = []
+    details_list: list[LedgerAccountDetails] = []
     for group in account_groups.values():
         balances: dict[Currency, list[AccountBalanceLine]] = {}
         for unit_str, row in group["units"].items():
@@ -321,10 +332,12 @@ async def all_account_balances_summary(
                 usd=Decimal(str(row["total_conv_usd"])),
                 sats=Decimal(str(row["total_conv_sats"])),
                 msats=Decimal(str(row["total_conv_msats"])),
+                dash=Decimal(str(row.get("total_conv_dash", 0))),
+                duffs=Decimal(str(row.get("total_conv_duffs", 0))),
             )
             line = AccountBalanceLine(
                 ledger_type=ledger_type,
-                timestamp=row.get("max_timestamp") or datetime.now(tz=timezone.utc),
+                timestamp=row.get("max_timestamp") or datetime.now(tz=UTC),
                 amount_signed=Decimal(str(row["total_amount"])),
                 amount_running_total=Decimal(str(row["total_amount"])),
                 unit=unit_str,
@@ -334,6 +347,8 @@ async def all_account_balances_summary(
                     usd=conv_summary.usd,
                     sats=conv_summary.sats,
                     msats=conv_summary.msats,
+                    dash=conv_summary.dash,
+                    duffs=conv_summary.duffs,
                 ),
                 conv_running_total=conv_summary,
             )
@@ -737,13 +752,19 @@ def _add_notes() -> str:
 # Helpers to centralize KSATS logic and formatting for reuse in printouts
 def _compute_ksats_settings(ledger_account_details: LedgerAccountDetails, unit: str):
     """Determine conversion factor, whether to display in KSATS, and the display unit string."""
-    conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
+    unit_u = str(unit).upper()
+    if unit_u == "DUFFS":
+        conversion_factor = int(DUFFS_PER_DASH)
+        final_bal_for_unit = Decimal(ledger_account_details.balances_net.get(unit, 0))
+        display_balance_total = final_bal_for_unit / DUFFS_PER_DASH
+        return conversion_factor, False, "DASH"
+    conversion_factor = 1_000 if unit_u == "MSATS" else 1
     final_bal_for_unit = Decimal(ledger_account_details.balances_net.get(unit, 0))
     display_balance_total = (
-        (final_bal_for_unit / conversion_factor) if unit.upper() == "MSATS" else final_bal_for_unit
+        (final_bal_for_unit / conversion_factor) if unit_u == "MSATS" else final_bal_for_unit
     )
-    use_ksats = unit.upper() == "MSATS" and abs(display_balance_total) >= Decimal(1_000_000)
-    display_unit = "KSATS" if use_ksats else ("SATS" if unit.upper() == "MSATS" else unit.upper())
+    use_ksats = unit_u == "MSATS" and abs(display_balance_total) >= Decimal(1_000_000)
+    display_unit = "KSATS" if use_ksats else ("SATS" if unit_u == "MSATS" else unit_u)
     return conversion_factor, use_ksats, display_unit
 
 
@@ -753,10 +774,15 @@ def _format_converted_line(conversion, use_ksats: bool) -> str:
         sats_str = f"{(conversion.sats / Decimal(1000)):>12,.1f} KSATS "
     else:
         sats_str = f"{conversion.sats:>12,.0f} SATS "
+    dash_str = ""
+    dash_val = getattr(conversion, "dash", None)
+    if dash_val:
+        dash_str = f"{dash_val:>12,.3f} DASH "
     return (
         f"{'Converted':<10} "
         f"{conversion.hive:>15,.3f} HIVE "
         f"{conversion.hbd:>12,.3f} HBD "
+        f"{dash_str}"
         f"{conversion.usd:>12,.3f} USD "
         f"{sats_str}"
         f"{conversion.msats:>16,.0f} msats"
@@ -774,6 +800,9 @@ def _format_final_balance_line(
         else:
             balance_fmt = f"{display_balance:,.0f}"
             balance_unit = "SATS"
+    elif unit.upper() == "DUFFS":
+        balance_fmt = f"{display_balance:,.3f}"
+        balance_unit = "DASH"
     else:
         balance_fmt = f"{display_balance:,.3f}"
         balance_unit = unit.upper()
@@ -793,6 +822,15 @@ def _format_amounts_for_display(
 
     msats_nonks_format: 'one_decimal' or 'integer' determines how non-KSATS SATS are formatted.
     """
+    if unit.upper() == "DUFFS":
+        debit_val /= conversion_factor
+        credit_val /= conversion_factor
+        balance_val /= conversion_factor
+        debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
+        credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
+        balance_fmt = f"{balance_val:,.3f}"
+        return debit_fmt, credit_fmt, balance_fmt
+
     if unit.upper() == "MSATS":
         # Convert from msats to sats first
         debit_val /= conversion_factor
@@ -850,7 +888,7 @@ async def account_balance_printout(
     ledger_account_details: LedgerAccountDetails | None = None,
     quote: QuoteResponse | None = None,
     period_start: datetime | None = None,
-) -> Tuple[str, LedgerAccountDetails]:
+) -> tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account (and optional sub-account).
     Optionally lists all debit and credit transactions up to the specified date, or shows only the closing balance.
@@ -945,7 +983,7 @@ async def account_balance_printout(
     if not quote:
         quote = await TrackedBaseModel.update_quote()
 
-    as_of_date_printout = as_of_date if as_of_date else datetime.now(tz=timezone.utc)
+    as_of_date_printout = as_of_date if as_of_date else datetime.now(tz=UTC)
     title_line = f"{account} balance as of {as_of_date_printout:%Y-%m-%d %H:%M:%S} UTC"
     output = ["_" * max_width]
     output.append(title_line)
@@ -974,7 +1012,7 @@ async def account_balance_printout(
 
     # HBD first so multi-unit customer reports open on the usual liability unit
     # (HIVE dust from failed withdraws used to dominate the first screenful).
-    for unit in [Currency.HBD, Currency.HIVE, Currency.MSATS]:
+    for unit in PRINTOUT_UNITS:
         if unit not in units:
             continue
         # Compute common KSATS display settings for this unit
@@ -1018,9 +1056,8 @@ async def account_balance_printout(
                 and opening_details.balances_net
             ):
                 ob_net = opening_details.balances_net.get(unit, Decimal(0))
-                if (
-                    ob_net != Decimal(0)
-                    and not (len(all_rows) == 1 and all_rows[0].ledger_type == "ob")
+                if ob_net != Decimal(0) and not (
+                    len(all_rows) == 1 and all_rows[0].ledger_type == "ob"
                 ):
                     ob_date_str = period_start.strftime("%Y-%m-%d")  # type: ignore[union-attr]
                     output.append(f"\n=== {ob_date_str} ===")
@@ -1053,9 +1090,9 @@ async def account_balance_printout(
                 else:
                     ts = row.timestamp
                     if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
+                        ts = ts.replace(tzinfo=UTC)
                     else:
-                        ts = ts.astimezone(timezone.utc)
+                        ts = ts.astimezone(UTC)
                     date_str = f"{ts:%Y-%m-%d}"
                 transactions_by_date.setdefault(date_str, []).append(row)
 
@@ -1069,9 +1106,9 @@ async def account_balance_printout(
                     else:
                         ts = row.timestamp
                         if ts.tzinfo is None:
-                            ts = ts.replace(tzinfo=timezone.utc)
+                            ts = ts.replace(tzinfo=UTC)
                         else:
-                            ts = ts.astimezone(timezone.utc)
+                            ts = ts.astimezone(UTC)
                         timestamp = f"{ts:%H:%M:%S.%f}"[:10]
                     description = truncate_text(row.description, 50)
                     ledger_type = row.ledger_type
@@ -1152,12 +1189,12 @@ async def account_balance_printout_grouped_by_customer(
     age: timedelta | None = None,
     ledger_account_details: LedgerAccountDetails | None = None,
     period_start: datetime | None = None,
-) -> Tuple[str, LedgerAccountDetails]:
+) -> tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account with transactions grouped by date and customer ID.
     This alternate version recalculates running totals per customer within each date to maintain consistency.
     Properly accounts for assets and liabilities, and includes converted values to other units
-    (SATS, HIVE, HBD, USD, msats).
+    (SATS, HIVE, HBD, DASH, USD, msats).
 
     Args:
         account (Account | str): An Account object specifying the account name, type, and optional sub-account. If
@@ -1254,7 +1291,7 @@ async def account_balance_printout_grouped_by_customer(
         )
     quote = await TrackedBaseModel.update_quote()
 
-    as_of_date_printout = as_of_date if as_of_date else datetime.now(tz=timezone.utc)
+    as_of_date_printout = as_of_date if as_of_date else datetime.now(tz=UTC)
     title_line = f"{account} balance as of {as_of_date_printout:%Y-%m-%d %H:%M:%S} UTC (Grouped by Customer)"
     output = ["_" * max_width]
     output.append(title_line)
@@ -1282,20 +1319,14 @@ async def account_balance_printout_grouped_by_customer(
     total_msats: Decimal = Decimal(0)
 
     # Match account_balance_printout unit order (HBD before HIVE).
-    for unit in [Currency.HBD, Currency.HIVE, Currency.MSATS]:
+    for unit in PRINTOUT_UNITS:
         if unit not in units:
             continue
-        conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
+        conversion_factor, use_ksats, display_unit = _compute_ksats_settings(
+            ledger_account_details, unit
+        )
         final_bal_for_unit = Decimal(ledger_account_details.balances_net.get(unit, 0))
-        display_balance_total = (
-            (final_bal_for_unit / conversion_factor)
-            if unit.upper() == "MSATS"
-            else final_bal_for_unit
-        )
-        use_ksats = unit.upper() == "MSATS" and abs(display_balance_total) >= Decimal(1_000_000)
-        display_unit = (
-            "KSATS" if use_ksats else ("SATS" if unit.upper() == "MSATS" else unit.upper())
-        )
+        display_balance_total = final_bal_for_unit / Decimal(conversion_factor)
 
         # Headings on same line as Unit
         left_pad = COL_TS + 1 + COL_DESC + 1 + 4  # Space covering TS, desc, contra and separators
@@ -1539,7 +1570,7 @@ async def account_balance_printout_grouped_by_customer(
 async def list_active_account_subs(
     account_name: str,
     min_transactions: int = 2,
-) -> Set[str]:
+) -> set[str]:
     """
     Returns the list of account sub identifiers that have at least `min_transactions`
     ledger entries for the given account name.
@@ -1561,7 +1592,7 @@ async def list_active_account_subs(
     return {doc["sub"] for doc in results}
 
 
-async def list_all_accounts() -> List[LedgerAccount]:
+async def list_all_accounts() -> list[LedgerAccount]:
     """
     Lists all unique accounts in the ledger by aggregating debit and credit accounts.
 
@@ -1578,7 +1609,7 @@ async def list_all_accounts() -> List[LedgerAccount]:
     return accounts
 
 
-async def list_all_active_accounts() -> List[LedgerAccount]:
+async def list_all_active_accounts() -> list[LedgerAccount]:
     """
     Lists all unique active accounts in the ledger by aggregating debit and credit accounts.
     An active account is defined as having at least 2 transactions.
@@ -1597,7 +1628,7 @@ async def list_all_active_accounts() -> List[LedgerAccount]:
 
 
 # @async_time_decorator
-async def list_all_ledger_types() -> List[LedgerType]:
+async def list_all_ledger_types() -> list[LedgerType]:
     """
     Lists all unique ledger types in the ledger.
 
@@ -1606,7 +1637,7 @@ async def list_all_ledger_types() -> List[LedgerType]:
     """
     pipeline = list_all_ledger_types_pipeline()
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
-    ledger_types: List[LedgerType] = []
+    ledger_types: list[LedgerType] = []
     async for doc in cursor:
         try:
             ledger_type = LedgerType(doc.get("ledger_type"))
@@ -1622,7 +1653,7 @@ async def list_all_ledger_types() -> List[LedgerType]:
 async def ledger_pipeline_result(
     cust_id: CustIDType,
     account: LedgerAccount,
-    pipeline: List[Mapping[str, Any]],
+    pipeline: list[Mapping[str, Any]],
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
 ) -> LedgerConvSummary:
@@ -1703,13 +1734,13 @@ async def check_hive_conversion_limits(
         expiry_info = await get_next_limit_expiry(cust_id)
         if expiry_info:
             limit_check.expiry, limit_check.sats_freed = expiry_info
-            expires_in = limit_check.expiry - datetime.now(tz=timezone.utc)
+            expires_in = limit_check.expiry - datetime.now(tz=UTC)
             limit_check.next_limit_expiry = f"Next limit expires in: {format_time_delta(expires_in)}, freeing {limit_check.sats_freed:,.0f} sats"
 
     return limit_check
 
 
-async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal] | None:
+async def get_next_limit_expiry(cust_id: CustIDType) -> tuple[datetime, Decimal] | None:
     """
     Determines when the next rate limit will expire for a given customer and the amount that will be freed.
     Checks all over-limit periods and returns the soonest expiry across them.
@@ -1778,7 +1809,7 @@ async def keepsats_balance(
     as_of_date: datetime | None = None,
     line_items: bool = False,
     notifications: bool = False,
-) -> Tuple[Decimal, LedgerAccountDetails]:
+) -> tuple[Decimal, LedgerAccountDetails]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
@@ -1870,7 +1901,7 @@ async def keepsats_balance(
 
 async def keepsats_balance_printout(
     cust_id: CustIDType, previous_msats: int | Decimal | None = None, line_items: bool = False
-) -> Tuple[Decimal, LedgerAccountDetails]:
+) -> tuple[Decimal, LedgerAccountDetails]:
     """
     Generates and logs a printout of the Keepsats balance for a given customer.
 

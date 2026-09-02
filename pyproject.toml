@@ -34,6 +34,7 @@ dependencies = [
     "hive-nectar>=1.0.4,<2.0.0",
     "aiofiles>=25.1.0",
     "pandas>=3.0.0",
+    "bip-utils>=2.9.0",
 ]
 
 [dependency-groups]

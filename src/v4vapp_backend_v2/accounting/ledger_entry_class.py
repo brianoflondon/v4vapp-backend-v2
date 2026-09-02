@@ -1,8 +1,9 @@
 import textwrap
-from datetime import datetime, timezone
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 from math import isclose
-from typing import Any, Dict, List, Mapping, Self, Sequence
+from typing import Any, Self
 
 from pydantic import (
     BaseModel,
@@ -25,6 +26,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 from v4vapp_backend_v2.accounting.ledger_cache import invalidate_ledger_cache
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType, LedgerTypeIcon
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -39,31 +41,21 @@ from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 class LedgerEntryException(Exception):
     """Custom exception for LedgerEntry errors."""
 
-    pass
-
 
 class LedgerEntryCreationException(LedgerEntryException):
     """Custom exception for LedgerEntry creation errors."""
-
-    pass
 
 
 class LedgerEntryConfigurationException(LedgerEntryException):
     """Custom exception for LedgerEntry configuration errors."""
 
-    pass
-
 
 class LedgerEntryDuplicateException(LedgerEntryException):
     """Custom exception for LedgerEntry duplicate errors."""
 
-    pass
-
 
 class LedgerEntryNotFoundException(LedgerEntryException):
     """Custom exception for LedgerEntry not found errors."""
-
-    pass
 
 
 class LedgerEntry(BaseModel):
@@ -144,9 +136,7 @@ class LedgerEntry(BaseModel):
     ledger_type: LedgerType = Field(
         default=LedgerType.UNSET, description="Transaction type of the ledger entry"
     )
-    timestamp: datetime = Field(
-        datetime.now(tz=timezone.utc), description="Timestamp of the ledger entry"
-    )
+    timestamp: datetime = Field(datetime.now(tz=UTC), description="Timestamp of the ledger entry")
     description: str = Field("", description="Description of the ledger entry")
     user_memo: str = Field(
         "", description="A memo which can be shown to users for the ledger entry"
@@ -194,7 +184,7 @@ class LedgerEntry(BaseModel):
         None, description="Timestamp of the reversal if the entry has been reversed"
     )
     link: str = Field("", description="Link to the Hive block explorer transaction if appropriate")
-    extra_data: List[Any] = Field(
+    extra_data: list[Any] = Field(
         default_factory=list, description="Additional data related to the ledger entry"
     )
     notes: str = Field("", description="Additional notes for the ledger entry")
@@ -285,7 +275,7 @@ class LedgerEntry(BaseModel):
         return self.credit_amount * self.credit_sign
 
     @computed_field
-    def all_cust_ids(self) -> List[AccNameType]:
+    def all_cust_ids(self) -> list[AccNameType]:
         """
         Returns a list of all customer IDs associated with this ledger entry, including cust_id, cust_id_from, and cust_id_to.
         This is useful for querying and indexing purposes when we want to find all entries related to a specific customer ID.
@@ -322,7 +312,7 @@ class LedgerEntry(BaseModel):
             return -1
 
     @computed_field
-    def conv_signed(self) -> Dict[str, CryptoConv]:
+    def conv_signed(self) -> dict[str, CryptoConv]:
         """
         Returns the conversion details as a signed CryptoConv object.
         This is used to ensure that the conversion amounts are correctly signed for accounting.
@@ -333,7 +323,7 @@ class LedgerEntry(BaseModel):
         }
 
     @property
-    def conv_signed_p(self) -> Dict[str, CryptoConv]:
+    def conv_signed_p(self) -> dict[str, CryptoConv]:
         """
         Returns the conversion details as a property (not computed field)
         this stops type checking problems
@@ -427,7 +417,7 @@ class LedgerEntry(BaseModel):
         return snake_case(cls.__name__)
 
     @property
-    def log_extra(self) -> Dict[str, Any]:
+    def log_extra(self) -> dict[str, Any]:
         """
         Generates a dictionary containing additional logging information.
         Usage: in a log entry use as an unpacked dictionary like this:
@@ -452,6 +442,8 @@ class LedgerEntry(BaseModel):
         """
         if self.credit_unit == Currency.MSATS:
             return f"{self.credit_amount // 1000:.0f} sats"
+        if self.credit_unit == Currency.DUFFS:
+            return f"{self.credit_amount / DUFFS_PER_DASH:.3f} DASH"
         else:
             return f"{self.credit_amount:.3f} {self.credit_unit}"
 
@@ -816,7 +808,7 @@ class LedgerEntry(BaseModel):
             - Updates the 'reversed' field of the LedgerEntry to the current timestamp.
             - Logs the reversal action.
         """
-        self.reversed = datetime.now(tz=timezone.utc)
+        self.reversed = datetime.now(tz=UTC)
         logger.info(
             f"Ledger Entry marked as reversed: {self.short_id} {self.debit_amount} {self.debit_unit} {self.debit} {self.credit} {self.group_id}",
             extra={"notification": False, **self.log_extra},
@@ -965,6 +957,8 @@ class LedgerEntry(BaseModel):
         debit_display_unit = (
             "SATS"
             if self.debit_unit and self.debit_unit.value.upper() == "MSATS"
+            else "DASH"
+            if self.debit_unit and self.debit_unit.value.upper() == "DUFFS"
             else self.debit_unit.value
             if self.debit_unit
             else ""
@@ -972,16 +966,24 @@ class LedgerEntry(BaseModel):
         credit_display_unit = (
             "SATS"
             if self.credit_unit and self.credit_unit.value.upper() == "MSATS"
+            else "DASH"
+            if self.credit_unit and self.credit_unit.value.upper() == "DUFFS"
             else self.credit_unit.value
             if self.credit_unit
             else ""
         )
-        debit_conversion_factor = (
-            1000 if self.debit_unit and self.debit_unit.value.upper() == "MSATS" else 1
-        )
-        credit_conversion_factor = (
-            1000 if self.credit_unit and self.credit_unit.value.upper() == "MSATS" else 1
-        )
+        if self.debit_unit and self.debit_unit.value.upper() == "MSATS":
+            debit_conversion_factor = 1000
+        elif self.debit_unit and self.debit_unit.value.upper() == "DUFFS":
+            debit_conversion_factor = int(DUFFS_PER_DASH)
+        else:
+            debit_conversion_factor = 1
+        if self.credit_unit and self.credit_unit.value.upper() == "MSATS":
+            credit_conversion_factor = 1000
+        elif self.credit_unit and self.credit_unit.value.upper() == "DUFFS":
+            credit_conversion_factor = int(DUFFS_PER_DASH)
+        else:
+            credit_conversion_factor = 1
 
         debit_contra_str = "-c-" if self.debit.contra else "   "
         credit_contra_str = "-c-" if self.credit.contra else "   "
@@ -990,7 +992,11 @@ class LedgerEntry(BaseModel):
         debit_amount = self.debit_amount if self.debit_amount else 0.00
         credit_amount = self.credit_amount if self.credit_amount else 0.00
 
-        if debit_display_unit.upper() == "SATS" and (debit_amount / debit_conversion_factor) < 5:
+        if (
+            debit_display_unit.upper() == "SATS"
+            and (debit_amount / debit_conversion_factor) < 5
+            or debit_display_unit.upper() == "DASH"
+        ):
             formatted_debit_amount = (
                 f"{debit_amount / debit_conversion_factor:,.3f} {debit_display_unit.upper()}"
             )
@@ -1004,7 +1010,7 @@ class LedgerEntry(BaseModel):
         if (
             credit_display_unit.upper() == "SATS"
             and (credit_amount / credit_conversion_factor) < 5
-        ):
+        ) or credit_display_unit.upper() == "DASH":
             formatted_credit_amount = (
                 f"{credit_amount / credit_conversion_factor:,.3f} {credit_display_unit.upper()}"
             )
@@ -1026,12 +1032,13 @@ class LedgerEntry(BaseModel):
             description += f"{description}\n{self.credit_debit_balance_str}"
 
         # Create a conversion line which looks
-        # like Converted              -0.000 HIVE       -0.000 HBD       -0.000 USD           -0 SATS               -0 msats
+        # like Converted              -0.000 HIVE       -0.000 HBD       -0.000 DASH       -0.000 USD           -0 SATS
         if self.debit_conv and self.credit_conv:
             conversion_line = (
                 f"Converted   "
                 f"{self.debit_conv.hive:>11,.3f} HIVE "
                 f"{self.debit_conv.hbd:>11,.3f} HBD "
+                f"{getattr(self.debit_conv, 'dash', 0):>11,.3f} DASH "
                 f"{self.debit_conv.usd:>11,.3f} USD "
                 f"{self.debit_conv.sats_rounded:>18,.3f} SATS "
             )

@@ -512,6 +512,7 @@ class TrackedBaseModel(BaseModel):
                 hbd_usd=quote.hbd_usd,
                 btc_usd=quote.btc_usd,
                 hive_hbd=quote.hive_hbd,
+                dash_usd=quote.dash_usd,
                 raw_response={},
                 source="HiveRatesDB",
                 fetch_date=quote.timestamp,

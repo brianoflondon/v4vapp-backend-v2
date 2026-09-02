@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import secrets
 from decimal import Decimal
 
 from google.protobuf.json_format import MessageToDict
@@ -370,6 +371,69 @@ def b64_transform(plain_str: str) -> str:
     return base64.b64encode(plain_str.encode()).decode()
 
 
+def _probe_send_payment_params(
+    pay_req: PayReq,
+    amount_msat: int,
+    fee_limit_msat: int,
+    dest_custom_records: dict,
+) -> dict:
+    """
+    Build SendPaymentV2 fields for a prepay probe.
+
+    Omits payment_request and uses a random payment_hash so the destination cannot
+    settle. Funds return; LND reports FAILURE_REASON_INCORRECT_PAYMENT_DETAILS if
+    the probe reaches the destination.
+    """
+    try:
+        dest = bytes.fromhex(pay_req.destination)
+    except ValueError as e:
+        raise LNDPaymentError(f"probe_only requires a hex destination pubkey: {e}") from e
+    if not dest:
+        raise LNDPaymentError("probe_only requires pay_req.destination")
+
+    params: dict = {
+        "dest": dest,
+        "amt_msat": amount_msat,
+        "payment_hash": secrets.token_bytes(32),
+        "final_cltv_delta": int(pay_req.cltv_expiry or 40),
+        "timeout_seconds": 600,
+        "fee_limit_msat": fee_limit_msat,
+        "dest_custom_records": dest_custom_records,
+        "max_parts": 1,
+    }
+    if pay_req.payment_addr:
+        try:
+            params["payment_addr"] = base64.b64decode(pay_req.payment_addr)
+        except (ValueError, TypeError) as e:
+            raise LNDPaymentError(f"probe_only invalid payment_addr: {e}") from e
+    if pay_req.route_hints:
+        params["route_hints"] = [
+            lnrpc.RouteHint(
+                hop_hints=[
+                    lnrpc.HopHint(
+                        node_id=hint.node_id,
+                        chan_id=int(hint.chan_id or 0),
+                        fee_base_msat=hint.fee_base_msat,
+                        fee_proportional_millionths=hint.fee_proportional_millionths,
+                        cltv_expiry_delta=hint.cltv_expiry_delta,
+                    )
+                    for hint in route.hop_hints
+                ]
+            )
+            for route in pay_req.route_hints
+        ]
+    if pay_req.features:
+        dest_features = []
+        for bit in pay_req.features:
+            try:
+                dest_features.append(int(bit))
+            except (TypeError, ValueError):
+                continue
+        if dest_features:
+            params["dest_features"] = dest_features
+    return params
+
+
 async def send_lightning_to_pay_req(
     pay_req: PayReq,
     lnd_client: LNDClient,
@@ -379,6 +443,7 @@ async def send_lightning_to_pay_req(
     chat_message: str = "",
     amount_msat: Decimal = Decimal(0),
     fee_limit_ppm: int = 0,
+    probe_only: bool = False,
 ) -> Payment:
     """
     Send a payment to a Lightning Network invoice using the provided payment request.
@@ -392,6 +457,10 @@ async def send_lightning_to_pay_req(
                     Defaults to 0. If set will be ignored if the pay_req includes an amount
         fee_limit_ppm (int, optional): Fee limit in parts per million. Defaults to setting in config.
         use_keepsats (bool, optional): Whether to use Keepsats for the payment. Defaults to False.
+        probe_only (bool, optional): If True, dispatch a prepay probe with a random payment
+                    hash instead of the invoice. The destination cannot settle, so no funds
+                    are transferred. Expect FAILED / FAILURE_REASON_INCORRECT_PAYMENT_DETAILS
+                    if the probe reaches the destination. Defaults to False.
 
     Raises:
         ValueError: If the LNDClient instance is not provided.
@@ -490,16 +559,23 @@ async def send_lightning_to_pay_req(
     )
     failure_reason = "Unknown Failure"
     # Construct the SendPaymentRequest parameters
-    request_params = request_params | {
-        "payment_request": pay_req.pay_req_str,
-        "timeout_seconds": 600,
-        "fee_limit_msat": fee_limit_msat,
-        "dest_custom_records": dest_custom_records,
-    }
-
-    # Add amount_msat if it's a zero-value invoice
-    if zero_value_pay_req:
-        request_params["amt_msat"] = int(amount_msat)
+    if probe_only:
+        request_params = request_params | _probe_send_payment_params(
+            pay_req,
+            amount_msat=int(payment_amount_msat),
+            fee_limit_msat=fee_limit_msat,
+            dest_custom_records=dest_custom_records,
+        )
+    else:
+        request_params = request_params | {
+            "payment_request": pay_req.pay_req_str,
+            "timeout_seconds": 600,
+            "fee_limit_msat": fee_limit_msat,
+            "dest_custom_records": dest_custom_records,
+        }
+        # Add amount_msat if it's a zero-value invoice
+        if zero_value_pay_req:
+            request_params["amt_msat"] = int(amount_msat)
 
     payment_dict = {}
     error_message = ""
@@ -509,8 +585,12 @@ async def send_lightning_to_pay_req(
         # simulate_error_for_testing()
         # Create the SendPaymentRequest object
         logger.info(
-            f"{payment_id} Sending payment...",
-            extra={"notification": False, "request_params": request_params},
+            f"{payment_id} Sending {'probe' if probe_only else 'payment'}...",
+            extra={
+                "notification": False,
+                "request_params": request_params,
+                "probe_only": probe_only,
+            },
         )
         request = routerrpc.SendPaymentRequest(**request_params)
         async for payment_resp in lnd_client.router_stub.SendPaymentV2(request):
