@@ -39,6 +39,10 @@ from v4vapp_backend_v2.helpers.opening_balances import (
     reset_exchange_opening_balance,
     reset_lightning_opening_balance,
 )
+from v4vapp_backend_v2.magi.magi_classes import (
+    MagiIdentityInconsistency,
+    assert_magi_identity_ready,
+)
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 from v4vapp_backend_v2.process.overwatch_flows import FLOW_DEFINITIONS
 from v4vapp_backend_v2.process.process_overwatch import Overwatch
@@ -601,6 +605,7 @@ async def main_async_start(use_resume: bool = True, use_overwatch: bool = False)
 
     db_conn = DBConn()
     await db_conn.setup_database()
+    await assert_magi_identity_ready()
     await invalidate_all_ledger_cache()
 
     await reset_lightning_opening_balance()
@@ -724,7 +729,12 @@ def main(
         extra={"notification": False},
     )
 
-    asyncio.run(main_async_start(use_resume=use_resume, use_overwatch=use_overwatch))
+    try:
+        asyncio.run(main_async_start(use_resume=use_resume, use_overwatch=use_overwatch))
+    except MagiIdentityInconsistency as e:
+        # Exit 0 so Docker restart: on-failure does not bounce and re-process.
+        logger.error(f"{ICON} Magi identity gate failed: {e}", extra={"notification": False})
+        raise typer.Exit(code=0) from e
 
 
 if __name__ == "__main__":

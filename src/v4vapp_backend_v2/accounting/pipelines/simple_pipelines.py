@@ -233,6 +233,9 @@ IGNORED_UPDATE_FIELDS = [
     "invoice_description",
     "vsc_call_not_needed",  # CustomJson field to mark VSC calls that can be ignored in processing
     "node_name",  # Node name will be on invoices, payments and htlc_events, but is not relevant to processing
+    "group_id",
+    "legacy_group_id",
+    "identity_key",
 ]
 
 

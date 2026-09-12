@@ -7,7 +7,12 @@ from v4vapp_backend_v2.hive_models.account_name_type import AccName
 from v4vapp_backend_v2.hive_models.magi_json_data import VSCCall, VSCCallPayload
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingCustomJson
-from v4vapp_backend_v2.magi.magi_classes import ICON, MagiBTCTransferEvent
+from v4vapp_backend_v2.magi.magi_classes import (
+    ICON,
+    MagiBTCTransferEvent,
+    find_magi_docs,
+    select_keeper,
+)
 from v4vapp_backend_v2.process.hive_notification import send_magi_transfer_custom_json
 
 
@@ -153,9 +158,8 @@ async def wait_for_magi_btc_event(
     """
     start_time = time.time()
     while time.time() - start_time < timeout_seconds:
-        btc_event_raw = await MagiBTCTransferEvent.collection().find_one({
-            "indexer_tx_hash": custom_json.trx_id
-        })
+        docs = await find_magi_docs(indexer_tx_hash=custom_json.trx_id)
+        btc_event_raw = await select_keeper(docs)
         if btc_event_raw:
             try:
                 magi_event = MagiBTCTransferEvent.model_validate(btc_event_raw)
@@ -199,9 +203,8 @@ async def find_magi_btc(custom_json: CustomJson) -> MagiBTCTransferEvent | None:
 
     try:
         trx_id = custom_json.trx_id
-        btc_event_raw = await MagiBTCTransferEvent.collection().find_one({
-            "indexer_tx_hash": trx_id
-        })
+        docs = await find_magi_docs(indexer_tx_hash=trx_id)
+        btc_event_raw = await select_keeper(docs)
         if btc_event_raw:
             btc_event = MagiBTCTransferEvent.model_validate(btc_event_raw)
             logger.info(

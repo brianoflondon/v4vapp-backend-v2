@@ -12,7 +12,10 @@ from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.hive_models.op_base import OpBase
-from v4vapp_backend_v2.magi.magi_classes import DB_MAGI_BTC_COLLECTION
+from v4vapp_backend_v2.magi.magi_classes import (
+    DB_MAGI_BTC_COLLECTION,
+    persist_watched_magi_event,
+)
 from v4vapp_backend_v2.magi.stream_magi import stream_magi_transfer_events
 
 ICON = "🧙‍♂️"
@@ -161,7 +164,7 @@ async def main_async_start(from_indexer_id: int = 0) -> None:
                     continue
                 try:
                     if event.is_watched:
-                        await event.fill_custom_jsons()
+                        await persist_watched_magi_event(event)
                         for custom_json in event.custom_jsons or []:
                             if custom_json.is_watched:
                                 logger.info(

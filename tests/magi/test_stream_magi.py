@@ -358,25 +358,36 @@ def test_transfer_event_op_in_trx_suffix_one():
 
 
 def test_transfer_event_group_id():
-    """group_id uses the indexer event identifier format."""
-    event = MagiBTCTransferEvent(**SAMPLE_EVENT)  # hash = "abc123", indexer_id = 42
-    expected = f"{SAMPLE_EVENT['indexer_id']}_abc123_magi"
-    assert event.group_id == expected
-    assert event.group_id_p == expected
+    """group_id is indexer-agnostic: {trx_id}_{op_in_trx}_magi."""
+    event = MagiBTCTransferEvent(**SAMPLE_EVENT)  # hash = "abc123", op 1
+    assert event.group_id == "abc123_1_magi"
+    assert event.group_id_p == "abc123_1_magi"
 
 
 def test_transfer_event_group_id_with_suffix():
-    """group_id uses trx_id (suffix stripped) with indexer_id."""
+    """abc123-1 is op 2 → abc123_2_magi."""
     event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": "abc123-1"})
-    expected = f"{SAMPLE_EVENT['indexer_id']}_abc123_magi"
-    assert event.group_id == expected
-    assert event.group_id_p == expected
+    assert event.group_id == "abc123_2_magi"
+    assert event.group_id_p == "abc123_2_magi"
+
+
+def test_transfer_event_group_id_no_suffix_and_zero_share():
+    no_suffix = MagiBTCTransferEvent(**SAMPLE_EVENT)
+    zero = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": "abc123-0"})
+    assert no_suffix.group_id == zero.group_id == "abc123_1_magi"
+    assert no_suffix.identity_key_p == zero.identity_key_p == "abc123_1"
+
+
+def test_transfer_event_group_id_ipfs_cid_suffix():
+    cid = "bafyreifnigggana4n3uvzxitdbvvywnarvhnfovwk4ojf2zodqucvktizi"
+    event = MagiBTCTransferEvent(**{**SAMPLE_EVENT, "indexer_tx_hash": f"{cid}-1"})
+    assert event.group_id == f"{cid}_2_magi"
 
 
 def test_transfer_event_group_id_query():
     event = MagiBTCTransferEvent(**SAMPLE_EVENT)
-    group_id = event.group_id
-    assert event.group_id_query == {"group_id": group_id}
+    assert event.group_id_query == {"identity_key": event.identity_key_p}
+    assert event.identity_key_p == "abc123_1"
 
 
 def test_transfer_event_tracked_base_fields():
@@ -450,16 +461,33 @@ async def test_transfer_event_save_upsert(mocker):
 
 @pytest.mark.asyncio
 async def test_transfer_event_save_multiple_ids(mocker):
-    """Different indexer_ids produce separate documents."""
+    """Different hashes produce separate documents; same hash does not."""
     mock_client = AsyncMongoMockClient()
     mock_db = mock_client["test_db"]
     mocker.patch.object(InternalConfig, "db", mock_db)
 
-    for raw in [SAMPLE_EVENT, SAMPLE_EVENT_2]:
-        await MagiBTCTransferEvent(**raw).save()
+    await MagiBTCTransferEvent(**SAMPLE_EVENT).save()
+    await MagiBTCTransferEvent(**SAMPLE_EVENT_OTHER).save()
 
     count = await mock_db[DB_MAGI_BTC_COLLECTION].count_documents({})
     assert count == 2
+
+
+@pytest.mark.asyncio
+async def test_transfer_event_save_same_hash_keeps_first_indexer_id(mocker):
+    """Rescan with a new indexer_id upserts the keeper; first indexer_id wins."""
+    mock_client = AsyncMongoMockClient()
+    mock_db = mock_client["test_db"]
+    mocker.patch.object(InternalConfig, "db", mock_db)
+
+    await MagiBTCTransferEvent(**SAMPLE_EVENT).save()
+    await MagiBTCTransferEvent(**SAMPLE_EVENT_2).save()
+
+    count = await mock_db[DB_MAGI_BTC_COLLECTION].count_documents({})
+    assert count == 1
+    doc = await mock_db[DB_MAGI_BTC_COLLECTION].find_one({})
+    assert doc["indexer_id"] == SAMPLE_EVENT["indexer_id"]
+    assert doc["group_id"] == "abc123_1_magi"
 
 
 # ---------------------------------------------------------------------------

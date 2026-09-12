@@ -17,7 +17,11 @@ from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
-from v4vapp_backend_v2.magi.magi_classes import MagiBTCTransferEvent
+from v4vapp_backend_v2.magi.magi_classes import (
+    MagiBTCTransferEvent,
+    find_magi_docs,
+    select_keeper,
+)
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
@@ -209,11 +213,10 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
     if isinstance(tracked_obj, str):
         group_id = tracked_obj
         if "_magi" in group_id or "_m" in group_id:
-            collection_name = MagiBTCTransferEvent().collection_name
-            query = {"group_id": group_id}
-            result = await db[collection_name].find_one(filter=query)
-            if result:
-                value = {"value": result}
+            docs = await find_magi_docs(group_id=group_id)
+            keeper = await select_keeper(docs)
+            if keeper:
+                value = {"value": keeper}
                 answer = DiscriminatedTracked.model_validate(value)
                 return answer.value
 
@@ -237,9 +240,16 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
                     return answer.value
 
     elif collection_name := getattr(tracked_obj, "collection_name", None):
-        result = await db[collection_name].find_one(
-            filter=tracked_obj.group_id_query,
-        )
+        if isinstance(tracked_obj, MagiBTCTransferEvent):
+            docs = await find_magi_docs(
+                indexer_tx_hash=tracked_obj.indexer_tx_hash,
+                identity_key=tracked_obj.identity_key_p,
+            )
+            result = await select_keeper(docs)
+        else:
+            result = await db[collection_name].find_one(
+                filter=tracked_obj.group_id_query,
+            )
         if result:
             value = {"value": result}
             answer = DiscriminatedTracked.model_validate(value)

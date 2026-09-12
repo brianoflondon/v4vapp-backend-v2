@@ -57,7 +57,12 @@ from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
-from v4vapp_backend_v2.magi.magi_classes import MagiBTCTransferEvent
+from v4vapp_backend_v2.magi.magi_classes import (
+    MagiBTCTransferEvent,
+    find_magi_docs,
+    magi_ledgers_for,
+    select_keeper,
+)
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment, PaymentStatus
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
@@ -112,7 +117,11 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
     finalize = True
     retry_task = None
     start = timer()
-    async with LockStr(f"{CUST_ID_LOCK_PREFIX}_{tracked_op.group_id_p}").locked(
+    if isinstance(tracked_op, MagiBTCTransferEvent):
+        outer_lock_key = f"{CUST_ID_LOCK_PREFIX}_{tracked_op.identity_key_p}"
+    else:
+        outer_lock_key = f"{CUST_ID_LOCK_PREFIX}_{tracked_op.group_id_p}"
+    async with LockStr(outer_lock_key).locked(
         timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
     ):
         existing_entry = await LedgerEntry.load(group_id=tracked_op.group_id_p)
@@ -130,7 +139,13 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
         ledger_entries: list[LedgerEntry] = []
 
         existing_op = await load_tracked_object(tracked_obj=tracked_op.group_id_p)
-        if existing_op and existing_op.process_time:
+        if (
+            existing_op
+            and existing_op.process_time
+            and not isinstance(tracked_op, MagiBTCTransferEvent)
+        ):
+            # Magi skips inside try so finally → perform_finalize can migrate
+            # identity fields on the keeper without re-running accounting.
             logger.debug(
                 f"Process time already set for {tracked_op.short_id} already processed.",
                 extra={"notification": False},
@@ -196,6 +211,20 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
                     # here resulted in duplicate messages.
                     ledger_entries = await process_forward(tracked_forward_event=tracked_op)
                 elif isinstance(tracked_op, MagiBTCTransferEvent):
+                    docs = await find_magi_docs(
+                        indexer_tx_hash=tracked_op.indexer_tx_hash,
+                        identity_key=tracked_op.identity_key_p,
+                    )
+                    keeper = await select_keeper(docs)
+                    ledgers = await magi_ledgers_for(keeper) if keeper else []
+                    if keeper and (keeper.get("process_time") is not None or ledgers):
+                        # Already booked under the keeper's stored group_id.
+                        # Return inside try so finally → perform_finalize stamps
+                        # process_time on the keeper via Magi save() field policy.
+                        ledger_entries = (
+                            [LedgerEntry.model_validate(x) for x in ledgers] if ledgers else []
+                        )
+                        return ledger_entries
                     ledger_entries = await process_magi_btc_transfer_event(
                         magi_transfer=tracked_op
                     )
