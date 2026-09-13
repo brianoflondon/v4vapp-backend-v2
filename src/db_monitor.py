@@ -53,9 +53,11 @@ ICON = "🏆"
 # Only Hive transfers that produce no ledger entries should cancel Overwatch
 # candidates (untracked accounts). CustomJson / invoice / payment ops often
 # return [] because their ledgers are written later via other streams.
-_OVERWATCH_CANCEL_ON_EMPTY_OP_TYPES = frozenset(
-    {"transfer", "recurrent_transfer", "transfer_to_vesting"}
-)
+_OVERWATCH_CANCEL_ON_EMPTY_OP_TYPES = frozenset({
+    "transfer",
+    "recurrent_transfer",
+    "transfer_to_vesting",
+})
 app = typer.Typer()
 
 
@@ -500,7 +502,9 @@ async def subscribe_stream(
             try:
                 resume.delete_token()
             except Exception:
-                logger.debug(f"{ICON} {collection_name} Failed to delete resume token; continuing shutdown")
+                logger.debug(
+                    f"{ICON} {collection_name} Failed to delete resume token; continuing shutdown"
+                )
             # signal shutdown in case anything else is watching
             shutdown_event.set()
             # raise something that bubbles up through main_async_start and
@@ -733,7 +737,7 @@ def main(
         asyncio.run(main_async_start(use_resume=use_resume, use_overwatch=use_overwatch))
     except MagiIdentityInconsistency as e:
         # Exit 0 so Docker restart: on-failure does not bounce and re-process.
-        logger.error(f"{ICON} Magi identity gate failed: {e}", extra={"notification": False})
+        logger.error(f"{ICON} Magi identity gate failed: {e}", extra={"notification": True})
         raise typer.Exit(code=0) from e
 
 
