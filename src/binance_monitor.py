@@ -210,8 +210,9 @@ def generate_message(saved_balances: dict):
     delta_message = ""
     delta_balances = {}
     adapter = get_exchange_adapter()
-    balances = adapter.get_balances(["BTC", "HIVE"])
+    balances = adapter.get_balances(["BTC", "HIVE", "DASH"])
     hive_balance = Decimal(balances.get("HIVE", 0))
+    dash_balance = Decimal(balances.get("DASH", 0))
     sats_balance = Decimal(balances.get("SATS", 0))
     if saved_balances and balances != saved_balances:
         delta_balances = {
@@ -219,9 +220,11 @@ def generate_message(saved_balances: dict):
         }
         if delta_balances:
             hive_direction = "⬆️🟢" if delta_balances.get("HIVE", 0) >= 0 else "📉🟥"
+            dash_direction = "⬆️🟢" if delta_balances.get("DASH", 0) >= 0 else "📉🟥"
             sats_direction = "⬆️🟢" if delta_balances.get("SATS", 0) >= 0 else "📉🟥"
             delta_message = (
                 f"{hive_direction} {delta_balances.get('HIVE', 0):.3f} HIVE "
+                f"{dash_direction} {delta_balances.get('DASH', 0):.3f} DASH "
                 f"({sats_direction} {int(delta_balances.get('SATS', 0)):,} sats)"
             )
     current_price_decimal = adapter.get_current_price("HIVE", "BTC")
@@ -240,7 +243,9 @@ def generate_message(saved_balances: dict):
         f"{percentage_meter}\n"
         f"{hive_balance - hive_target:.0f} HIVE "
         f"{delta_message} "
-        f"{float(hive_balance):,.3f} ({int(sats_balance):,} sats)\n"
+        f"{float(hive_balance):,.3f} HIVE "
+        f"{float(dash_balance):,.3f} DASH "
+        f"({int(sats_balance):,} sats)\n"
         f"Target: {hive_target:.3f}"
     )
     log_str = notification_str.replace("\n", " ")

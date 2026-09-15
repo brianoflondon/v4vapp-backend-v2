@@ -11,6 +11,7 @@ NOTE: The Convert API does NOT support testnet. All operations are live.
 """
 
 import time
+from datetime import UTC, datetime
 from decimal import ROUND_DOWN, Decimal
 from typing import ClassVar
 
@@ -22,17 +23,24 @@ from requests.exceptions import RequestException
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.exchange_protocol import (
-    BaseExchangeAdapter, ExchangeBelowMinimumError, ExchangeConnectionError,
-    ExchangeError, ExchangeMinimums, ExchangeOrderResult)
+    BaseExchangeAdapter,
+    ExchangeBelowMinimumError,
+    ExchangeConnectionError,
+    ExchangeError,
+    ExchangeMinimums,
+    ExchangeOrderResult,
+)
 from v4vapp_backend_v2.helpers.binance_extras import (
-    BinanceErrorBadConnection, get_balances, get_client, get_mid_price)
+    BinanceErrorBadConnection,
+    get_balances,
+    get_client,
+    get_mid_price,
+)
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 
 
 class ExchangeQuoteExpiredError(ExchangeError):
     """Raised when a Convert quote has expired before acceptance."""
-
-    pass
 
 
 class ConvertQuoteResult(BaseModel):
@@ -197,7 +205,10 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
     # Convert API reports a smaller minimum.  This protects rebalance logic
     # from doing tiny trades when the published minimum is effectively zero.
     # Set to Decimal("0") or remove key to disable for an asset.
-    MIN_BASE_ASSET_OVERRIDE: ClassVar[dict[str, Decimal]] = {"HIVE": Decimal("50")}
+    MIN_BASE_ASSET_OVERRIDE: ClassVar[dict[str, Decimal]] = {
+        "HIVE": Decimal(50),
+        "DASH": Decimal("0.5"),
+    }
 
     def _get_client(self) -> Client:
         """
@@ -252,13 +263,13 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
                 if pair.get("fromAsset") == base_asset and pair.get("toAsset") == quote_asset:
                     min_qty = Decimal(str(pair.get("fromAssetMinAmount", "0")))
                     # apply any configured override for the base asset
-                    override = self.MIN_BASE_ASSET_OVERRIDE.get(base_asset, Decimal("0"))
+                    override = self.MIN_BASE_ASSET_OVERRIDE.get(base_asset, Decimal(0))
                     if override and min_qty < override:
                         min_qty = override
                     return ExchangeMinimums(
                         min_qty=min_qty,
                         min_notional=Decimal(str(pair.get("toAssetMinAmount", "0"))),
-                        step_size=Decimal("0"),  # Convert API doesn't have step_size
+                        step_size=Decimal(0),  # Convert API doesn't have step_size
                     )
 
             # Also check the reverse direction (toAsset -> fromAsset)
@@ -269,13 +280,13 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
                 if pair.get("fromAsset") == quote_asset and pair.get("toAsset") == base_asset:
                     min_qty = Decimal(str(pair.get("toAssetMinAmount", "0")))
                     # override is based on the base asset (still base_asset variable)
-                    override = self.MIN_BASE_ASSET_OVERRIDE.get(base_asset, Decimal("0"))
+                    override = self.MIN_BASE_ASSET_OVERRIDE.get(base_asset, Decimal(0))
                     if override and min_qty < override:
                         min_qty = override
                     return ExchangeMinimums(
                         min_qty=min_qty,
                         min_notional=Decimal(str(pair.get("fromAssetMinAmount", "0"))),
-                        step_size=Decimal("0"),
+                        step_size=Decimal(0),
                     )
 
             # Pair not found - return zeros (let the API reject if invalid)
@@ -283,9 +294,9 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
                 f"Convert pair {base_asset}/{quote_asset} not found in convert pairs list"
             )
             return ExchangeMinimums(
-                min_qty=Decimal("0"),
-                min_notional=Decimal("0"),
-                step_size=Decimal("0"),
+                min_qty=Decimal(0),
+                min_notional=Decimal(0),
+                step_size=Decimal(0),
             )
 
         except ClientError as e:
@@ -526,9 +537,9 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
         Build a QuoteResponse reflecting the actual swap rate,
         preserving market prices for other conversions.
 
-        For HIVE->BTC or BTC->HIVE swaps:
-            - Uses actual swap ratio for sats_hive calculation
-            - Preserves real BTC/USD, HBD/USD rates from market
+        For HIVE/HBD/DASH <-> BTC swaps:
+            - Uses actual swap ratio for that asset's USD rate
+            - Preserves other market rates (BTC/USD, HBD/USD, DASH/USD, etc.)
 
         Args:
             from_asset: The source asset
@@ -539,7 +550,6 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             QuoteResponse with rates reflecting the actual swap
         """
         import asyncio
-        from datetime import datetime, timezone
 
         from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 
@@ -560,66 +570,43 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             all_quotes.quote = QuoteResponse()
 
         market_quote = all_quotes.quote
-        btc_usd = market_quote.btc_usd if market_quote.btc_usd > 0 else Decimal("1")
+        btc_usd = market_quote.btc_usd if market_quote.btc_usd > 0 else Decimal(1)
+        now = datetime.now(tz=UTC)
+        source = f"{self.exchange_name}_trade"
+        from_u, to_u = from_asset.upper(), to_asset.upper()
 
-        # Determine the effective HIVE/BTC price from the swap ratio
-        if from_asset.upper() == "HIVE" and to_asset.upper() == "BTC":
-            # Selling HIVE for BTC: ratio = BTC received per HIVE
-            # avg_price (in BTC per HIVE) = ratio
-            avg_price_btc = ratio
-            trade_hive_usd = avg_price_btc * btc_usd
+        def _qr(
+            *,
+            hive_usd: Decimal | None = None,
+            hbd_usd: Decimal | None = None,
+            dash_usd: Decimal | None = None,
+        ) -> QuoteResponse:
             return QuoteResponse(
-                hive_usd=trade_hive_usd,
-                hbd_usd=market_quote.hbd_usd,
+                hive_usd=market_quote.hive_usd if hive_usd is None else hive_usd,
+                hbd_usd=market_quote.hbd_usd if hbd_usd is None else hbd_usd,
                 btc_usd=btc_usd,
                 hive_hbd=market_quote.hive_hbd,
-                source=f"{self.exchange_name}_trade",
-                fetch_date=datetime.now(tz=timezone.utc),
+                dash_usd=market_quote.dash_usd if dash_usd is None else dash_usd,
+                source=source,
+                fetch_date=now,
             )
-        elif from_asset.upper() == "BTC" and to_asset.upper() == "HIVE":
-            # Buying HIVE with BTC: ratio = HIVE received per BTC
-            # avg_price (BTC per HIVE) = 1 / ratio
-            avg_price_btc = Decimal("1") / ratio if ratio > 0 else Decimal("0")
-            trade_hive_usd = avg_price_btc * btc_usd
-            return QuoteResponse(
-                hive_usd=trade_hive_usd,
-                hbd_usd=market_quote.hbd_usd,
-                btc_usd=btc_usd,
-                hive_hbd=market_quote.hive_hbd,
-                source=f"{self.exchange_name}_trade",
-                fetch_date=datetime.now(tz=timezone.utc),
-            )
-        elif from_asset.upper() == "HBD" and to_asset.upper() == "BTC":
-            avg_price_btc = ratio
-            trade_hbd_usd = avg_price_btc * btc_usd
-            return QuoteResponse(
-                hive_usd=market_quote.hive_usd,
-                hbd_usd=trade_hbd_usd,
-                btc_usd=btc_usd,
-                hive_hbd=market_quote.hive_hbd,
-                source=f"{self.exchange_name}_trade",
-                fetch_date=datetime.now(tz=timezone.utc),
-            )
-        elif from_asset.upper() == "BTC" and to_asset.upper() == "HBD":
-            avg_price_btc = Decimal("1") / ratio if ratio > 0 else Decimal("0")
-            trade_hbd_usd = avg_price_btc * btc_usd
-            return QuoteResponse(
-                hive_usd=market_quote.hive_usd,
-                hbd_usd=trade_hbd_usd,
-                btc_usd=btc_usd,
-                hive_hbd=market_quote.hive_hbd,
-                source=f"{self.exchange_name}_trade",
-                fetch_date=datetime.now(tz=timezone.utc),
-            )
-        else:
-            return QuoteResponse(
-                hive_usd=market_quote.hive_usd,
-                hbd_usd=market_quote.hbd_usd,
-                btc_usd=market_quote.btc_usd,
-                hive_hbd=market_quote.hive_hbd,
-                source=f"{self.exchange_name}_trade",
-                fetch_date=datetime.now(tz=timezone.utc),
-            )
+
+        if from_u == "HIVE" and to_u == "BTC":
+            return _qr(hive_usd=ratio * btc_usd)
+        if from_u == "BTC" and to_u == "HIVE":
+            avg_price_btc = Decimal(1) / ratio if ratio > 0 else Decimal(0)
+            return _qr(hive_usd=avg_price_btc * btc_usd)
+        if from_u == "HBD" and to_u == "BTC":
+            return _qr(hbd_usd=ratio * btc_usd)
+        if from_u == "BTC" and to_u == "HBD":
+            avg_price_btc = Decimal(1) / ratio if ratio > 0 else Decimal(0)
+            return _qr(hbd_usd=avg_price_btc * btc_usd)
+        if from_u == "DASH" and to_u == "BTC":
+            return _qr(dash_usd=ratio * btc_usd)
+        if from_u == "BTC" and to_u == "DASH":
+            avg_price_btc = Decimal(1) / ratio if ratio > 0 else Decimal(0)
+            return _qr(dash_usd=avg_price_btc * btc_usd)
+        return _qr()
 
     def _execute_swap(
         self,
@@ -659,9 +646,7 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
 
         # Validate we got a usable Binance quote ID
         if not quote.quote_id:
-            raise ExchangeConnectionError(
-                "Binance Convert quote response is missing quoteId."
-            )
+            raise ExchangeConnectionError("Binance Convert quote response is missing quoteId.")
 
         # Step 2: Accept the quote
         accept_result = self.accept_quote(quote.quote_id)
@@ -677,14 +662,14 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             executed_qty = order_status.from_amount
             quote_qty = order_status.to_amount
             # avg_price = quote_asset per base_asset
-            avg_price = quote_qty / executed_qty if executed_qty > 0 else Decimal("0")
+            avg_price = quote_qty / executed_qty if executed_qty > 0 else Decimal(0)
         else:
             # Buying base_asset with quote_asset
             # from_asset=quote_asset, to_asset=base_asset
             executed_qty = order_status.to_amount
             quote_qty = order_status.from_amount
             # avg_price = quote_asset per base_asset
-            avg_price = quote_qty / executed_qty if executed_qty > 0 else Decimal("0")
+            avg_price = quote_qty / executed_qty if executed_qty > 0 else Decimal(0)
 
         # Build trade quote from the actual conversion ratio
         # For sell: from→to means base→quote, ratio = to_amount/from_amount = avg_price
@@ -708,8 +693,8 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             executed_qty=executed_qty,
             quote_qty=quote_qty,
             avg_price=avg_price,
-            fee_msats=Decimal("0"),  # Fees hidden in rate
-            fee_original=Decimal("0"),
+            fee_msats=Decimal(0),  # Fees hidden in rate
+            fee_original=Decimal(0),
             fee_asset="",
             raw_response=order_status.raw_response,
             base_asset=base_asset,
@@ -793,7 +778,7 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
         # order_status: from=quote_asset, to=base_asset
         executed_qty = order_status.to_amount  # base_asset received
         quote_qty = order_status.from_amount  # quote_asset spent
-        avg_price = quote_qty / executed_qty if executed_qty > 0 else Decimal("0")
+        avg_price = quote_qty / executed_qty if executed_qty > 0 else Decimal(0)
 
         trade_quote = self._build_trade_quote(
             from_asset=quote_asset,
@@ -814,8 +799,8 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             executed_qty=executed_qty,
             quote_qty=quote_qty,
             avg_price=avg_price,
-            fee_msats=Decimal("0"),  # Fees hidden in rate
-            fee_original=Decimal("0"),
+            fee_msats=Decimal(0),  # Fees hidden in rate
+            fee_original=Decimal(0),
             fee_asset="",
             raw_response=order_status.raw_response,
             base_asset=base_asset,
