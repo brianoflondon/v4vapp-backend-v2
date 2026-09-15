@@ -928,8 +928,6 @@ class TestZeroFeePaymentCompletes:
         await ow.check_stalls()
 
         assert not [
-            f
-            for f in ow.flow_instances
-            if f.flow_definition.name == "keepsats_to_hive" and f.status != FlowStatus.FAILED
+            f for f in ow.flow_instances if f.flow_definition.name == "keepsats_to_hive"
         ]
         assert ow.completed_flows[0].flow_definition.name == "keepsats_to_external"
