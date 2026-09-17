@@ -369,7 +369,24 @@ async def pay_dash_lightning(invoice_doc: dict[str, Any]) -> DashLightningResult
 
 
 async def refund_failed_lightning(invoice_doc: dict[str, Any]) -> list[LedgerEntry]:
-    """Send received Dash minus 100 sats back to the funding address; clear SATS liability."""
+    """
+    Refund a failed Lightning payment for the given invoice.
+    Returns a list of LedgerEntry objects representing the refund transactions.
+
+    This function checks if a refund is necessary and possible, calculates the refund amount,
+    and attempts to create a payout to the original funding address. It handles various edge
+    cases such as missing funding information, insufficient credited sats, and invalid addresses.
+
+    Note that this function does not guarantee a successful refund; it only attempts to process it
+    if all necessary conditions are met.
+
+    Parameters:
+        invoice_doc (dict[str, Any]): The invoice document containing payment and funding details.
+
+    Returns:
+        list[LedgerEntry]: A list of LedgerEntry objects representing the refund transactions.
+    """
+
     group_key = invoice_group_key(invoice_doc)
     if not group_key or invoice_doc.get("lightning_refunded_at"):
         return []
@@ -415,6 +432,14 @@ async def refund_failed_lightning(invoice_doc: dict[str, Any]) -> list[LedgerEnt
         )
         return []
 
+    # Wait for 2 minutes (this helps ensure that any pending Lightning transactions have time to settle)
+    WAIT_TIME_SECONDS = 120
+    logger.info(
+        f"{ICON} REFUND: Waiting {WAIT_TIME_SECONDS // 60} minutes before attempting Dash refund {ledger_cust} "
+        f"to allow pending Lightning transactions to settle {short_id}"
+    )
+    await asyncio.sleep(WAIT_TIME_SECONDS)
+
     try:
         async with dashd_session(conn) as dashd:
             reply_to = await funding_sender_address(dashd, txid=txid, our_address=our_address)
@@ -447,7 +472,7 @@ async def refund_failed_lightning(invoice_doc: dict[str, Any]) -> list[LedgerEnt
             )
     except ApiError as exc:
         logger.warning(
-            f"{ICON} Dash refund payout failed for {short_id}: {exc}",
+            f"{ICON} REFUND: Dash refund payout failed for {short_id}: {exc}",
             extra={"invoice_id": invoice_id, "error": str(exc)},
         )
         return []
@@ -524,7 +549,7 @@ async def refund_failed_lightning(invoice_doc: dict[str, Any]) -> list[LedgerEnt
         },
     )
     logger.info(
-        f"{ICON} Dash refund {dest_duffs:,.0f} duffs to {reply_to} after Lightning fail {short_id}",
+        f"{ICON} REFUND:Dash refund {dest_duffs:,.0f} duffs to {reply_to} after Lightning fail {short_id}",
         extra={
             "invoice_id": invoice_id,
             "refund_txid": extra.get("txid"),
