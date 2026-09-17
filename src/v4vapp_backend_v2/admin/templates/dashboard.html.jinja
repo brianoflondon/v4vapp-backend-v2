@@ -87,6 +87,15 @@
                         </div>
                     </div>
                 </div>
+                <div class="row mt-3">
+                    <div class="col-md-4" id="exchange-balances-section">
+                        <h6 class="text-muted">Exchange / Dash</h6>
+                        <div class="d-flex align-items-center text-muted small">
+                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                            Loading exchange balances&hellip;
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -226,6 +235,25 @@
     function renderMagiBalances(data) {
         latestMagiBalances = data.balances || {};
         renderHiveBalances({ balances: latestHiveBalances });
+    }
+
+    function renderExchangeBalances(data) {
+        const info = (data && data.exchange) || {};
+        let html = '<h6 class="text-muted">Exchange / Dash</h6>';
+        if (info.error) {
+            html += '<div class="text-danger small mb-2">Wallet: ' + escHtml(String(info.error)) + '</div>';
+        }
+        html += '<div class="small">'
+            + '<div><span class="text-muted">Binance HIVE</span> <strong>' + escHtml(info.HIVE || 'N/A') + '</strong></div>'
+            + '<div><span class="text-muted">Binance DASH</span> <strong>' + escHtml(info.DASH || 'N/A') + '</strong></div>'
+            + '<div><span class="text-muted">Binance BTC</span> <strong>' + escHtml(info.BTC || 'N/A') + '</strong></div>'
+            + '<div><span class="text-muted">Binance SATS</span> <strong>' + escHtml(info.SATS || 'N/A') + '</strong></div>'
+            + '<div class="mt-2"><span class="text-muted">Treasury Dash'
+            + (info.treasury_dash_sub ? ' (' + escHtml(info.treasury_dash_sub) + ')' : '')
+            + '</span><br><strong>' + escHtml(info.treasury_dash || 'N/A') + '</strong> DASH</div>'
+            + '</div>';
+        const section = document.getElementById('exchange-balances-section');
+        if (section) section.innerHTML = html;
     }
 
     function renderLndInfo(data) {
@@ -384,6 +412,17 @@
             latestMagiBalances = {};
             if (latestHiveBalances) {
                 renderHiveBalances({ balances: latestHiveBalances });
+            }
+        });
+
+    const exchangePromise = fetchJsonOrThrow('/admin/api/dashboard/exchange-balances')
+        .then(renderExchangeBalances)
+        .catch(err => {
+            const section = document.getElementById('exchange-balances-section');
+            if (section) {
+                section.innerHTML =
+                    '<h6 class="text-muted">Exchange / Dash</h6>'
+                    + '<div class="text-danger small">Failed to load: ' + escHtml(String(err)) + '</div>';
             }
         });
 

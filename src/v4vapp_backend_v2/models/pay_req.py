@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -32,7 +32,7 @@ class HopHint(BaseModel):
 
 # Model for RouteHint
 class RouteHint(BaseModel):
-    hop_hints: List[HopHint] = []
+    hop_hints: list[HopHint] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -49,7 +49,7 @@ class BlindedHop(BaseModel):
 class BlindedPath(BaseModel):
     introduction_node: str  # Base64-encoded bytes
     blinding_point: str  # Base64-encoded bytes
-    blinded_hops: List[BlindedHop] = []
+    blinded_hops: list[BlindedHop] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -62,7 +62,7 @@ class BlindedPaymentPath(BaseModel):
     total_cltv_delta: int
     htlc_min_msat: BSONInt64
     htlc_max_msat: BSONInt64
-    features: List[int] = []  # List of FeatureBit enum values
+    features: list[int] = []  # List of FeatureBit enum values
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -111,10 +111,10 @@ class PayReq(BaseModel):
     description_hash: str | None = None
     fallback_addr: str | None = None
     cltv_expiry: int | None = None
-    route_hints: List[RouteHint] | None = None
+    route_hints: list[RouteHint] | None = None
     payment_addr: str | None = None
-    features: Dict[str, Feature] | None = None
-    blinded_paths: List[BlindedPaymentPath] | None = None
+    features: dict[str, Feature] | None = None
+    blinded_paths: list[BlindedPaymentPath] | None = None
 
     # Added fields in addition to normal LND fields
     conv: CryptoConv = Field(
@@ -242,7 +242,7 @@ class PayReq(BaseModel):
             bool: True if the payment request is expired, False otherwise.
         """
         return self.expiry_date is not None and datetime.now(
-            tz=timezone.utc
+            tz=UTC
         ) > self.expiry_date + timedelta(seconds=0)
 
     @property

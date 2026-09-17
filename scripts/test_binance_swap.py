@@ -54,7 +54,7 @@ def print_balances(adapter):
     print_separator()
     print("📊 Current Balances")
     print("-" * 40)
-    balances = adapter.get_balances(["BTC", "HIVE", "HBD"])
+    balances = adapter.get_balances(["BTC", "HIVE", "DASH", "HBD"])
     for asset, balance in sorted(balances.items()):
         if asset == "SATS":
             print(f"  {asset:>6}: {int(balance):>15,}")
