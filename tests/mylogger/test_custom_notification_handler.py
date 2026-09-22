@@ -1,4 +1,6 @@
+import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -8,6 +10,7 @@ from v4vapp_backend_v2.config.mylogger import (
     CustomNotificationHandler,
     ErrorCode,
     ErrorTrackingFilter,
+    MyJSONFormatter,
     NotificationProtocol,
 )
 from v4vapp_backend_v2.config.setup import InternalConfig
@@ -140,3 +143,48 @@ def test_error_filter_suppresses_duplicate_error_code(error_filter, caplog):
 
     # Should suppress the record (return False)
     assert result is False
+
+
+def test_new_error_code_message_is_not_blanked(error_filter):
+    """The first error line keeps its exception text in the JSON formatter."""
+    record = logging.LogRecord(
+        name="binance_monitor",
+        level=logging.ERROR,
+        pathname="binance_monitor.py",
+        lineno=1,
+        msg="Problem with Networking on Server. timed out",
+        args=(),
+        exc_info=None,
+    )
+    record.error_code = "network_error"
+    record.created = datetime.now(tz=timezone.utc).timestamp()
+
+    assert error_filter.filter(record) is True
+    formatted = MyJSONFormatter().format(record)
+
+    assert formatted
+    payload = json.loads(formatted)
+    assert payload["message"] == "Problem with Networking on Server. timed out"
+    assert "_error_code_emit" not in payload
+
+
+def test_error_filter_clears_multiple_codes(error_filter):
+    """One success line can clear both Binance error codes."""
+    record = logging.LogRecord(
+        name="binance_monitor",
+        level=logging.INFO,
+        pathname="binance_monitor.py",
+        lineno=1,
+        msg="balance ok",
+        args=(),
+        exc_info=None,
+    )
+    record.error_code_clear = ["binance_api_error", "network_error"]
+    InternalConfig().error_codes["binance_api_error"] = ErrorCode(code="binance_api_error")
+    InternalConfig().error_codes["network_error"] = ErrorCode(
+        code="network_error", message="Problem with Networking on Server. timed out"
+    )
+
+    assert error_filter.filter(record) is True
+    assert "binance_api_error" not in InternalConfig().error_codes
+    assert "network_error" not in InternalConfig().error_codes

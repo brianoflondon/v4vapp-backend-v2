@@ -177,6 +177,7 @@ class TestGetClient:
         # Verify it was NOT called with testnet base_url
         call_kwargs = mock_spot.call_args[1]
         assert "base_url" not in call_kwargs
+        assert call_kwargs["timeout"] == 15
 
     def test_get_client_testnet(self, mocker):
         """Test getting a testnet Binance client."""
@@ -193,6 +194,7 @@ class TestGetClient:
         # Verify it was called with testnet base_url
         call_kwargs = mock_spot.call_args[1]
         assert call_kwargs.get("base_url") == "https://testnet.binance.vision"
+        assert call_kwargs["timeout"] == 15
 
     def test_get_client_exception(self, mocker):
         """Test that exceptions are re-raised from get_client."""
@@ -323,7 +325,11 @@ class TestGetBalances:
         with pytest.raises(BinanceErrorBadConnection) as exc_info:
             get_balances(["BTC"], testnet=True)
 
-        assert "Invalid API-key, IP, or permissions for action." in str(exc_info.value)
+        message = str(exc_info.value)
+        assert "get_balances failed" in message
+        assert "status=403" in message
+        assert "code=-2015" in message
+        assert "Invalid API-key, IP, or permissions for action." in message
 
     def test_get_balances_generic_exception(self, mocker):
         """Test handling of generic exceptions."""
@@ -414,6 +420,29 @@ class TestGetCurrentPrice:
         assert price["ask_price"] == "0.26"
         assert price["bid_price"] == "0.25"
         assert price["current_price"] == "0.255"
+
+    def test_get_current_price_client_error(self, mocker):
+        """Price failures keep the Binance status, error code, and symbol."""
+        mock_client = MagicMock()
+        mock_client.book_ticker.side_effect = ClientError(
+            status_code=400,
+            error_code=-1121,
+            error_message="Invalid symbol.",
+            header={},
+        )
+        mocker.patch(
+            "v4vapp_backend_v2.helpers.binance_extras.get_client",
+            return_value=mock_client,
+        )
+
+        with pytest.raises(BinanceErrorBadConnection) as exc_info:
+            get_current_price("HIVEBTC", testnet=False)
+
+        message = str(exc_info.value)
+        assert "get_current_price for HIVEBTC failed" in message
+        assert "status=400" in message
+        assert "code=-1121" in message
+        assert "Invalid symbol." in message
 
 
 class TestExceptionClasses:
