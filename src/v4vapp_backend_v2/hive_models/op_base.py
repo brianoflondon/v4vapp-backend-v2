@@ -20,6 +20,7 @@ from v4vapp_backend_v2.hive_models.op_base_extras import (
     HiveExp,
     OpLogData,
     OpRealm,
+    get_hive_block_explorer_link,
     op_realm,
 )
 
@@ -391,37 +392,19 @@ class OpBase(TrackedBaseModel):
 
     def _get_hive_block_explorer_link(self, markdown: bool = False) -> str:
         """
-        Generate a Hive blockchain explorer URL for a given transaction ID.
-
-        Args:
-            trx_id (str): The transaction ID to include in the URL
-            block_explorer (HiveExp): The blockchain explorer to use (defaults to HiveHub)
+        Generate a Hive blockchain explorer URL for this operation.
 
         Returns:
-            str: The complete URL with the transaction ID inserted
+            str: The explorer URL, or a markdown link when ``markdown`` is set.
         """
-        prefix = ""
-        path = ""
-        if self.realm == OpRealm.REAL:
-            prefix = "tx/"
-            path = f"{self.trx_id}"
-
-        elif self.realm == OpRealm.VIRTUAL:
-            prefix = "tx/"
-            path = f"{self.block_num}/{self.trx_id}/{self.op_in_trx}"
-
-        if OpBase.block_explorer == HiveExp.HiveScanInfo:
-            if prefix == "tx/":
-                prefix = "transaction/"
-            elif prefix == "b/":
-                prefix = "block/"
-
-        prefix_path = f"{prefix}{path}"
-
-        link_html = OpBase.block_explorer.value.format(prefix_path=prefix_path)
-        if not markdown:
-            return link_html
-        return f"[{OpBase.block_explorer.name}]({link_html})"
+        return get_hive_block_explorer_link(
+            trx_id=self.trx_id,
+            block_explorer=OpBase.block_explorer,
+            markdown=markdown,
+            block_num=self.block_num,
+            op_in_trx=self.op_in_trx,
+            realm=self.realm,
+        )
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
