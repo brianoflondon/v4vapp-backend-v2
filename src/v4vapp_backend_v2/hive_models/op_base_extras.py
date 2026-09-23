@@ -38,6 +38,10 @@ class HiveExp(StrEnum):
     # HiveExplorer = "https://hivexplorer.com/{prefix_path}"
 
 
+# Virtual ops with no real transaction use this id. HiveScan has no page for it.
+_ZERO_TRX_ID = "0000000000000000000000000000000000000000"
+
+
 def get_hive_block_explorer_link(
     trx_id: str,
     block_explorer: HiveExp = HiveExp.HiveHub,
@@ -50,6 +54,12 @@ def get_hive_block_explorer_link(
     """
     Generate a Hive blockchain explorer URL for a given transaction ID.
 
+    HiveHub links a real operation at ``tx/{trx_id}`` and a virtual operation at
+    ``tx/{block}/{trx_id}/{op}``. HiveScan serves real transactions at
+    ``tx/{trx_id}`` and blocks at ``block/{block_num}``. It has no virtual-op
+    page, so a virtual op with a real transaction id links to that transaction
+    and an all-zero transaction id links to the block.
+
     Args:
         trx_id (str): The transaction ID to include in the URL
         block_explorer (HiveExp): The blockchain explorer to use (defaults to HiveHub)
@@ -57,30 +67,27 @@ def get_hive_block_explorer_link(
     Returns:
         str: The complete URL with the transaction ID inserted
     """
-
-    if trx_id and not (block_num and op_in_trx):
-        path = f"{trx_id}"
+    zero_trx = not trx_id or trx_id == _ZERO_TRX_ID
+    if (realm == OpRealm.VIRTUAL or zero_trx) and block_num:
         prefix = "tx/"
-    elif trx_id == "0000000000000000000000000000000000000000" and block_num:
-        op_in_trx = op_in_trx if op_in_trx else 1
-        prefix = f"{block_num}/"
-        path = f"{trx_id}/{op_in_trx}"
-    elif trx_id and block_num and op_in_trx and realm == OpRealm.VIRTUAL:
         path = f"{block_num}/{trx_id}/{op_in_trx}"
+    elif trx_id:
         prefix = "tx/"
-    elif trx_id and op_in_trx and realm == OpRealm.REAL:
-        if op_in_trx > 1:
-            path = f"{trx_id}/{op_in_trx}"
-        else:
-            path = f"{trx_id}"
-        prefix = "tx/"
-    elif not trx_id and block_num:
-        path = f"{block_num}"
+        path = f"{trx_id}"
+    elif block_num:
         prefix = "b/"
+        path = f"{block_num}"
+    else:
+        prefix = "tx/"
+        path = f"{trx_id}"
 
     if block_explorer == HiveExp.HiveScanInfo:
-        if prefix == "tx/":
-            prefix = "transaction/"
+        if zero_trx and block_num:
+            prefix = "block/"
+            path = f"{block_num}"
+        elif realm == OpRealm.VIRTUAL and block_num and trx_id:
+            prefix = "tx/"
+            path = trx_id
         elif prefix == "b/":
             prefix = "block/"
 

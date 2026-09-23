@@ -53,6 +53,28 @@ def test_format_basic_log_record():
     assert "timestamp" in log_dict
 
 
+def test_format_keeps_error_code_message_when_filter_marks_emit():
+    """A first-time error code must keep the exception text in the JSON line."""
+    record = logging.LogRecord(
+        name="binance_monitor",
+        level=logging.ERROR,
+        pathname=__file__,
+        lineno=20,
+        msg="Problem with Networking on Server. timed out",
+        args=(),
+        exc_info=None,
+    )
+    record.created = datetime.now(tz=timezone.utc).timestamp()
+    record.error_code = "network_error"
+    record._error_code_emit = True
+
+    formatted_message = MyJSONFormatter().format(record)
+
+    log_dict = json.loads(formatted_message)
+    assert log_dict["message"] == "Problem with Networking on Server. timed out"
+    assert "_error_code_emit" not in log_dict
+
+
 def test_format_log_record_with_exception():
     # Create a log record with exception info
     try:

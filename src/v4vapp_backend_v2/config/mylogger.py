@@ -36,6 +36,10 @@ LOG_RECORD_BUILTIN_ATTRS = {
     "thread",
     "threadName",
     "taskName",
+    # Internal flags. They must not be copied into the JSON log line.
+    "_error_tracking_processed",
+    "_error_tracking_result",
+    "_error_code_emit",
 }
 
 
@@ -140,6 +144,11 @@ class MyJSONFormatter(logging.Formatter):
         try:
             message = self._prepare_log_dict(record)
             ans_str = json.dumps(message, default=json_default)
+            # The filter already decided this occurrence should be written.
+            # Without this, last_log_time was just set and the check below
+            # blanks the only line that contains the exception text.
+            if getattr(record, "_error_code_emit", False):
+                return ans_str
             if hasattr(record, "error_code"):
                 error_code = record.error_code  # type: ignore[attr-defined]
                 error_state = InternalConfig().error_codes.get(error_code, None)
@@ -317,24 +326,35 @@ class ErrorTrackingFilter(logging.Filter):
         # Is this a notifiable error?
         notification = record.notification if hasattr(record, "notification") else True  # type: ignore[attr-defined]
 
-        # Handle error_code_clear first - always allow these through and clear the code
+        # Handle error_code_clear first - always allow these through and clear the code.
+        # A string clears one code. A list clears each code from the same log line.
         if hasattr(record, "error_code_clear") and record.error_code_clear:  # type: ignore[attr-defined]
             error_code_clear = record.error_code_clear  # type: ignore[attr-defined]
-            if error_code_clear in InternalConfig().error_codes:
-                error_code_obj = InternalConfig().error_codes.get(error_code_clear)
+            if isinstance(error_code_clear, str):
+                codes_to_clear = [error_code_clear]
+            elif isinstance(error_code_clear, (list, tuple)):
+                codes_to_clear = [
+                    code for code in error_code_clear if isinstance(code, str) and code
+                ]
+            else:
+                codes_to_clear = []
+            for code in codes_to_clear:
+                if code not in InternalConfig().error_codes:
+                    continue
+                error_code_obj = InternalConfig().error_codes.get(code)
                 elapsed_time = (
                     error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=0)
                 )
                 elapsed_time_str = timedelta_display(elapsed_time)
                 message = (
-                    f"✅ {Fore.WHITE}Error code {error_code_clear} cleared after "
+                    f"✅ {Fore.WHITE}Error code {code} cleared after "
                     f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}{Style.RESET_ALL}"
                 )
                 logger.info(
                     message,
                     extra={"notification": notification, "error_code_obj": error_code_obj},
                 )
-                InternalConfig().error_codes.pop(error_code_clear, clear_message=message)
+                InternalConfig().error_codes.pop(code, clear_message=message)
             record._error_tracking_processed = True  # type: ignore[attr-defined]
             record._error_tracking_result = True  # type: ignore[attr-defined]
             return True  # Allow the clear message through
@@ -350,9 +370,12 @@ class ErrorTrackingFilter(logging.Filter):
                 re_alert_time = timedelta(hours=1)
 
             if error_code not in InternalConfig().error_codes:
-                # New error code - add it (triggers MongoDB persistence) and allow the log through
+                # New error code - add it (triggers MongoDB persistence) and allow the log through.
+                # Mark the record so MyJSONFormatter does not blank it: add() sets
+                # last_log_time to now, which used to fail the formatter's re-alert check.
                 error_code_obj = ErrorCode(code=error_code, message=record.getMessage())
                 InternalConfig().error_codes.add(error_code_obj)
+                record._error_code_emit = True  # type: ignore[attr-defined]
                 logger.error(
                     f"❌ New error: {error_code}",
                     extra={
@@ -369,6 +392,7 @@ class ErrorTrackingFilter(logging.Filter):
                 if error_state.check_time_since_last_log(re_alert_time):
                     # Time to re-alert - reset the timer and allow through
                     error_state.reset_last_log_time()
+                    record._error_code_emit = True  # type: ignore[attr-defined]
                     record._error_tracking_processed = True  # type: ignore[attr-defined]
                     record._error_tracking_result = True  # type: ignore[attr-defined]
                     return True
