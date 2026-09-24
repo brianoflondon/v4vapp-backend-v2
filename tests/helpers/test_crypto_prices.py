@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock
 
@@ -62,6 +63,7 @@ async def test_coin_gecko_quote_service(mocker):
     assert quote is not None
     assert quote.fetch_date is not None
     assert quote.raw_response == coingecko_resp
+    assert quote.dash_usd > 0
     quote = await service.get_quote(use_cache=True)
     assert quote is not None
     assert quote.fetch_date is not None
@@ -114,6 +116,7 @@ async def test_binance_quote_service(mocker):
     quote = await service.get_quote(use_cache=False)
     assert quote is not None
     assert quote.raw_response == binance_resp
+    assert quote.dash_usd > 0
     quote = await service.get_quote(use_cache=True)
     assert quote is not None
     assert quote.raw_response == binance_resp
@@ -133,6 +136,27 @@ async def test_binance_quote_service_error(mocker):
     quote = await service.get_quote(use_cache=False)
 
     assert "Test error" in quote.error
+
+
+def test_overlay_dash_usd_when_binance_has_none():
+    all_quotes = AllQuotes()
+    all_quotes.quotes = {
+        "Binance": QuoteResponse(
+            hive_usd=Decimal("0.2"),
+            btc_usd=Decimal(65000),
+            dash_usd=Decimal(0),
+            source="Binance",
+        ),
+        "CoinGecko": QuoteResponse(
+            btc_usd=Decimal(65000),
+            dash_usd=Decimal("32.5"),
+            source="CoinGecko",
+        ),
+    }
+    quote = all_quotes.get_one_quote()
+    assert quote.source == "Binance"
+    assert quote.dash_usd == Decimal("32.5")
+    assert quote.dash_btc_p > 0
 
 
 def mock_coin_market_cap(mocker):
@@ -160,6 +184,7 @@ async def test_coin_market_cap_quote_service(mocker):
     quote = await service.get_quote(use_cache=False)
     assert quote is not None
     assert quote.raw_response == coinmarketcap_resp
+    assert quote.dash_usd > 0
     quote = await service.get_quote(use_cache=True)
     assert quote is not None
     assert quote.raw_response == coinmarketcap_resp
