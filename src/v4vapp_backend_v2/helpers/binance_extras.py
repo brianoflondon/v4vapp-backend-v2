@@ -14,6 +14,9 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 # Only alphanumeric characters, hyphens, and underscores are allowed
 BINANCE_ORDER_ID_PATTERN = re.compile(r"^[a-zA-Z0-9\-_]{1,36}$")
 
+# binance-connector defaults timeout to None, so a stalled socket blocks forever.
+BINANCE_HTTP_TIMEOUT_S = 15
+
 
 def sanitize_client_order_id(order_id: str | None, max_length: int = 36) -> str | None:
     """
@@ -63,6 +66,22 @@ class BinanceErrorBelowMinimum(Exception):
     pass
 
 
+def _binance_connection_error(
+    action: str, error: Exception, symbol: str | None = None
+) -> BinanceErrorBadConnection:
+    """Build a BinanceErrorBadConnection that keeps status, code, and symbol."""
+    where = f" for {symbol}" if symbol else ""
+    if isinstance(error, ClientError):
+        detail = (
+            f"{action}{where} failed: status={error.status_code} "
+            f"code={error.error_code} {error.error_message}"
+        )
+    else:
+        detail = f"{action}{where} failed: {type(error).__name__}: {error}"
+    logger.debug(detail, extra={"notification": False})
+    return BinanceErrorBadConnection(detail)
+
+
 def get_client(testnet: bool = False) -> Client:
     """
     Get a Binance API client.
@@ -84,12 +103,14 @@ def get_client(testnet: bool = False) -> Client:
                 api_key=network_config.resolved_api_key,
                 api_secret=network_config.resolved_api_secret,
                 base_url=base_url,
+                timeout=BINANCE_HTTP_TIMEOUT_S,
             )
         else:
             network_config = binance_config.mainnet
             client = Client(
                 api_key=network_config.resolved_api_key,
                 api_secret=network_config.resolved_api_secret,
+                timeout=BINANCE_HTTP_TIMEOUT_S,
             )
         return client
     except Exception as e:
@@ -130,20 +151,17 @@ def get_balances(symbols: list, testnet: bool = False) -> Dict[str, Decimal | in
         if "BTC" in balances and balances["BTC"] > Decimal("0"):
             balances["SATS"] = Decimal(balances["BTC"] * Decimal("100000000"))
         return balances
-    except ClientError as error:
-        logger.debug(
-            f"Found error. status: {error.status_code}, error code: {error.error_code}, error message: {error.error_message}",
-            extra={"notification": False},
-        )
-        raise BinanceErrorBadConnection(error.error_message)
-    except RequestException as error:
-        logger.debug(f"Connection error: {error}", extra={"notification": False})
-        raise BinanceErrorBadConnection(str(error))
     except Exception as error:
-        logger.debug(error, extra={"notification": False})
-        raise BinanceErrorBadConnection(str(error))
+        raise _binance_connection_error("get_balances", error) from error
 
 
+@backoff.on_exception(
+    backoff.expo,
+    (BinanceErrorBadConnection,),
+    max_tries=3,
+    jitter=backoff.full_jitter,
+    logger=logger,
+)
 def get_current_price(symbol: str, testnet: bool = False) -> dict:
     """
     Retrieve the current price details for a given trading symbol from Binance.
@@ -159,15 +177,17 @@ def get_current_price(symbol: str, testnet: bool = False) -> dict:
             - "current_price" (str): The latest price for the symbol.
     """
 
-    client = get_client(testnet)
-
-    price = {}
-    ticker_info = client.book_ticker(symbol)
-    price["ask_price"] = ticker_info["askPrice"]
-    price["bid_price"] = ticker_info["bidPrice"]
-    ticker_price = client.ticker_price(symbol)
-    price["current_price"] = ticker_price["price"]
-    return price
+    try:
+        client = get_client(testnet)
+        ticker_info = client.book_ticker(symbol)
+        ticker_price = client.ticker_price(symbol)
+        return {
+            "ask_price": ticker_info["askPrice"],
+            "bid_price": ticker_info["bidPrice"],
+            "current_price": ticker_price["price"],
+        }
+    except Exception as error:
+        raise _binance_connection_error("get_current_price", error, symbol) from error
 
 
 def get_mid_price(symbol: str, testnet: bool = False) -> Decimal:

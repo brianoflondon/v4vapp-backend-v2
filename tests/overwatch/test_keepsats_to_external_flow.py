@@ -836,3 +836,98 @@ class TestZeroFeePaymentCompletes:
         assert len(ow.completed_flows) == 1
         assert ow.completed_flows[0].flow_definition.name == "keepsats_to_external"
         assert len(ow.active_flows) == 0
+
+    @pytest.mark.asyncio
+    async def test_optional_unique_event_does_not_keep_hive_after_external(
+        self,
+        ke_flow_data: dict,
+        ke_all_flow_events: list[FlowEvent],
+    ):
+        """Regression 2657_3ca903_1: an optional hive-only event (fill_order)
+        must not keep keepsats_to_hive after keepsats_to_external completes."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = ke_flow_data["trigger_custom_json"]
+        await ow._try_create_flow(
+            ke_all_flow_events[0],
+            type(
+                "FakeOp",
+                (),
+                {
+                    "group_id": trigger["group_id"],
+                    "short_id": trigger["short_id"],
+                    "op_type": trigger["type"],
+                    "from_account": trigger.get("cust_id", ""),
+                },
+            )(),
+        )
+
+        hive = next(f for f in ow.active_flows if f.flow_definition.name == "keepsats_to_hive")
+        hive.add_event(
+            FlowEvent(
+                event_type="op",
+                timestamp=ke_all_flow_events[0].timestamp,
+                group_id="gid_unrelated_fill",
+                short_id="fill_xxxx",
+                op_type="fill_order",
+                group="primary",
+            )
+        )
+
+        for event in ke_all_flow_events[1:]:
+            await ow._dispatch(event)
+
+        assert {f.flow_definition.name for f in ow.completed_flows} == {"keepsats_to_external"}
+        assert not [f for f in ow.flow_instances if f.flow_definition.name == "keepsats_to_hive"]
+
+    @pytest.mark.asyncio
+    async def test_check_stalls_drops_stalled_hive_after_external_completed(
+        self,
+        ke_flow_data: dict,
+        ke_all_flow_events: list[FlowEvent],
+    ):
+        """Already-STALLED keepsats_to_hive is cleaned up once the LN sibling completed."""
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger = ke_flow_data["trigger_custom_json"]
+        await ow._try_create_flow(
+            ke_all_flow_events[0],
+            type(
+                "FakeOp",
+                (),
+                {
+                    "group_id": trigger["group_id"],
+                    "short_id": trigger["short_id"],
+                    "op_type": trigger["type"],
+                    "from_account": trigger.get("cust_id", ""),
+                },
+            )(),
+        )
+        for event in ke_all_flow_events[1:]:
+            await ow._dispatch(event)
+
+        # Simulate production: hive was left STALLED after external completed
+        hive = FlowInstance(
+            flow_definition=KEEPSATS_TO_HIVE_FLOW,
+            trigger_group_id=trigger["group_id"],
+            trigger_short_id=trigger["short_id"],
+            cust_id=trigger.get("cust_id", ""),
+            status=FlowStatus.STALLED,
+            events=[ke_all_flow_events[0]],
+        )
+        ow.flow_instances.append(hive)
+
+        await ow.check_stalls()
+
+        assert not [
+            f for f in ow.flow_instances if f.flow_definition.name == "keepsats_to_hive"
+        ]
+        assert ow.completed_flows[0].flow_definition.name == "keepsats_to_external"

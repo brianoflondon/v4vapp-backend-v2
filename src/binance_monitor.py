@@ -2,6 +2,8 @@ import asyncio
 import os
 import signal
 import sys
+import threading
+import time
 from decimal import Decimal
 from timeit import default_timer as timer
 from typing import Annotated
@@ -36,24 +38,89 @@ BINANCE_BTC_ALERT_LEVEL = 0.02
 
 STATUS_MESSAGE_TIME_MIN = 60
 
+# Outer bound for one poll. Each HTTP call times out at BINANCE_HTTP_TIMEOUT_S (15s)
+# and get_balances / get_current_price retry up to 3 times, so this is longer than
+# a single socket timeout and shorter than the health-check stale limit.
+BINANCE_POLL_TIMEOUT_S = 50
+HEALTH_MAX_STALE_S = 180
+BALANCE_TASK_NAME = "binance_monitor.check_balances"
+
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
+_fetch_lock = threading.Lock()
+_last_success_monotonic: float | None = None
+_monitor_started_monotonic: float | None = None
+
+
+class BinancePollInProgress(Exception):
+    """Raised when a new poll starts while the previous HTTP call is still running."""
+
+
+def fetch_balances_and_price() -> tuple[dict, Decimal]:
+    """Blocking Binance balance and HIVE/BTC price fetch. Safe to run in a thread."""
+    if not _fetch_lock.acquire(blocking=False):
+        raise BinancePollInProgress("previous Binance poll is still running")
+    try:
+        adapter = get_exchange_adapter()
+        balances = adapter.get_balances(["BTC", "HIVE"])
+        price = adapter.get_current_price("HIVE", "BTC")
+        return balances, price
+    finally:
+        _fetch_lock.release()
+
+
+def _log_poll_failure(ex: Exception, started: float, *, error_code: str | None) -> None:
+    elapsed_ms = round((time.monotonic() - started) * 1000)
+    extra: dict = {
+        "notification": error_code == "binance_api_error",
+        "elapsed_ms": elapsed_ms,
+    }
+    if error_code:
+        extra["error_code"] = error_code
+    logger.warning(
+        f"{ICON} Binance poll failed after {elapsed_ms}ms: {type(ex).__name__}: {ex}",
+        extra=extra,
+    )
 
 
 async def health_check():
     """
-    A simple health check function that can be used to verify that the application is running.
-    It can be expanded to include more comprehensive checks as needed.
+    Fail when the balance loop is gone or the last successful poll is too old.
+
+    A hung Binance call used to leave the check_balances task listed as running
+    while the sleep task was absent, so the old task-name check did not describe
+    the failure. Staleness of the last success does.
     """
-    tasks = ["binance_monitor.sleep_with_shutdown_check", "binance_monitor.check_balances"]
-    exceptions = []
-    running_tasks = [t.get_name() for t in asyncio.all_tasks()]
-    for task in tasks:
-        if task not in running_tasks:
-            exceptions.append(f"{ICON} Health check warning: Task '{task}' is not running. ")
-    if exceptions:
-        raise StatusAPIException(", ".join(exceptions))
-    return {"status": "OK", "message": "Binance Monitor is running"}
+    running_tasks = {t.get_name() for t in asyncio.all_tasks()}
+    if BALANCE_TASK_NAME not in running_tasks:
+        raise StatusAPIException(
+            f"{ICON} Health check warning: Task '{BALANCE_TASK_NAME}' is not running."
+        )
+
+    now = time.monotonic()
+    if _last_success_monotonic is None:
+        started = _monitor_started_monotonic if _monitor_started_monotonic is not None else now
+        age = now - started
+        if age > HEALTH_MAX_STALE_S:
+            raise StatusAPIException(
+                f"{ICON} Binance Monitor has not completed a poll after {age:.0f}s"
+            )
+        return {
+            "status": "OK",
+            "message": "Binance Monitor is starting",
+            "last_success_age_s": None,
+        }
+
+    age = now - _last_success_monotonic
+    if age > HEALTH_MAX_STALE_S:
+        raise StatusAPIException(
+            f"{ICON} Binance Monitor last successful poll was {age:.0f}s ago"
+        )
+    return {
+        "status": "OK",
+        "message": "Binance Monitor is running",
+        "last_success_age_s": round(age, 1),
+    }
 
 
 def handle_shutdown_signal():
@@ -84,6 +151,65 @@ async def sleep_with_shutdown_check(duration: int, check_interval: float = 1.0):
         elapsed += check_interval
 
 
+async def poll_binance_balances(saved_balances: dict):
+    """
+    Fetch balances off the event loop and format the status message.
+
+    Returns the generate_message tuple, or None when the poll failed and was logged.
+    CancelledError propagates so shutdown is not turned into a failed poll.
+    """
+    started = time.monotonic()
+    outcome = "ok"
+    logger.info(f"{ICON} Binance poll started", extra={"notification": False})
+    try:
+        balances, price = await asyncio.wait_for(
+            asyncio.to_thread(fetch_balances_and_price),
+            timeout=BINANCE_POLL_TIMEOUT_S,
+        )
+        return generate_message(saved_balances, balances, price)
+    except asyncio.CancelledError:
+        outcome = "cancelled"
+        raise
+    except BinancePollInProgress as ex:
+        outcome = f"{type(ex).__name__}: {ex}"
+        _log_poll_failure(ex, started, error_code=None)
+        return None
+    except TimeoutError as ex:
+        outcome = f"TimeoutError: {ex}"
+        _log_poll_failure(ex, started, error_code="binance_api_error")
+        return None
+    except NameResolutionError as ex:
+        outcome = f"{type(ex).__name__}: {ex}"
+        _log_poll_failure(ex, started, error_code="network_error")
+        return None
+    except OSError as ex:
+        outcome = f"{type(ex).__name__}: {ex}"
+        _log_poll_failure(ex, started, error_code="network_error")
+        return None
+    except ExchangeConnectionError as ex:
+        outcome = f"{type(ex).__name__}: {ex}"
+        _log_poll_failure(ex, started, error_code="binance_api_error")
+        return None
+    except Exception as ex:
+        outcome = f"{type(ex).__name__}: {ex}"
+        elapsed_ms = round((time.monotonic() - started) * 1000)
+        logger.exception(
+            f"{ICON} Problem with Binance API after {elapsed_ms}ms: {type(ex).__name__}: {ex}",
+            extra={"notification": False, "elapsed_ms": elapsed_ms},
+        )
+        return None
+    finally:
+        elapsed_ms = round((time.monotonic() - started) * 1000)
+        logger.info(
+            f"{ICON} Binance poll ended after {elapsed_ms}ms ({outcome})",
+            extra={
+                "notification": False,
+                "elapsed_ms": elapsed_ms,
+                "poll_outcome": outcome,
+            },
+        )
+
+
 async def check_binance_balances():
     """
     Asynchronously monitors Binance balances and logs updates.
@@ -106,6 +232,8 @@ async def check_binance_balances():
         target values, and the message to log.
     """
     """Get the Binance balances"""
+    global _last_success_monotonic, _monitor_started_monotonic
+    _monitor_started_monotonic = time.monotonic()
     saved_balances = {}
     send_message = True
     start = timer()
@@ -125,57 +253,32 @@ async def check_binance_balances():
         try:
             if shutdown_event.is_set():
                 raise asyncio.CancelledError("Docker Shutdown")
-            new_balances, hive_target, notification_str, log_str = generate_message(
-                saved_balances,
-            )
-            silent = True if new_balances.get("HIVE", 0) > hive_target else False
-            if new_balances != saved_balances:
+            try:
+                polled = await poll_binance_balances(saved_balances)
+            except asyncio.CancelledError:
+                logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
+                raise
+            if polled is None:
                 send_message = True
-            if send_message:
-                logger.info(
-                    log_str,
-                    extra={
-                        "notification": True,
-                        "binance-balances": new_balances,
-                        "silent": silent,
-                        "notification_str": notification_str,
-                        "error_code_clear": "binance_api_error",
-                    },
-                )
-            send_message = False  # Send message once unless the balance changes
-            saved_balances = new_balances
-
-        except OSError as ex:
-            logger.error(
-                f"{ICON} Problem with Networking on Server. {ex}",
-                extra={"error_code": "network_error", "notification": False},
-            )
-            send_message = True
-
-        except ExchangeConnectionError as ex:
-            logger.warning(
-                f"{ICON} Problem with Binance API. {ex}",
-                # extra={"error_code": "binance_api_error", "notification": True},
-                extra={"notification": True},
-            )
-            send_message = True  # This will allow the error to clear if things improve
-
-        except NameResolutionError as ex:
-            logger.error(
-                f"{ICON} Name resolution error: {ex}",
-                # extra={"error_code": "network_error", "notification": False},
-                extra={"notification": False},
-            )
-            send_message = True
-
-        except Exception as ex:
-            logger.error(f"{ICON} Problem with Binance API. {ex} {ex.__class__}")
-            logger.exception(ex, extra={"error": ex, "notification": False})
-            logger.exception(ex, extra={"error": ex, "notification": False})
-
-        except asyncio.CancelledError as e:
-            logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
-            raise e
+            else:
+                new_balances, hive_target, notification_str, log_str = polled
+                _last_success_monotonic = time.monotonic()
+                silent = new_balances.get("HIVE", 0) > hive_target
+                if new_balances != saved_balances:
+                    send_message = True
+                if send_message:
+                    logger.info(
+                        log_str,
+                        extra={
+                            "notification": True,
+                            "binance-balances": new_balances,
+                            "silent": silent,
+                            "notification_str": notification_str,
+                            "error_code_clear": ["binance_api_error", "network_error"],
+                        },
+                    )
+                send_message = False  # Send message once unless the balance changes
+                saved_balances = new_balances
 
         finally:
             task = asyncio.create_task(
@@ -189,15 +292,17 @@ async def check_binance_balances():
                 start = timer()
 
 
-def generate_message(saved_balances: dict):
+def generate_message(
+    saved_balances: dict, balances: dict, current_price_decimal: Decimal
+):
     """
     Generates a message summarizing the current and target balances of HIVE and SATS,
     along with any changes (delta) in balances since the last check.
 
     Args:
-        saved_balances (dict): A dictionary containing the previously saved balances
-            for comparison. Keys are asset symbols (e.g., "HIVE", "SATS") and values
-            are their respective balances.
+        saved_balances (dict): Previously saved balances for comparison.
+        balances (dict): Current balances, already fetched off the event loop.
+        current_price_decimal (Decimal): Current HIVE/BTC price.
 
     Returns:
         tuple: A tuple containing:
@@ -227,9 +332,6 @@ def generate_message(saved_balances: dict):
                 f"{dash_direction} {delta_balances.get('DASH', 0):.3f} DASH "
                 f"({sats_direction} {int(delta_balances.get('SATS', 0)):,} sats)"
             )
-    current_price_decimal = adapter.get_current_price("HIVE", "BTC")
-    saved_balances = balances
-
     current_price_sats = current_price_decimal * Decimal("1e8")
     if current_price_sats <= 0:
         raise ExchangeConnectionError(
@@ -302,6 +404,24 @@ async def testnet_rebalance(hive_qty: Decimal, hive_target: Decimal):
         )
 
 
+def _log_balance_task_done(task: asyncio.Task) -> None:
+    """Log when the balance loop ends. A hung poll never gets here; a crash does."""
+    if task.cancelled():
+        logger.info(f"{ICON} {BALANCE_TASK_NAME} cancelled")
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error(
+            f"{ICON} {BALANCE_TASK_NAME} exited: {type(exc).__name__}: {exc}",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        return
+    if shutdown_event.is_set():
+        logger.info(f"{ICON} {BALANCE_TASK_NAME} stopped after shutdown")
+        return
+    logger.error(f"{ICON} {BALANCE_TASK_NAME} exited while the monitor is still running")
+
+
 async def main_async_start():
     """
     Main function to run Template app.
@@ -325,9 +445,11 @@ async def main_async_start():
         loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
         loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
 
-        tasks = [
-            asyncio.create_task(check_binance_balances(), name="binance_monitor.check_balances"),
-        ]
+        balance_task = asyncio.create_task(
+            check_binance_balances(), name=BALANCE_TASK_NAME
+        )
+        balance_task.add_done_callback(_log_balance_task_done)
+        tasks = [balance_task]
 
         # Wait until shutdown is requested
         await shutdown_event.wait()

@@ -1166,8 +1166,9 @@ class Overwatch:
 
         Called when *winner* completes.  A candidate is kept alive if:
 
-        1. It already has **events** the winner's definition can't explain
-           (e.g. a ``payment`` op not in the winner's stages), **or**
+        1. It already has **required-stage events** the winner's definition
+           can't explain (e.g. a ``payment`` op not in the winner's stages).
+           Optional-only matches do not keep a competing alternative, **or**
         2. The winner's stage definitions are a **proper subset** of the
            candidate's — meaning the candidate is a superset flow that
            could still be the correct match once more events arrive.
@@ -1204,10 +1205,11 @@ class Overwatch:
         winner_req_sigs = {_stage_sig(s) for s in winner.flow_definition.required_stages}
 
         for candidate in candidates:
-            # (1) Keep the candidate if it has events the winner can't explain
-            has_unique_events = any(
-                not any(stage.matches(ev) for stage in winner_stages) for ev in candidate.events
-            )
+            # (1) Keep only if a *required* candidate event is unexplained by
+            # the winner. Optional matches (fill_order, notification, …) must
+            # not keep a competing alternative forever — that left
+            # keepsats_to_hive stalled 1/10 after keepsats_to_external completed.
+            has_unique_events = self._has_unexplained_required_events(candidate, winner)
             # (2) Keep if the candidate is a superset flow.  Two checks:
             #     a) All of the winner's stages exist in the candidate
             #        (matching by event_type + op_type + ledger_type), AND
@@ -1235,6 +1237,7 @@ class Overwatch:
                         datetime.now(tz=timezone.utc) + self.superset_grace_period
                     )
                     candidate.superset_winner_name = winner.flow_definition.name
+                    await self._persist_flow(candidate)
                 logger.info(
                     f"{ICON} 📌 Keeping candidate '{candidate.flow_definition.name}' "
                     f"({candidate.trigger_short_id}) — {reason} "
@@ -1251,6 +1254,23 @@ class Overwatch:
                 f"'{winner.flow_definition.name}' completed",
                 extra={"notification": False, **candidate.log_extra},
             )
+
+    @staticmethod
+    def _has_unexplained_required_events(candidate: FlowInstance, winner: FlowInstance) -> bool:
+        """True if the candidate has a required-stage event the winner cannot match.
+
+        Optional-only matches (notifications, fill_order, …) are ignored so a
+        competing alternative like ``keepsats_to_hive`` is not kept after
+        ``keepsats_to_external`` has already completed.
+        """
+        winner_stages = winner.flow_definition.stages
+        required = candidate.flow_definition.required_stages
+        for ev in candidate.events:
+            if not any(stage.matches(ev) for stage in required):
+                continue
+            if not any(stage.matches(ev) for stage in winner_stages):
+                return True
+        return False
 
     async def cancel_flows_for_trigger(self, trigger_group_id: str) -> int:
         """Cancel all candidate flows for a trigger that produced no ledger entries.
@@ -1323,6 +1343,28 @@ class Overwatch:
                     f"({self.superset_grace_period.total_seconds():.0f}s) expired",
                     extra={"notification": False, **flow.log_extra},
                 )
+
+        # Rule 1b: a sibling already completed. Drop stalled alternatives that
+        # never accumulated unexplained *required* events (ghost 1/N flows).
+        completed_by_trigger: dict[str, list[FlowInstance]] = {}
+        for f in self.completed_flows:
+            completed_by_trigger.setdefault(f.trigger_group_id, []).append(f)
+        for flow in list(self.active_flows):
+            if flow.status != FlowStatus.STALLED:
+                continue
+            winners = completed_by_trigger.get(flow.trigger_group_id) or []
+            if not winners:
+                continue
+            if any(self._has_unexplained_required_events(flow, w) for w in winners):
+                continue
+            flow.status = FlowStatus.FAILED
+            self.flow_instances.remove(flow)
+            await self._remove_active_flow(flow)
+            logger.info(
+                f"{ICON} 🗑️ Stalled candidate '{flow.flow_definition.name}' "
+                f"({flow.trigger_short_id}) cancelled — sibling flow completed",
+                extra={"notification": False, **flow.log_extra},
+            )
 
         # Rule 2: cancel flows that haven't progressed past trigger-only.
         # A flow created by _try_create_flow receives exactly one "op" event
