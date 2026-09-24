@@ -24,6 +24,13 @@
       "bidQty": "32.00000000",
       "askPrice": "0.23950000",
       "askQty": "4189.00000000"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "bidPrice": "32.49000000",
+      "bidQty": "10.00000000",
+      "askPrice": "32.51000000",
+      "askQty": "12.00000000"
     }
   ],
   "source": "Binance",

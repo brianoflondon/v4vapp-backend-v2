@@ -169,6 +169,17 @@
             "last_updated": "2025-03-16T13:14:00.000Z"
           }
         }
+      },
+      "131": {
+        "id": 131,
+        "name": "Dash",
+        "symbol": "DASH",
+        "slug": "dash",
+        "quote": {
+          "USD": {
+            "price": 32.5
+          }
+        }
       }
     }
   },
