@@ -322,7 +322,13 @@ class TrackedBaseModel(BaseModel):
             Exception: For any other exceptions encountered during the save operation.
         """
         if mongo_kwargs is None:
-            mongo_kwargs = {"upsert": True}
+            mongo_kwargs = {"upsert": self.mongo_save_upsert()}
+        else:
+            mongo_kwargs = dict(mongo_kwargs)
+        # A non-terminal payment must not upsert: its filter excludes terminal
+        # rows, and upsert would insert a second document when that misses.
+        if not self.mongo_save_upsert():
+            mongo_kwargs["upsert"] = False
         update = self.model_dump(
             exclude_unset=exclude_unset,
             exclude_none=exclude_none,
@@ -339,13 +345,22 @@ class TrackedBaseModel(BaseModel):
             "$set": update,
         }
         # Delegate retries and logging to the wrapper
+        save_filter = self.mongo_save_filter()
         return await mongo_call(
             lambda: InternalConfig.db[self.collection_name].update_one(
-                filter=self.group_id_query, update=update, **mongo_kwargs
+                filter=save_filter, update=update, **mongo_kwargs
             ),
             error_code=f"db_save_error_{self.collection_name}",
             context=f"{self.collection_name}:{self.group_id_p}",
         )
+
+    def mongo_save_filter(self) -> dict[str, Any]:
+        """Query for this model's ``save()`` update. Defaults to ``group_id_query``."""
+        return dict(self.group_id_query)
+
+    def mongo_save_upsert(self) -> bool:
+        """When False, ``save()`` will not insert if the filter matches nothing."""
+        return True
 
     def tracked_type(self) -> str:
         """

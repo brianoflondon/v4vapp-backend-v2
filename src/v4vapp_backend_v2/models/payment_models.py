@@ -31,6 +31,16 @@ class PaymentStatus(StrEnum):
     INITIATED = "INITIATED"
 
 
+TERMINAL_PAYMENT_STATUSES = frozenset({PaymentStatus.SUCCEEDED, PaymentStatus.FAILED})
+
+
+def payment_status_is_terminal(status: Any) -> bool:
+    """True only for a finished payment. In-flight snapshots must not replace one."""
+    if isinstance(status, PaymentStatus):
+        return status in TERMINAL_PAYMENT_STATUSES
+    return str(status or "").upper() in {item.value for item in TERMINAL_PAYMENT_STATUSES}
+
+
 class Hop(BaseModel):
     chan_id: str
     chan_capacity: BSONInt64 | None = None
@@ -306,14 +316,16 @@ class Payment(TrackedBaseModel):
             return "Unknown"
 
         route_fees_ppm = self.route_fees_ppm
-        ans = " -> ".join([
-            (
-                f"{hop.alias}"
-                if route_fees_ppm.get(hop.pub_key) is None
-                else f"{hop.alias} ({route_fees_ppm.get(hop.pub_key):.0f} ppm)"
-            )
-            for hop in self.route
-        ])
+        ans = " -> ".join(
+            [
+                (
+                    f"{hop.alias}"
+                    if route_fees_ppm.get(hop.pub_key) is None
+                    else f"{hop.alias} ({route_fees_ppm.get(hop.pub_key):.0f} ppm)"
+                )
+                for hop in self.route
+            ]
+        )
         return ans
 
     # Methods from Payment
@@ -340,6 +352,15 @@ class Payment(TrackedBaseModel):
     @property
     def group_id_query(self) -> dict[str, str]:
         return {"payment_hash": self.payment_hash}
+
+    def mongo_save_filter(self) -> dict[str, Any]:
+        filt: dict[str, Any] = dict(self.group_id_query)
+        if not payment_status_is_terminal(self.status):
+            filt["status"] = {"$nin": sorted(item.value for item in TERMINAL_PAYMENT_STATUSES)}
+        return filt
+
+    def mongo_save_upsert(self) -> bool:
+        return payment_status_is_terminal(self.status)
 
     @computed_field
     def group_id(self) -> str:

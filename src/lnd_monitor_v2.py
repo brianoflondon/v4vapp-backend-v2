@@ -47,7 +47,13 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 )
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState, ListInvoiceResponse
 from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
-from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment, PaymentStatus
+from v4vapp_backend_v2.models.payment_models import (
+    TERMINAL_PAYMENT_STATUSES,
+    ListPaymentsResponse,
+    Payment,
+    PaymentStatus,
+    payment_status_is_terminal,
+)
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 
 ICON = "⚡"
@@ -247,6 +253,37 @@ def _payment_status_is_incomplete(status: Any) -> bool:
     if isinstance(status, PaymentStatus):
         return status in _PAYMENT_LAG_INCOMPLETE_STATUSES
     return str(status).upper() in {s.value for s in _PAYMENT_LAG_INCOMPLETE_STATUSES}
+
+
+def lnrpc_payment_status_name(htlc_event: Any) -> str:
+    """Payment status name from a TrackPayments or ListPayments protobuf."""
+    status = getattr(htlc_event, "status", None)
+    if isinstance(status, PaymentStatus):
+        return status.value
+    if isinstance(status, str):
+        return status.upper()
+    try:
+        return lnrpc.Payment.PaymentStatus.Name(int(status))
+    except (TypeError, ValueError):
+        return ""
+
+
+def should_skip_payment_backfill(payment: Any, read_payment: dict[str, Any] | None) -> bool:
+    """Skip a ListPayments row that must not be written.
+
+    In-flight source rows are never stored. A stored in-flight row is replaced
+    when ListPayments now has the terminal payment. A stored terminal row is
+    left alone once it already has a route string.
+    """
+    if not payment_status_is_terminal(getattr(payment, "status", None)):
+        return True
+    if not read_payment:
+        return False
+    if not payment_status_is_terminal(read_payment.get("status")):
+        return False
+    # A filled route means this terminal row was already written. "Unknown" is
+    # only a problem on an in-flight row, which is handled above.
+    return bool(read_payment.get("route_str"))
 
 
 async def _payment_subscription_lag_message(lnd_client: LNDClient) -> str | None:
@@ -696,6 +733,12 @@ async def db_store_payment(
                 f"(<= floor {floors.payment_index})",
                 extra={"notification": False},
             )
+            return
+
+        # TrackPayments delivers in-flight updates with no lock between them.
+        # A slow in-flight save finishes after SUCCEEDED and replaces the row.
+        status_name = lnrpc_payment_status_name(htlc_event)
+        if status_name not in {item.value for item in TERMINAL_PAYMENT_STATUSES}:
             return
 
         payment_pyd = Payment(htlc_event)
@@ -1543,20 +1586,13 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 read_payment = await Payment.collection().find_one(
                     filter=query,
                 )
-                # The invoice_description "Not set" is used in pub_key_alias.py if there is no description.
+                if should_skip_payment_backfill(payment, read_payment):
+                    continue
                 route_str = read_payment.get("route_str", None) if read_payment else None
                 invoice_description = (
                     read_payment.get("invoice_description", None) if read_payment else None
                 )
                 status = read_payment.get("status", None) if read_payment else None
-                if read_payment and route_str and invoice_description:
-                    continue
-                if (
-                    read_payment
-                    and route_str
-                    and (not invoice_description or invoice_description == "Not set")
-                ):
-                    continue
                 logger.info(
                     f"Updating payment {payment.payment_index} {route_str} "
                     f"{invoice_description} {payment.payment_hash} {status}"
