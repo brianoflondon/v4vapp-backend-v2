@@ -17,7 +17,10 @@ from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 
 ICON = "📡"
-KUMA_HEARTBEAT_TIMEOUT = 30.0
+KUMA_HEARTBEAT_TIMEOUT = 15.0
+KUMA_HEARTBEAT_ATTEMPTS = 2
+# Cloudflare 520 and the usual gateway statuses are the transient push failures.
+KUMA_RETRY_STATUS_CODES = {502, 503, 504, 520}
 
 
 def _kuma_host(url: str) -> str:
@@ -305,6 +308,9 @@ async def send_kuma_heartbeat(
 ) -> None:
     """
     Sends a heartbeat to the Uptime Kuma webhook URL to indicate the witness monitor is alive.
+
+    A connect timeout, read timeout, connect error, or gateway status (502, 503, 504, 520)
+    is tried once more. The failure is logged only when the retry also fails.
     Args:
         status (str): The status of the service ("up" or "down").
         msg (str): A message to include with the heartbeat.
@@ -323,52 +329,73 @@ async def send_kuma_heartbeat(
     # This allows for obfuscation of the webhook URL in github actions
     webhook_url = os.getenv(witness_config.kuma_webhook_url, witness_config.kuma_webhook_url)
     host = _kuma_host(webhook_url)
-    started = timer()
-    try:
-        async with httpx.AsyncClient() as client:
-            params = {
-                "status": status,
-                "msg": msg,
-                "ping": f"{ping:.3f}" if ping is not None else "",
-            }
-            response = await client.get(webhook_url, params=params, timeout=KUMA_HEARTBEAT_TIMEOUT)
-            response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
-            logger.debug(
-                f"{ICON} Successfully sent heartbeat to Kuma webhook.",
-                extra={"notification": False},
+    params = {
+        "status": status,
+        "msg": msg,
+        "ping": f"{ping:.3f}" if ping is not None else "",
+    }
+    for attempt in range(1, KUMA_HEARTBEAT_ATTEMPTS + 1):
+        started = timer()
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    webhook_url, params=params, timeout=KUMA_HEARTBEAT_TIMEOUT
+                )
+                response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
+                logger.debug(
+                    f"{ICON} Successfully sent heartbeat to Kuma webhook.",
+                    extra={"notification": False},
+                )
+                return
+        except httpx.HTTPStatusError as e:
+            retry = (
+                attempt < KUMA_HEARTBEAT_ATTEMPTS
+                and e.response.status_code in KUMA_RETRY_STATUS_CODES
             )
-    except httpx.HTTPStatusError as e:
-        body = (e.response.text or "").replace("\n", " ")[:200]
-        detail = (
-            f"witness={witness} push={status} host={host} "
-            f"http={e.response.status_code} in {timer() - started:.1f}s body={body!r}"
-        )
-        logger.warning(
-            f"{ICON} Failed to send heartbeat to Kuma webhook. {detail}",
-            extra={"notification": False, "error": detail},
-        )
-    except (
-        httpx.ConnectTimeout,
-        httpx.ReadTimeout,
-        httpx.ConnectError,
-    ) as e:
-        detail = (
-            f"witness={witness} push={status} host={host} "
-            f"in {timer() - started:.1f}s {_kuma_error_text(e)}"
-        )
-        logger.error(
-            f"{ICON} Connection error sending heartbeat to Kuma webhook. {detail}",
-            extra={"notification": False, "error": detail},
-        )
-    except Exception as e:
-        detail = (
-            f"witness={witness} push={status} host={host} "
-            f"in {timer() - started:.1f}s {_kuma_error_text(e)}"
-        )
-        logger.exception(
-            f"{ICON} Unexpected error sending heartbeat to Kuma webhook. {detail}",
-            extra={"notification": False, "error": detail},
-        )
+            if retry:
+                continue
+            body = (e.response.text or "").replace("\n", " ")[:200]
+            elapsed = timer() - started
+            detail = (
+                f"witness={witness} push={status} host={host} "
+                f"attempt={attempt}/{KUMA_HEARTBEAT_ATTEMPTS} "
+                f"http={e.response.status_code} in {elapsed:.1f}s body={body!r}"
+            )
+            logger.warning(
+                f"{ICON} Failed to send heartbeat to Kuma webhook. {detail}",
+                extra={"notification": False, "error": detail},
+            )
+            return
+        except (
+            httpx.ConnectTimeout,
+            httpx.ReadTimeout,
+            httpx.ConnectError,
+        ) as e:
+            if attempt < KUMA_HEARTBEAT_ATTEMPTS:
+                continue
+            elapsed = timer() - started
+            detail = (
+                f"witness={witness} push={status} host={host} "
+                f"attempt={attempt}/{KUMA_HEARTBEAT_ATTEMPTS} "
+                f"in {elapsed:.1f}s {_kuma_error_text(e)}"
+            )
+            logger.error(
+                f"{ICON} Connection error sending heartbeat to Kuma webhook. {detail}",
+                extra={"notification": False, "error": detail},
+            )
+            return
+        except Exception as e:
+            elapsed = timer() - started
+            detail = (
+                f"witness={witness} push={status} host={host} "
+                f"attempt={attempt}/{KUMA_HEARTBEAT_ATTEMPTS} "
+                f"in {elapsed:.1f}s {_kuma_error_text(e)}"
+            )
+            logger.exception(
+                f"{ICON} Unexpected error sending heartbeat to Kuma webhook. {detail}",
+                extra={"notification": False, "error": detail},
+            )
+            return
 
 
 async def verify_hive_witness_rpc_alive(url: str, machine_name: str) -> tuple[dict | None, float]:
