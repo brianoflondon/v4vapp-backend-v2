@@ -17,6 +17,30 @@ from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 
 ICON = "📡"
+KUMA_HEARTBEAT_TIMEOUT = 30.0
+
+
+def _kuma_host(url: str) -> str:
+    """Host only. The push path is a secret."""
+    try:
+        parsed = httpx.URL(url)
+        port = f":{parsed.port}" if parsed.port else ""
+        return f"{parsed.scheme}://{parsed.host}{port}"
+    except Exception:
+        return "unparsed-webhook"
+
+
+def _kuma_error_text(exc: BaseException) -> str:
+    """Exception class plus cause chain. TimeoutError from anyio has no message."""
+    parts: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        text = str(current).strip()
+        parts.append(type(current).__name__ + (f": {text}" if text else ""))
+        current = current.__cause__ or current.__context__
+    return " <- ".join(parts)
 
 
 async def process_witness_event(tracked_op: TrackedProducer) -> None:
@@ -298,6 +322,8 @@ async def send_kuma_heartbeat(
     # Use the config webhook URL as an environment variable if set or use it directly
     # This allows for obfuscation of the webhook URL in github actions
     webhook_url = os.getenv(witness_config.kuma_webhook_url, witness_config.kuma_webhook_url)
+    host = _kuma_host(webhook_url)
+    started = timer()
     try:
         async with httpx.AsyncClient() as client:
             params = {
@@ -305,30 +331,43 @@ async def send_kuma_heartbeat(
                 "msg": msg,
                 "ping": f"{ping:.3f}" if ping is not None else "",
             }
-            response = await client.get(webhook_url, params=params, timeout=10.0)
+            response = await client.get(webhook_url, params=params, timeout=KUMA_HEARTBEAT_TIMEOUT)
             response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
             logger.debug(
                 f"{ICON} Successfully sent heartbeat to Kuma webhook.",
                 extra={"notification": False},
             )
     except httpx.HTTPStatusError as e:
+        body = (e.response.text or "").replace("\n", " ")[:200]
+        detail = (
+            f"witness={witness} push={status} host={host} "
+            f"http={e.response.status_code} in {timer() - started:.1f}s body={body!r}"
+        )
         logger.warning(
-            f"{ICON} Failed to send heartbeat to Kuma webhook. Status code: {e.response.status_code}",
-            extra={"notification": False, "error": e},
+            f"{ICON} Failed to send heartbeat to Kuma webhook. {detail}",
+            extra={"notification": False, "error": detail},
         )
     except (
         httpx.ConnectTimeout,
         httpx.ReadTimeout,
         httpx.ConnectError,
-    ) as e:  # Added httpx.ConnectError here
+    ) as e:
+        detail = (
+            f"witness={witness} push={status} host={host} "
+            f"in {timer() - started:.1f}s {_kuma_error_text(e)}"
+        )
         logger.error(
-            f"{ICON} Connection error sending heartbeat to Kuma webhook: {e}",
-            extra={"notification": False, "error": e},
+            f"{ICON} Connection error sending heartbeat to Kuma webhook. {detail}",
+            extra={"notification": False, "error": detail},
         )
     except Exception as e:
+        detail = (
+            f"witness={witness} push={status} host={host} "
+            f"in {timer() - started:.1f}s {_kuma_error_text(e)}"
+        )
         logger.exception(
-            f"{ICON} Unexpected error sending heartbeat to Kuma webhook: {e}",
-            extra={"notification": False, "error": e},
+            f"{ICON} Unexpected error sending heartbeat to Kuma webhook. {detail}",
+            extra={"notification": False, "error": detail},
         )
 
 
