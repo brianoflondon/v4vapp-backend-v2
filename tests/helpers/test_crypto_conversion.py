@@ -1,11 +1,15 @@
 import asyncio
 import json
+from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 
 
@@ -90,13 +94,35 @@ async def test_crypto_conversion_parameterized(conv_from, value):
 
 @pytest.mark.asyncio
 async def test_fetch_date():
-    conv = CryptoConversion(conv_from=Currency.HBD, value=1000.0)
-    await conv.get_quote(use_cache=False, store_db=False)
-    assert conv.quote is not None
-    fetch_date = conv.quote.fetch_date
-    assert fetch_date is not None
-    await asyncio.sleep(1)
-    await conv.get_quote(use_cache=False, store_db=False)
-    fetch_date2 = conv.quote.fetch_date
-    assert fetch_date2 is not None
-    assert fetch_date2 > fetch_date
+    """A later uncached fetch replaces the quote timestamp.
+
+    The quote is stubbed. A live fetch has no USD price when CoinGecko is
+    blocked and Binance does not answer, and that empty quote keeps the
+    1970-01-01 default date.
+    """
+
+    async def _fake(quotes, use_cache=True, timeout=60.0, store_db=True):
+        quotes.quote = QuoteResponse(
+            hive_usd=Decimal("0.08"),
+            hbd_usd=Decimal("0.99"),
+            btc_usd=Decimal(60000),
+            hive_hbd=Decimal("0.0808"),
+            source="Binance",
+            fetch_date=datetime.now(tz=UTC),
+        )
+        quotes.fetch_date = quotes.quote.fetch_date
+
+    with patch(
+        "v4vapp_backend_v2.helpers.crypto_prices.AllQuotes.get_all_quotes",
+        _fake,
+    ):
+        conv = CryptoConversion(conv_from=Currency.HBD, value=1000.0)
+        await conv.get_quote(use_cache=False, store_db=False)
+        assert conv.quote is not None
+        fetch_date = conv.quote.fetch_date
+        assert fetch_date is not None
+        await asyncio.sleep(1)
+        await conv.get_quote(use_cache=False, store_db=False)
+        fetch_date2 = conv.quote.fetch_date
+        assert fetch_date2 is not None
+        assert fetch_date2 > fetch_date
