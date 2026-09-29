@@ -426,6 +426,9 @@
         {% if details.balances_net['MSATS'] is defined and details.balances_net['MSATS'] %}
         content += `SATS Balance: {{ ((details.balances_net['MSATS']|float / 1000)|int) }}\n`;
         {% endif %}
+        {% if details.dash is defined and details.dash %}
+        content += `DASH Balance: {{ "%.3f"|format(details.dash|float) }}\n`;
+        {% endif %}
         {% if details.balances_net['USD'] is defined and details.balances_net['USD'] %}
         content += `USD Balance: ${{ "%.2f"| format(details.balances_net['USD'] | float) }}\n`;
         {% endif %}
@@ -467,6 +470,9 @@
         {% endif %}
         {% if details.balances_net['MSATS'] is defined and details.balances_net['MSATS'] %}
         content += `SATS: {{ "{:,}".format((details.balances_net['MSATS'] / 1000)|float|int) }}\n`;
+        {% endif %}
+        {% if details.dash is defined and details.dash %}
+        content += `DASH: {{ "%.3f"|format(details.dash|float) }}\n`;
         {% endif %}
 
         navigator.clipboard.writeText(content).then(function () {

@@ -8,6 +8,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
+from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.models.lnd_balance_models import fetch_balances
@@ -112,14 +113,15 @@ async def reset_lightning_opening_balance() -> None:
     # Diagnostic check: confirm the opening balance was saved and is visible for the node
     try:
         found = (
-            await LedgerEntry
-            .collection()
-            .find({
-                "$or": [
-                    {"debit.name": "External Lightning Payments", "debit.sub": node},
-                    {"credit.name": "External Lightning Payments", "credit.sub": node},
-                ]
-            })
+            await LedgerEntry.collection()
+            .find(
+                {
+                    "$or": [
+                        {"debit.name": "External Lightning Payments", "debit.sub": node},
+                        {"credit.name": "External Lightning Payments", "credit.sub": node},
+                    ]
+                }
+            )
             .to_list()
         )
         logger.info(
@@ -179,10 +181,12 @@ async def reset_exchange_opening_balance(
     sats_balance = btc_balance * Decimal(1e8)  # Convert BTC to satoshis
     hive_balance = default_exchange_adapter.get_balance("HIVE")
     hbd_balance = default_exchange_adapter.get_balance("HBD")
+    dash_balance = default_exchange_adapter.get_balance("DASH")
+    duffs_balance = (dash_balance * DUFFS_PER_DASH).quantize(Decimal(1))
 
-    if sats_balance == 0 and hive_balance == 0 and hbd_balance == 0:
+    if sats_balance == 0 and hive_balance == 0 and hbd_balance == 0 and dash_balance == 0:
         logger.warning(
-            f"No SATS, HIVE, or HBD balance found in Binance balances for {exchange_sub}. "
+            f"No SATS, HIVE, HBD, or DASH balance found in Binance balances for {exchange_sub}. "
             "Cannot reset opening balance."
         )
         return
@@ -192,7 +196,7 @@ async def reset_exchange_opening_balance(
 
     check_account = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
 
-    # Process each asset: SATS → MSATS ledger entry, HIVE → HIVE ledger entry
+    # Process each asset: SATS → MSATS, HIVE → HIVE, DASH → DUFFS
     asset_entries: list[tuple[str, Currency, Decimal]] = []
     if sats_balance > 0:
         # Convert sats to msats for ledger consistency (1 sat = 1000 msats)
@@ -202,6 +206,8 @@ async def reset_exchange_opening_balance(
         asset_entries.append(("hive", Currency.HIVE, hive_balance))
     if hbd_balance > 0:
         asset_entries.append(("hbd", Currency.HBD, hbd_balance))
+    if duffs_balance > 0:
+        asset_entries.append(("dash", Currency.DUFFS, duffs_balance))
 
     # Snapshot the account balance ONCE before the loop so that entries written
     # during the first iteration don't cause subsequent iterations to see
@@ -210,6 +216,7 @@ async def reset_exchange_opening_balance(
     initial_msats = initial_ledger_balance.msats
     initial_hive = initial_ledger_balance.hive
     initial_hbd = initial_ledger_balance.hbd
+    initial_duffs = getattr(initial_ledger_balance, "duffs", Decimal(0))
     initial_has_transactions = initial_ledger_balance.has_transactions
 
     for asset_label, currency, balance_value in asset_entries:
@@ -220,6 +227,8 @@ async def reset_exchange_opening_balance(
             existing_balance = initial_hive
         elif currency == Currency.HBD:
             existing_balance = initial_hbd
+        elif currency == Currency.DUFFS:
+            existing_balance = initial_duffs
         else:
             logger.warning(f"Unsupported currency {currency} for {asset_label}, skipping.")
             continue
@@ -253,6 +262,11 @@ async def reset_exchange_opening_balance(
             elif currency == Currency.HIVE:
                 # round to 3 decimal places for Hive
                 adjustment_value = adjustment_value.quantize(Decimal("0.001"))
+            elif currency == Currency.DUFFS:
+                # round to 0.001 DASH (1e5 duffs)
+                adjustment_value = (adjustment_value / Decimal(100000)).quantize(
+                    Decimal(1)
+                ) * Decimal(100000)
             short_id = "adjustment"
         else:
             reason = f"Initial opening balance for {exchange_sub} ({asset_label})"
@@ -292,14 +306,15 @@ async def reset_exchange_opening_balance(
         # Diagnostic check
         try:
             found = (
-                await LedgerEntry
-                .collection()
-                .find({
-                    "$or": [
-                        {"debit.name": "Exchange Holdings", "debit.sub": exchange_sub},
-                        {"credit.name": "Exchange Holdings", "credit.sub": exchange_sub},
-                    ]
-                })
+                await LedgerEntry.collection()
+                .find(
+                    {
+                        "$or": [
+                            {"debit.name": "Exchange Holdings", "debit.sub": exchange_sub},
+                            {"credit.name": "Exchange Holdings", "credit.sub": exchange_sub},
+                        ]
+                    }
+                )
                 .to_list()
             )
             logger.info(

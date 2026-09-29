@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
@@ -19,12 +19,12 @@ async def generate_profit_and_loss_report(
 
     Returns:
         dict: A dictionary with:
-            - Revenue: {account_name: {sub: {sats, msats, hive, hbd, usd}}}
-            - Expenses: {account_name: {sub: {sats, msats, hive, hbd, usd}}}
-            - Net Income: {sub: {sats, msats, hive, hbd, usd}, "Total": {...}}
+            - Revenue: {account_name: {sub: {sats, msats, hive, hbd, dash, usd}}}
+            - Expenses: {account_name: {sub: {sats, msats, hive, hbd, dash, usd}}}
+            - Net Income: {sub: {sats, msats, hive, hbd, dash, usd}, "Total": {...}}
     """
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
+        as_of_date = datetime.now(tz=UTC)
     # Fetch ledger entries if DataFrame is empty
     pl_pipeline = profit_loss_pipeline(as_of_date=as_of_date, age=age)
     pl_cursor = await LedgerEntry.collection().aggregate(pipeline=pl_pipeline)
@@ -43,7 +43,7 @@ async def profit_and_loss_printout(
     age: timedelta = timedelta(days=0),
 ) -> str:
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
+        as_of_date = datetime.now(tz=UTC)
 
     if pl_report is None:
         pl_report = await generate_profit_and_loss_report(as_of_date=as_of_date, age=age)
@@ -55,7 +55,9 @@ async def profit_and_loss_printout(
     date_str = f"{as_of_date:%Y-%m-%d %H:%M:%S} UTC"
     output.append(f"Profit and Loss Report for {date_str}")
     output.append("-" * max_width)
-    output.append(f"{'Account':<40} {'Sub':<18} {'SATS':>12} {'HIVE':>12} {'HBD':>12} {'USD':>12}")
+    output.append(
+        f"{'Account':<40} {'Sub':<18} {'SATS':>12} {'HIVE':>12} {'HBD':>12} {'DASH':>12} {'USD':>12}"
+    )
     output.append("-" * max_width)
 
     # Revenue
@@ -66,11 +68,11 @@ async def profit_and_loss_printout(
             if sub == "Total":
                 continue
             output.append(
-                f"{account_name:<40} {sub[:18]:<18} {balance['sats']:>12,.0f} {balance['hive']:>12,.3f} {balance['hbd']:>12,.3f} {balance['usd']:>12,.2f}"
+                f"{account_name:<40} {sub[:18]:<18} {balance['sats']:>12,.0f} {balance['hive']:>12,.3f} {balance['hbd']:>12,.3f} {balance.get('dash', 0):>12,.3f} {balance['usd']:>12,.2f}"
             )
         total = sub_accounts.get("Total", {})
         output.append(
-            f"{'   Total ' + account_name:<40} {'':<18} {total.get('sats', 0):>12,.0f} {total.get('hive', 0):>12,.3f} {total.get('hbd', 0):>12,.3f} {total.get('usd', 0):>12,.2f}"
+            f"{'   Total ' + account_name:<40} {'':<18} {total.get('sats', 0):>12,.0f} {total.get('hive', 0):>12,.3f} {total.get('hbd', 0):>12,.3f} {total.get('dash', 0):>12,.3f} {total.get('usd', 0):>12,.2f}"
         )
     output.append("-" * max_width)
 
@@ -82,11 +84,11 @@ async def profit_and_loss_printout(
             if sub == "Total":
                 continue
             output.append(
-                f"{account_name:<40} {sub[:18]:<18} {balance['sats']:>12,.0f} {balance['hive']:>12,.3f} {balance['hbd']:>12,.3f} {balance['usd']:>12,.2f}"
+                f"{account_name:<40} {sub[:18]:<18} {balance['sats']:>12,.0f} {balance['hive']:>12,.3f} {balance['hbd']:>12,.3f} {balance.get('dash', 0):>12,.3f} {balance['usd']:>12,.2f}"
             )
         total = sub_accounts.get("Total", {})
         output.append(
-            f"{'   Total ' + account_name:<40} {'':<18} {total.get('sats', 0):>12,.0f} {total.get('hive', 0):>12,.3f} {total.get('hbd', 0):>12,.3f} {total.get('usd', 0):>12,.2f}"
+            f"{'   Total ' + account_name:<40} {'':<18} {total.get('sats', 0):>12,.0f} {total.get('hive', 0):>12,.3f} {total.get('hbd', 0):>12,.3f} {total.get('dash', 0):>12,.3f} {total.get('usd', 0):>12,.2f}"
         )
     output.append("-" * max_width)
 
@@ -102,13 +104,13 @@ async def profit_and_loss_printout(
         else:
             label = "Net Loss"
         output.append(
-            f"{label:<40} {sub[:18]:<18} {balance['sats']:>12,.0f} {balance['hive']:>12,.3f} {balance['hbd']:>12,.3f} {balance['usd']:>12,.2f}"
+            f"{label:<40} {sub[:18]:<18} {balance['sats']:>12,.0f} {balance['hive']:>12,.3f} {balance['hbd']:>12,.3f} {balance.get('dash', 0):>12,.3f} {balance['usd']:>12,.2f}"
         )
     # Handle the total separately
     total = pl_report["Net Income"].get("Total", {})
     total_label = "   Total Net Income" if total.get("msats", 0) >= 0 else "   Total Net Loss"
     output.append(
-        f"{total_label:<40} {'':<18} {total.get('sats', 0):>12,.0f} {total.get('hive', 0):>12,.3f} {total.get('hbd', 0):>12,.3f} {total.get('usd', 0):>12,.2f}"
+        f"{total_label:<40} {'':<18} {total.get('sats', 0):>12,.0f} {total.get('hive', 0):>12,.3f} {total.get('hbd', 0):>12,.3f} {total.get('dash', 0):>12,.3f} {total.get('usd', 0):>12,.2f}"
     )
     output.append("=" * max_width)
 

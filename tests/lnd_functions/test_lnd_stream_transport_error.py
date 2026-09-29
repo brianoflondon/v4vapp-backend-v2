@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 from pathlib import Path
@@ -85,6 +86,17 @@ def _sample_pay_req() -> PayReq:
         pay_req_str="lnbc19520n1p49testinvoice",
         memo="Send to L-BTC address",
     )
+
+
+def _capturing_router_stub(captured: dict) -> MagicMock:
+    async def send_payment_v2(request):
+        captured["request"] = request
+        return
+        yield  # pragma: no cover
+
+    stub = MagicMock()
+    stub.SendPaymentV2 = send_payment_v2
+    return stub
 
 
 def _mock_lnd_client(node_info, router_stub) -> MagicMock:
@@ -269,3 +281,154 @@ async def test_send_lightning_to_pay_req_real_failure_still_raises_payment_error
                 pay_req=_sample_pay_req(),
                 lnd_client=client,
             )
+
+
+@pytest.mark.asyncio
+async def test_send_lightning_to_pay_req_default_sends_payment_request(
+    set_base_config_path,
+):
+    captured: dict = {}
+    mock_router_stub = _capturing_router_stub(captured)
+    pay_req = _sample_pay_req()
+
+    with patch(
+        "v4vapp_backend_v2.lnd_grpc.lnd_functions.get_node_alias_from_pub_key",
+        new=AsyncMock(return_value="Boltz Mini"),
+    ):
+        client = _mock_lnd_client(set_base_config_path, mock_router_stub)
+        with pytest.raises(LNDPaymentError):
+            await send_lightning_to_pay_req(pay_req=pay_req, lnd_client=client)
+
+    request = captured["request"]
+    assert request.payment_request == pay_req.pay_req_str
+    assert request.dest == b""
+    assert request.payment_hash == b""
+    assert request.amt_msat == 0
+
+
+@pytest.mark.asyncio
+async def test_send_lightning_to_pay_req_probe_only_uses_dummy_hash(
+    set_base_config_path,
+):
+    captured: dict = {}
+    mock_router_stub = _capturing_router_stub(captured)
+    pay_req = _sample_pay_req()
+
+    with patch(
+        "v4vapp_backend_v2.lnd_grpc.lnd_functions.get_node_alias_from_pub_key",
+        new=AsyncMock(return_value="Boltz Mini"),
+    ):
+        client = _mock_lnd_client(set_base_config_path, mock_router_stub)
+        with pytest.raises(LNDPaymentError):
+            await send_lightning_to_pay_req(
+                pay_req=pay_req,
+                lnd_client=client,
+                probe_only=True,
+            )
+
+    request = captured["request"]
+    assert request.payment_request == ""
+    assert request.dest == bytes.fromhex(pay_req.destination)
+    assert len(request.payment_hash) == 32
+    assert request.payment_hash != bytes.fromhex(pay_req.payment_hash)
+    assert request.amt_msat == 1_952_000
+    assert request.final_cltv_delta == 40
+    assert request.max_parts == 1
+    assert request.timeout_seconds == 600
+
+
+@pytest.mark.asyncio
+async def test_send_lightning_to_pay_req_probe_only_copies_invoice_routing_fields(
+    set_base_config_path,
+):
+    captured: dict = {}
+    mock_router_stub = _capturing_router_stub(captured)
+    pay_req = PayReq(
+        destination="03" + "a" * 64,
+        payment_hash="9e1436f4a7f568a01297a2931bf0b6dea812fb76b37dec741602eed586e23704",
+        value=1952,
+        value_msat=1952000,
+        pay_req_str="lnbc19520n1p49testinvoice",
+        memo="Send to L-BTC address",
+        cltv_expiry=80,
+        payment_addr="EXwI58+yBTq8tSOtAtxsl7cBHMbkm0De10eZDynVxj0=",
+        route_hints=[
+            {
+                "hop_hints": [
+                    {
+                        "node_id": "03" + "b" * 64,
+                        "chan_id": "123456789",
+                        "fee_base_msat": 1000,
+                        "fee_proportional_millionths": 100,
+                        "cltv_expiry_delta": 40,
+                    }
+                ]
+            }
+        ],
+        features={
+            "8": {"name": "tlv-onion", "is_required": True, "is_known": True},
+            "14": {"name": "payment-addr", "is_required": True, "is_known": True},
+        },
+    )
+
+    with patch(
+        "v4vapp_backend_v2.lnd_grpc.lnd_functions.get_node_alias_from_pub_key",
+        new=AsyncMock(return_value="Boltz Mini"),
+    ):
+        client = _mock_lnd_client(set_base_config_path, mock_router_stub)
+        with pytest.raises(LNDPaymentError):
+            await send_lightning_to_pay_req(
+                pay_req=pay_req,
+                lnd_client=client,
+                probe_only=True,
+            )
+
+    request = captured["request"]
+    assert request.final_cltv_delta == 80
+    assert request.payment_addr == base64.b64decode(pay_req.payment_addr)
+    assert len(request.route_hints) == 1
+    hop = request.route_hints[0].hop_hints[0]
+    assert hop.node_id == "03" + "b" * 64
+    assert hop.chan_id == 123456789
+    assert hop.fee_base_msat == 1000
+    assert hop.fee_proportional_millionths == 100
+    assert hop.cltv_expiry_delta == 40
+    assert [int(bit) for bit in request.dest_features] == [8, 14]
+
+
+@pytest.mark.asyncio
+async def test_send_lightning_to_pay_req_probe_only_rejects_bad_destination(
+    set_base_config_path,
+):
+    called = False
+
+    async def send_payment_v2(_request):
+        nonlocal called
+        called = True
+        return
+        yield  # pragma: no cover
+
+    mock_router_stub = MagicMock()
+    mock_router_stub.SendPaymentV2 = send_payment_v2
+    pay_req = PayReq(
+        destination="not-a-pubkey",
+        payment_hash="9e1436f4a7f568a01297a2931bf0b6dea812fb76b37dec741602eed586e23704",
+        value=1952,
+        value_msat=1952000,
+        pay_req_str="lnbc19520n1p49testinvoice",
+        memo="Send to L-BTC address",
+    )
+
+    with patch(
+        "v4vapp_backend_v2.lnd_grpc.lnd_functions.get_node_alias_from_pub_key",
+        new=AsyncMock(return_value="Boltz Mini"),
+    ):
+        client = _mock_lnd_client(set_base_config_path, mock_router_stub)
+        with pytest.raises(LNDPaymentError, match="hex destination pubkey"):
+            await send_lightning_to_pay_req(
+                pay_req=pay_req,
+                lnd_client=client,
+                probe_only=True,
+            )
+
+    assert called is False

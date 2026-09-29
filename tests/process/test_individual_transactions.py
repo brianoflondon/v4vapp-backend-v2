@@ -330,7 +330,7 @@ async def test_conversion_keepsats_to_hive():
         🌟 ✅ Hive To Keepsats for v4vapp-test 70.004 HIVE / 5,344 sats (76) 3617_00a4ce_1 completed 14/14 required stages complete  [flow] 🔔
 
     """
-    invoice_sats = Decimal("5000")
+    invoice_sats = Decimal(5000)
     await test_deposit_hive_to_keepsats(
         int(invoice_sats),
         timeout=120,
@@ -505,7 +505,7 @@ async def test_convert_incoming_lightning_to_magisats_outbound_payment():
     exchange_account = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
     magisats_exchange_balance = await one_account_balance(account=exchange_account)
 
-    invoice_value_sat = int(10000)
+    invoice_value_sat = 10000
 
     assert magisats_exchange_balance is not None, "Failed to retrieve Magisats exchange balance"
     assert magisats_exchange_balance.sats > invoice_value_sat * 1.1, (
