@@ -548,6 +548,10 @@
             // show up to 3 decimal places for sats (msats precision)
             return n.toLocaleString(undefined, { maximumFractionDigits: 3 }) + " SATS"
         }
+        if (unitStr === "DUFFS") {
+            n = n / 100000000
+            return n.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + " DASH"
+        }
         const opts = Number.isInteger(n)
             ? { maximumFractionDigits: 0 }
             : { maximumFractionDigits: 3 }
@@ -592,7 +596,13 @@
             }
             return ""
         })()
-        return ["Converted", hive, hbd, usd, sats]
+        const dash =
+            conv.dash !== undefined && Number(conv.dash)
+                ? Number(conv.dash).toLocaleString(undefined, {
+                    maximumFractionDigits: 3,
+                }) + " DASH"
+                : ""
+        return ["Converted", hive, hbd, dash, usd, sats]
             .filter(Boolean)
             .join(" &nbsp;&nbsp; ")
     }
@@ -610,7 +620,7 @@
     function renderTotals(totals) {
         const totalSummary = document.getElementById("ledger-total-summary")
         if (!totalSummary) return
-        if (!totals || (totals.hive == null && totals.hbd == null && totals.usd == null && totals.sats == null)) {
+        if (!totals || (totals.hive == null && totals.hbd == null && totals.dash == null && totals.usd == null && totals.sats == null)) {
             totalSummary.innerHTML = ""
             return
         }
@@ -621,6 +631,7 @@
                 <tbody>
                     <tr><td>HIVE</td><td class="text-end">${formatTotalNumber(totals.hive, 3)}</td></tr>
                     <tr><td>HBD</td><td class="text-end">${formatTotalNumber(totals.hbd, 3)}</td></tr>
+                    <tr><td>DASH</td><td class="text-end">${formatTotalNumber(totals.dash, 3)}</td></tr>
                     <tr><td>USD</td><td class="text-end">${formatTotalNumber(totals.usd, 2)}</td></tr>
                     <tr><td>SATS</td><td class="text-end">${formatTotalNumber(totals.sats, 0)}</td></tr>
                 </tbody>

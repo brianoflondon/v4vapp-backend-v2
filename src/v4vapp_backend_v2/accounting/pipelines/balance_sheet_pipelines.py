@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 
 def balance_sheet_check_pipeline(
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=UTC),
     age: timedelta | None = None,
 ) -> Sequence[Mapping[str, Any]]:
     """
@@ -117,7 +118,7 @@ def balance_sheet_check_pipeline(
 
 
 def balance_sheet_pipeline(
-    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+    as_of_date: datetime = datetime.now(tz=UTC), age: timedelta | None = None
 ) -> Sequence[Mapping[str, Any]]:
     """
     Pipeline to generate a balance sheet as of a specific date.
@@ -159,6 +160,7 @@ def balance_sheet_pipeline(
                             "count": {"$sum": 1},
                             "hbd": {"$sum": "$conv_signed.debit.hbd"},
                             "hive": {"$sum": "$conv_signed.debit.hive"},
+                            "dash": {"$sum": "$conv_signed.debit.dash"},
                             "msats": {"$sum": "$conv_signed.debit.msats"},
                             "sats": {"$sum": "$conv_signed.debit.sats"},
                             "usd": {"$sum": "$conv_signed.debit.usd"},
@@ -176,6 +178,7 @@ def balance_sheet_pipeline(
                             "count": {"$sum": 1},
                             "hbd": {"$sum": "$conv_signed.credit.hbd"},
                             "hive": {"$sum": "$conv_signed.credit.hive"},
+                            "dash": {"$sum": "$conv_signed.credit.dash"},
                             "msats": {"$sum": "$conv_signed.credit.msats"},
                             "sats": {"$sum": "$conv_signed.credit.sats"},
                             "usd": {"$sum": "$conv_signed.credit.usd"},
@@ -192,6 +195,7 @@ def balance_sheet_pipeline(
                 "count": {"$sum": "$all.count"},
                 "hbd": {"$sum": "$all.hbd"},
                 "hive": {"$sum": "$all.hive"},
+                "dash": {"$sum": "$all.dash"},
                 "msats": {"$sum": "$all.msats"},
                 "sats": {"$sum": "$all.sats"},
                 "usd": {"$sum": "$all.usd"},
@@ -212,6 +216,7 @@ def balance_sheet_pipeline(
                                         "count": "$count",
                                         "hbd": "$hbd",
                                         "hive": "$hive",
+                                        "dash": "$dash",
                                         "msats": "$msats",
                                         "sats": "$sats",
                                         "usd": "$usd",
@@ -221,6 +226,7 @@ def balance_sheet_pipeline(
                             "total_count": {"$sum": "$count"},
                             "total_hbd": {"$sum": "$hbd"},
                             "total_hive": {"$sum": "$hive"},
+                            "total_dash": {"$sum": "$dash"},
                             "total_msats": {"$sum": "$msats"},
                             "total_sats": {"$sum": "$sats"},
                             "total_usd": {"$sum": "$usd"},
@@ -237,6 +243,7 @@ def balance_sheet_pipeline(
                                             "count": "$total_count",
                                             "hbd": "$total_hbd",
                                             "hive": "$total_hive",
+                                            "dash": "$total_dash",
                                             "msats": "$total_msats",
                                             "sats": "$total_sats",
                                             "usd": "$total_usd",
@@ -261,6 +268,7 @@ def balance_sheet_pipeline(
                                         "count": "$count",
                                         "hbd": "$hbd",
                                         "hive": "$hive",
+                                        "dash": "$dash",
                                         "msats": "$msats",
                                         "sats": "$sats",
                                         "usd": "$usd",
@@ -270,6 +278,7 @@ def balance_sheet_pipeline(
                             "total_count": {"$sum": "$count"},
                             "total_hbd": {"$sum": "$hbd"},
                             "total_hive": {"$sum": "$hive"},
+                            "total_dash": {"$sum": "$dash"},
                             "total_msats": {"$sum": "$msats"},
                             "total_sats": {"$sum": "$sats"},
                             "total_usd": {"$sum": "$usd"},
@@ -286,6 +295,7 @@ def balance_sheet_pipeline(
                                             "count": "$total_count",
                                             "hbd": "$total_hbd",
                                             "hive": "$total_hive",
+                                            "dash": "$total_dash",
                                             "msats": "$total_msats",
                                             "sats": "$total_sats",
                                             "usd": "$total_usd",
@@ -306,11 +316,13 @@ def balance_sheet_pipeline(
                 "Liabilities": {"$arrayToObject": "$liabilities"},
                 "total_assets_hbd": {"$sum": "$assets.v.Total.hbd"},
                 "total_assets_hive": {"$sum": "$assets.v.Total.hive"},
+                "total_assets_dash": {"$sum": "$assets.v.Total.dash"},
                 "total_assets_msats": {"$sum": "$assets.v.Total.msats"},
                 "total_assets_sats": {"$sum": "$assets.v.Total.sats"},
                 "total_assets_usd": {"$sum": "$assets.v.Total.usd"},
                 "total_liabilities_hbd": {"$sum": "$liabilities.v.Total.hbd"},
                 "total_liabilities_hive": {"$sum": "$liabilities.v.Total.hive"},
+                "total_liabilities_dash": {"$sum": "$liabilities.v.Total.dash"},
                 "total_liabilities_msats": {"$sum": "$liabilities.v.Total.msats"},
                 "total_liabilities_sats": {"$sum": "$liabilities.v.Total.sats"},
                 "total_liabilities_usd": {"$sum": "$liabilities.v.Total.usd"},
@@ -333,7 +345,7 @@ def profit_loss_pipeline(
         dict: A dictionary representing the profit and loss statement.
     """
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
+        as_of_date = datetime.now(tz=UTC)
 
     if age:
         start_date = as_of_date - age
@@ -353,6 +365,7 @@ def profit_loss_pipeline(
                             "_id": {"name": "$credit.name", "sub": "$credit.sub"},
                             "hbd": {"$sum": "$conv_signed.credit.hbd"},
                             "hive": {"$sum": "$conv_signed.credit.hive"},
+                            "dash": {"$sum": "$conv_signed.credit.dash"},
                             "msats": {"$sum": "$conv_signed.credit.msats"},
                             "sats": {"$sum": "$conv_signed.credit.sats"},
                             "usd": {"$sum": "$conv_signed.credit.usd"},
@@ -367,6 +380,7 @@ def profit_loss_pipeline(
                             "_id": {"name": "$debit.name", "sub": "$debit.sub"},
                             "hbd": {"$sum": "$conv_signed.debit.hbd"},
                             "hive": {"$sum": "$conv_signed.debit.hive"},
+                            "dash": {"$sum": "$conv_signed.debit.dash"},
                             "msats": {"$sum": "$conv_signed.debit.msats"},
                             "sats": {"$sum": "$conv_signed.debit.sats"},
                             "usd": {"$sum": "$conv_signed.debit.usd"},
@@ -435,6 +449,26 @@ def profit_loss_pipeline(
                                                         },
                                                         "as": "f",
                                                         "in": "$$f.hive",
+                                                    }
+                                                }
+                                            },
+                                            "dash": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$revenue_details",
+                                                                "as": "r",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$r._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.dash",
                                                     }
                                                 }
                                             },
@@ -518,6 +552,7 @@ def profit_loss_pipeline(
                                                     "v": {
                                                         "hbd": "$$item.hbd",
                                                         "hive": "$$item.hive",
+                                                        "dash": "$$item.dash",
                                                         "msats": "$$item.msats",
                                                         "sats": "$$item.sats",
                                                         "usd": "$$item.usd",
@@ -588,6 +623,26 @@ def profit_loss_pipeline(
                                                         },
                                                         "as": "f",
                                                         "in": "$$f.hive",
+                                                    }
+                                                }
+                                            },
+                                            "dash": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$expense_details",
+                                                                "as": "e",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$e._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.dash",
                                                     }
                                                 }
                                             },
@@ -671,6 +726,7 @@ def profit_loss_pipeline(
                                                     "v": {
                                                         "hbd": "$$item.hbd",
                                                         "hive": "$$item.hive",
+                                                        "dash": "$$item.dash",
                                                         "msats": "$$item.msats",
                                                         "sats": "$$item.sats",
                                                         "usd": "$$item.usd",
@@ -698,6 +754,12 @@ def profit_loss_pipeline(
                                     "$subtract": [
                                         {"$sum": "$revenue_details.hive"},
                                         {"$sum": "$expense_details.hive"},
+                                    ]
+                                },
+                                "dash": {
+                                    "$subtract": [
+                                        {"$sum": "$revenue_details.dash"},
+                                        {"$sum": "$expense_details.dash"},
                                     ]
                                 },
                                 "msats": {
@@ -828,6 +890,50 @@ def profit_loss_pipeline(
                                                                 },
                                                                 "as": "f",
                                                                 "in": "$$f.hive",
+                                                            }
+                                                        }
+                                                    },
+                                                ]
+                                            },
+                                            "dash": {
+                                                "$subtract": [
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$revenue_details",
+                                                                        "as": "r",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$r._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.dash",
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$expense_details",
+                                                                        "as": "e",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$e._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.dash",
                                                             }
                                                         }
                                                     },

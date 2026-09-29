@@ -77,6 +77,12 @@ def test_internal_config(monkeypatch: pytest.MonkeyPatch):
         int_config.lnd_config.connections["example"].address
         == raw_config["lnd_config"]["connections"]["example"]["address"]
     )
+    assert int_config.dash_config.default == "testnet"
+    assert int_config.dash_config.dash_wallet_sender == "v4v.app"
+    assert int_config.dash_config.connections["testnet"].network == "testnet"
+    assert int_config.dash_config.connections["testnet"].master_fingerprint == "73c5da0a"
+    assert int_config.dash_config.connection_config() is not None
+    assert int_config.dash_config.connection_config().rpc_configured is False
     assert (
         int_config.logging.log_notification_silent
         == raw_config["logging"]["log_notification_silent"]

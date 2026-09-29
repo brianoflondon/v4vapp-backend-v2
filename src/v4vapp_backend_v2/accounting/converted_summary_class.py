@@ -12,6 +12,8 @@ class ConvertedSummary:
     usd: Decimal = Decimal(0)
     sats: Decimal = Decimal(0)
     msats: Decimal = Decimal(0)
+    dash: Decimal = Decimal(0)
+    duffs: Decimal = Decimal(0)
 
     @property
     def sats_rounded(self) -> Decimal:
@@ -27,6 +29,8 @@ class ConvertedSummary:
             usd=crypto_conv.usd,
             sats=crypto_conv.sats,
             msats=crypto_conv.msats,
+            dash=crypto_conv.dash,
+            duffs=crypto_conv.duffs,
         )
 
     def __add__(self, other: "ConvertedSummary") -> "ConvertedSummary":
@@ -38,6 +42,8 @@ class ConvertedSummary:
                 usd=self.usd + other.usd,
                 sats=self.sats + other.sats,
                 msats=self.msats + other.msats,
+                dash=self.dash + other.dash,
+                duffs=self.duffs + other.duffs,
             )
         raise TypeError(f"Unsupported operand type for +: '{type(other)}'")
 
@@ -50,6 +56,8 @@ class ConvertedSummary:
                 usd=self.usd - other.usd,
                 sats=self.sats - other.sats,
                 msats=self.msats - other.msats,
+                dash=self.dash - other.dash,
+                duffs=self.duffs - other.duffs,
             )
         raise TypeError(f"Unsupported operand type for -: '{type(other)}'")
 
@@ -63,6 +71,8 @@ class ConvertedSummary:
                 usd=self.usd * other_dec,
                 sats=self.sats * other_dec,
                 msats=self.msats * other_dec,
+                dash=self.dash * other_dec,
+                duffs=self.duffs * other_dec,
             )
         elif isinstance(other, ConvertedSummary):
             return ConvertedSummary(
@@ -71,6 +81,8 @@ class ConvertedSummary:
                 usd=self.usd * other.usd,
                 sats=self.sats * other.sats,
                 msats=self.msats * other.msats,
+                dash=self.dash * other.dash,
+                duffs=self.duffs * other.duffs,
             )
         raise TypeError(f"Unsupported operand type for *: '{type(other)}'")
 
@@ -84,6 +96,8 @@ class ConvertedSummary:
             and abs(self.usd - other.usd) < 1e-10
             and abs(self.sats - other.sats) < 1e-10
             and abs(self.msats - other.msats) < 1e-10
+            and abs(self.dash - other.dash) < 1e-10
+            and abs(self.duffs - other.duffs) < 1e-10
         )
 
     def __rmul__(self, other: Union[float, int]) -> "ConvertedSummary":
@@ -93,7 +107,13 @@ class ConvertedSummary:
     def __neg__(self) -> "ConvertedSummary":
         """Support unary negation (e.g., -obj)."""
         return ConvertedSummary(
-            hive=-self.hive, hbd=-self.hbd, usd=-self.usd, sats=-self.sats, msats=-self.msats
+            hive=-self.hive,
+            hbd=-self.hbd,
+            usd=-self.usd,
+            sats=-self.sats,
+            msats=-self.msats,
+            dash=-self.dash,
+            duffs=-self.duffs,
         )
 
     def __truediv__(self, other: Union["ConvertedSummary", float, int]) -> "ConvertedSummary":
@@ -108,6 +128,8 @@ class ConvertedSummary:
                 usd=self.usd / other_dec,
                 sats=self.sats / other_dec,
                 msats=self.msats / other_dec,
+                dash=self.dash / other_dec,
+                duffs=self.duffs / other_dec,
             )
         elif isinstance(other, ConvertedSummary):
             return ConvertedSummary(
@@ -116,5 +138,7 @@ class ConvertedSummary:
                 usd=self.usd / other.usd if other.usd != 0 else Decimal("inf"),
                 sats=self.sats / other.sats if other.sats != 0 else Decimal("inf"),
                 msats=self.msats / other.msats if other.msats != 0 else Decimal("inf"),
+                dash=self.dash / other.dash if other.dash != 0 else Decimal("inf"),
+                duffs=self.duffs / other.duffs if other.duffs != 0 else Decimal("inf"),
             )
         raise TypeError(f"Unsupported operand type for /: '{type(other)}'")

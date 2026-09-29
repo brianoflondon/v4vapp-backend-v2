@@ -5,9 +5,10 @@ Provides a simple page and data endpoint to browse ledger entries.
 """
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from timeit import default_timer as timer
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -38,8 +39,8 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTrans
 router = APIRouter()
 
 # Will be set by the main app
-templates: Optional[Jinja2Templates] = None
-nav_manager: Optional[NavigationManager] = None
+templates: Jinja2Templates | None = None
+nav_manager: NavigationManager | None = None
 
 
 def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
@@ -75,15 +76,15 @@ async def get_ledger_entries(
 @router.get("/data")
 # @async_time_stats_decorator()
 async def ledger_entries_data(
-    account_string: Optional[str] = None,
-    sub_filter: Optional[str] = None,
-    short_id: Optional[str] = None,
-    group_id: Optional[str] = None,
-    op_type: Optional[str] = None,
-    from_date_str: Optional[str] = None,
-    to_date_str: Optional[str] = None,
-    ledger_type: Optional[str] = None,
-    general_search: Optional[str] = None,
+    account_string: str | None = None,
+    sub_filter: str | None = None,
+    short_id: str | None = None,
+    group_id: str | None = None,
+    op_type: str | None = None,
+    from_date_str: str | None = None,
+    to_date_str: str | None = None,
+    ledger_type: str | None = None,
+    general_search: str | None = None,
     age_hours: int = 0,
     limit: int = 10,
     offset: int = 0,
@@ -92,7 +93,7 @@ async def ledger_entries_data(
     # Determine date range using from/to inputs. We use the existing helper which
     # accepts an as_of_date (end) and an age (timedelta) to represent the range.
     # Default end date to current UTC time
-    to_date = datetime.now(tz=timezone.utc)
+    to_date = datetime.now(tz=UTC)
     from_date = None
 
     # Helper: parse incoming ISO strings. If they include an explicit timezone (Z or +HH:MM),
@@ -197,6 +198,14 @@ async def ledger_entries_data(
                         ]
                     }
                 },
+                "dash": {
+                    "$sum": {
+                        "$ifNull": [
+                            "$debit_conv.dash",
+                            {"$ifNull": ["$credit_conv.dash", 0]},
+                        ]
+                    }
+                },
                 "sats": {
                     "$sum": {
                         "$ifNull": [
@@ -237,14 +246,14 @@ async def ledger_entries_data(
     totals = {
         "hive": _normalize_num(totals_doc.get("hive", 0)),
         "hbd": _normalize_num(totals_doc.get("hbd", 0)),
+        "dash": _normalize_num(totals_doc.get("dash", 0)),
         "usd": _normalize_num(totals_doc.get("usd", 0)),
         "sats": _normalize_num(totals_doc.get("sats", 0)),
     }
 
     # Fetch paginated documents
     cursor = (
-        LedgerEntry
-        .collection()
+        LedgerEntry.collection()
         .find(filter=query)
         .sort([("timestamp", -1)])
         .skip(offset)
@@ -274,8 +283,11 @@ async def ledger_entries_data(
                 "sats",
                 "sats_rounded",
                 "btc",
+                "dash",
+                "duffs",
                 "sats_hive",
                 "sats_hbd",
+                "sats_dash",
                 "fetch_date",
                 "source",
             ]
@@ -306,45 +318,47 @@ async def ledger_entries_data(
     for e in ledger_entries:
         debit = acct_to_dict(getattr(e, "debit", None))
         credit = acct_to_dict(getattr(e, "credit", None))
-        entries.append({
-            "group_id": e.group_id,
-            "short_id": e.short_id,
-            "timestamp": e.timestamp.isoformat() if getattr(e, "timestamp", None) else None,
-            "ledger_type": e.ledger_type.name if getattr(e, "ledger_type", None) else None,
-            "ledger_type_str": getattr(e, "ledger_type", None).printout
-            if getattr(e, "ledger_type", None)
-            else None,
-            "description": e.description,
-            "link": getattr(e, "link", ""),
-            "cust_id": getattr(e, "cust_id", ""),
-            "cust_id_from": getattr(e, "cust_id_from", ""),
-            "cust_id_to": getattr(e, "cust_id_to", ""),
-            "debit": {
-                **debit,
-                "amount": str(getattr(e, "debit_amount", None)),
-                "unit": getattr(e, "debit_unit", "").value
-                if getattr(e, "debit_unit", None)
-                else "",
-                "conv": conv_to_dict(getattr(e, "debit_conv", None)),
-            },
-            "credit": {
-                **credit,
-                "amount": str(getattr(e, "credit_amount", None)),
-                "unit": getattr(e, "credit_unit", "").value
-                if getattr(e, "credit_unit", None)
-                else "",
-                "conv": conv_to_dict(getattr(e, "credit_conv", None)),
-            },
-            "conversion": {
-                "debit": conv_to_dict(getattr(e, "debit_conv", None)),
-                "credit": conv_to_dict(getattr(e, "credit_conv", None)),
-            },
-            # Provide the textual journal for reference (not used for primary rendering)
-            "user_memo": getattr(e, "user_memo", ""),
-            "journal": e.print_journal_entry() if hasattr(e, "print_journal_entry") else None,
-            "reversed": e.reversed.isoformat() if getattr(e, "reversed", None) else None,
-            "op_type": getattr(e, "op_type", ""),
-        })
+        entries.append(
+            {
+                "group_id": e.group_id,
+                "short_id": e.short_id,
+                "timestamp": e.timestamp.isoformat() if getattr(e, "timestamp", None) else None,
+                "ledger_type": e.ledger_type.name if getattr(e, "ledger_type", None) else None,
+                "ledger_type_str": getattr(e, "ledger_type", None).printout
+                if getattr(e, "ledger_type", None)
+                else None,
+                "description": e.description,
+                "link": getattr(e, "link", ""),
+                "cust_id": getattr(e, "cust_id", ""),
+                "cust_id_from": getattr(e, "cust_id_from", ""),
+                "cust_id_to": getattr(e, "cust_id_to", ""),
+                "debit": {
+                    **debit,
+                    "amount": str(getattr(e, "debit_amount", None)),
+                    "unit": getattr(e, "debit_unit", "").value
+                    if getattr(e, "debit_unit", None)
+                    else "",
+                    "conv": conv_to_dict(getattr(e, "debit_conv", None)),
+                },
+                "credit": {
+                    **credit,
+                    "amount": str(getattr(e, "credit_amount", None)),
+                    "unit": getattr(e, "credit_unit", "").value
+                    if getattr(e, "credit_unit", None)
+                    else "",
+                    "conv": conv_to_dict(getattr(e, "credit_conv", None)),
+                },
+                "conversion": {
+                    "debit": conv_to_dict(getattr(e, "debit_conv", None)),
+                    "credit": conv_to_dict(getattr(e, "credit_conv", None)),
+                },
+                # Provide the textual journal for reference (not used for primary rendering)
+                "user_memo": getattr(e, "user_memo", ""),
+                "journal": e.print_journal_entry() if hasattr(e, "print_journal_entry") else None,
+                "reversed": e.reversed.isoformat() if getattr(e, "reversed", None) else None,
+                "op_type": getattr(e, "op_type", ""),
+            }
+        )
 
     return JSONResponse({"count": total, "entries": entries, "totals": totals})
 
@@ -385,16 +399,16 @@ async def ledger_entry_reverse(group_id: str = Body(..., embed=True)):
 @router.get("/", response_class=HTMLResponse)
 async def ledger_entries_page(
     request: Request,
-    account_string: Optional[str] = None,
-    sub_filter: Optional[str] = None,
-    short_id: Optional[str] = None,
-    group_id: Optional[str] = None,
-    op_type: Optional[str] = None,
-    from_date_str: Optional[str] = None,
-    to_date_str: Optional[str] = None,
-    ledger_type: Optional[str] = None,
-    general_search: Optional[str] = None,
-    age_hours: Optional[int] = 0,
+    account_string: str | None = None,
+    sub_filter: str | None = None,
+    short_id: str | None = None,
+    group_id: str | None = None,
+    op_type: str | None = None,
+    from_date_str: str | None = None,
+    to_date_str: str | None = None,
+    ledger_type: str | None = None,
+    general_search: str | None = None,
+    age_hours: int | None = 0,
 ):
     """Render ledger entries page. Supports simple GET search parameters."""
 
@@ -404,7 +418,7 @@ async def ledger_entries_page(
         raise RuntimeError("Templates and navigation not initialized")
 
     # compute date window for query analogously to /data
-    to_date = datetime.now(tz=timezone.utc)
+    to_date = datetime.now(tz=UTC)
     from_date = None
     if to_date_str:
         parsed = parse_dt_with_tz(to_date_str)
@@ -587,15 +601,15 @@ async def ledger_entries_page(
 @router.get("/limit-order-create", response_class=HTMLResponse)
 async def ledger_entries_limit_order_create_page(
     request: Request,
-    account_string: Optional[str] = None,
-    sub_filter: Optional[str] = None,
-    short_id: Optional[str] = None,
-    group_id: Optional[str] = None,
-    from_date_str: Optional[str] = None,
-    to_date_str: Optional[str] = None,
-    ledger_type: Optional[str] = None,
-    general_search: Optional[str] = None,
-    age_hours: Optional[int] = 0,
+    account_string: str | None = None,
+    sub_filter: str | None = None,
+    short_id: str | None = None,
+    group_id: str | None = None,
+    from_date_str: str | None = None,
+    to_date_str: str | None = None,
+    ledger_type: str | None = None,
+    general_search: str | None = None,
+    age_hours: int | None = 0,
 ):
     """Render the ledger entries page with op_type pre-selected to limit_order_create."""
     return await ledger_entries_page(
