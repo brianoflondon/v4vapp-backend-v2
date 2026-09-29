@@ -82,7 +82,7 @@ async def test_poll_logs_start_and_end(monkeypatch, caplog):
         lambda saved, current, price: (current, Decimal(1), "note", "log line"),
     )
 
-    with caplog.at_level("INFO"):
+    with caplog.at_level("DEBUG"):
         result = await binance_monitor.poll_binance_balances({})
 
     assert result[0] == balances
@@ -99,7 +99,7 @@ async def test_poll_timeout_is_logged(monkeypatch, caplog):
     monkeypatch.setattr(binance_monitor, "BINANCE_POLL_TIMEOUT_S", 0.05)
     monkeypatch.setattr(binance_monitor, "fetch_balances_and_price", fetch_slow)
 
-    with caplog.at_level("INFO"):
+    with caplog.at_level("DEBUG"):
         result = await binance_monitor.poll_binance_balances({})
 
     assert result is None
