@@ -160,7 +160,7 @@ async def poll_binance_balances(saved_balances: dict):
     """
     started = time.monotonic()
     outcome = "ok"
-    logger.info(f"{ICON} Binance poll started", extra={"notification": False})
+    logger.debug(f"{ICON} Binance poll started", extra={"notification": False})
     try:
         balances, price = await asyncio.wait_for(
             asyncio.to_thread(fetch_balances_and_price),
@@ -200,7 +200,7 @@ async def poll_binance_balances(saved_balances: dict):
         return None
     finally:
         elapsed_ms = round((time.monotonic() - started) * 1000)
-        logger.info(
+        logger.debug(
             f"{ICON} Binance poll ended after {elapsed_ms}ms ({outcome})",
             extra={
                 "notification": False,
