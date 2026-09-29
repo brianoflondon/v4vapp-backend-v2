@@ -1,8 +1,8 @@
 import math
 from asyncio import TaskGroup
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, Tuple
+from typing import Any
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
@@ -17,7 +17,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 # @async_time_stats_decorator()
 async def generate_balance_sheet_mongodb(
     as_of_date: datetime | None = None, age: timedelta = timedelta(seconds=0)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generates a balance sheet from MongoDB data.
 
@@ -29,7 +29,7 @@ async def generate_balance_sheet_mongodb(
         Sequence[Mapping[str, Any]]: The generated balance sheet.
     """
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
+        as_of_date = datetime.now(tz=UTC)
 
     bs_pipeline = balance_sheet_pipeline(as_of_date=as_of_date, age=age)
     pl_pipeline = profit_loss_pipeline(as_of_date=as_of_date, age=age)
@@ -65,12 +65,13 @@ async def generate_balance_sheet_mongodb(
             "usd": values["usd"],
             "hive": values["hive"],
             "hbd": values["hbd"],
+            "dash": values.get("dash", 0),
             "sats": values["sats"],
             "msats": values["msats"],
         }
 
         # Compute section totals
-        currencies = ["hbd", "hive", "msats", "sats", "usd"]
+        currencies = ["hbd", "hive", "dash", "msats", "sats", "usd"]
         for section in ["Assets", "Liabilities", "Equity"]:
             if section in balance_sheet:
                 section_total = {cur: Decimal(0) for cur in currencies}
@@ -93,6 +94,7 @@ async def generate_balance_sheet_mongodb(
         "usd": liabilities_total["usd"] + equity_total["usd"],
         "hive": liabilities_total["hive"] + equity_total["hive"],
         "hbd": liabilities_total["hbd"] + equity_total["hbd"],
+        "dash": liabilities_total.get("dash", 0) + equity_total.get("dash", 0),
         "sats": liabilities_total["sats"] + equity_total["sats"],
         "msats": liabilities_total["msats"] + equity_total["msats"],
     }
@@ -121,7 +123,7 @@ async def generate_balance_sheet_mongodb(
 
 async def check_balance_sheet_mongodb(
     as_of_date: datetime | None = None, age: timedelta | None = None
-) -> Tuple[bool, Decimal]:
+) -> tuple[bool, Decimal]:
     """
     Checks if the balance sheet is balanced using MongoDB data.
 
@@ -133,7 +135,7 @@ async def check_balance_sheet_mongodb(
         bool: True if the balance sheet is balanced, False otherwise.
     """
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
+        as_of_date = datetime.now(tz=UTC)
 
     bs_check_pipeline = balance_sheet_check_pipeline(as_of_date=as_of_date, age=age)
     bs_check_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_check_pipeline)
@@ -160,7 +162,7 @@ async def check_balance_sheet_mongodb(
     return is_balanced, msats_tolerance
 
 
-def balance_sheet_printout(balance_sheet: Dict, vsc_details: bool = False) -> str:
+def balance_sheet_printout(balance_sheet: dict, vsc_details: bool = False) -> str:
     """
     Formats the balance sheet into a readable string representation, displaying only USD values.
     Includes sections for Assets, Liabilities, and Equity, along with their respective totals.
@@ -227,9 +229,9 @@ def balance_sheet_printout(balance_sheet: Dict, vsc_details: bool = False) -> st
     return "\n".join(output)
 
 
-def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool = False) -> str:
+def balance_sheet_all_currencies_printout(balance_sheet: dict, vsc_details: bool = False) -> str:
     """
-    Formats a table with balances in SATS, HIVE, HBD, and USD.
+    Formats a table with balances in SATS, HIVE, HBD, DASH, and USD.
     Returns a string table for reference.
 
     Args:
@@ -237,9 +239,9 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
         vsc_details (bool): If False, hides individual sub-account lines for VSC Liability account.
 
     Returns:
-        str: A formatted string table displaying balances in SATS, HIVE, HBD, and USD.
+        str: A formatted string table displaying balances in SATS, HIVE, HBD, DASH, and USD.
     """
-    max_width = 115
+    max_width = 128
     output = ["Balance Sheet in All Currencies"]
     output.append("-" * max_width)
     # Clarify presentation semantics to avoid misinterpretation of per-unit rows
@@ -247,7 +249,9 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
         "Note: Unit lines represent values converted into each unit; they are NOT additive across columns. "
         "Intra-account exchange trades may show gross (both sides) and will net to zero in totals — only fees and net flows remain."
     )
-    output.append(f"{'Account':<40} {'Sub':<17} {'SATS':>14} {'HIVE':>12} {'HBD':>12} {'USD':>12}")
+    output.append(
+        f"{'Account':<40} {'Sub':<17} {'SATS':>14} {'HIVE':>12} {'HBD':>12} {'DASH':>12} {'USD':>12}"
+    )
     output.append("-" * max_width)
 
     for category in ["Assets", "Liabilities", "Equity"]:
@@ -288,6 +292,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
                         f"{balance.get('sats', 0):>14,.0f} "
                         f"{balance.get('hive', 0):>12,.0f} "
                         f"{balance.get('hbd', 0):>12,.0f} "
+                        f"{balance.get('dash', 0):>12,.3f} "
                         f"{balance.get('usd', 0):>12,.0f}"
                     )
             if "Total" not in sub_accounts:
@@ -306,6 +311,11 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
                     for sub, sub_acc in sub_accounts.items()
                     if sub != "Total" and "hbd" in sub_acc
                 )
+                total_dash = sum(
+                    sub_acc.get("dash", 0)
+                    for sub, sub_acc in sub_accounts.items()
+                    if sub != "Total" and "dash" in sub_acc
+                )
                 total_sats = sum(
                     sub_acc.get("sats", 0)
                     for sub, sub_acc in sub_accounts.items()
@@ -315,6 +325,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
                     "usd": round(total_usd, 2),
                     "hive": round(total_hive, 2),
                     "hbd": round(total_hbd, 2),
+                    "dash": round(total_dash, 3),
                     "sats": round(total_sats, 0),
                     "msats": 0,
                 }
@@ -335,6 +346,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
                 f"{total.get('sats', 0):>14,.0f} "
                 f"{total.get('hive', 0):>12,.0f} "
                 f"{total.get('hbd', 0):>12,.0f} "
+                f"{total.get('dash', 0):>12,.3f} "
                 f"{total.get('usd', 0):>12,.0f}"
             )
             output.append(f"{'-' * max_width}")
@@ -346,6 +358,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
             f"{total.get('sats', 0):>14,.0f} "
             f"{total.get('hive', 0):>12,.0f} "
             f"{total.get('hbd', 0):>12,.0f} "
+            f"{total.get('dash', 0):>12,.3f} "
             f"{total.get('usd', 0):>12,.0f}"
         )
         output.append("=" * max_width)
@@ -358,6 +371,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
         f"{total.get('sats', 0):>14,.0f} "
         f"{total.get('hive', 0):>12,.0f} "
         f"{total.get('hbd', 0):>12,.0f} "
+        f"{total.get('dash', 0):>12,.3f} "
         f"{total.get('usd', 0):>12,.0f}"
     )
 

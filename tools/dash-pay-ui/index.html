@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dash → Lightning</title>
+    <style>
+      :root {
+        --bg: #0c1117;
+        --panel: #151c26;
+        --panel-2: #1c2532;
+        --ink: #e8eef6;
+        --muted: #8b9bb0;
+        --line: #2a3646;
+        --dash: #008de4;
+        --dash-2: #3cb4ff;
+        --ok: #34d399;
+        --warn: #fbbf24;
+        --bad: #f87171;
+        --wait: #7dd3fc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(1200px 500px at 10% -10%, #12304a 0%, transparent 55%),
+          var(--bg);
+        color: var(--ink);
+        font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      .wrap {
+        max-width: 440px;
+        margin: 0 auto;
+        padding: 28px 16px 48px;
+      }
+
+      header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.25rem;
+        letter-spacing: -0.02em;
+      }
+
+      .sub {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }
+
+      .session {
+        text-align: right;
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+
+      .session code {
+        display: block;
+        margin-top: 4px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: var(--panel-2);
+        color: var(--dash-2);
+        font-size: 0.78rem;
+        letter-spacing: 0.02em;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 18px;
+      }
+
+      label {
+        display: block;
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+
+      input[type="number"],
+      input[type="text"] {
+        width: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 11px 12px;
+        font: inherit;
+      }
+
+      input:focus {
+        outline: 2px solid color-mix(in srgb, var(--dash) 55%, transparent);
+        border-color: var(--dash);
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 11px 16px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .primary {
+        background: var(--dash);
+        color: #041018;
+        white-space: nowrap;
+      }
+
+      .primary:hover:not(:disabled) {
+        background: var(--dash-2);
+      }
+
+      .ghost {
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      .pay {
+        display: none;
+        margin-top: 16px;
+      }
+
+      .pay.visible {
+        display: block;
+      }
+
+      .qr-wrap {
+        background: #fff;
+        border-radius: 14px;
+        padding: 14px;
+        display: grid;
+        place-items: center;
+      }
+
+      .qr-wrap img {
+        display: block;
+        width: min(280px, 100%);
+        height: auto;
+      }
+
+      .amount-line {
+        text-align: center;
+        margin: 14px 0 8px;
+        font-size: 1.2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .meta {
+        display: grid;
+        gap: 6px;
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin: 12px 0;
+      }
+
+      .meta div {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .meta span {
+        color: var(--ink);
+        text-align: right;
+        word-break: break-all;
+      }
+
+      .state {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        background: var(--panel-2);
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--wait);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--wait) 70%, transparent);
+      }
+
+      .state.poll .dot {
+        animation: pulse 1.4s ease-out infinite;
+      }
+
+      .state.OPEN .dot,
+      .state.poll .dot {
+        background: var(--wait);
+      }
+      .state.DETECTED .dot {
+        background: var(--warn);
+      }
+      .state.SETTLED .dot,
+      .state.OVERPAID .dot {
+        background: var(--ok);
+        box-shadow: none;
+        animation: none;
+      }
+      .state.EXPIRED .dot,
+      .state.UNDERPAID .dot,
+      .state.CANCELED .dot,
+      .state.error .dot {
+        background: var(--bad);
+        box-shadow: none;
+        animation: none;
+      }
+
+      @keyframes pulse {
+        70% {
+          box-shadow: 0 0 0 8px transparent;
+        }
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .actions button {
+        flex: 1;
+      }
+
+      .error {
+        display: none;
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--bad) 14%, var(--panel));
+        color: #fecaca;
+        font-size: 0.86rem;
+        white-space: pre-wrap;
+      }
+
+      .error.visible {
+        display: block;
+      }
+
+      .uri {
+        font-size: 0.7rem;
+        color: var(--muted);
+        word-break: break-all;
+        margin-top: 10px;
+      }
+
+      a {
+        color: var(--dash-2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>Pay Lightning with Dash</h1>
+          <div class="sub">devapi.v4v.app · KeepSats invoice</div>
+        </div>
+        <div class="session">
+          session cust_id
+          <code id="custId"></code>
+        </div>
+      </header>
+
+      <form class="card" id="form">
+        <label for="sats">Amount in sats</label>
+        <div class="row">
+          <input id="sats" type="number" min="1" step="1" value="1000" required />
+          <button class="primary" id="create" type="submit">Create</button>
+        </div>
+        <div class="error" id="error"></div>
+
+        <div class="pay" id="pay">
+          <div class="qr-wrap">
+            <img id="qr" alt="DashPay payment QR" />
+          </div>
+          <div class="amount-line" id="dashAmount">—</div>
+          <div style="text-align: center">
+            <span class="state poll" id="statePill"
+              ><i class="dot"></i><span id="stateLabel">OPEN</span></span
+            >
+          </div>
+          <div class="meta">
+            <div>Lightning <span id="lnSats">—</span></div>
+            <div>Collect (incl. fees) <span id="collectSats">—</span></div>
+            <div>Network <span id="network">—</span></div>
+            <div>Address <span id="address">—</span></div>
+            <div>External id <span id="extId">—</span></div>
+            <div>Last check <span id="lastCheck">waiting</span></div>
+          </div>
+          <div class="uri" id="uri"></div>
+          <div class="actions">
+            <button class="ghost" id="openUri" type="button">Open DashPay</button>
+            <button class="ghost" id="clear" type="button">Clear</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <script>
+      const API = "";
+      const POLL_MS = 2000;
+      const EXPIRES_IN_S = 900;
+      const CUST_KEY = "dashPayCustId";
+
+      const els = {
+        form: document.getElementById("form"),
+        sats: document.getElementById("sats"),
+        create: document.getElementById("create"),
+        error: document.getElementById("error"),
+        pay: document.getElementById("pay"),
+        qr: document.getElementById("qr"),
+        dashAmount: document.getElementById("dashAmount"),
+        statePill: document.getElementById("statePill"),
+        stateLabel: document.getElementById("stateLabel"),
+        lnSats: document.getElementById("lnSats"),
+        collectSats: document.getElementById("collectSats"),
+        network: document.getElementById("network"),
+        address: document.getElementById("address"),
+        extId: document.getElementById("extId"),
+        lastCheck: document.getElementById("lastCheck"),
+        uri: document.getElementById("uri"),
+        openUri: document.getElementById("openUri"),
+        clear: document.getElementById("clear"),
+        custId: document.getElementById("custId"),
+      };
+
+      const PAID = new Set(["SETTLED", "OVERPAID"]);
+      const STOP = new Set(["SETTLED", "OVERPAID", "EXPIRED", "UNDERPAID", "CANCELED"]);
+
+      let pollTimer = null;
+      let currentExternalId = null;
+      let currentUri = "";
+
+      function sessionCustId() {
+        let id = sessionStorage.getItem(CUST_KEY);
+        if (!id) {
+          const bytes = crypto.getRandomValues(new Uint8Array(5));
+          const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+          id = "dp" + hex;
+          sessionStorage.setItem(CUST_KEY, id);
+        }
+        return id;
+      }
+
+      function randomExternalId(custId) {
+        const n = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+        return `webui:${custId}:${n}`;
+      }
+
+      function showError(msg) {
+        els.error.textContent = msg || "";
+        els.error.classList.toggle("visible", Boolean(msg));
+      }
+
+      function setState(state, polling) {
+        const label = state || "—";
+        els.stateLabel.textContent = label;
+        els.statePill.className = `state ${label}${polling ? " poll" : ""}`;
+      }
+
+      function fmtTime(d = new Date()) {
+        return d.toLocaleTimeString([], { hour12: false });
+      }
+
+      async function readError(res) {
+        const text = await res.text();
+        try {
+          const body = JSON.parse(text);
+          if (typeof body.detail === "string") return body.detail;
+          if (Array.isArray(body.detail)) {
+            return body.detail
+              .map((d) => d.msg || JSON.stringify(d))
+              .join("\n");
+          }
+          return JSON.stringify(body, null, 2);
+        } catch {
+          return text || `${res.status} ${res.statusText}`;
+        }
+      }
+
+      async function api(path, options = {}) {
+        const res = await fetch(API + path, {
+          ...options,
+          headers: {
+            Accept: "application/json",
+            ...(options.body ? { "Content-Type": "application/json" } : {}),
+            ...(options.headers || {}),
+          },
+        });
+        if (!res.ok) {
+          throw new Error(await readError(res));
+        }
+        return res.json();
+      }
+
+      function stopPolling() {
+        if (pollTimer) {
+          clearTimeout(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      function renderInvoice(inv) {
+        currentUri = inv.uri_dashpay || "";
+        els.dashAmount.textContent = `${inv.dash_quoted} DASH`;
+        els.lnSats.textContent = `${inv.sats_requested} sats`;
+        els.collectSats.textContent =
+          inv.sats_collect == null ? "—" : `${inv.sats_collect} sats`;
+        els.network.textContent = inv.network || "—";
+        els.address.textContent = inv.address;
+        els.extId.textContent = inv.external_id;
+        els.uri.innerHTML = "";
+        const a = document.createElement("a");
+        a.href = currentUri;
+        a.textContent = currentUri;
+        els.uri.appendChild(a);
+        setState(inv.state, !STOP.has(inv.state));
+      }
+
+      async function drawQr(text) {
+        const src = `/qr?data=${encodeURIComponent(text)}`;
+        await new Promise((resolve, reject) => {
+          els.qr.onload = () => resolve();
+          els.qr.onerror = () => reject(new Error("QR image failed to load"));
+          els.qr.src = src;
+        });
+      }
+
+      async function pollOnce() {
+        if (!currentExternalId) return;
+        const inv = await api(
+          `/v2/dash/check_invoice/by-external/${encodeURIComponent(currentExternalId)}`
+        );
+        els.lastCheck.textContent = fmtTime();
+        renderInvoice(inv);
+        if (STOP.has(inv.state)) {
+          stopPolling();
+          els.create.disabled = false;
+          els.sats.disabled = false;
+          return;
+        }
+        pollTimer = setTimeout(() => {
+          pollOnce().catch((err) => {
+            showError(err.message);
+            pollTimer = setTimeout(() => pollOnce().catch(() => {}), POLL_MS);
+          });
+        }, POLL_MS);
+      }
+
+      function clearPay() {
+        stopPolling();
+        currentExternalId = null;
+        currentUri = "";
+        els.pay.classList.remove("visible");
+        els.create.disabled = false;
+        els.sats.disabled = false;
+        showError("");
+        setState("OPEN", false);
+      }
+
+      async function createInvoice(event) {
+        event.preventDefault();
+        showError("");
+        stopPolling();
+
+        const sats = Number(els.sats.value);
+        if (!Number.isInteger(sats) || sats < 1) {
+          showError("Enter a whole number of sats.");
+          return;
+        }
+
+        const custId = sessionCustId();
+        const externalId = randomExternalId(custId);
+
+        els.create.disabled = true;
+        els.sats.disabled = true;
+
+        try {
+          const ln = await api("/v1/new_invoice", {
+            method: "POST",
+            body: JSON.stringify({
+              hive_accname: "v4vapp-test",
+              amount: sats,
+              currency: "sats",
+              app_name: "dashwebui",
+              expiry: EXPIRES_IN_S > 1800 ? 1800 : EXPIRES_IN_S,
+              memo: "#SATS | #V4VAPP",
+            }),
+          });
+
+          const dash = await api("/v2/dash/new_invoice", {
+            method: "POST",
+            body: JSON.stringify({
+              external_id: externalId,
+              invoice: ln.payment_request,
+              expires_in_s: EXPIRES_IN_S,
+              cust_id: custId,
+              memo: `webui ${sats} sats`,
+            }),
+          });
+
+          currentExternalId = dash.external_id;
+          els.pay.classList.add("visible");
+          renderInvoice(dash);
+          await drawQr(dash.uri_dashpay);
+          els.lastCheck.textContent = "created " + fmtTime();
+          pollOnce().catch((err) => showError(err.message));
+        } catch (err) {
+          els.create.disabled = false;
+          els.sats.disabled = false;
+          showError(err.message);
+        }
+      }
+
+      els.form.addEventListener("submit", createInvoice);
+      els.clear.addEventListener("click", clearPay);
+      els.openUri.addEventListener("click", () => {
+        if (currentUri) window.location.href = currentUri;
+      });
+
+      els.custId.textContent = sessionCustId();
+    </script>
+  </body>
+</html>

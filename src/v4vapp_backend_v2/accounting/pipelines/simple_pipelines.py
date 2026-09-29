@@ -236,6 +236,11 @@ IGNORED_UPDATE_FIELDS = [
     "group_id",
     "legacy_group_id",
     "identity_key",
+    "ledger_posted_at",
+    "ledger_group_id",
+    "lightning_probed_at",
+    "lightning_sent_at",
+    "tracked_at",
 ]
 
 
@@ -311,6 +316,14 @@ def db_monitor_pipelines() -> dict[str, Sequence[Mapping[str, Any]]]:
             }
         }
     ]
+    dash_invoices_pipeline: Sequence[Mapping[str, Any]] = [
+        {
+            "$match": {
+                "operationType": {"$ne": "delete"},
+                "fullDocument.state": {"$in": ["SETTLED", "OVERPAID"]},
+            }
+        }
+    ]
 
     return {
         "payments": payments_pipeline,
@@ -319,4 +332,5 @@ def db_monitor_pipelines() -> dict[str, Sequence[Mapping[str, Any]]]:
         "htlc_events": htlc_events_pipeline,
         "ledger": ledger_pipeline,
         "magi_btc": magi_btc_pipeline,
+        "dash_invoices": dash_invoices_pipeline,
     }

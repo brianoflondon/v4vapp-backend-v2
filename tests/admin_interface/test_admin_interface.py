@@ -230,6 +230,7 @@ class TestAdminEndpoints:
         # asynchronously via /admin/api/dashboard/* endpoints.
         # Verify the async loading placeholders are present:
         assert "hive-balances-section" in content
+        assert "exchange-balances-section" in content
         assert "lnd-info-section" in content
         assert "financial-summary-section" in content
         assert "server-balance-check" in content
