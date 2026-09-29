@@ -1,4 +1,5 @@
 import asyncio
+import json
 import pickle
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
@@ -21,6 +22,10 @@ from v4vapp_backend_v2.helpers.binance_extras import get_client
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     convert_decimals_for_mongodb,
     format_time_delta,
+)
+from v4vapp_backend_v2.hive.v4v_config import (
+    QUOTE_SERVICE_NAMES,
+    normalize_quote_service_flags,
 )
 
 ALL_PRICES_COINGECKO = (
@@ -52,7 +57,98 @@ CACHE_TIMES = {
 
 DB_RATES_MIN_INTERVAL: int = 60 * 2 - 10  # 2 minutes 50 seconds
 
+# Shared by every process that fetches quotes. The admin page writes this key
+# so a disabled service is skipped on the next fetch, without waiting for Hive.
+QUOTE_SERVICES_REDIS_KEY = "cryptoprices:quote_services_enabled"
+
 ICON = "💱"
+
+_logged_disabled_quote_services: tuple[str, ...] | None = None
+
+
+def _decode_quote_service_payload(raw: object) -> dict | None:
+    if raw is None:
+        return None
+    if isinstance(raw, bytes):
+        try:
+            raw = raw.decode()
+        except Exception:
+            return None
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _redis_quote_service_flags() -> dict | None:
+    try:
+        redis_client = getattr(InternalConfig, "redis", None)
+        if redis_client is None:
+            return None
+        return _decode_quote_service_payload(redis_client.get(QUOTE_SERVICES_REDIS_KEY))
+    except Exception:
+        return None
+
+
+def _loaded_v4vconfig_quote_service_flags() -> dict | None:
+    """Use the in-memory Hive config when Redis has no switch yet.
+
+    Does not construct V4VConfig. Construction fetches Hive.
+    """
+    try:
+        from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+    except Exception:
+        return None
+    inst = getattr(V4VConfig, "_instance", None)
+    data = getattr(inst, "data", None) if inst is not None else None
+    flags = getattr(data, "quote_services", None)
+    if isinstance(flags, dict):
+        return flags
+    return None
+
+
+def read_quote_service_flags() -> dict[str, bool]:
+    """Flags for the next quote fetch. A missing config leaves every service on."""
+    raw = _redis_quote_service_flags()
+    if raw is None:
+        raw = _loaded_v4vconfig_quote_service_flags()
+    return normalize_quote_service_flags(raw)
+
+
+def publish_quote_service_flags(flags: dict[str, bool], *, overwrite: bool = True) -> None:
+    """Write the switches to Redis. overwrite=False leaves an existing key alone."""
+    payload = json.dumps(normalize_quote_service_flags(flags))
+    try:
+        redis_client = getattr(InternalConfig, "redis", None)
+        if redis_client is None:
+            return
+        if overwrite:
+            redis_client.set(QUOTE_SERVICES_REDIS_KEY, payload)
+        else:
+            redis_client.set(QUOTE_SERVICES_REDIS_KEY, payload, nx=True)
+    except Exception as ex:
+        logger.warning(
+            f"{ICON} Failed to publish quote service flags: {ex}",
+            extra={"notification": False},
+        )
+
+
+def _log_disabled_quote_services(disabled: tuple[str, ...]) -> None:
+    global _logged_disabled_quote_services
+    if disabled == _logged_disabled_quote_services:
+        return
+    _logged_disabled_quote_services = disabled
+    if not disabled:
+        return
+    logger.info(
+        f"{ICON} Not calling disabled quote services: {', '.join(disabled)}",
+        extra={"notification": False, "disabled_quote_services": list(disabled)},
+    )
 
 
 def _log_rates_insert_done(t: asyncio.Task) -> None:
@@ -522,6 +618,7 @@ class AllQuotes(BaseModel):
             - Updates self.fetch_date with the current fetch timestamp.
             - Logs detailed information and errors during the fetching process.
             - Stores quotes in Redis cache and optionally in the database.
+            - Skips quote services that are switched off in the admin Quote Sources page.
         Raises:
             asyncio.TimeoutError: If fetching quotes exceeds the specified timeout.
             Exception: If any quote service raises an exception during fetching.
@@ -538,13 +635,17 @@ class AllQuotes(BaseModel):
                 f"{ICON} Quotes fetched from main cache in {timer() - start:.4f} seconds",
             )
             return
-        all_services = [
-            CoinGecko(),
-            Binance(),
-            CoinMarketCap(),
-            HiveInternalMarket(),
-        ]
+        all_services = enabled_quote_service_clients()
         self.fetch_date = datetime.now(tz=UTC)
+        if not all_services:
+            logger.error(
+                f"{ICON} Every quote service is disabled; no prices were fetched",
+                extra={"notification": True},
+            )
+            self.quotes = {}
+            self.quote = QuoteResponse(error="All quote services are disabled")
+            self.source = ""
+            return
         tasks: dict[str, asyncio.Task] = {}
 
         # per-service timeout smaller than overall; helps avoid a single slow provider
@@ -566,7 +667,10 @@ class AllQuotes(BaseModel):
 
         try:
             async with asyncio.timeout(timeout):
-                logger.debug(f"{ICON} Fetching quotes with timeout of {timeout} seconds")
+                logger.debug(
+                    f"{ICON} Fetching quotes with timeout of {timeout} seconds",
+                    extra={"services": [service.__class__.__name__ for service in all_services]},
+                )
                 async with asyncio.TaskGroup() as tg:
                     for service in all_services:
                         name = service.__class__.__name__
@@ -1203,6 +1307,26 @@ class HiveInternalMarket(QuoteService):
                 error=message,
                 error_details={"exception": str(ex), "exception_type": type(ex).__name__},
             )
+
+
+def enabled_quote_service_clients() -> list[QuoteService]:
+    """Quote clients that are switched on, in the same order as QUOTE_SERVICE_NAMES."""
+    registry: dict[str, type[QuoteService]] = {
+        "CoinGecko": CoinGecko,
+        "Binance": Binance,
+        "CoinMarketCap": CoinMarketCap,
+        "HiveInternalMarket": HiveInternalMarket,
+    }
+    flags = read_quote_service_flags()
+    enabled: list[QuoteService] = []
+    disabled: list[str] = []
+    for name in QUOTE_SERVICE_NAMES:
+        if flags.get(name, True):
+            enabled.append(registry[name]())
+        else:
+            disabled.append(name)
+    _log_disabled_quote_services(tuple(disabled))
+    return enabled
 
 
 def per_diff(a: float, b: float) -> float:

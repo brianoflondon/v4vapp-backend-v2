@@ -37,6 +37,14 @@ class NavigationManager:
                 badge_color="info",
             ),
             NavigationItem(
+                name="Quote Sources",
+                url="/admin/quote-sources",
+                icon="💱",
+                description="Turn price quote services on or off",
+                badge="Prices",
+                badge_color="warning",
+            ),
+            NavigationItem(
                 name="Account Balances",
                 url="/admin/accounts",
                 icon="🏦",

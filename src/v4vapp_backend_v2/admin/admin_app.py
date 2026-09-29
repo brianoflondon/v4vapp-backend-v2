@@ -140,6 +140,14 @@ class AdminApp:
             v4vconfig.router, prefix="/admin/v4vconfig", tags=["V4V Configuration"]
         )
 
+        # Quote source switches (CoinGecko, Binance, CoinMarketCap, Hive internal market)
+        from v4vapp_backend_v2.admin.routers import quote_sources
+
+        quote_sources.set_templates_and_nav(self.templates, self.nav_manager)
+        self.app.include_router(
+            quote_sources.router, prefix="/admin/quote-sources", tags=["Quote Sources"]
+        )
+
         # Dashboard API router (progressive loading endpoints)
         self.app.include_router(
             dashboard_api.router,
@@ -337,10 +345,12 @@ class AdminApp:
             """
             try:
                 count = await archive_old_hold_release_keepsats_entries(older_than_days=8)
-                return JSONResponse({
-                    "success": True,
-                    "message": f"Archive process completed, moved {count} entries",
-                })
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "message": f"Archive process completed, moved {count} entries",
+                    }
+                )
             except Exception as e:
                 logger.exception(
                     "Error running archive endpoint: %s",

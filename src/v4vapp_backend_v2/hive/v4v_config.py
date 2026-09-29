@@ -8,7 +8,7 @@ from time import sleep
 import httpx
 from nectar.account import Account
 from nectar.hive import Hive
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -17,6 +17,55 @@ from v4vapp_backend_v2.hive.hive_extras import default_hive_nodes, get_verified_
 
 CONFIG_ROOT_KEY = "v4vapp_hiveconfig"
 ICON = "⚙️v"
+
+# Class names of the quote services in AllQuotes.get_all_quotes, in call order.
+QUOTE_SERVICE_NAMES: tuple[str, ...] = (
+    "CoinGecko",
+    "Binance",
+    "CoinMarketCap",
+    "HiveInternalMarket",
+)
+
+
+def _coerce_bool(value: object) -> bool:
+    """Parse a config flag. The string "false" must stay off."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def default_quote_service_flags() -> dict[str, bool]:
+    """Every known quote service starts enabled."""
+    return {name: True for name in QUOTE_SERVICE_NAMES}
+
+
+def normalize_quote_service_flags(raw: object) -> dict[str, bool]:
+    """Return one flag per known service. Missing or unknown values stay enabled."""
+    flags = default_quote_service_flags()
+    if not isinstance(raw, dict):
+        return flags
+    for name in QUOTE_SERVICE_NAMES:
+        if name in raw:
+            flags[name] = _coerce_bool(raw[name])
+    return flags
+
+
+def carry_quote_services(
+    existing: "V4VConfigData | None",
+    updated: "V4VConfigData",
+) -> "V4VConfigData":
+    """Keep quote-service switches when a fee or limit update replaces the config object.
+
+    Those forms build a new V4VConfigData and would otherwise fill quote_services
+    from the defaults, turning a disabled source back on.
+    """
+    if existing is not None:
+        updated.quote_services = dict(existing.quote_services)
+    return updated
 
 
 class V4VConfigRateLimits(BaseModel):
@@ -95,8 +144,20 @@ class V4VConfigData(BaseModel):
     )
     dynamic_fees_url: str = Field("", description="URL for dynamic fees.")
     dynamic_fees_permlink: str = Field("", description="Permlink for dynamic fees.")
+    quote_services: dict[str, bool] = Field(
+        default_factory=default_quote_service_flags,
+        description=(
+            "Which price quote services AllQuotes.get_all_quotes calls. "
+            "Missing keys stay enabled. Turn CoinGecko off when it rate-limits the server."
+        ),
+    )
     # server_id: str = Field("", description="Server Hive Account.")
     # treasury_id: str = Field("", description="Treasury Hive Account.")
+
+    @field_validator("quote_services", mode="before")
+    @classmethod
+    def fill_quote_services(cls, value: object) -> dict[str, bool]:
+        return normalize_quote_service_flags(value)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -146,6 +207,7 @@ class V4VConfig:
                 server_accname = InternalConfig().server_id
             self.server_accname = server_accname
             self.hive = hive or Hive(node=default_hive_nodes())
+            self.loaded_quote_services_from_hive = False
             self.fetch()
             logger.info(
                 f"{ICON} V4VConfig initialized {self.server_accname}", extra={**self.log_extra}
@@ -209,6 +271,8 @@ class V4VConfig:
 
         Returns:
             bool: True if the settings were successfully fetched and validated, False otherwise.
+            A successful fetch also records loaded_quote_services_from_hive and, when Redis
+            has no quote-service key yet, copies those switches into Redis.
 
         Logging:
             - Logs an info message when settings are successfully fetched and validated.
@@ -216,6 +280,7 @@ class V4VConfig:
             - Logs an error message if an exception occurs during the process.
         """
 
+        self.loaded_quote_services_from_hive = False
         try:
             if not self.server_accname:
                 # Uses the default values and doesn't check Hive.
@@ -241,6 +306,8 @@ class V4VConfig:
                 if existing_hive_config_raw:
                     self.data = V4VConfigData.model_validate(existing_hive_config_raw)
                     self.timestamp = datetime.now(tz=UTC)
+                    self.loaded_quote_services_from_hive = True
+                    self._seed_quote_service_flags()
                     logger.debug(
                         f"{ICON} Fetched settings from Hive. {self.server_accname}",
                         extra={**self.log_extra},
@@ -262,7 +329,7 @@ class V4VConfig:
             )
         return True if self.data else False
 
-    async def put(self, hive_client: Hive | None = None) -> None:
+    async def put(self, hive_client: Hive | None = None) -> bool:
         """
         Updates the Hive configuration settings with the provided data.
 
@@ -276,6 +343,10 @@ class V4VConfig:
 
         Raises:
             ValueError: If the provided `new_data` is invalid or cannot be serialized.
+
+        Returns:
+            bool: True when Hive already matches or the update was broadcast.
+            False when the account update failed.
 
         Logs:
             - Logs a message if the settings in Hive do not need to change.
@@ -297,7 +368,7 @@ class V4VConfig:
                     f"{ICON} Settings in Hive do not need to change",
                     extra={"settings": {**self.data.model_dump()}},
                 )
-                return
+                return True
 
         if not self.data or not isinstance(self.data, V4VConfigData):
             logger.warning(f"{ICON} No settings found to update to Hive")
@@ -338,13 +409,60 @@ class V4VConfig:
                 extra={**self.log_extra, "trx": trx},
             )
             asyncio.create_task(self._update_public_api_server())
-            return
+            return True
         except Exception as ex:
             logger.error(
                 f"{ICON} Error updating settings in Hive: {ex} {ex.__class__.__name__}",
                 extra={"hive_config": new_meta, **self.log_extra},
             )
-            return
+            return False
+
+    async def update_quote_services(self, flags: dict[str, bool]) -> bool:
+        """Store quote-service switches on Hive and push them to Redis immediately.
+
+        Redis is what running processes read on the next quote fetch, so a rate-limited
+        source stops being called without waiting for the hourly Hive config refresh.
+        Redis is still updated when the Hive write fails. The caller can warn that the
+        switch will revert if that cache is cleared before Hive accepts it.
+
+        Raises:
+            ValueError: If every service would be turned off.
+        """
+        normalized = normalize_quote_service_flags(flags)
+        if not any(normalized.values()):
+            raise ValueError("At least one quote service must stay enabled")
+        self.data.quote_services = normalized
+        saved = await self.put()
+        # Imported lazily so crypto_prices can import this module at load time.
+        from v4vapp_backend_v2.helpers.crypto_prices import publish_quote_service_flags
+
+        publish_quote_service_flags(normalized, overwrite=True)
+        logger.info(
+            f"{ICON} Quote services updated",
+            extra={
+                "notification": True,
+                "quote_services": normalized,
+                "hive_saved": saved,
+                "server_account": self.server_accname,
+            },
+        )
+        return saved
+
+    def _seed_quote_service_flags(self) -> None:
+        """Copy Hive switches into Redis only when the key is absent.
+
+        An operator may have just turned a service off in Redis before this process
+        refreshes. Seeding must not turn that service back on.
+        """
+        try:
+            from v4vapp_backend_v2.helpers.crypto_prices import publish_quote_service_flags
+
+            publish_quote_service_flags(self.data.quote_services, overwrite=False)
+        except Exception as ex:
+            logger.warning(
+                f"{ICON} Could not seed quote service flags: {ex}",
+                extra={"notification": False},
+            )
 
     def _load_profile_from_disk(self) -> dict | None:
         """

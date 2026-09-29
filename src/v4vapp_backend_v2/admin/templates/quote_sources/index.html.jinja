@@ -1,0 +1,123 @@
+{% extends "base.html.jinja" %}
+
+{% block page_actions %}
+<div class="d-flex gap-2">
+    <a href="/admin/quote-sources/refresh" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-clockwise me-1"></i>
+        Refresh from Hive
+    </a>
+    <a href="/admin/quote-sources/api" class="btn btn-outline-info" target="_blank">
+        <i class="bi bi-code me-1"></i>
+        View JSON
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 col-xl-8">
+        {% if hive_warning %}
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            Running services are using this selection, but saving it on Hive failed.
+            It will revert if the shared cache is cleared before Hive accepts the update.
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" id="quote-sources-error">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            {{ error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% else %}
+        <div class="alert alert-danger d-none" role="alert" id="quote-sources-error">
+            Leave at least one quote service on. With every source off there is no price.
+        </div>
+        {% endif %}
+
+        {% if drift %}
+        <div class="alert alert-warning" role="alert">
+            The switches stored on Hive do not match the set running services will call.
+            Save to push this form, or refresh from Hive to adopt the chain copy.
+        </div>
+        {% endif %}
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Services called on the next quote fetch</h5>
+                <p class="mb-1">
+                    {% if active_titles %}
+                    {{ active_titles | join(", ") }}
+                    {% else %}
+                    None
+                    {% endif %}
+                </p>
+                <p class="text-muted mb-0">
+                    Stored on <code>{{ server_account or "the server account" }}</code>
+                    {% if timestamp %}
+                    and last loaded {{ timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}.
+                    {% else %}
+                    .
+                    {% endif %}
+                    Turning a service off stops new requests to it. CoinGecko can be switched off
+                    while it is rate-limiting this server.
+                </p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-currency-exchange me-2"></i>
+                    Quote Sources
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/admin/quote-sources/update" id="quote-sources-form">
+                    {% for service in services %}
+                    <div class="config-section border-bottom pb-3 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch"
+                                id="quote-{{ service.name }}" name="enabled" value="{{ service.name }}"
+                                {% if service.enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="quote-{{ service.name }}">
+                                <strong>{{ service.title }}</strong>
+                                {% if service.enabled %}
+                                <span class="badge bg-success ms-2">On</span>
+                                {% else %}
+                                <span class="badge bg-secondary ms-2">Off</span>
+                                {% endif %}
+                                <div class="form-text">{{ service.summary }}</div>
+                            </label>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    <div class="text-center mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg px-5">
+                            <i class="bi bi-save me-2"></i>
+                            Update Quote Sources
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById("quote-sources-form").addEventListener("submit", function (event) {
+        const checked = document.querySelectorAll('#quote-sources-form input[name="enabled"]:checked');
+        const alertBox = document.getElementById("quote-sources-error");
+        if (checked.length === 0) {
+            event.preventDefault();
+            alertBox.classList.remove("d-none");
+            alertBox.hidden = false;
+        }
+    });
+</script>
+{% endblock %}

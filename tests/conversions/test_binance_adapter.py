@@ -4,6 +4,7 @@ Unit tests for binance_adapter module.
 Tests the Binance implementation of the ExchangeProtocol.
 """
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -21,6 +22,7 @@ from v4vapp_backend_v2.helpers.binance_extras import (
     BinanceErrorBelowMinimum,
     MarketOrderResult,
 )
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 
 
 class TestBinanceAdapterInit:
@@ -543,6 +545,33 @@ class TestBinanceAdapterFeeConversion:
 
 class TestBinanceAdapterBuildTradeQuote:
     """Tests for _build_trade_quote method."""
+
+    @pytest.fixture(autouse=True)
+    def stub_market_quote(self):
+        """Supply the market rates _build_trade_quote copies onto the trade.
+
+        The unit job must not call CoinGecko, Binance, or CoinMarketCap.
+        CoinGecko is blocked, the test CoinMarketCap key is invalid, and
+        Binance does not answer from the GitHub runner. Hive's internal
+        market has no USD price, so a live fetch comes back as an empty quote.
+        """
+
+        async def _fake(quotes, use_cache=True, timeout=60.0, store_db=True):
+            quotes.quote = QuoteResponse(
+                hive_usd=Decimal("0.08"),
+                hbd_usd=Decimal("0.99"),
+                btc_usd=Decimal(60000),
+                hive_hbd=Decimal("0.0808"),
+                source="Binance",
+                fetch_date=datetime.now(tz=UTC),
+            )
+            quotes.fetch_date = quotes.quote.fetch_date
+
+        with patch(
+            "v4vapp_backend_v2.helpers.crypto_prices.AllQuotes.get_all_quotes",
+            _fake,
+        ):
+            yield
 
     def test_build_trade_quote_hive_btc(self):
         """Test building trade quote for HIVE/BTC pair.

@@ -16,7 +16,12 @@ from pydantic import ValidationError
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.hive.v4v_config import V4VConfig, V4VConfigData, V4VConfigRateLimits
+from v4vapp_backend_v2.hive.v4v_config import (
+    V4VConfig,
+    V4VConfigData,
+    V4VConfigRateLimits,
+    carry_quote_services,
+)
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 # Setup router and templates
@@ -116,8 +121,13 @@ async def update_v4vconfig_api(new_config: V4VConfigData):
     try:
         config = get_v4v_config()
 
-        # Validate the new configuration
-        validated_config = V4VConfigData.model_validate(new_config.model_dump())
+        # Validate the new configuration. Quote-service switches are saved from the
+        # Quote Sources page. A payload that omits them must not turn a disabled
+        # source back on via this endpoint's defaults.
+        validated_config = carry_quote_services(
+            config.data,
+            V4VConfigData.model_validate(new_config.model_dump()),
+        )
 
         # Store old config for logging
         old_config = config.data.model_copy() if config.data else None
@@ -185,23 +195,27 @@ async def update_v4vconfig_form(
             current_config = config.data
             rate_limits = current_config.lightning_rate_limits if current_config else []
 
-        # Create new configuration
-        new_config = V4VConfigData(
-            hive_return_fee=hive_return_fee,
-            conv_fee_percent=conv_fee_percent,
-            conv_fee_sats=conv_fee_sats,
-            minimum_invoice_payment_sats=minimum_invoice_payment_sats,
-            force_custom_json_payment_sats=force_custom_json_payment_sats,
-            maximum_invoice_payment_sats=maximum_invoice_payment_sats,
-            max_acceptable_lnd_fee_msats=max_acceptable_lnd_fee_msats,
-            closed_get_lnd=closed_get_lnd,
-            closed_get_hive=closed_get_hive,
-            v4v_frontend_iri=v4v_frontend_iri,
-            v4v_api_iri=v4v_api_iri,
-            v4v_fees_streaming_sats_to_hive_percent=v4v_fees_streaming_sats_to_hive_percent,
-            lightning_rate_limits=rate_limits,
-            dynamic_fees_url=dynamic_fees_url,
-            dynamic_fees_permlink=dynamic_fees_permlink,
+        # Create new configuration. Carry quote-service switches so this form
+        # cannot re-enable a source that was turned off on the Quote Sources page.
+        new_config = carry_quote_services(
+            config.data,
+            V4VConfigData(
+                hive_return_fee=hive_return_fee,
+                conv_fee_percent=conv_fee_percent,
+                conv_fee_sats=conv_fee_sats,
+                minimum_invoice_payment_sats=minimum_invoice_payment_sats,
+                force_custom_json_payment_sats=force_custom_json_payment_sats,
+                maximum_invoice_payment_sats=maximum_invoice_payment_sats,
+                max_acceptable_lnd_fee_msats=max_acceptable_lnd_fee_msats,
+                closed_get_lnd=closed_get_lnd,
+                closed_get_hive=closed_get_hive,
+                v4v_frontend_iri=v4v_frontend_iri,
+                v4v_api_iri=v4v_api_iri,
+                v4v_fees_streaming_sats_to_hive_percent=v4v_fees_streaming_sats_to_hive_percent,
+                lightning_rate_limits=rate_limits,
+                dynamic_fees_url=dynamic_fees_url,
+                dynamic_fees_permlink=dynamic_fees_permlink,
+            ),
         )
 
         # Update configuration

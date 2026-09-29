@@ -21,6 +21,16 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
     QuoteResponse,
 )
 from v4vapp_backend_v2.hive import hive_extras
+from v4vapp_backend_v2.hive.v4v_config import QUOTE_SERVICE_NAMES, default_quote_service_flags
+
+
+@pytest.fixture(autouse=True)
+def enable_all_quote_services(mocker):
+    """Keep these tests off the operator's Redis quote-service switches."""
+    mocker.patch(
+        "v4vapp_backend_v2.helpers.crypto_prices.read_quote_service_flags",
+        return_value=default_quote_service_flags(),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -428,6 +438,63 @@ def test_quote_response_parses_iso_string_fetch_date():
     assert q.fetch_date.tzinfo is not None
     # age should be non-negative (very recent)
     assert q.age_p >= 0
+
+
+@pytest.mark.asyncio
+async def test_get_all_quotes_skips_disabled_coingecko(mocker):
+    """A disabled CoinGecko switch must not call CoinGecko."""
+    flags = default_quote_service_flags()
+    flags["CoinGecko"] = False
+    mocker.patch(
+        "v4vapp_backend_v2.helpers.crypto_prices.read_quote_service_flags",
+        return_value=flags,
+    )
+    called: list[str] = []
+
+    async def fake_get_quote(self, use_cache=True):
+        called.append(type(self).__name__)
+        return QuoteResponse(source=type(self).__name__)
+
+    for cls in (CoinGecko, Binance, CoinMarketCap, HiveInternalMarket):
+        mocker.patch.object(cls, "get_quote", fake_get_quote)
+
+    mock_redis = mocker.patch("v4vapp_backend_v2.config.setup.InternalConfig.redis")
+    mock_redis.get.return_value = None
+    mock_redis.set.return_value = True
+
+    all_quotes = AllQuotes()
+    await all_quotes.get_all_quotes(use_cache=False, store_db=False)
+
+    assert "CoinGecko" not in called
+    assert set(called) == {"Binance", "CoinMarketCap", "HiveInternalMarket"}
+    assert "CoinGecko" not in all_quotes.quotes
+    assert all_quotes.quote.error == ""
+
+
+@pytest.mark.asyncio
+async def test_get_all_quotes_when_every_service_is_disabled(mocker):
+    mocker.patch(
+        "v4vapp_backend_v2.helpers.crypto_prices.read_quote_service_flags",
+        return_value={name: False for name in QUOTE_SERVICE_NAMES},
+    )
+    called: list[str] = []
+
+    async def fake_get_quote(self, use_cache=True):
+        called.append(type(self).__name__)
+        return QuoteResponse(source=type(self).__name__)
+
+    for cls in (CoinGecko, Binance, CoinMarketCap, HiveInternalMarket):
+        mocker.patch.object(cls, "get_quote", fake_get_quote)
+
+    mock_redis = mocker.patch("v4vapp_backend_v2.config.setup.InternalConfig.redis")
+    mock_redis.get.return_value = None
+
+    all_quotes = AllQuotes()
+    await all_quotes.get_all_quotes(use_cache=False, store_db=False)
+
+    assert called == []
+    assert "disabled" in all_quotes.quote.error.lower()
+    mock_redis.set.assert_not_called()
 
 
 @pytest.mark.asyncio
