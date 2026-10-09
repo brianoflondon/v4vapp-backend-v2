@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Any, ClassVar, override
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
@@ -58,13 +58,40 @@ class Hop(BaseModel):
     custom_records: dict[str, str] | None = None
 
 
+def _whole_sats_from_msat(value: Any) -> int | None:
+    """Floor millisatoshis to satoshis. None when the amount cannot be read."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value) // 1000
+    except (TypeError, ValueError):
+        return None
+
+
 class Route(BaseModel):
     total_time_lock: int
     total_fees: BSONInt64 | None = None
-    total_amt: BSONInt64
+    # LND 0.22 removes this satoshi field. Fill it from total_amt_msat when it is absent
+    # so Payment() still validates and db_store_payment keeps the payment.
+    total_amt: BSONInt64 = BSONInt64(0)
     hops: list[Hop]
     total_fees_msat: BSONInt64 | None = None
     total_amt_msat: BSONInt64
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_total_amt_from_msat(cls, data: Any) -> Any:
+        """Use total_amt when LND still sends it. Otherwise derive sats from total_amt_msat."""
+        if not isinstance(data, dict):
+            return data
+        if data.get("total_amt") not in (None, ""):
+            return data
+        sats = _whole_sats_from_msat(data.get("total_amt_msat"))
+        if sats is None:
+            return data
+        filled = dict(data)
+        filled["total_amt"] = sats
+        return filled
 
 
 class HTLCAttempt(BaseModel):
