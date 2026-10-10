@@ -4154,7 +4154,7 @@ wheels = [
 
 [[package]]
 name = "v4vapp-backend-v2"
-version = "2.15.7"
+version = "2.15.8"
 source = { editable = "." }
 dependencies = [
     { name = "aiocache" },
