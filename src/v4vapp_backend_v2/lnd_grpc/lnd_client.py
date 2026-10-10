@@ -1,7 +1,8 @@
 import asyncio
 import os
 import sys
-from typing import Any, AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable
+from typing import Any
 
 import backoff
 from google.protobuf.json_format import MessageToDict
@@ -197,7 +198,7 @@ class LNDClient:
         if self.channel is not None:
             await self.channel.close(grace=2)
             self.channel = None
-            logger.info(f"{ICON} {self.icon} Disconnected from LND")
+            logger.info(f"{self.icon} Disconnected from LND")
 
     def _ensure_reconnect_lock(self) -> asyncio.Lock:
         if self._reconnect_lock is None:
