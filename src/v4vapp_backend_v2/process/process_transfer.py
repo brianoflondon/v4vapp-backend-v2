@@ -37,6 +37,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError, LNDInvoiceError
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     LNDPaymentError,
     LNDPaymentExpired,
@@ -408,6 +409,17 @@ async def follow_on_transfer(
     except CustomJsonToLightningError:
         raise
 
+    except LNDConnectionError as e:
+        return_details.action = ReturnAction.HOLD
+        return_details.reason_str = (
+            f"Lightning node unavailable while decoding invoice: {e} {tracked_op.short_id}"
+        )
+        logger.warning(
+            return_details.reason_str,
+            extra={"notification": False, **tracked_op.log_extra},
+        )
+        release_hold = False
+
     except MagiSatsInboundFollowOnTransferError as e:
         logger.error(
             "Error processing Magi sats inbound follow on transfer",
@@ -584,6 +596,14 @@ async def decode_incoming_and_checks(
             extra={"notification": False, **tracked_op.log_extra},
         )
         return None
+
+    except LNDInvoiceError as e:
+        # Permanent. A bad checksum must not fall through as a 0 sat invoice.
+        raise HiveTransferError(f"Lightning invoice could not be decoded: {e}") from e
+
+    except LNDConnectionError:
+        # Transient. The caller holds instead of quoting a minimum-invoice limit.
+        raise
 
     except Exception as e:
         message = f"Unexpected error decoding Lightning invoice: {e} {tracked_op.short_id}"

@@ -1026,6 +1026,40 @@ class TestNotificationReplyCompletion:
         assert len(ow.active_flows) == 2
 
     @pytest.mark.asyncio
+    async def test_processing_error_notification_closes_trigger_only_candidates(self):
+        """A HiveTransferError reply ('Processing error:') is terminal.
+
+        Invoice limit and checksum failures never reach an LND send, so the
+        memo does not contain 'Payment failed'. The three candidate flows
+        must still be closed instead of stalling at 1/N.
+        """
+        Overwatch.reset()
+        ow = Overwatch()
+        Overwatch.register_flow(KEEPSATS_TO_HIVE_FLOW)
+        Overwatch.register_flow(KEEPSATS_TO_EXTERNAL_FLOW)
+        Overwatch.register_flow(KEEPSATS_INTERNAL_TRANSFER_FLOW)
+        Overwatch._loaded_from_redis = True
+
+        trigger_gid = "110656071_511f51871a701d1efcbeb05ccd5acf312d8a1dc9_1_real"
+        customer_op = self._customer_op(group_id=trigger_gid, short_id="6071_511f51_1")
+        await ow.ingest_op(customer_op)
+        assert len(ow.active_flows) == 3
+
+        notif = self._notification_op(
+            parent_id=trigger_gid,
+            memo=(
+                "Processing error: Lightning invoice could not be decoded: "
+                "checksum failed. Expected e8jlkq, got 83vg72. "
+                "6071_511f51_1 | § 6071_511f51_1 | Thank you for using v4v.app"
+            ),
+            short_id="6073_739a20_1",
+        )
+        await ow.ingest_op(notif)
+
+        assert len(ow.active_flows) == 0
+        assert len(ow.completed_flows) == 1
+
+    @pytest.mark.asyncio
     async def test_notification_no_matching_flows_is_no_op(self):
         """Notification for a parent_id that has no active flows does nothing."""
         Overwatch.reset()
