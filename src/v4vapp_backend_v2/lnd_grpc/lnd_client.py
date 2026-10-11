@@ -24,8 +24,21 @@ from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDConnectionError,
     LNDFatalError,
+    LNDInvoiceError,
     LNDStartupError,
     LNDSubscriptionError,
+)
+
+# DecodePayReq rejects a bad BOLT11 with StatusCode.UNKNOWN. Those strings are
+# the invoice, not a dead gRPC connection, and must not be paged as one.
+_INVALID_INVOICE_MARKERS = (
+    "checksum failed",
+    "invalid bech32",
+    "illegal character",
+    "invalid human readable part",
+    "not a valid lightning",
+    "invalid payment request",
+    "malformed invoice",
 )
 
 MAX_RETRIES = 20
@@ -46,6 +59,17 @@ def error_to_dict(e: Exception) -> dict:
         "message": str(e),
         "args": e.args,
     }
+
+
+def invalid_invoice_details(details: str) -> str | None:
+    """Return LND's decode text when the RPC failed because the invoice is invalid."""
+    text = details.strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    if any(marker in lowered for marker in _INVALID_INVOICE_MARKERS):
+        return text
+    return None
 
 
 class LNDClient:
@@ -336,6 +360,19 @@ class LNDClient:
                     },
                 )
                 raise LNDFatalError(message)
+            details_fn = getattr(e, "details", None)
+            details = details_fn() if callable(details_fn) else ""
+            invoice_details = invalid_invoice_details(details or "")
+            if invoice_details:
+                logger.warning(
+                    f"{ICON} {self.icon} Invalid Lightning invoice: {invoice_details}",
+                    extra={
+                        "notification": False,
+                        "error_code": get_error_code(e),
+                        "error_details": error_to_dict(e),
+                    },
+                )
+                raise LNDInvoiceError(invoice_details, e)
             logger.warning(
                 f"{ICON} {self.icon} Error in {method} RPC call: {e.code()}",
                 extra={

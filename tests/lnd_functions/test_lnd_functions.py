@@ -7,6 +7,7 @@ from google.protobuf.json_format import Parse
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2_grpc as lightningstub
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError, LNDInvoiceError
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     get_node_alias_from_pay_request,
     get_node_info,
@@ -143,3 +144,19 @@ async def test_get_invoice_from_pay_request(
                         payment_request, lnd_client=lnd_client
                     )
                     assert result == mock_response
+
+
+@pytest.mark.asyncio
+async def test_get_pay_req_does_not_turn_a_bad_checksum_into_a_zero_invoice():
+    client = AsyncMock()
+    client.call.side_effect = LNDInvoiceError("checksum failed. Expected e8jlkq, got 83vg72.")
+    with pytest.raises(LNDInvoiceError, match="checksum failed"):
+        await get_pay_req_from_pay_request("lnbc9u1bad", lnd_client=client)
+
+
+@pytest.mark.asyncio
+async def test_get_pay_req_connection_error_is_not_a_zero_invoice():
+    client = AsyncMock()
+    client.call.side_effect = LNDConnectionError("node down")
+    with pytest.raises(LNDConnectionError):
+        await get_pay_req_from_pay_request("lnbc9u1bad", lnd_client=client)

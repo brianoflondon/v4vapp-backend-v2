@@ -283,24 +283,25 @@ async def get_pay_req_from_pay_request(pay_request: str, lnd_client: LNDClient) 
 
     Returns:
         lnrpc.PayReq: The PayReq object.
+
+    Raises:
+        LNDInvoiceError: The string is not a decodable BOLT11 invoice.
+        LNDConnectionError: LND could not be reached. Callers must not treat
+            that as a zero-amount invoice.
     """
     if not lnd_client:
         raise ValueError("LNDClient instance is required")
 
-    try:
-        # Decode the payment request
-        if pay_request == "":
-            logger.debug("Empty payment request", extra={"notification": False})
-            return lnrpc.PayReq()
-        decode_request = lnrpc.PayReqString(pay_req=pay_request)
-        decode_response: lnrpc.PayReq = await lnd_client.call(
-            lnd_client.lightning_stub.DecodePayReq,
-            decode_request,
-        )
-        return decode_response
-    except Exception as e:
-        logger.exception(e)
+    if pay_request == "":
+        logger.debug("Empty payment request", extra={"notification": False})
         return lnrpc.PayReq()
+    decode_request = lnrpc.PayReqString(pay_req=pay_request)
+    # A failed decode used to return an empty PayReq. That is a zero-amount
+    # invoice, so a bad checksum was reported as "0 sats is below minimum".
+    return await lnd_client.call(
+        lnd_client.lightning_stub.DecodePayReq,
+        decode_request,
+    )
 
 
 async def get_node_alias_from_pay_request(pay_request: str, client: LNDClient) -> str:
