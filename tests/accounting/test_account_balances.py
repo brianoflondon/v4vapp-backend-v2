@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -184,7 +185,9 @@ async def test_one_account_transactions_pipeline():
     assert isinstance(pipeline_none, list)
     assert len(pipeline_none) == len(pipeline)
 
-    # New behavior: account filter is applied within the $facet stage, not top-level $or.
+    # Account predicates stay inside $facet so debit and credit projections
+    # stay separate. Open-ended queries also put those predicates on the
+    # top-level $match, which can use indexes. $facet itself cannot.
     facet_stage = next((s for s in pipeline if "$facet" in s), None)
     assert facet_stage is not None, "expected $facet stage in pipeline"
 
@@ -219,6 +222,11 @@ async def test_one_account_transactions_pipeline():
     # default call (no as_of_date, no age) uses an existence check
     ts_query = date_stage["$match"]["timestamp"]
     assert ts_query == {"$exists": True}
+    # Open-ended: the account filter is also on the indexed $match.
+    assert date_stage["$match"]["$or"] == [
+        debits_view[0]["$match"],
+        credits_view[0]["$match"],
+    ]
 
     # explicit as_of_date without age should produce a $lte-only filter
     from datetime import datetime, timedelta, timezone
@@ -235,6 +243,7 @@ async def test_one_account_transactions_pipeline():
     )
     assert date_stage2 is not None
     assert date_stage2["$match"]["timestamp"] == {"$lte": now}
+    assert "$or" in date_stage2["$match"]
 
     # providing only age should return a range with both $gte and $lte
     one_week = timedelta(days=7)
@@ -250,6 +259,8 @@ async def test_one_account_transactions_pipeline():
     assert date_stage3 is not None
     tsq3 = date_stage3["$match"]["timestamp"]
     assert "$gte" in tsq3 and "$lte" in tsq3
+    # Age windows stay timestamp-bounded and do not add the account $or.
+    assert "$or" not in date_stage3["$match"]
 
     # age plus explicit as_of_date should use the provided end date
     asof = datetime(2025, 1, 1, tzinfo=timezone.utc)
@@ -266,6 +277,80 @@ async def test_one_account_transactions_pipeline():
     assert date_stage4 is not None
     assert date_stage4["$match"]["timestamp"]["$gte"] == asof - age
     assert date_stage4["$match"]["timestamp"]["$lte"] == asof
+    assert "$or" not in date_stage4["$match"]
+
+    pipeline_from = one_account_transactions_pipeline(
+        account=account,
+        as_of_date=asof,
+        from_date=asof - timedelta(days=1),
+    )
+    date_stage5 = next(
+        (
+            s
+            for s in pipeline_from
+            if "$match" in s and isinstance(s["$match"], dict) and "timestamp" in s["$match"]
+        ),
+        None,
+    )
+    assert date_stage5 is not None
+    assert "$or" not in date_stage5["$match"]
+
+
+async def test_share_balance_flight_runs_factory_once():
+    """Concurrent callers for one key share a single calculation."""
+    from v4vapp_backend_v2.accounting.account_balances import (
+        _balance_flights,
+        _share_balance_flight,
+    )
+
+    calls = 0
+
+    async def work():
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.05)
+        return "ok"
+
+    key = "flight-test-once"
+    _balance_flights.pop(key, None)
+    first = asyncio.create_task(_share_balance_flight(key, work))
+    await asyncio.sleep(0)
+    second = asyncio.create_task(_share_balance_flight(key, work))
+    (value_1, owner_1), (value_2, owner_2) = await asyncio.gather(first, second)
+
+    assert calls == 1
+    assert value_1 == value_2 == "ok"
+    assert owner_1 is True
+    assert owner_2 is False
+    assert key not in _balance_flights
+
+
+async def test_share_balance_flight_retries_after_failure():
+    """A failed calculation does not stick; the next caller runs again."""
+    from v4vapp_backend_v2.accounting.account_balances import (
+        _balance_flights,
+        _share_balance_flight,
+    )
+
+    calls = 0
+
+    async def work():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("boom")
+        return "ok"
+
+    key = "flight-test-retry"
+    _balance_flights.pop(key, None)
+    with pytest.raises(RuntimeError, match="boom"):
+        await _share_balance_flight(key, work)
+    value, owner = await _share_balance_flight(key, work)
+
+    assert calls == 2
+    assert value == "ok"
+    assert owner is True
+    assert key not in _balance_flights
 
 
 # async def test_all_account_balances():

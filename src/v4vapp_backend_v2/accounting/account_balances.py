@@ -59,6 +59,11 @@ UNIT_TOLERANCE = {
     "MSATS": 10,
 }
 
+# In-flight balance calculations. The key matches the cache identity except
+# the generation, so two callers for the same account and query share one
+# aggregation instead of scanning the ledger twice.
+_balance_flights: dict[str, asyncio.Task[LedgerAccountDetails]] = {}
+
 
 # I am not sure what the purpose of this code is, removed from code path.
 
@@ -372,6 +377,55 @@ async def all_account_balances_summary(
 
 
 # @async_time_decorator
+def _clear_balance_flight(key: str, task: asyncio.Task[LedgerAccountDetails]) -> None:
+    if _balance_flights.get(key) is task:
+        _balance_flights.pop(key, None)
+
+
+def _balance_flight_key(
+    account: LedgerAccount,
+    as_of_date: datetime | None,
+    age: timedelta | None,
+    use_checkpoints: bool,
+    use_cache: bool,
+) -> str:
+    """Identity of one balance calculation, minute-truncated like the cache key."""
+    if as_of_date is None:
+        date_part = "live"
+    else:
+        date_part = as_of_date.replace(second=0, microsecond=0).strftime("%Y-%m-%dT%H%MZ")
+    if age is None or age.total_seconds() <= 0:
+        age_part = "none"
+    else:
+        age_part = f"{int(age.total_seconds())}s"
+    cp_part = "cp" if use_checkpoints else "no_cp"
+    contra = "contra" if account.contra else "normal"
+    cache_part = "cache" if use_cache else "nocache"
+    return (
+        f"{account.account_type.value}:{account.name}:{account.sub}:"
+        f"{contra}:{cp_part}:{date_part}:{age_part}:{cache_part}"
+    )
+
+
+async def _share_balance_flight(key: str, factory) -> tuple[LedgerAccountDetails, bool]:
+    """Run ``factory`` once for ``key`` while that calculation is in progress.
+
+    The bool is True for the caller that started the calculation. Waiters
+    receive the same result object, so they must copy it before mutating.
+    """
+    task = _balance_flights.get(key)
+    owner = task is None or task.done()
+    if owner:
+        task = asyncio.create_task(factory())
+        _balance_flights[key] = task
+        task.add_done_callback(
+            lambda _done, key=key, task=task: _clear_balance_flight(key, task)
+        )
+    assert task is not None
+    result = await asyncio.shield(task)
+    return result, owner
+
+
 async def one_account_balance(
     account: LedgerAccount | str,
     as_of_date: datetime | None = None,
@@ -383,6 +437,8 @@ async def one_account_balance(
     """
     Retrieve the balance details for a single ledger account as of a specified date.
     If use_cache is False, the cache will be ignored but the result will be written to the cache.
+
+    Concurrent callers for the same account and query share one calculation.
 
     Args:
         account (LedgerAccount | str): The ledger account object or its string identifier.
@@ -404,6 +460,42 @@ async def one_account_balance(
           credit_sub)``, which deletes only the relevant account(s).  A full
           flush can be forced by calling ``invalidate_all_ledger_cache()``.
     """
+    if isinstance(account, str):
+        account = LiabilityAccount(
+            name="VSC Liability",
+            sub=account,
+        )
+    result, owner = await _share_balance_flight(
+        _balance_flight_key(account, as_of_date, age, use_checkpoints, use_cache),
+        lambda: _compute_one_account_balance(
+            account,
+            as_of_date,
+            age,
+            in_progress,
+            use_cache,
+            use_checkpoints,
+        ),
+    )
+    # Waiters must not share the leader's model. Refresh in_progress the
+    # same way a cache hit does, so each caller sees its own hold total.
+    if not owner:
+        result = result.model_copy(deep=False)
+        if in_progress is None:
+            all_held_result = await all_held_msats()
+            in_progress = InProgressResults(results=all_held_result)
+        result.in_progress_msats = in_progress.get_net_held(account.sub)
+    return result
+
+
+async def _compute_one_account_balance(
+    account: LedgerAccount | str,
+    as_of_date: datetime | None = None,
+    age: timedelta | None = None,
+    in_progress: InProgressResults | None = None,
+    use_cache: bool = True,
+    use_checkpoints: bool = True,
+) -> LedgerAccountDetails:
+    """Calculate one account balance, using the cache when ``use_cache`` is set."""
     _t0 = timer()
     if isinstance(account, str):
         account = LiabilityAccount(
@@ -512,9 +604,13 @@ async def one_account_balance(
         extra={"notification": False},
     )
     account_balance = AccountBalances.model_validate(clean_results)
+    line_count = sum(
+        len(lines) for group in account_balance.root for lines in group.balances.values()
+    )
     _t3 = timer()
     logger.debug(
-        f"{account_label} one_account_balance model validate done in {(_t3 - _t2):.3f}s root={len(account_balance.root)}",
+        f"{account_label} one_account_balance model validate done in {(_t3 - _t2):.3f}s "
+        f"root={len(account_balance.root)} lines={line_count}",
         extra={"notification": False},
     )
     # If there are multiple entries (e.g., contra and non-contra groups), merge them so both show up
@@ -686,6 +782,16 @@ async def one_account_balance(
         )
     ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
     _t5 = timer()
+    calc_s = _t5 - _t0
+    if calc_s > 1.0:
+        # This used to be logged as "Slow cache set". That number is the
+        # balance rebuild, measured before the Redis write.
+        logger.warning(
+            f"Slow balance calculation: {calc_s:.3f}s for {account_label} "
+            f"lines={line_count} checkpoint={checkpoint is not None} "
+            f"use_checkpoints={use_checkpoints}",
+            extra={"notification": False},
+        )
 
     # --- Cache store ---
     try:

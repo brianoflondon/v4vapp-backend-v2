@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -243,17 +244,23 @@ async def set_cached_balance(
     try:
         gen = await get_cache_generation()
         key = _make_cache_key(gen, account, as_of_date, age, use_checkpoints)
+        # report_time is the balance calculation that happened before this
+        # call. Time the serialise + Redis write on its own so a slow
+        # aggregation is not reported as a slow cache write.
+        write_start = perf_counter()
         data = result.model_dump_json()
         await InternalConfig.redis_async.set(name=key, value=data, ex=ttl)
+        write_s = perf_counter() - write_start
         if report_time is not None:
-            report_time_str = f"{report_time:.3f}s"
-            logger.debug(f"SET: {key} (ttl={ttl}s in {report_time_str})")
-            if report_time > 1.0:
-                logger.warning(
-                    f"Slow cache set: {report_time_str} for key {key}",
-                    extra={"notification": False},
-                )
+            logger.debug(
+                f"SET: {key} (ttl={ttl}s calc={report_time:.3f}s redis={write_s:.3f}s)"
+            )
         else:
-            logger.debug(f"SET: {key} (ttl={ttl}s)")
+            logger.debug(f"SET: {key} (ttl={ttl}s redis={write_s:.3f}s)")
+        if write_s > 1.0:
+            logger.warning(
+                f"Slow cache set: {write_s:.3f}s for key {key}",
+                extra={"notification": False},
+            )
     except Exception as e:
         logger.warning(f"Failed to set ledger cache: {e}", extra={"notification": True})

@@ -1021,6 +1021,18 @@ def one_account_transactions_pipeline(
     if cust_ids is not None:
         match["all_cust_ids"] = {"$in": list(cust_ids)}
 
+    # An open-ended scan (live, or as-of with no age and no checkpoint
+    # lower bound) used to match every ledger row and only then filter to
+    # the account inside $facet. $facet cannot use indexes, so that read
+    # the whole collection. The same debit/credit predicates now sit on
+    # this $match, which can use the account indexes. The facet filters
+    # stay, so the rows that come out are unchanged. Checkpoint deltas
+    # and age windows are already timestamp-bounded and keep that plan.
+    open_ended = from_date is None and not age
+    account_branches = [query for query in (debit_match_query, credit_match_query) if query]
+    if open_ended and account_branches:
+        match["$or"] = account_branches
+
     pipeline.append({"$match": match})
 
     pipeline.extend([
