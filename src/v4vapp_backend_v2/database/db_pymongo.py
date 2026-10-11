@@ -301,7 +301,9 @@ class DBConn:
                 await self.setup_user(admin_client=admin_client)
                 await self.setup_collections_indexes(admin_client=admin_client)
                 await self._create_timeseries(admin_client=admin_client)
-                await self.log_replica_set_versions(admin_client=admin_client)
+                await self._log_replica_set_versions_with_admin_client(
+                    admin_client=admin_client
+                )
             logger.info(
                 f"{DATABASE_ICON} {logger.name} "
                 f"Database {self.db_name} is set up with user {self.db_user}"
@@ -468,7 +470,19 @@ class DBConn:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
                 logger.error(message, extra={"notification": False})
 
-    async def log_replica_set_versions(
+    async def log_replica_set_versions(self) -> None:
+        """Public entry point to log replica-set member versions and health."""
+        admin_client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
+            self.admin_uri,
+            tz_aware=True,
+            connectTimeoutMS=5_000,
+            serverSelectionTimeoutMS=5_000,
+            appName=InternalConfig().app_name,
+        )
+        async with admin_client:
+            await self._log_replica_set_versions_with_admin_client(admin_client=admin_client)
+
+    async def _log_replica_set_versions_with_admin_client(
         self, admin_client: AsyncMongoClient[dict[str, Any]]
     ) -> None:
         """Log each replica-set member mongod version and FCV."""
