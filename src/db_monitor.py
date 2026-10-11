@@ -14,6 +14,7 @@ from pymongo.errors import (
     ConnectionFailure,
     NetworkTimeout,
     OperationFailure,
+    PyMongoError,
     ServerSelectionTimeoutError,
 )
 
@@ -567,6 +568,27 @@ async def subscribe_overwatch():
     )
 
 
+async def subscribe_replica_set_versions(db_conn: DBConn, interval_seconds: int = 900) -> None:
+    """Periodically log replica-set member versions and health until shutdown."""
+    logger.info(
+        f"{ICON} Starting replica-set version/health logger every {interval_seconds}s",
+        extra={"notification": False},
+    )
+    while not shutdown_event.is_set():
+        try:
+            await db_conn.log_replica_set_versions()
+        except PyMongoError as exc:
+            logger.warning(
+                f"{ICON} Replica-set version/health logging failed: {exc}",
+                extra={"notification": False},
+            )
+
+        try:
+            await asyncio.wait_for(shutdown_event.wait(), timeout=interval_seconds)
+        except TimeoutError:
+            continue
+
+
 def handle_shutdown_signal():
     """
     Signal handler to set the shutdown event.
@@ -639,6 +661,12 @@ async def main_async_start(use_resume: bool = True, use_overwatch: bool = False)
                 name=name,
             )
             tasks.append(task)
+        tasks.append(
+            asyncio.create_task(
+                subscribe_replica_set_versions(db_conn=db_conn, interval_seconds=900),
+                name="replica_set_version_health",
+            )
+        )
         if overwatch_enabled():
             tasks.append(asyncio.create_task(subscribe_overwatch(), name="overwatch_report_loop"))
 

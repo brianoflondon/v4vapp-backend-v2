@@ -1,22 +1,48 @@
 import asyncio
-from datetime import datetime, timezone
-from typing import Any, Dict
-from urllib.parse import quote_plus
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+from urllib.parse import quote_plus, urlsplit, urlunsplit
 
 from pymongo import AsyncMongoClient, MongoClient, timeout
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.database import Database
-from pymongo.errors import CollectionInvalid, OperationFailure, ServerSelectionTimeoutError
+from pymongo.errors import (
+    CollectionInvalid,
+    OperationFailure,
+    PyMongoError,
+    ServerSelectionTimeoutError,
+)
 
 from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, logger
 
 DATABASE_ICON = "📁"
 
 
+@dataclass(slots=True, frozen=True)
+class ReplicaSetMemberDetailsLog:
+    host: str
+    state: str
+    health: int | float | None
+    version: str | None = None
+    version_array: list[int] | None = None
+    git_version: str | None = None
+    modules: list[str] | None = None
+
+    def to_log_extra(self) -> dict[str, Any]:
+        return {
+            "host": self.host,
+            "state": self.state,
+            "health": self.health,
+            "version": self.version,
+            "versionArray": self.version_array,
+            "gitVersion": self.git_version,
+            "modules": self.modules,
+        }
+
+
 class DBConnConnectionException(Exception):
     """Custom exception for database connection errors."""
-
-    pass
 
 
 class DBConn:
@@ -39,7 +65,7 @@ class DBConn:
         self.db_name = db_name if db_name else dbs_config.default_name
         self.db_user = db_user if db_user else dbs_config.default_user
 
-    def client(self) -> AsyncMongoClient[Dict[str, Any]]:
+    def client(self) -> AsyncMongoClient[dict[str, Any]]:
         """
         Returns an instance of AsyncMongoClient with the constructed URI.
 
@@ -50,7 +76,7 @@ class DBConn:
             AsyncMongoClient: An instance of AsyncMongoClient connected to the database.
         """
 
-        client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(
+        client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
             self.uri,  # Ensure URI is properly formatted (e.g., "mongodb://host:port")
             tz_aware=True,  # Enables timezone-aware datetime objects
             connectTimeoutMS=480_000,  # Timeout for establishing a connection (480 seconds)
@@ -65,7 +91,7 @@ class DBConn:
 
         return client
 
-    def admin_client(self) -> AsyncMongoClient[Dict[str, Any]]:
+    def admin_client(self) -> AsyncMongoClient[dict[str, Any]]:
         """
         Returns an instance of AsyncMongoClient for the admin database.
 
@@ -77,14 +103,14 @@ class DBConn:
         """
         return AsyncMongoClient(self.admin_uri, tz_aware=True, appName=InternalConfig().app_name)
 
-    def db(self) -> AsyncDatabase[Dict[str, Any]]:
+    def db(self) -> AsyncDatabase[dict[str, Any]]:
         """
         Returns the database instance for the specified database name.
 
         This method retrieves the database instance using the constructed URI.
 
         Returns:
-            AsyncDatabase[Dict[str, Any]]: The database instance for the specified database name.
+            AsyncDatabase[dict[str, Any]]: The database instance for the specified database name.
         """
         return self.client()[self.db_name]
 
@@ -205,7 +231,7 @@ class DBConn:
             ConnectionError: If the connection to the database fails.
         """
         uri = self.admin_uri if admin else self.uri
-        client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(uri, tz_aware=True)
+        client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(uri, tz_aware=True)
         try:
             with timeout(timeout_seconds):
                 async with client:
@@ -216,7 +242,7 @@ class DBConn:
             raise ConnectionError(f"Failed to connect to the database: {e}") from e
 
     # MARK: Database setup methods Async
-    def client_sync(self) -> MongoClient[Dict[str, Any]]:  # pragma: no cover
+    def client_sync(self) -> MongoClient[dict[str, Any]]:  # pragma: no cover
         """
         Returns an instance of MongoClient with the constructed URI.
 
@@ -240,12 +266,12 @@ class DBConn:
             appName=InternalConfig().app_name,  # Optional: for MongoDB monitoring
         )
 
-    def db_sync(self) -> Database[Dict[str, Any]]:  # pragma: no cover
+    def db_sync(self) -> Database[dict[str, Any]]:  # pragma: no cover
         """
         Returns the database instance for the specified database name.
         This method retrieves the database instance using the constructed URI.
         Returns:
-            Database[Dict[str, Any]]: The database instance for the specified database name.
+            Database[dict[str, Any]]: The database instance for the specified database name.
         """
         return self.client_sync()[self.db_name]
 
@@ -264,7 +290,7 @@ class DBConn:
             self._setup = True
             # Use a reasonable timeout for the admin client setup
             # CI environments may need more time for MongoDB to be ready
-            admin_client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(
+            admin_client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
                 self.admin_uri,
                 tz_aware=True,
                 connectTimeoutMS=600_000,
@@ -275,6 +301,7 @@ class DBConn:
                 await self.setup_user(admin_client=admin_client)
                 await self.setup_collections_indexes(admin_client=admin_client)
                 await self._create_timeseries(admin_client=admin_client)
+                await self._log_replica_set_versions_with_admin_client(admin_client=admin_client)
             logger.info(
                 f"{DATABASE_ICON} {logger.name} "
                 f"Database {self.db_name} is set up with user {self.db_user}"
@@ -290,7 +317,7 @@ class DBConn:
             )
         logger.info(f"{DATABASE_ICON} {logger.name} Database {self.db_name} is already set up.")
 
-    async def setup_user(self, admin_client: AsyncMongoClient[Dict[str, Any]]) -> None:
+    async def setup_user(self, admin_client: AsyncMongoClient[dict[str, Any]]) -> None:
         """
         Set up the user.
 
@@ -300,9 +327,10 @@ class DBConn:
         create_user = {}
         try:
             admin_db = admin_client[self.db_name]
-            await admin_db["startup_collection"].insert_one(
-                {"startup": "complete", "timestamp": datetime.now(tz=timezone.utc)}
-            )
+            await admin_db["startup_collection"].insert_one({
+                "startup": "complete",
+                "timestamp": datetime.now(tz=UTC),
+            })
             users_info = await admin_client[self.db_name].command("usersInfo")
             users = [user["user"] for user in users_info.get("users", [])]
             if self.db_user not in users:
@@ -333,7 +361,6 @@ class DBConn:
                     extra={"error": str(e), "create_user": create_user},
                 )
                 raise DBConnConnectionException("Failed to create database user.") from e
-            pass
         except ServerSelectionTimeoutError as e:
             logger.error(
                 "Database server selection timed out. Can't proceed", extra={"error": str(e)}
@@ -347,10 +374,9 @@ class DBConn:
                 f"{DATABASE_ICON} {logger.name} Failed to create user {self.db_user}: {e}",
                 extra={"error": e, "create_user": create_user},
             )
-            pass
 
     async def setup_collections_indexes(
-        self, admin_client: AsyncMongoClient[Dict[str, Any]]
+        self, admin_client: AsyncMongoClient[dict[str, Any]]
     ) -> None:
         """
         Set up the collections in the database.
@@ -401,7 +427,7 @@ class DBConn:
                 return True
         return False
 
-    async def _create_timeseries(self, admin_client: AsyncMongoClient[Dict[str, Any]]) -> None:
+    async def _create_timeseries(self, admin_client: AsyncMongoClient[dict[str, Any]]) -> None:
         """
         Asynchronously creates a time series collection in the database.
 
@@ -442,6 +468,124 @@ class DBConn:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
                 logger.error(message, extra={"notification": False})
 
+    async def log_replica_set_versions(self) -> None:
+        """Public entry point to log replica-set member versions and health."""
+        admin_client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
+            self.admin_uri,
+            tz_aware=True,
+            connectTimeoutMS=5_000,
+            serverSelectionTimeoutMS=5_000,
+            appName=InternalConfig().app_name,
+        )
+        async with admin_client:
+            await self._log_replica_set_versions_with_admin_client(admin_client=admin_client)
+
+    async def _log_replica_set_versions_with_admin_client(
+        self, admin_client: AsyncMongoClient[dict[str, Any]]
+    ) -> None:
+        """Log each replica-set member mongod version and FCV."""
+        if not InternalConfig().config.dbs_config.connections[self.db_conn].replica_set:
+            return
+
+        admin_db = admin_client["admin"]
+        try:
+            status = await admin_db.command("replSetGetStatus")
+            fcv_doc = await admin_db.command({"getParameter": 1, "featureCompatibilityVersion": 1})
+        except PyMongoError as exc:
+            logger.warning(f"{DATABASE_ICON} Could not read replica set status: {exc}")
+            return
+
+        fcv = fcv_doc.get("featureCompatibilityVersion", {})
+        set_name = status.get("set", "")
+        logger.info(
+            f"{DATABASE_ICON} Replica set {set_name} "
+            f"featureCompatibilityVersion {fcv.get('version')}",
+            extra={"set": set_name, "fcv": fcv.get("version"), "fcv_doc": fcv},
+        )
+
+        members = status.get("members", [])
+        health_summary = ", ".join(
+            (
+                f"{member.get('name', 'unknown')} "
+                f"{member.get('stateStr', 'unknown')} "
+                f"health={member.get('health', 'unknown')}"
+            )
+            for member in members
+        )
+        member_summary_extra = {
+            "members": {
+                member.get("name", "unknown"): {
+                    "state": member.get("stateStr", "unknown"),
+                    "health": member.get("health", "unknown"),
+                }
+                for member in members
+            }
+        }
+        if any(member.get("health") != 1.0 for member in members):
+            logger.warning(
+                f"{DATABASE_ICON} Replica set member health: {health_summary}",
+                extra=member_summary_extra,
+            )
+        else:
+            logger.info(
+                f"{DATABASE_ICON} Replica set member health: {health_summary}",
+                extra=member_summary_extra,
+            )
+
+        for member in members:
+            host = member["name"]
+            state = member.get("stateStr", "")
+            health = member.get("health")
+
+            if health != 1:
+                member_details = ReplicaSetMemberDetailsLog(host=host, state=state, health=health)
+                logger.info(
+                    f"{DATABASE_ICON} {host} {state} health {health} version unknown",
+                    extra=member_details.to_log_extra(),
+                )
+                continue
+
+            parts = urlsplit(self.admin_uri)
+            userinfo, sep, _hosts = parts.netloc.rpartition("@")
+            netloc = f"{userinfo}@{host}" if sep else host
+            direct_uri = urlunsplit((
+                "mongodb",
+                netloc,
+                "/",
+                "authSource=admin&directConnection=true",
+                "",
+            ))
+            direct: AsyncMongoClient = AsyncMongoClient(
+                direct_uri,
+                tz_aware=True,
+                serverSelectionTimeoutMS=5_000,
+                connectTimeoutMS=5_000,
+                appName=InternalConfig().app_name,
+            )
+            try:
+                info = await direct["admin"].command("buildInfo")
+                member_details = ReplicaSetMemberDetailsLog(
+                    host=host,
+                    state=state,
+                    health=health,
+                    version=info.get("version"),
+                    version_array=info.get("versionArray"),
+                    git_version=info.get("gitVersion"),
+                    modules=info.get("modules"),
+                )
+                logger.info(
+                    f"{DATABASE_ICON} {host} {state} MongoDB {info.get('version')}",
+                    extra={"member_details": member_details.to_log_extra()},
+                )
+            except PyMongoError as exc:
+                member_details = ReplicaSetMemberDetailsLog(host=host, state=state, health=health)
+                logger.warning(
+                    f"{DATABASE_ICON} {host} {state} version unread: {exc}",
+                    extra=member_details.to_log_extra(),
+                )
+            finally:
+                await direct.close()
+
     # MARK: Database setup methods Sync
 
     def test_connection_sync(self, timeout_seconds: float = 10, admin: bool = False) -> None:
@@ -459,15 +603,14 @@ class DBConn:
             ConnectionError: If the connection to the database fails.
         """
         uri = self.admin_uri if admin else self.uri
-        client: MongoClient[Dict[str, Any]] = MongoClient(
+        client: MongoClient[dict[str, Any]] = MongoClient(
             uri, tz_aware=True, appName=InternalConfig().app_name
         )
         try:
-            with timeout(timeout_seconds):
-                with client:
-                    db = client[self.db_name]
-                    ans = db.command("ping")
-                    assert ans.get("ok", None)
+            with timeout(timeout_seconds), client:
+                db = client[self.db_name]
+                ans = db.command("ping")
+                assert ans.get("ok", None)
         except Exception as e:
             raise ConnectionError(f"Failed to connect to the database: {e}") from e
 
@@ -482,7 +625,9 @@ class DBConn:
         InternalConfig.db_uri = self.uri
         if not self._setup:
             self._setup = True
-            admin_client: MongoClient[Dict[str, Any]] = MongoClient(self.admin_uri, tz_aware=True, appName=InternalConfig().app_name)
+            admin_client: MongoClient[dict[str, Any]] = MongoClient(
+                self.admin_uri, tz_aware=True, appName=InternalConfig().app_name
+            )
             with admin_client:
                 self.setup_user_sync(admin_client=admin_client)
                 self.setup_collections_indexes_sync(admin_client=admin_client)
@@ -493,14 +638,16 @@ class DBConn:
             )
             if InternalConfig.db_client_sync:
                 InternalConfig.db_client_sync.close()
-            InternalConfig.db_client_sync = MongoClient(self.uri, tz_aware=True, appName=InternalConfig().app_name)
+            InternalConfig.db_client_sync = MongoClient(
+                self.uri, tz_aware=True, appName=InternalConfig().app_name
+            )
             InternalConfig.db_sync = InternalConfig.db_client_sync[self.db_name]
             logger.info(
                 f"{DATABASE_ICON} Database {self.db_name} client is set up for InternalConfig"
             )
         logger.info(f"{DATABASE_ICON} {logger.name} Database {self.db_name} is already set up.")
 
-    def setup_user_sync(self, admin_client: MongoClient[Dict[str, Any]]) -> None:
+    def setup_user_sync(self, admin_client: MongoClient[dict[str, Any]]) -> None:
         """
         Set up the user.
 
@@ -510,9 +657,10 @@ class DBConn:
         create_user = {}
         try:
             admin_db = admin_client[self.db_name]
-            admin_db["startup_collection"].insert_one(
-                {"startup": "complete", "timestamp": datetime.now(tz=timezone.utc)}
-            )
+            admin_db["startup_collection"].insert_one({
+                "startup": "complete",
+                "timestamp": datetime.now(tz=UTC),
+            })
             users_info = admin_client[self.db_name].command("usersInfo")
             users = [user["user"] for user in users_info.get("users", [])]
             if self.db_user not in users:
@@ -542,17 +690,15 @@ class DBConn:
                     f"{DATABASE_ICON} {logger.name} Failed to create user {self.db_user}: {e}",
                     extra={"error": str(e), "create_user": create_user},
                 )
-                raise e
-            pass
+                raise
         except Exception as e:
             create_user = {} if not create_user else create_user
             logger.error(
                 f"{DATABASE_ICON} {logger.name} Failed to create user {self.db_user}: {e}",
                 extra={"error": str(e), "create_user": create_user},
             )
-            pass
 
-    def setup_collections_indexes_sync(self, admin_client: MongoClient[Dict[str, Any]]) -> None:
+    def setup_collections_indexes_sync(self, admin_client: MongoClient[dict[str, Any]]) -> None:
         """
         Set up the collections in the database.
 
@@ -595,7 +741,7 @@ class DBConn:
                         except Exception as ex:
                             logger.error(ex)
 
-    def _create_timeseries_sync(self, admin_client: MongoClient[Dict[str, Any]]) -> None:
+    def _create_timeseries_sync(self, admin_client: MongoClient[dict[str, Any]]) -> None:
         """
         Creates a time series collection in the database.
 
@@ -635,7 +781,6 @@ class DBConn:
             except Exception as ex:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
                 logger.error(message, extra={"notification": False})
-                pass
 
 
 # # End of DBConn class

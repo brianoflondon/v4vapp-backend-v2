@@ -14,6 +14,7 @@
         "coro",
         "coros",
         "cummulative",
+        "cutover",
         "dedupe",
         "devhive",
         "devser",
@@ -58,6 +59,7 @@
         "Unpatch",
         "unvoted",
         "urllib",
+        "userinfo",
         "vconfig"
     ],
     "python.testing.pytestArgs": [
