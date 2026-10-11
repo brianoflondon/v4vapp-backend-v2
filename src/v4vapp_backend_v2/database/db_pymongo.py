@@ -20,7 +20,7 @@ DATABASE_ICON = "📁"
 
 
 @dataclass(slots=True, frozen=True)
-class ReplicaSetMemberVersionLog:
+class ReplicaSetMemberDetailsLog:
     host: str
     state: str
     health: int | float | None
@@ -301,9 +301,7 @@ class DBConn:
                 await self.setup_user(admin_client=admin_client)
                 await self.setup_collections_indexes(admin_client=admin_client)
                 await self._create_timeseries(admin_client=admin_client)
-                await self._log_replica_set_versions_with_admin_client(
-                    admin_client=admin_client
-                )
+                await self._log_replica_set_versions_with_admin_client(admin_client=admin_client)
             logger.info(
                 f"{DATABASE_ICON} {logger.name} "
                 f"Database {self.db_name} is set up with user {self.db_user}"
@@ -492,9 +490,7 @@ class DBConn:
         admin_db = admin_client["admin"]
         try:
             status = await admin_db.command("replSetGetStatus")
-            fcv_doc = await admin_db.command(
-                {"getParameter": 1, "featureCompatibilityVersion": 1}
-            )
+            fcv_doc = await admin_db.command({"getParameter": 1, "featureCompatibilityVersion": 1})
         except PyMongoError as exc:
             logger.warning(f"{DATABASE_ICON} Could not read replica set status: {exc}")
             return
@@ -516,7 +512,25 @@ class DBConn:
             )
             for member in members
         )
-        logger.info(f"{DATABASE_ICON} Replica set member health: {health_summary}")
+        member_summary_extra = {
+            "members": {
+                member.get("name", "unknown"): {
+                    "state": member.get("stateStr", "unknown"),
+                    "health": member.get("health", "unknown"),
+                }
+                for member in members
+            }
+        }
+        if any(member.get("health") != 1.0 for member in members):
+            logger.warning(
+                f"{DATABASE_ICON} Replica set member health: {health_summary}",
+                extra=member_summary_extra,
+            )
+        else:
+            logger.info(
+                f"{DATABASE_ICON} Replica set member health: {health_summary}",
+                extra=member_summary_extra,
+            )
 
         for member in members:
             host = member["name"]
@@ -524,20 +538,24 @@ class DBConn:
             health = member.get("health")
 
             if health != 1:
-                member_version = ReplicaSetMemberVersionLog(host=host, state=state, health=health)
+                member_details = ReplicaSetMemberDetailsLog(host=host, state=state, health=health)
                 logger.info(
                     f"{DATABASE_ICON} {host} {state} health {health} version unknown",
-                    extra=member_version.to_log_extra(),
+                    extra=member_details.to_log_extra(),
                 )
                 continue
 
             parts = urlsplit(self.admin_uri)
             userinfo, sep, _hosts = parts.netloc.rpartition("@")
             netloc = f"{userinfo}@{host}" if sep else host
-            direct_uri = urlunsplit(
-                ("mongodb", netloc, "/", "authSource=admin&directConnection=true", "")
-            )
-            direct = AsyncMongoClient(
+            direct_uri = urlunsplit((
+                "mongodb",
+                netloc,
+                "/",
+                "authSource=admin&directConnection=true",
+                "",
+            ))
+            direct: AsyncMongoClient = AsyncMongoClient(
                 direct_uri,
                 tz_aware=True,
                 serverSelectionTimeoutMS=5_000,
@@ -546,7 +564,7 @@ class DBConn:
             )
             try:
                 info = await direct["admin"].command("buildInfo")
-                member_version = ReplicaSetMemberVersionLog(
+                member_details = ReplicaSetMemberDetailsLog(
                     host=host,
                     state=state,
                     health=health,
@@ -557,13 +575,13 @@ class DBConn:
                 )
                 logger.info(
                     f"{DATABASE_ICON} {host} {state} MongoDB {info.get('version')}",
-                    extra=member_version.to_log_extra(),
+                    extra={"member_details": member_details.to_log_extra()},
                 )
             except PyMongoError as exc:
-                member_version = ReplicaSetMemberVersionLog(host=host, state=state, health=health)
+                member_details = ReplicaSetMemberDetailsLog(host=host, state=state, health=health)
                 logger.warning(
                     f"{DATABASE_ICON} {host} {state} version unread: {exc}",
-                    extra=member_version.to_log_extra(),
+                    extra=member_details.to_log_extra(),
                 )
             finally:
                 await direct.close()
@@ -763,5 +781,6 @@ class DBConn:
             except Exception as ex:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
                 logger.error(message, extra={"notification": False})
+
 
 # # End of DBConn class
