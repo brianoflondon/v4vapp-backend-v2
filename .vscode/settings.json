@@ -59,6 +59,7 @@
         "Unpatch",
         "unvoted",
         "urllib",
+        "userinfo",
         "vconfig"
     ],
     "python.testing.pytestArgs": [

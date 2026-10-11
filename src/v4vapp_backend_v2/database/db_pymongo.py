@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote_plus, urlsplit, urlunsplit
@@ -28,6 +28,17 @@ class ReplicaSetMemberVersionLog:
     version_array: list[int] | None = None
     git_version: str | None = None
     modules: list[str] | None = None
+
+    def to_log_extra(self) -> dict[str, Any]:
+        return {
+            "host": self.host,
+            "state": self.state,
+            "health": self.health,
+            "version": self.version,
+            "versionArray": self.version_array,
+            "gitVersion": self.git_version,
+            "modules": self.modules,
+        }
 
 
 class DBConnConnectionException(Exception):
@@ -482,7 +493,18 @@ class DBConn:
             extra={"set": set_name, "fcv": fcv.get("version"), "fcv_doc": fcv},
         )
 
-        for member in status.get("members", []):
+        members = status.get("members", [])
+        health_summary = ", ".join(
+            (
+                f"{member.get('name', 'unknown')} "
+                f"{member.get('stateStr', 'unknown')} "
+                f"health={member.get('health', 'unknown')}"
+            )
+            for member in members
+        )
+        logger.info(f"{DATABASE_ICON} Replica set member health: {health_summary}")
+
+        for member in members:
             host = member["name"]
             state = member.get("stateStr", "")
             health = member.get("health")
@@ -491,7 +513,7 @@ class DBConn:
                 member_version = ReplicaSetMemberVersionLog(host=host, state=state, health=health)
                 logger.info(
                     f"{DATABASE_ICON} {host} {state} health {health} version unknown",
-                    extra={"member_version": asdict(member_version)},
+                    extra=member_version.to_log_extra(),
                 )
                 continue
 
@@ -521,13 +543,13 @@ class DBConn:
                 )
                 logger.info(
                     f"{DATABASE_ICON} {host} {state} MongoDB {info.get('version')}",
-                    extra={"member_version": asdict(member_version)},
+                    extra=member_version.to_log_extra(),
                 )
             except PyMongoError as exc:
                 member_version = ReplicaSetMemberVersionLog(host=host, state=state, health=health)
                 logger.warning(
                     f"{DATABASE_ICON} {host} {state} version unread: {exc}",
-                    extra={"member_version": asdict(member_version)},
+                    extra=member_version.to_log_extra(),
                 )
             finally:
                 await direct.close()
