@@ -1451,8 +1451,8 @@ class InternalConfig:
                 handler.addFilter(ConsoleLogFilter())
                 handler.addFilter(AddJsonDataIndicatorFilter())
                 handler.addFilter(AddNotificationBellFilter())
-            except Exception:
-                pass
+            except Exception:  # S110: Ignore exceptions in adding filters
+                pass  # S110: Ignore exceptions in adding filters
 
             root_logger.addHandler(handler)
 
