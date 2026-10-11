@@ -1,5 +1,10 @@
 # Ledger Balance Cache
 
+The sections below are older than the code. TTLs, key shape, and the
+"Slow cache set" warning are described as they are in October 2026 in
+[slow_balance_cache_2026_10.md](slow_balance_cache_2026_10.md), which is
+the note for branch `fix/slow-balance-cache-scan`.
+
 Redis-based caching for ledger account balance queries.  The system still
 supports **generation-based invalidation** for O(1) bulk expiry, but most
 cache flushes now use a faster **selective invalidation** mechanism that only
