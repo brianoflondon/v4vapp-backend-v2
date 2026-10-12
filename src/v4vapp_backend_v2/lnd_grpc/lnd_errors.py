@@ -13,6 +13,14 @@ class LNDFatalError(Exception):
     pass
 
 
+class LNDInvoiceError(Exception):
+    """A BOLT11 string LND refused to decode. The node connection is fine."""
+
+    def __init__(self, message: str, original_error: Exception | None = None) -> None:
+        super().__init__(message)
+        self.original_error = original_error
+
+
 class LNDSubscriptionError(LNDConnectionError):
     pass
 

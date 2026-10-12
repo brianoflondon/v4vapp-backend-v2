@@ -68,6 +68,22 @@ def _swallow_task_exception(task: asyncio.Task) -> None:  # type: ignore[type-ar
             _logger.debug(f"{ICON} completion-report task raised: {exc!r}")
 
 
+# Phrases that mean the server has finished with this operation and will not
+# add the missing stages. Success memos ("Sent N sats", "Transfer a -> b")
+# do not contain them, so those flows still complete from their own events.
+_FAILED_FLOW_MEMO_MARKERS = (
+    "Payment failed",
+    "Processing error:",
+    "Lightning node unavailable",
+    "Unexpected error occurred:",
+)
+
+
+def _memo_closes_failed_flow(memo: str) -> bool:
+    """True when a notification memo is a terminal failure reply."""
+    return any(marker in memo for marker in _FAILED_FLOW_MEMO_MARKERS)
+
+
 # ---------------------------------------------------------------------------
 # Flow status enum
 # ---------------------------------------------------------------------------
@@ -814,12 +830,15 @@ class Overwatch:
 
         # --- Detect payment-failure notifications that terminate flows ---
         #
-        # Path 1: custom_json notification reply (parent_id + notification flag)
+        # Path 1: custom_json notification reply (parent_id + notification flag).
+        # LND send failures say "Payment failed". A rejected invoice
+        # (bad checksum, below minimum) is a HiveTransferError and says
+        # "Processing error:" instead. Both are terminal replies.
         json_data = getattr(op, "json_data", None)
         parent_id = getattr(json_data, "parent_id", None) if json_data else None
         is_notification = getattr(json_data, "notification", False) if json_data else False
         cj_memo = getattr(json_data, "memo", "") or ""
-        if parent_id and is_notification and "Payment failed" in cj_memo:
+        if parent_id and is_notification and _memo_closes_failed_flow(cj_memo):
             await self._complete_by_notification(reply_event=event, parent_id=parent_id)
 
         # Path 2: transfer refund (Hive/HBD returned to customer with

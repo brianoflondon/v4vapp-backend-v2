@@ -10,8 +10,8 @@ from grpc.aio import AioRpcError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2_grpc as lightningstub
-from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, invalid_invoice_details
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError, LNDInvoiceError
 
 os.environ["TESTING"] = "True"
 
@@ -287,3 +287,32 @@ async def test_get_icon(set_base_config_path: None):
     lnd_client = LNDClient(connection_name="example")
     print(lnd_client.icon)
     assert lnd_client.icon == "🛟"
+
+
+def test_invalid_invoice_details_matches_checksum_only():
+    assert (
+        invalid_invoice_details("checksum failed. Expected e8jlkq, got 83vg72.")
+        == "checksum failed. Expected e8jlkq, got 83vg72."
+    )
+    assert invalid_invoice_details("UNAVAILABLE") is None
+    assert invalid_invoice_details("") is None
+
+
+@pytest.mark.asyncio
+async def test_call_checksum_failure_is_an_invoice_error(set_base_config_path: None):
+    mock_error = AioRpcError(
+        code=StatusCode.UNKNOWN,
+        initial_metadata=None,
+        trailing_metadata=None,
+        details="checksum failed. Expected e8jlkq, got 83vg72.",
+        debug_error_string="UNKNOWN:checksum failed. Expected e8jlkq, got 83vg72.",
+    )
+    mock_method = AsyncMock(side_effect=mock_error)
+    with patch.object(
+        lightningstub,
+        "LightningStub",
+        return_value=MagicMock(DecodePayReq=mock_method),
+    ):
+        async with LNDClient(connection_name="example") as client:
+            with pytest.raises(LNDInvoiceError, match="checksum failed"):
+                await client.call(client.lightning_stub.DecodePayReq, lnrpc.PayReqString())

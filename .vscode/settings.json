@@ -18,6 +18,7 @@
         "cummulative",
         "dashpay",
         "dashwebui",
+        "cutover",
         "dedupe",
         "devhive",
         "devser",
@@ -73,6 +74,8 @@
         "vconfig",
         "webui",
         "xpub"
+        "userinfo",
+        "vconfig"
     ],
     "python.testing.pytestArgs": [
         "tests"
