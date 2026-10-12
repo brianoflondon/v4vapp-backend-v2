@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -54,7 +54,7 @@ class DummyCollection:
 
     async def aggregate(self, pipeline):
         # return zero totals for simple dummy entries for testing
-        return DummyCursor([{"_id": None, "hive": 0, "hbd": 0, "usd": 0, "sats": 0}])
+        return DummyCursor([{"_id": None, "hive": 0, "hbd": 0, "dash": 0, "usd": 0, "sats": 0}])
 
 
 @pytest.mark.asyncio
@@ -64,7 +64,7 @@ async def test_ledger_entries_data_includes_op_type(monkeypatch):
         def __init__(self):
             self.group_id = "g1"
             self.short_id = "s1"
-            self.timestamp = datetime.now(tz=timezone.utc)
+            self.timestamp = datetime.now(tz=UTC)
             self.ledger_type = None
             self.ledger_type_str = ""
             self.description = "d"
@@ -80,7 +80,7 @@ async def test_ledger_entries_data_includes_op_type(monkeypatch):
             self.journal = "j"
             self.op_type = "MY_OP"
             # include reversed timestamp to test API and formatting
-            self.reversed = datetime.now(tz=timezone.utc)
+            self.reversed = datetime.now(tz=UTC)
 
         def print_journal_entry(self):
             return self.journal
@@ -141,10 +141,9 @@ async def test_reverse_endpoint(monkeypatch):
         async def save(self, ignore_duplicates=False, upsert=False, reverse=False):
             self.saved.append((ignore_duplicates, upsert, reverse))
             if reverse:
-                from datetime import datetime, timezone
+                from datetime import datetime
 
-                self.reversed = datetime.now(tz=timezone.utc)
-            return None
+                self.reversed = datetime.now(tz=UTC)
 
     # helper to create async loader
     async def _async_none(gid):

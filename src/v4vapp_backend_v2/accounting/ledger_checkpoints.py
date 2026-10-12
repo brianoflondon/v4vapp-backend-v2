@@ -18,7 +18,7 @@ Each document covers one account × one period:
         "period_end": ISODate("2024-01-31T23:59:59.999999Z"),
         "balances_net": {"HIVE": "1.234", "MSATS": "100000"},
         "conv_totals": {
-            "HIVE": {"hive": "1.234", "hbd": "0.5", "usd": "0.3", "sats": "100", "msats": "100000"},
+            "HIVE": {"hive": "1.234", "hbd": "0.5", "usd": "0.3", "sats": "100", "msats": "100000", "dash": "0"},
             ...
         },
         "last_transaction_date": ISODate("..."),
@@ -29,10 +29,10 @@ Each document covers one account × one period:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from timeit import default_timer as timer
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from bson import Decimal128
 from pydantic import BaseModel, Field
@@ -63,6 +63,8 @@ class CheckpointConvSummary(BaseModel):
     usd: Decimal = Decimal(0)
     sats: Decimal = Decimal(0)
     msats: Decimal = Decimal(0)
+    dash: Decimal = Decimal(0)
+    duffs: Decimal = Decimal(0)
 
     def to_converted_summary(self):
         """Return a ``ConvertedSummary`` dataclass instance."""
@@ -74,10 +76,12 @@ class CheckpointConvSummary(BaseModel):
             usd=self.usd,
             sats=self.sats,
             msats=self.msats,
+            dash=self.dash,
+            duffs=self.duffs,
         )
 
     @classmethod
-    def from_converted_summary(cls, cs) -> "CheckpointConvSummary":
+    def from_converted_summary(cls, cs) -> CheckpointConvSummary:
         """Build from a ``ConvertedSummary`` dataclass."""
         return cls(
             hive=cs.hive,
@@ -85,6 +89,8 @@ class CheckpointConvSummary(BaseModel):
             usd=cs.usd,
             sats=cs.sats,
             msats=cs.msats,
+            dash=getattr(cs, "dash", Decimal(0)),
+            duffs=getattr(cs, "duffs", Decimal(0)),
         )
 
 
@@ -104,20 +110,20 @@ class LedgerCheckpoint(BaseModel):
         ),
     )
     # Net running balance at period_end per currency (e.g. {"HIVE": Decimal("1.234")})
-    balances_net: Dict[str, Decimal] = Field(
+    balances_net: dict[str, Decimal] = Field(
         default_factory=dict,
         description="Net amount per currency at period_end",
     )
     # Conversion running-total at period_end per currency
-    conv_totals: Dict[str, CheckpointConvSummary] = Field(
+    conv_totals: dict[str, CheckpointConvSummary] = Field(
         default_factory=dict,
         description="Conversion running-total per currency at period_end",
     )
-    last_transaction_date: Optional[datetime] = Field(
+    last_transaction_date: datetime | None = Field(
         None, description="Timestamp of last included transaction"
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc),
+        default_factory=lambda: datetime.now(tz=UTC),
         description="When this checkpoint was written",
     )
 
@@ -164,7 +170,7 @@ class LedgerCheckpoint(BaseModel):
             "conv_totals": {
                 currency: {
                     field: Decimal128(str(getattr(cs, field)))
-                    for field in ("hive", "hbd", "usd", "sats", "msats")
+                    for field in ("hive", "hbd", "usd", "sats", "msats", "dash", "duffs")
                 }
                 for currency, cs in self.conv_totals.items()
             },
@@ -172,7 +178,7 @@ class LedgerCheckpoint(BaseModel):
         return raw
 
     @classmethod
-    def _from_mongo_doc(cls, doc: dict) -> "LedgerCheckpoint":
+    def _from_mongo_doc(cls, doc: dict) -> LedgerCheckpoint:
         """Deserialise from a raw MongoDB document."""
         from bson import Decimal128 as _D128
 
@@ -182,7 +188,7 @@ class LedgerCheckpoint(BaseModel):
             return Decimal(str(v))
 
         balances_net = {k: _dec(v) for k, v in doc.get("balances_net", {}).items()}
-        conv_totals: Dict[str, CheckpointConvSummary] = {}
+        conv_totals: dict[str, CheckpointConvSummary] = {}
         for currency, cs_raw in doc.get("conv_totals", {}).items():
             conv_totals[currency] = CheckpointConvSummary(
                 hive=_dec(cs_raw.get("hive", 0)),
@@ -190,6 +196,8 @@ class LedgerCheckpoint(BaseModel):
                 usd=_dec(cs_raw.get("usd", 0)),
                 sats=_dec(cs_raw.get("sats", 0)),
                 msats=_dec(cs_raw.get("msats", 0)),
+                dash=_dec(cs_raw.get("dash", 0)),
+                duffs=_dec(cs_raw.get("duffs", 0)),
             )
         return cls(
             account_name=doc["account_name"],
@@ -201,7 +209,7 @@ class LedgerCheckpoint(BaseModel):
             balances_net=balances_net,
             conv_totals=conv_totals,
             last_transaction_date=doc.get("last_transaction_date"),
-            created_at=doc.get("created_at", datetime.now(tz=timezone.utc)),
+            created_at=doc.get("created_at", datetime.now(tz=UTC)),
         )
 
     async def save(self) -> None:
@@ -275,7 +283,7 @@ async def delete_all_ledger_checkpoints(
 
 
 async def invalidate_checkpoints_for_accounts_by_date(
-    accounts: List[LedgerAccount], timestamp: datetime
+    accounts: list[LedgerAccount], timestamp: datetime
 ) -> None:
     """
     Invalidate the cache for given accounts and timestamp.
@@ -290,7 +298,7 @@ async def invalidate_checkpoints_for_accounts_by_date(
     tasks = []
     # convert timestamp to UTC if it is naive
     if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
+        timestamp = timestamp.replace(tzinfo=UTC)
     for period_type in PeriodType:
         if timestamp < last_completed_period_end(period_type):
             tasks.append(delete_checkpoints_for_accounts_and_period_type(accounts, period_type))
@@ -298,7 +306,7 @@ async def invalidate_checkpoints_for_accounts_by_date(
 
 
 async def delete_checkpoints_for_accounts_and_period_type(
-    accounts: List[LedgerAccount], period_type: PeriodType
+    accounts: list[LedgerAccount], period_type: PeriodType
 ) -> None:
     """
     Delete all checkpoints for given accounts and period type.
@@ -398,7 +406,7 @@ async def get_checkpoint_by_id(
 
 async def latest_period_create_checkpoint(
     account: LedgerAccount, period_type: PeriodType = PeriodType.DAILY
-) -> Tuple[LedgerCheckpoint | None, bool, timedelta, datetime]:
+) -> tuple[LedgerCheckpoint | None, bool, timedelta, datetime]:
     """
     Create a checkpoint for the most recently completed period if it does not already exist.
 
@@ -416,7 +424,7 @@ async def latest_period_create_checkpoint(
     """
     period_start: datetime | None = None
     start = timer()
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     period_start = last_completed_period_end(period_type, now)
     age = now - period_start
     account_label = f"{account.name}:{account.sub}"
@@ -451,7 +459,7 @@ async def create_checkpoint(
     period_end: datetime,
     use_cache: bool = True,
     force: bool = False,
-) -> Tuple[LedgerCheckpoint, bool]:
+) -> tuple[LedgerCheckpoint, bool]:
     """
     Compute and persist a checkpoint for *account* at *period_end*.
 
@@ -524,8 +532,8 @@ async def create_checkpoint(
         extra={"notification": False},
     )
 
-    balances_net: Dict[str, Decimal] = {}
-    conv_totals: Dict[str, CheckpointConvSummary] = {}
+    balances_net: dict[str, Decimal] = {}
+    conv_totals: dict[str, CheckpointConvSummary] = {}
 
     for currency, net_value in ledger_details.balances_net.items():
         key = str(currency)
@@ -583,7 +591,7 @@ async def build_checkpoints_for_period(
         The total number of checkpoints written.
     """
     start = timer()
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     if until is None:
         until = now
 
@@ -599,7 +607,7 @@ async def build_checkpoints_for_period(
             return 0
         since = first_doc["timestamp"]
         if since and since.tzinfo is None:
-            since = since.replace(tzinfo=timezone.utc)
+            since = since.replace(tzinfo=UTC)
 
     period_ends = completed_period_ends_since(period_type, since, until)
     if not period_ends:

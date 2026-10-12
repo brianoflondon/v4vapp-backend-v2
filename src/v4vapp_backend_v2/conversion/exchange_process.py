@@ -1,33 +1,51 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any, Protocol
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, ExpenseAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
-from v4vapp_backend_v2.actions.tracked_any import TrackedTransferKeepsatsToHive
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
+from v4vapp_backend_v2.conversion.exchange_protocol import (
+    ExchangeOrderResult,
+    get_exchange_adapter,
+)
 from v4vapp_backend_v2.conversion.exchange_rebalance import (
     RebalanceDirection,
     RebalanceResult,
     add_pending_rebalance,
 )
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+
+
+class RebalanceTrackedOp(Protocol):
+    """Minimum fields needed to queue and book an exchange rebalance."""
+
+    group_id: str
+    short_id: str
+    cust_id: str
+
+    @property
+    def log_extra(self) -> dict[str, Any]: ...
 
 
 async def rebalance_queue_task(
     direction: RebalanceDirection,
     currency: Currency,
     hive_qty: Decimal,
-    tracked_op: TransferBase | TrackedTransferKeepsatsToHive,
+    tracked_op: RebalanceTrackedOp,
+    *,
+    base_asset: str = "HIVE",
+    quote_asset: str = "BTC",
 ) -> None:
-    # When HIVE/HBD is deposited, we accumulate the amount for eventual sale to BTC
-    # This runs in background and doesn't affect customer transaction
-    # Note: Exchange selection is driven by config (default_exchange setting)
+    """Accumulate and maybe execute a Convert swap. Default pair is HIVE/BTC.
+
+    ``hive_qty`` is the quantity of ``base_asset`` (HIVE for Hive flows, DASH
+    for Dash inbound). Hive callers that pass HBD still send the HIVE equivalent.
+    """
     try:
         app_config = InternalConfig().config
         provider_name = app_config.exchange_config.default_exchange
@@ -44,17 +62,16 @@ async def rebalance_queue_task(
             )
             return
 
-        # Always use HIVE for exchange - Binance doesn't trade HBD
-        # Get exchange adapter based on config (uses default_exchange)
         logger.info(
-            f"Queuing rebalance task with delay: {direction.value} {currency} with quantity {hive_qty} for tracked operation {tracked_op.short_id}",
+            f"Queuing rebalance task with delay: {direction.value} {currency} "
+            f"{hive_qty} {base_asset} for tracked operation {tracked_op.short_id}",
         )
         await asyncio.sleep(10)
         exchange_adapter = get_exchange_adapter()
         rebalance_result = await add_pending_rebalance(
             exchange_adapter=exchange_adapter,
-            base_asset="HIVE",  # Always HIVE - Binance doesn't trade HBD
-            quote_asset="BTC",
+            base_asset=base_asset,
+            quote_asset=quote_asset,
             direction=direction,
             qty=hive_qty,
             transaction_id=str(tracked_op.short_id),
@@ -84,8 +101,45 @@ async def rebalance_queue_task(
         )
 
 
+def _order_base_asset(order_result: ExchangeOrderResult) -> str:
+    if order_result.base_asset:
+        return order_result.base_asset.upper()
+    base, _quote = order_result._get_assets()
+    return base.upper()
+
+
+def _trade_legs(
+    order_result: ExchangeOrderResult, trade_quote: QuoteResponse
+) -> tuple[CryptoConv, Currency, Currency, Decimal, Decimal]:
+    """Debit/credit units and amounts for an executed Convert/spot trade."""
+    base = _order_base_asset(order_result)
+    is_buy = order_result.side.upper() == "BUY"
+    if base == "DASH":
+        if is_buy:
+            msats_value = order_result.quote_qty * Decimal(100_000_000_000)
+            conv = CryptoConversion(
+                conv_from=Currency.MSATS, value=msats_value, quote=trade_quote
+            ).conversion
+            return conv, Currency.DUFFS, Currency.MSATS, conv.duffs, conv.msats
+        conv = CryptoConversion(
+            conv_from=Currency.DASH, value=order_result.executed_qty, quote=trade_quote
+        ).conversion
+        return conv, Currency.MSATS, Currency.DUFFS, conv.msats, conv.duffs
+
+    if is_buy:
+        msats_value = order_result.quote_qty * Decimal(100_000_000_000)
+        conv = CryptoConversion(
+            conv_from=Currency.MSATS, value=msats_value, quote=trade_quote
+        ).conversion
+        return conv, Currency.HIVE, Currency.MSATS, conv.hive, conv.msats
+    conv = CryptoConversion(
+        conv_from=Currency.HIVE, value=order_result.executed_qty, quote=trade_quote
+    ).conversion
+    return conv, Currency.MSATS, Currency.HIVE, conv.msats, conv.hive
+
+
 async def exchange_accounting(
-    rebalance_result: RebalanceResult, tracked_op: TransferBase | TrackedTransferKeepsatsToHive
+    rebalance_result: RebalanceResult, tracked_op: RebalanceTrackedOp
 ) -> None:
     """Perform any accounting updates after a rebalance trade has executed."""
     if not rebalance_result.executed or rebalance_result.order_result is None:
@@ -117,41 +171,11 @@ async def exchange_accounting(
             f"Order: {order_result.client_order_id}"
         )
 
-    # Create CryptoConversion using the trade_quote
-    # SELL: We sold HIVE (executed_qty) and received BTC (quote_qty)
-    # BUY: We spent BTC (quote_qty) and received HIVE (executed_qty)
-    #
-    # The accounting entries should reflect what happens to the asset account:
-    #   * the currency that goes up is debited (asset increase)
-    #   * the currency that goes down is credited (asset decrease)
-    # Previously the debit/credit sides were reversed which made sales appear as
-    # hives being debited and msats credited.  That meant the asset account
-    # balance moved in the wrong direction (credits reduce the balance).
-    #
-    # For a BUY order we spend msats and acquire hive, so hive is debited and
-    # msats is credited.  For a SELL order we sell hive and receive msats, so
-    # msats is debited and hive is credited.
-    if order_result.side.upper() == "BUY":
-        # BUY HIVE: Start from msats spent, derive HIVE received
-        msats_value = order_result.quote_qty * Decimal("100_000_000_000")
-        crypto_conversion = CryptoConversion(
-            conv_from=Currency.MSATS, value=msats_value, quote=trade_quote
-        )
-        conv = crypto_conversion.conversion
-        debit_unit = Currency.HIVE
-        credit_unit = Currency.MSATS
-        debit_amount = conv.hive
-        credit_amount = conv.msats
-    else:  # SELL
-        # SELL HIVE: Start from HIVE sold, derive msats received
-        crypto_conversion = CryptoConversion(
-            conv_from=Currency.HIVE, value=order_result.executed_qty, quote=trade_quote
-        )
-        conv = crypto_conversion.conversion
-        debit_unit = Currency.MSATS
-        credit_unit = Currency.HIVE
-        debit_amount = conv.msats
-        credit_amount = conv.hive
+    # Asset increase is debited; asset decrease is credited.
+    # HIVE trades use HIVE/MSATS; DASH trades use DUFFS/MSATS.
+    conv, debit_unit, credit_unit, debit_amount, credit_amount = _trade_legs(
+        order_result, trade_quote
+    )
 
     # Create fee conversion from fee_msats using trade_quote for consistent rates
     fee_conv = CryptoConversion(
@@ -171,7 +195,7 @@ async def exchange_accounting(
         op_type="exchange_trade",
         cust_id=tracked_op.cust_id,
         group_id=f"{group_id_base}_{ledger_type.value}",
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         description=rebalance_result.ledger_description,
         debit=AssetAccount(name="Exchange Holdings", sub=rebalance_result.order_result.exchange),
         debit_unit=debit_unit,
@@ -194,7 +218,7 @@ async def exchange_accounting(
             op_type="exchange_fee",
             cust_id=tracked_op.cust_id,
             group_id=f"{group_id_base}_{ledger_type.value}",
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             description=f"Exchange Fee for {rebalance_result.ledger_description}",
             debit=ExpenseAccount(
                 name="Exchange Fees Paid", sub=rebalance_result.order_result.exchange

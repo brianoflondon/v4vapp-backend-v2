@@ -41,6 +41,7 @@ from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers.helper_functions import get_accounts_by_type_for_selector
 from v4vapp_backend_v2.admin.routers.ledger_edit_presets import _build_editor_presets
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
@@ -146,6 +147,8 @@ async def ledger_editor_page(
         Currency.MSATS.value,
         Currency.HIVE.value,
         Currency.HBD.value,
+        Currency.DASH.value,
+        Currency.DUFFS.value,
     ]
 
     nav_items = nav_manager.get_navigation_items("/admin/ledger-editor")
@@ -390,14 +393,23 @@ async def _validate_and_build_entry(
         except Exception:
             return None, f"Unknown currency: {currency_str}"
 
-        # Normalise to storage units: only msats, hive, hbd are stored.
-        # If the user entered sats, convert to msats (×1000).
+        # Normalise to storage units: msats, hive, hbd, duffs.
+        # sats → msats (×1000); dash → duffs (×1e8).
         if currency == Currency.SATS:
             amount = amount * 1000
             currency = Currency.MSATS
-        elif currency not in (Currency.HIVE, Currency.HBD, Currency.MSATS):
+        elif currency == Currency.DASH:
+            amount = amount * DUFFS_PER_DASH
+            currency = Currency.DUFFS
+        elif currency not in (
+            Currency.HIVE,
+            Currency.HBD,
+            Currency.MSATS,
+            Currency.DUFFS,
+        ):
             return None, (
-                f"Currency {currency.value} cannot be stored directly. Use sats, hive, or hbd."
+                f"Currency {currency.value} cannot be stored directly. "
+                "Use sats, hive, hbd, or dash."
             )
 
         # Compute conversion using the storage currency/amount

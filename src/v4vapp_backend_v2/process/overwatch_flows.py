@@ -1128,6 +1128,84 @@ EXTERNAL_TO_MAGISATS_FLOW = FlowDefinition(
 
 
 # ---------------------------------------------------------------------------
+# Dash inbound → Lightning
+# ---------------------------------------------------------------------------
+# Flow: A Dash invoice is settled on-chain. The system books Treasury Dash vs
+# server sats (CONV_DASH_TO_SATS) and optional fee income, then pays (or
+# probes) the bolt11 stored on the invoice.
+#
+# While Dash ``payouts_enabled`` is false, Lightning is probe-only: no
+# WITHDRAW_LIGHTNING ledger is posted. Net sats are parked on Asset
+# Dash Payment Tests (d_test_p). Payment stages are optional.
+#
+# Primary events (same short_id as trigger — invoice external_id / _id):
+#   1. dash_invoice op (trigger)
+#   2. d_conv_s ledger — CONV_DASH_TO_SATS
+#   3. fee_inc ledger — FEE_INCOME (optional when fee is zero)
+#
+# Lightning payment (different short_id — payment hash, OPTIONAL):
+#   4. payment op
+#   5. withdraw_l ledger — WITHDRAW_LIGHTNING
+#   6. fee_exp ledger — FEE_EXPENSE (optional)
+# ---------------------------------------------------------------------------
+
+DASH_TO_LIGHTNING_FLOW = FlowDefinition(
+    name="dash_to_lightning",
+    description="Dash invoice settled, converted to sats, then paid out as Lightning",
+    trigger_op_type="dash_invoice",
+    stages=[
+        FlowStage(
+            name="trigger_dash_invoice",
+            event_type="op",
+            op_type="dash_invoice",
+            group="primary",
+        ),
+        FlowStage(
+            name="conv_dash_to_sats",
+            event_type="ledger",
+            ledger_type=LedgerType.CONV_DASH_TO_SATS,
+            group="primary",
+        ),
+        FlowStage(
+            name="fee_income",
+            event_type="ledger",
+            ledger_type=LedgerType.FEE_INCOME,
+            group="primary",
+            required=False,
+        ),
+        FlowStage(
+            name="dash_test_pay",
+            event_type="ledger",
+            ledger_type=LedgerType.DASH_TEST_PAY,
+            group="primary",
+            required=False,
+        ),
+        FlowStage(
+            name="payment_op",
+            event_type="op",
+            op_type="payment",
+            group="payment",
+            required=False,
+        ),
+        FlowStage(
+            name="withdraw_lightning",
+            event_type="ledger",
+            ledger_type=LedgerType.WITHDRAW_LIGHTNING,
+            group="payment",
+            required=False,
+        ),
+        FlowStage(
+            name="fee_expense",
+            event_type="ledger",
+            ledger_type=LedgerType.FEE_EXPENSE,
+            group="payment",
+            required=False,
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Registry of all known flow definitions
 # ---------------------------------------------------------------------------
 
@@ -1145,4 +1223,5 @@ FLOW_DEFINITIONS = {
     "hive_transfer_paywithsats": HIVE_TRANSFER_PAYWITHSATS_FLOW,
     "balance_request": BALANCE_REQUEST_FLOW,
     "hive_transfer_failure": HIVE_TRANSFER_FAILURE_FLOW,
+    "dash_to_lightning": DASH_TO_LIGHTNING_FLOW,
 }
