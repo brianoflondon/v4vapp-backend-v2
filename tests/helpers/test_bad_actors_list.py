@@ -118,3 +118,4 @@ async def test_local_bad_accounts_include_tre(mocker):
 
     result = await get_bad_hive_accounts()
     assert "tre" in result
+    assert "emem0515" in result

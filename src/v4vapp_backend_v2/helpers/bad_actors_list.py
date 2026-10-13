@@ -1,8 +1,6 @@
 import json
-import logging
 import tempfile
 from pathlib import Path
-from typing import List, Set
 
 import httpx
 from aiocache import cached
@@ -11,12 +9,12 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
 # @async_time_stats_decorator()
-async def check_bad_hive_accounts(check_for: List[str]) -> bool:
+async def check_bad_hive_accounts(check_for: list[str]) -> bool:
     """
     Checks if any of the provided Hive account names are present in the bad accounts list.
 
     Args:
-        check_for (List[str]): A list of Hive account names to check.
+        check_for (list[str]): A list of Hive account names to check.
 
     Returns:
         bool: True if any account in the list is found in the bad accounts set, False otherwise.
@@ -29,12 +27,12 @@ async def check_bad_hive_accounts(check_for: List[str]) -> bool:
 
 
 # @async_time_stats_decorator()
-async def check_not_development_accounts(accounts: List[str]) -> bool:
+async def check_not_development_accounts(accounts: list[str]) -> bool:
     """
     Checks if any accounts are not allowed in development mode.
 
     Args:
-        accounts (List[str]): A list of Hive account names to check.
+        accounts (list[str]): A list of Hive account names to check.
 
     Returns:
         bool: True if development mode is ON and any account is not in the allowed list, False otherwise.
@@ -42,13 +40,13 @@ async def check_not_development_accounts(accounts: List[str]) -> bool:
     if not InternalConfig().config.development.enabled:
         return False
     allowed_set = set(InternalConfig().config.development.allowed_hive_accounts)
-    if any(account not in allowed_set for account in accounts):
+    if any(account not in allowed_set for account in accounts): 
         return True  # Raise error: dev ON and at least one account not allowed
     return False  # No error: dev OFF or all accounts allowed
 
 
 @cached(ttl=300)
-async def get_bad_hive_accounts() -> Set[str]:
+async def get_bad_hive_accounts() -> set[str]:
     """
     Asynchronously retrieves a combined set of bad Hive account usernames.
 
@@ -57,12 +55,13 @@ async def get_bad_hive_accounts() -> Set[str]:
     If the local file cannot be loaded, a warning is logged and only the fetched list is used.
 
     Returns:
-        Set[str]: A set containing usernames of bad Hive accounts.
+        set[str]: A set containing usernames of bad Hive accounts.
     """
     bad_actors = await fetch_bad_actor_list()
-    bad_accounts: Set[str] = set()
+    bad_accounts: set[str] = set()
     try:
         local_bad = Path(__file__).parent / "bad_actors_local_list.txt"
+        logger.info(f"Loading local bad accounts from {local_bad}")
         if local_bad.exists():
             with open(local_bad, "r") as f:
                 # load as text with one account per line, ignoring empty lines and stripping whitespace
@@ -74,13 +73,13 @@ async def get_bad_hive_accounts() -> Set[str]:
                 }
 
     except Exception as e:
-        logging.warning(f"Error loading bad accounts: {e}")
+        logger.warning(f"Error loading bad accounts: {e}")
         bad_accounts = set()
     combined = bad_actors | bad_accounts
     return combined
 
 
-async def fetch_bad_actor_list() -> Set[str]:
+async def fetch_bad_actor_list() -> set[str]:
     url = "https://gitlab.syncad.com/hive/wallet/-/raw/master/src/app/utils/BadActorList.js?ref_type=heads"
 
     TMP_DIR = Path(tempfile.gettempdir())
