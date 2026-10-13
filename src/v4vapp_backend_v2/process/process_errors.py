@@ -5,15 +5,11 @@ class HiveLightningError(Exception):
     Hive and Lightning fails or is not implemented.
     """
 
-    pass
-
 
 class HiveToLightningError(HiveLightningError):
     """
     Custom exception for Hive to Lightning errors.
     """
-
-    pass
 
 
 class LightningToHiveError(HiveLightningError):
@@ -22,16 +18,12 @@ class LightningToHiveError(HiveLightningError):
     This can be used to handle specific cases where the conversion or transfer fails.
     """
 
-    pass
-
 
 class KeepsatsDepositNotificationError(HiveLightningError):
     """
     Custom exception for errors related to Keepsats deposit notifications.
     This can be used to handle specific cases where the notification process fails.
     """
-
-    pass
 
 
 class CustomJsonToLightningError(HiveLightningError):
@@ -40,8 +32,6 @@ class CustomJsonToLightningError(HiveLightningError):
     This can be used to handle specific cases where the conversion or processing fails.
     """
 
-    pass
-
 
 class CustomJsonAuthorizationError(HiveLightningError):
     """
@@ -49,7 +39,12 @@ class CustomJsonAuthorizationError(HiveLightningError):
     This can be used to handle specific cases where the authorization fails.
     """
 
-    pass
+
+class CustomJsonBadHiveAccountError(HiveLightningError):
+    """
+    Custom exception for errors related to CustomJson operations involving bad Hive accounts.
+    This can be used to handle specific cases where the operation involves accounts that are not allowed.
+    """
 
 
 class CustomJsonRetryError(HiveLightningError):
@@ -68,5 +63,3 @@ class InsufficientBalanceError(HiveLightningError):
     Custom exception for errors related to insufficient balance.
     This can be used to handle specific cases where an account does not have enough funds for a transfer.
     """
-
-    pass
