@@ -15,7 +15,7 @@ def _load_local_bad_actors() -> set[str]:
         if local_bad.exists():
             with open(local_bad, "r") as f:
                 return {
-                    line.split("|", 1)[0].strip()
+                    line.split("|", 1)[0].strip().lower()
                     for line in f
                     if line.strip() and line.split("|", 1)[0].strip()
                 }
@@ -43,7 +43,7 @@ async def check_bad_hive_accounts(check_for: list[str]) -> bool:
         Any exceptions raised by `get_bad_hive_accounts()` will propagate.
     """
     bad_accounts_set = await get_bad_hive_accounts()
-    bad_accounts_found = {account for account in check_for if account in bad_accounts_set}
+    bad_accounts_found = {account for account in check_for if account.lower() in bad_accounts_set}
     if bad_accounts_found:
         logger.warning(
             f"⚠️ Bad accounts found: {bad_accounts_found}",
@@ -111,8 +111,8 @@ async def fetch_bad_actor_list() -> set[str]:
 
         # Get the list portion and process it
         list_content = content[start:end].strip()
-        # Split into lines and filter out empty lines
-        bad_actor_list = {line.strip() for line in list_content.split("\n") if line.strip()}
+        # Split into lines and filter out empty lines, convert to lowercase
+        bad_actor_list = {line.strip().lower() for line in list_content.split("\n") if line.strip()}
 
         # Persist a local backup (atomic write using pathlib) and cache in Redis
         try:
@@ -144,7 +144,7 @@ async def fetch_bad_actor_list() -> set[str]:
                     payload = json.loads(cached)
                     if isinstance(payload, (list, tuple)):
                         logger.debug("Using bad actors list from Redis cache")
-                        return set(payload)
+                        return {str(item).lower() for item in payload}
                 except Exception as e:
                     logger.debug(f"Failed to parse cached bad actors from Redis: {e}")
         except Exception as e:
@@ -154,7 +154,7 @@ async def fetch_bad_actor_list() -> set[str]:
         try:
             if TMP_FILE.exists():
                 text = TMP_FILE.read_text(encoding="utf-8")
-                lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+                lines = [ln.strip().lower() for ln in text.splitlines() if ln.strip()]
                 if lines:
                     logger.debug("Using bad actors list from /tmp backup")
                     return set(lines)
@@ -171,12 +171,12 @@ async def fetch_bad_actor_list() -> set[str]:
                     end = content.rfind("`")
                     if start != 0 and end != -1:
                         list_content = content[start:end]
-                        lines = [ln.strip() for ln in list_content.splitlines() if ln.strip()]
+                        lines = [ln.strip().lower() for ln in list_content.splitlines() if ln.strip()]
                         if lines:
                             logger.debug("Using bundled bad actors backup list")
                             return set(lines)
                 # fallback: plain lines
-                lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
+                lines = [ln.strip().lower() for ln in content.splitlines() if ln.strip()]
                 if lines:
                     logger.debug("Using bundled bad actors list (plain format)")
                     return set(lines)
