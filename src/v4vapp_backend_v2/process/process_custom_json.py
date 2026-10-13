@@ -1,7 +1,6 @@
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
-from typing import List
 
 from colorama import Fore, Style
 
@@ -15,6 +14,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import ReplyType, TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.bad_actors_list import check_bad_hive_accounts
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
@@ -28,6 +28,7 @@ from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.process.process_errors import (
     CustomJsonAuthorizationError,
+    CustomJsonBadHiveAccountError,
     CustomJsonRetryError,
     CustomJsonToLightningError,
     InsufficientBalanceError,
@@ -39,7 +40,7 @@ from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
 # MARK: CustomJson Operations
 async def process_custom_json_func(
     custom_json: CustomJson, nobroadcast: bool = False
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Processes a CustomJson operation and creates a ledger entry if applicable.
 
@@ -69,6 +70,12 @@ async def process_custom_json_func(
         message = f"CustomJson operation not authorized. {custom_json.from_account} not in {custom_json.required_auths}"
         logger.warning(message, extra={"notification": False, **custom_json.log_extra})
         raise CustomJsonAuthorizationError(message)
+
+    bad_accounts_check = await check_bad_hive_accounts(check_for=[custom_json.from_account, custom_json.to_account])
+    if bad_accounts_check:
+        message = f"CustomJson operation involves bad hive accounts. {custom_json.from_account}, {custom_json.to_account}"
+        logger.warning(message, extra={"notification": False, **custom_json.log_extra})
+        raise CustomJsonBadHiveAccountError(message)
 
     if custom_json.cj_id == InternalConfig().config.hive_config.custom_json_prefix + "_transfer":
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
@@ -215,7 +222,7 @@ async def custom_json_internal_transfer(
     keepsats_transfer: KeepsatsTransfer,
     nobroadcast: bool = False,
     reverse: bool = False,
-) -> List[LedgerEntry]:
+) -> list[LedgerEntry]:
     """
     Must perform balance check before processing the transfer.
 
@@ -248,7 +255,7 @@ async def custom_json_internal_transfer(
 
     if keepsats_transfer.sats is None and keepsats_transfer.msats is not None:
         keepsats_transfer.sats = (keepsats_transfer.msats / Decimal(1000)).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP
+            Decimal(1), rounding=ROUND_HALF_UP
         )
 
     if (
@@ -315,10 +322,10 @@ async def custom_json_internal_transfer(
 
     debit_credit_amount_msats = keepsats_transfer.msats or Decimal(0)
     debit_credit_amount_sats = (debit_credit_amount_msats / Decimal(1000)).quantize(
-        Decimal("1"), rounding=ROUND_HALF_UP
+        Decimal(1), rounding=ROUND_HALF_UP
     )
 
-    ledger_entries: List[LedgerEntry] = []
+    ledger_entries: list[LedgerEntry] = []
 
     fee_text = f"Fee {debit_credit_amount_sats:,.0f} sats " if fee_transfer else "Transfer "
     amount_text = (
@@ -397,7 +404,7 @@ async def custom_json_internal_transfer(
                 original_memo=keepsats_transfer.memo,
                 reason_str=description,
                 action=ReturnAction.CHANGE,
-                pay_to_cust_id=getattr(parent_op, "cust_id"),
+                pay_to_cust_id=parent_op.cust_id,
                 amount=parent_op.change_amount,
                 nobroadcast=nobroadcast,
             )
@@ -427,7 +434,7 @@ async def custom_json_internal_transfer(
             cust_id=cust_id,
             ledger_type=ledger_type,
             group_id=f"{custom_json.group_id}_{ledger_type.value}",
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             description=f"Fee for Keepsats {(keepsats_transfer.msats or 0) / 1000:,.0f} sats for {cust_id}",
             debit=LiabilityAccount(
                 name="VSC Liability",

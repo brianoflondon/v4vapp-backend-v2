@@ -8,6 +8,26 @@ from aiocache import cached
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
+def _load_local_bad_actors() -> set[str]:
+    """Load the local bad actors list once at module import time."""
+    try:
+        local_bad = Path(__file__).parent / "bad_actors_local_list.txt"
+        if local_bad.exists():
+            with open(local_bad, "r") as f:
+                return {
+                    line.split("|", 1)[0].strip()
+                    for line in f
+                    if line.strip() and line.split("|", 1)[0].strip()
+                }
+    except Exception as e:
+        logger.warning(f"Error loading local bad actors: {e}")
+    return set()
+
+
+# Cache the local list at module import time (only read once)
+_LOCAL_BAD_ACTORS = _load_local_bad_actors()
+
+
 # @async_time_stats_decorator()
 async def check_bad_hive_accounts(check_for: list[str]) -> bool:
     """
@@ -23,7 +43,13 @@ async def check_bad_hive_accounts(check_for: list[str]) -> bool:
         Any exceptions raised by `get_bad_hive_accounts()` will propagate.
     """
     bad_accounts_set = await get_bad_hive_accounts()
-    return any(account in bad_accounts_set for account in check_for)
+    bad_accounts_found = {account for account in check_for if account in bad_accounts_set}
+    if bad_accounts_found:
+        logger.warning(
+            f"⚠️ Bad accounts found: {bad_accounts_found}",
+            extra={"bad_accounts": list(bad_accounts_found)},
+        )
+    return any(bad_accounts_found)
 
 
 # @async_time_stats_decorator()
@@ -40,7 +66,7 @@ async def check_not_development_accounts(accounts: list[str]) -> bool:
     if not InternalConfig().config.development.enabled:
         return False
     allowed_set = set(InternalConfig().config.development.allowed_hive_accounts)
-    if any(account not in allowed_set for account in accounts): 
+    if any(account not in allowed_set for account in accounts):
         return True  # Raise error: dev ON and at least one account not allowed
     return False  # No error: dev OFF or all accounts allowed
 
@@ -51,31 +77,14 @@ async def get_bad_hive_accounts() -> set[str]:
     Asynchronously retrieves a combined set of bad Hive account usernames.
 
     This function fetches a list of bad actors from an external source and merges it
-    with a locally stored list of bad Hive accounts from 'data/bad_hive_accounts.json'.
-    If the local file cannot be loaded, a warning is logged and only the fetched list is used.
+    with a locally stored list of bad Hive accounts from 'bad_actors_local_list.txt'.
+    The local list is loaded once at module import time.
 
     Returns:
         set[str]: A set containing usernames of bad Hive accounts.
     """
     bad_actors = await fetch_bad_actor_list()
-    bad_accounts: set[str] = set()
-    try:
-        local_bad = Path(__file__).parent / "bad_actors_local_list.txt"
-        logger.info(f"Loading local bad accounts from {local_bad}")
-        if local_bad.exists():
-            with open(local_bad, "r") as f:
-                # load as text with one account per line, ignoring empty lines and stripping whitespace
-                # supports optional inline notes after a "|" separator
-                bad_accounts = {
-                    line.split("|", 1)[0].strip()
-                    for line in f
-                    if line.strip() and line.split("|", 1)[0].strip()
-                }
-
-    except Exception as e:
-        logger.warning(f"Error loading bad accounts: {e}")
-        bad_accounts = set()
-    combined = bad_actors | bad_accounts
+    combined = bad_actors | _LOCAL_BAD_ACTORS
     return combined
 
 
@@ -88,8 +97,8 @@ async def fetch_bad_actor_list() -> set[str]:
     REDIS_TTL = 3600
 
     try:
-        # Fetch the content from the URL
-        async with httpx.AsyncClient() as client:
+        # Fetch the content from the URL with a short timeout for debug runs
+        async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(url)
             response.raise_for_status()  # Raise an exception for bad status codes
 
@@ -125,7 +134,7 @@ async def fetch_bad_actor_list() -> set[str]:
 
     except (httpx.HTTPError, ValueError) as fetch_exc:
         # On fetch/parsing errors, attempt fallbacks in order: Redis -> /tmp -> bundled file
-        logger.warning(f"Error fetching/parsing the list: {fetch_exc}", exc_info=True)
+        logger.debug(f"Error fetching/parsing the list: {fetch_exc.__class__.__name__}")
 
         # 1) Try Redis
         try:
@@ -134,13 +143,12 @@ async def fetch_bad_actor_list() -> set[str]:
                 try:
                     payload = json.loads(cached)
                     if isinstance(payload, (list, tuple)):
+                        logger.debug("Using bad actors list from Redis cache")
                         return set(payload)
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to parse cached bad actors from Redis: {e}", exc_info=True
-                    )
+                    logger.debug(f"Failed to parse cached bad actors from Redis: {e}")
         except Exception as e:
-            logger.warning(f"Redis unavailable when loading bad actors backup: {e}", exc_info=True)
+            logger.debug(f"Redis unavailable when loading bad actors backup: {e}")
 
         # 2) Try /tmp file
         try:
@@ -148,9 +156,10 @@ async def fetch_bad_actor_list() -> set[str]:
                 text = TMP_FILE.read_text(encoding="utf-8")
                 lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
                 if lines:
+                    logger.debug("Using bad actors list from /tmp backup")
                     return set(lines)
         except Exception as e:
-            logger.warning(f"Failed to read tmp backup file {TMP_FILE}: {e}", exc_info=True)
+            logger.debug(f"Failed to read tmp backup file {TMP_FILE}: {e}")
 
         # 3) Final fallback: bundled file shipped with the repo (next to this module)
         try:
@@ -164,12 +173,14 @@ async def fetch_bad_actor_list() -> set[str]:
                         list_content = content[start:end]
                         lines = [ln.strip() for ln in list_content.splitlines() if ln.strip()]
                         if lines:
+                            logger.debug("Using bundled bad actors backup list")
                             return set(lines)
                 # fallback: plain lines
                 lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
                 if lines:
+                    logger.debug("Using bundled bad actors list (plain format)")
                     return set(lines)
         except Exception as e:
-            logger.warning(f"Failed to read bundled fallback bad actors file: {e}", exc_info=True)
+            logger.debug(f"Failed to read bundled fallback bad actors file: {e}")
 
         return set()
