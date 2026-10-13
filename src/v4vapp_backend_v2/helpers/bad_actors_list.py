@@ -147,8 +147,8 @@ async def fetch_bad_actor_list() -> set[str]:
                         return set(payload)
                 except Exception as e:
                     logger.debug(f"Failed to parse cached bad actors from Redis: {e}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Redis unavailable when loading bad actors backup: {e}")
 
         # 2) Try /tmp file
         try:
