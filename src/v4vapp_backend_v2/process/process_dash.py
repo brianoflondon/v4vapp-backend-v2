@@ -53,6 +53,8 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import LNDPaymentError, send_light
 ICON = "💠"
 OP_TYPE = "dash_invoice"
 SETTLED_STATES = {DashInvoiceState.SETTLED.value, DashInvoiceState.OVERPAID.value}
+# An in-flight Lightning attempt can still settle after the invoice is marked failed.
+REFUND_LIGHTNING_SETTLE_SECONDS = 120
 
 
 @dataclass
@@ -432,13 +434,12 @@ async def refund_failed_lightning(invoice_doc: dict[str, Any]) -> list[LedgerEnt
         )
         return []
 
-    # Wait for 2 minutes (this helps ensure that any pending Lightning transactions have time to settle)
-    WAIT_TIME_SECONDS = 120
     logger.info(
-        f"{ICON} REFUND: Waiting {WAIT_TIME_SECONDS // 60} minutes before attempting Dash refund {ledger_cust} "
+        f"{ICON} REFUND: Waiting {REFUND_LIGHTNING_SETTLE_SECONDS // 60} minutes "
+        f"before attempting Dash refund {ledger_cust} "
         f"to allow pending Lightning transactions to settle {short_id}"
     )
-    await asyncio.sleep(WAIT_TIME_SECONDS)
+    await asyncio.sleep(REFUND_LIGHTNING_SETTLE_SECONDS)
 
     try:
         async with dashd_session(conn) as dashd:

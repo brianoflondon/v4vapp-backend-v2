@@ -29,6 +29,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.magi.magi_classes import MagiBTCBalance
 
 """
 The test data for this module must be up to date with any changes in the accounting models.
@@ -475,12 +476,27 @@ async def test_account_balance_printout_includes_opening_only_currency_rows(monk
     assert result_grouped.count("Carried Forward (from 2026-04-17)") == 1
 
 
+@pytest.fixture
+def no_live_magi(monkeypatch: pytest.MonkeyPatch):
+    """Ledger tests must not call Hasura. The first MAGI host is on the tailnet."""
+
+    async def _zero(account, endpoint=None):
+        return MagiBTCBalance(account=str(account), balance_sats=Decimal(0))
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.accounting.account_balances.get_magi_btc_balance_by_account",
+        _zero,
+    )
+
+
+@pytest.mark.usefixtures("no_live_magi")
 async def test_get_keepsats_balance():
     cust_id = "v4vapp.qrc"
     net_sats, details = await keepsats_balance(cust_id=cust_id)
     print(f"Net Sats for {cust_id}: {net_sats}")
 
 
+@pytest.mark.usefixtures("no_live_magi")
 async def test_get_keepsats_balance_includes_notifications():
     cust_id = "v4vapp.qrc"
     _, details = await keepsats_balance(cust_id=cust_id, notifications=True)

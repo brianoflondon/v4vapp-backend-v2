@@ -398,7 +398,13 @@ async def test_refund_failed_lightning_posts_fee_and_sends_dash(
     from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
     from v4vapp_backend_v2.config.setup import InternalConfig
     from v4vapp_backend_v2.dash.collections import COL_PAYOUTS
+    from v4vapp_backend_v2.process import process_dash as process_dash_mod
     from v4vapp_backend_v2.process.process_dash import refund_failed_lightning
+
+    # Production holds the refund for two minutes. The test checks that wait
+    # without sleeping through it. Dash RPC is already faked below.
+    assert process_dash_mod.REFUND_LIGHTNING_SETTLE_SECONDS == 120
+    monkeypatch.setattr(process_dash_mod, "REFUND_LIGHTNING_SETTLE_SECONDS", 0)
 
     class _Payouts:
         def __init__(self) -> None:
