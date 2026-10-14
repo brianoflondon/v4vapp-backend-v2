@@ -35,6 +35,7 @@ dependencies = [
     "aiofiles>=25.1.0",
     "pandas>=3.0.0",
     "bip-utils>=2.9.0",
+    "mcp>=1.12,<2",
 ]
 
 [dependency-groups]
@@ -68,6 +69,7 @@ dev = [
 
 [project.scripts]
 tailjlogs = "scripts.tailjlogs:app"
+v4vapp-admin-mcp = "v4vapp_backend_v2.admin.mcp_server.server:main"
 
 [build-system]
 requires = ["hatchling"]

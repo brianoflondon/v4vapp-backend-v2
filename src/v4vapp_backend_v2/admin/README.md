@@ -59,6 +59,49 @@ python run_admin.py --config production.yaml
 python run_admin.py --reload --log-level debug
 ```
 
+## MCP server
+
+`v4vapp-admin-mcp` exposes the admin data to an MCP client. It uses the same config, MongoDB, and Redis connection as the web UI.
+
+stdio, for a client on this machine:
+
+```bash
+uv run v4vapp-admin-mcp --config devdocker.config.yaml
+```
+
+HTTP, for a Docker container reached over Tailscale. Put a long random value in `.env` as `V4VAPP_ADMIN_MCP_TOKEN`. The process refuses to listen without it. The `admin-mcp` service in `docker-compose.yaml` publishes port 8090.
+
+```bash
+uv run v4vapp-admin-mcp --transport http --host 0.0.0.0 --port 8090
+```
+
+Point a client at `http://<tailscale-host>:8090/mcp` and send the token on every request:
+
+```json
+{
+  "mcpServers": {
+    "v4vapp-admin": {
+      "url": "http://<tailscale-host>:8090/mcp",
+      "headers": {
+        "Authorization": "Bearer <V4VAPP_ADMIN_MCP_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+`/health` answers without the token so the container probe can run. It returns only `{"status": "ok"}`.
+
+Read tools cover the dashboard, ledger accounts, users, ledger search, financial reports, V4V configuration, quote sources, the two gateway switches, and Hive deposit inspection. `account_balance` takes an account label from `list_ledger_accounts`.
+
+Three tools change live state, and each refuses to run unless `confirm` is true:
+
+- `flush_ledger_cache` drops cached ledger balances.
+- `set_quote_sources` saves quote-service switches to Hive.
+- `set_gateway` opens or closes Hive → Lightning and Lightning → Hive. Pass `true` to open a direction and `false` to close it. Pass both arguments to set them together.
+
+Ledger edits, reversals, deposit replay, Lightning retries, and fee or limit updates stay on the web UI.
+
 ## Configuration Management
 
 ### V4V Configuration Settings

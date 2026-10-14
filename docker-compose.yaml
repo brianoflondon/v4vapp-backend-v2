@@ -205,6 +205,43 @@ services:
       retries: 3
       start_period: 30s
 
+  admin-mcp:
+    container_name: admin-mcp
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: v4vapp-backend:latest
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker:/app/logs
+    command: [
+      "v4vapp-admin-mcp",
+      "--transport", "http",
+      "--host", "0.0.0.0",
+      "--port", "8090",
+      "--config", "${DOCKER_COMPOSE_CONFIG:-devdocker.config.yaml}"
+    ]
+    restart: on-failure:3
+    stop_grace_period: 20s
+    networks:
+      - v4vapp-backend
+    depends_on:
+      - mongo-pytest-local
+      - redis-pytest-local
+    environment:
+      - PYTHONPATH=/app/src
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   mongo-pytest-local:
     # Huge issues setting this up: Mongodb replica sets require the internal and EXTERNAL names
     # to both be resolvable at the same time. This is a nightmare.
