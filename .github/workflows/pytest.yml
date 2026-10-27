@@ -74,20 +74,24 @@ jobs:
             --ignore=tests/hive/test_nectar_long_running_stability.py \
             --durations=20
 
-      - name: Print service container logs
-        if: failure()
-        run: |
-          echo "MongoDB logs:"
-          mongo_container_id="$(docker ps -aq --filter "ancestor=mongo:8.0" | head -n 1)"
-          if [ -n "$mongo_container_id" ]; then
-            docker logs "$mongo_container_id" || true
-          else
-            echo "No MongoDB container found."
-          fi
-          echo "Redis logs:"
-          redis_container_id="$(docker ps -aq --filter "ancestor=redis:latest" | head -n 1)"
-          if [ -n "$redis_container_id" ]; then
-            docker logs "$redis_container_id" || true
-          else
-            echo "No Redis container found."
-          fi
+      # Optional debugging step (currently disabled):
+      # Re-enable this if CI starts failing around Mongo/Redis startup again
+      # and you want service container logs in the workflow output.
+      #
+      # - name: Print service container logs
+      #   if: failure()
+      #   run: |
+      #     echo "MongoDB logs:"
+      #     mongo_container_id="$(docker ps -aq --filter "ancestor=mongo:8.0" | head -n 1)"
+      #     if [ -n "$mongo_container_id" ]; then
+      #       docker logs "$mongo_container_id" || true
+      #     else
+      #       echo "No MongoDB container found."
+      #     fi
+      #     echo "Redis logs:"
+      #     redis_container_id="$(docker ps -aq --filter "ancestor=redis:latest" | head -n 1)"
+      #     if [ -n "$redis_container_id" ]; then
+      #       docker logs "$redis_container_id" || true
+      #     else
+      #       echo "No Redis container found."
+      #     fi
