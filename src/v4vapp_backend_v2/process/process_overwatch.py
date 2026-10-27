@@ -624,8 +624,21 @@ class Overwatch:
         """Composite Redis key allowing multiple candidates per trigger."""
         return f"{flow.cust_id}:{flow.trigger_group_id}:{flow.flow_definition.name}"
 
-    async def _persist_flow(self, flow: FlowInstance) -> None:
-        """Write a single flow to Redis (active hash or completed key)."""
+    @staticmethod
+    def _retired_key(flow: FlowInstance, previous_key: str) -> str | None:
+        """Return ``previous_key`` when this persist moved the flow to a new field."""
+        if previous_key != Overwatch._redis_flow_key(flow):
+            return previous_key
+        return None
+
+    async def _persist_flow(self, flow: FlowInstance, previous_key: str | None = None) -> None:
+        """Write a single flow to Redis (active hash or completed key).
+
+        ``previous_key`` is the Redis field this flow occupied before a
+        key change (the key includes ``cust_id``, which is filled in after
+        the first persist). The old field is removed after the new one is
+        written so a restart cannot reload the stale snapshot.
+        """
         r = self._redis()
         if r is None:
             return
@@ -639,6 +652,9 @@ class Overwatch:
                 await r.hdel(_REDIS_ACTIVE_KEY, rkey)
             else:
                 await r.hset(_REDIS_ACTIVE_KEY, rkey, data)
+            if previous_key and previous_key != rkey:
+                await r.hdel(_REDIS_ACTIVE_KEY, previous_key)
+                await r.delete(f"{_REDIS_COMPLETED_PREFIX}{previous_key}")
         except Exception as e:
             logger.warning(
                 f"{ICON} Redis persist failed: {e}",
@@ -903,6 +919,7 @@ class Overwatch:
         for flow in self.active_flows:
             if self._is_duplicate(flow, event):
                 continue
+            previous_key = self._redis_flow_key(flow)
             result = flow.add_event(event)
             if result is not None:
                 if first_result is None:
@@ -926,7 +943,7 @@ class Overwatch:
                 if flow.is_complete:
                     newly_completed.append(flow)
                     self._enqueue_completion_report(flow)
-                await self._persist_flow(flow)
+                await self._persist_flow(flow, previous_key=self._retired_key(flow, previous_key))
         for completed in newly_completed:
             await self._resolve_candidates(completed)
 
@@ -944,6 +961,7 @@ class Overwatch:
                     continue
                 if self._is_duplicate(flow, event):
                     continue
+                previous_key = self._redis_flow_key(flow)
                 result = flow.add_event(event)
                 if result is not None:
                     first_result = result
@@ -953,7 +971,9 @@ class Overwatch:
                         f"({flow.trigger_short_id}){Fore.RESET}"
                     )
                     asyncio.create_task(self._delay_log(flow, message, notification=False))
-                    await self._persist_flow(flow)
+                    await self._persist_flow(
+                        flow, previous_key=self._retired_key(flow, previous_key)
+                    )
                     break  # one match is enough
 
         return first_result
@@ -1291,6 +1311,33 @@ class Overwatch:
                 return True
         return False
 
+    def _explained_by_completed_sibling(
+        self,
+        flow: FlowInstance,
+        completed_by_trigger: dict[str, list[FlowInstance]],
+    ) -> bool:
+        """True when some completed sibling matches every required event here.
+
+        A narrower sibling (for example a loopback flow with no lightning
+        deposit) must not keep a duplicate alive once a broader sibling has
+        already completed the same trigger.
+        """
+        winners = [w for w in completed_by_trigger.get(flow.trigger_group_id, []) if w is not flow]
+        if not winners:
+            return False
+        return any(not self._has_unexplained_required_events(flow, winner) for winner in winners)
+
+    async def _drop_explained_duplicate(self, flow: FlowInstance) -> None:
+        """Remove a duplicate whose events a completed sibling already covers."""
+        flow.status = FlowStatus.FAILED
+        self.flow_instances.remove(flow)
+        await self._remove_active_flow(flow)
+        logger.info(
+            f"{ICON} 🗑️ Stalled candidate '{flow.flow_definition.name}' "
+            f"({flow.trigger_short_id}) cancelled — sibling flow completed",
+            extra={"notification": False, **flow.log_extra},
+        )
+
     async def cancel_flows_for_trigger(self, trigger_group_id: str) -> int:
         """Cancel all candidate flows for a trigger that produced no ledger entries.
 
@@ -1363,27 +1410,19 @@ class Overwatch:
                     extra={"notification": False, **flow.log_extra},
                 )
 
-        # Rule 1b: a sibling already completed. Drop stalled alternatives that
-        # never accumulated unexplained *required* events (ghost 1/N flows).
+        # Rule 1b: a sibling already completed. Drop a stalled duplicate when
+        # some completed sibling matches every required event it holds.
+        # Requiring every sibling to match kept the empty-cust_id snapshot
+        # alive: the loopback sibling has no deposit stage, so `any` treated
+        # the deposit as unexplained even though the real flow had finished.
         completed_by_trigger: dict[str, list[FlowInstance]] = {}
         for f in self.completed_flows:
             completed_by_trigger.setdefault(f.trigger_group_id, []).append(f)
         for flow in list(self.active_flows):
             if flow.status != FlowStatus.STALLED:
                 continue
-            winners = completed_by_trigger.get(flow.trigger_group_id) or []
-            if not winners:
-                continue
-            if any(self._has_unexplained_required_events(flow, w) for w in winners):
-                continue
-            flow.status = FlowStatus.FAILED
-            self.flow_instances.remove(flow)
-            await self._remove_active_flow(flow)
-            logger.info(
-                f"{ICON} 🗑️ Stalled candidate '{flow.flow_definition.name}' "
-                f"({flow.trigger_short_id}) cancelled — sibling flow completed",
-                extra={"notification": False, **flow.log_extra},
-            )
+            if self._explained_by_completed_sibling(flow, completed_by_trigger):
+                await self._drop_explained_duplicate(flow)
 
         # Rule 2: cancel flows that haven't progressed past trigger-only.
         # A flow created by _try_create_flow receives exactly one "op" event
@@ -1423,6 +1462,12 @@ class Overwatch:
 
             last_event_time = flow.events[-1].timestamp if flow.events else flow.started_at
             if now - last_event_time > self.stall_timeout:
+                # Same cleanup as rule 1b, before the stall notification.
+                # A restart reloads the stale copy as in-progress; marking it
+                # stalled would page on a payment that already completed.
+                if self._explained_by_completed_sibling(flow, completed_by_trigger):
+                    await self._drop_explained_duplicate(flow)
+                    continue
                 flow.status = FlowStatus.STALLED
                 newly_stalled.append(flow)
                 logger.warning(
