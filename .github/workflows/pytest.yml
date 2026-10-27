@@ -78,6 +78,16 @@ jobs:
         if: failure()
         run: |
           echo "MongoDB logs:"
-          docker logs $(docker ps -q --filter "ancestor=mongo:8.0")
+          mongo_container_id="$(docker ps -aq --filter "ancestor=mongo:8.0" | head -n 1)"
+          if [ -n "$mongo_container_id" ]; then
+            docker logs "$mongo_container_id" || true
+          else
+            echo "No MongoDB container found."
+          fi
           echo "Redis logs:"
-          docker logs $(docker ps -q --filter "ancestor=redis:latest")
+          redis_container_id="$(docker ps -aq --filter "ancestor=redis:latest" | head -n 1)"
+          if [ -n "$redis_container_id" ]; then
+            docker logs "$redis_container_id" || true
+          else
+            echo "No Redis container found."
+          fi
