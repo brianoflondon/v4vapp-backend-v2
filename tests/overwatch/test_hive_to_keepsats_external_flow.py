@@ -349,10 +349,14 @@ class TestSupersetGracePeriod:
         for factory in _SHARED_EVENTS[1:]:
             await ow._dispatch(factory())
 
-        # Only 10s later — well within grace
+        # Only 10s later — well within grace. Event timestamps are frozen
+        # in the past, so this is also past stall_timeout. Grace still owns
+        # the candidate: it stays in progress and is not dropped as a ghost.
         future = datetime.now(tz=timezone.utc) + timedelta(seconds=10)
-        await ow.check_stalls(now=future)
+        stalled = await ow.check_stalls(now=future)
+        assert stalled == []
         assert len(ow.active_flows) == 1
+        assert ow.active_flows[0].status == FlowStatus.IN_PROGRESS
 
     @pytest.mark.asyncio
     async def test_distinguishing_event_clears_grace(self):
@@ -400,10 +404,13 @@ class TestSupersetGracePeriod:
         for factory in _SHARED_EVENTS[1:]:
             await ow._dispatch(factory())
 
-        # 40s later — would be expired with default 30s, but not with 60s
+        # 40s later — would be expired with default 30s, but not with 60s.
+        # Frozen event timestamps are already past stall_timeout.
         future = datetime.now(tz=timezone.utc) + timedelta(seconds=40)
-        await ow.check_stalls(now=future)
+        stalled = await ow.check_stalls(now=future)
+        assert stalled == []
         assert len(ow.active_flows) == 1
+        assert ow.active_flows[0].status == FlowStatus.IN_PROGRESS
 
         # 70s later — now it's expired
         future = datetime.now(tz=timezone.utc) + timedelta(seconds=70)

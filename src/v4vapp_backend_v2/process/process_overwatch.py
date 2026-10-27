@@ -1419,6 +1419,8 @@ class Overwatch:
         for f in self.completed_flows:
             completed_by_trigger.setdefault(f.trigger_group_id, []).append(f)
         for flow in list(self.active_flows):
+            if flow.superset_grace_expires is not None:
+                continue  # Rule 1 owns this window
             if flow.status != FlowStatus.STALLED:
                 continue
             if self._explained_by_completed_sibling(flow, completed_by_trigger):
@@ -1458,6 +1460,13 @@ class Overwatch:
                 flow.status = FlowStatus.COMPLETED
                 flow.completed_at = flow.events[-1].timestamp if flow.events else flow.started_at
                 await self._persist_flow(flow)
+                continue
+
+            # Superset grace is wall-clock, while stall age uses the last
+            # event's own timestamp. A candidate kept alive for distinguishing
+            # events must stay in progress until Rule 1, even when those
+            # events are already older than stall_timeout.
+            if flow.superset_grace_expires is not None:
                 continue
 
             last_event_time = flow.events[-1].timestamp if flow.events else flow.started_at
