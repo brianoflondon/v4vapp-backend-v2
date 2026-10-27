@@ -25,7 +25,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
       HIVE_MEMO_TEST_KEY: ${{ secrets.HIVE_MEMO_TEST_KEY }}
