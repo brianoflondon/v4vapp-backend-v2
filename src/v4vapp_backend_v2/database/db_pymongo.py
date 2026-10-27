@@ -573,7 +573,7 @@ class DBConn:
                     git_version=info.get("gitVersion"),
                     modules=info.get("modules"),
                 )
-                logger.info(
+                logger.debug(
                     f"{DATABASE_ICON} {host} {state} MongoDB {info.get('version')}",
                     extra={"member_details": member_details.to_log_extra()},
                 )
