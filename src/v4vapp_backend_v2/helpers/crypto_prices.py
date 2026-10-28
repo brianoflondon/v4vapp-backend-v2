@@ -53,6 +53,8 @@ CACHE_TIMES = {
     "Global": 60,
 }
 
+HBD_PRICE_WARNING_DELTA = Decimal("0.92")  # Example warning level for HBD price
+
 # Collection name for storing rates in the database
 
 DB_RATES_MIN_INTERVAL: int = 60 * 2 - 10  # 2 minutes 50 seconds
@@ -589,9 +591,9 @@ class AllQuotes(BaseModel):
                             hive_usd_val = Decimal(str(quote_dict.get("hive_usd")))
                             if hive_hbd_val and hive_usd_val:
                                 quote_dict["hbd_usd"] = hive_usd_val / hive_hbd_val
-                            if quote_dict["hbd_usd"] < Decimal("0.99"):
+                            if abs(Decimal(1) - quote_dict["hbd_usd"]) > HBD_PRICE_WARNING_DELTA:
                                 logger.warning(
-                                    f"Calculated HBD/USD price is low: {quote_dict['hbd_usd']:.3f}",
+                                    f"Calculated HBD/USD price is low/high deviation: {quote_dict['hbd_usd']:.3f}",
                                     extra={
                                         "notification": False,
                                         "quote_dict": quote_dict,
@@ -637,11 +639,7 @@ class AllQuotes(BaseModel):
                 quote_dict = quote.model_dump()
                 quote_dict["dash_usd"] = other.dash_usd
                 return QuoteResponse.model_validate(quote_dict)
-        vals = [
-            q.dash_usd
-            for q in self.quotes.values()
-            if not q.error and q.dash_usd > 0
-        ]
+        vals = [q.dash_usd for q in self.quotes.values() if not q.error and q.dash_usd > 0]
         if vals:
             quote_dict = quote.model_dump()
             quote_dict["dash_usd"] = sum(vals) / Decimal(len(vals))
