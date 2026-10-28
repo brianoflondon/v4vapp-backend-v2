@@ -73,7 +73,19 @@
                     </div>
                     {% endif %}
                     {# placeholder for async-loaded sanity results on dashboard #}
-                    <div class="px-3 mb-4" id="sanity-sidebar-placeholder"></div>
+                    <div class="px-3 mb-2" id="sanity-sidebar-placeholder"></div>
+
+                    <div class="px-3 mb-4" id="processing-pause-wrap">
+                        <div class="bg-white text-dark p-2 rounded" id="processing-pause-box">
+                            <div class="form-check form-switch m-0">
+                                <input class="form-check-input" type="checkbox" role="switch"
+                                    id="processing-pause-toggle" checked disabled>
+                                <label class="form-check-label" for="processing-pause-toggle"
+                                    id="processing-pause-label">Processing</label>
+                            </div>
+                            <small class="text-muted d-block mt-1" id="processing-pause-detail">Checking…</small>
+                        </div>
+                    </div>
 
                     <ul class="nav flex-column px-3">
                         {% for item in nav_items %}
@@ -165,6 +177,12 @@
                     <div class="btn-toolbar mb-2 mb-md-0">
                         {% block page_actions %}{% endblock %}
                     </div>
+                </div>
+
+                <div id="processing-paused-banner" class="alert alert-danger no-auto-dismiss d-none" role="alert">
+                    <strong>Processing is paused.</strong>
+                    Hive, Lightning, and other database changes are waiting.
+                    Turn processing back on under Sanity Checks to continue.
                 </div>
 
                 <!-- Flash messages -->
@@ -302,6 +320,34 @@
         </div>
     </div>
     {% endif %}
+
+    <div class="modal fade" id="processingPauseModal" tabindex="-1" aria-labelledby="processingPauseModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="processingPauseModalLabel">
+                        Are you sure you want to pause all processing?
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>
+                        db-monitor will stop watching database changes right away.
+                        Hive, Lightning, and other events stay where they are and are processed
+                        when you turn processing back on.
+                    </p>
+                    <p class="mb-0">Work that is already in progress will finish.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="processing-pause-confirm">
+                        Pause processing
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -452,6 +498,103 @@
                     showAlert('Archive start error: ' + err, 'danger');
                 });
         }
+
+        // Processing pause toggle. Checked means db_monitor is watching changes.
+        var processingPauseBusy = false;
+
+        function renderProcessingPause(data) {
+            var toggle = document.getElementById('processing-pause-toggle');
+            var label = document.getElementById('processing-pause-label');
+            var detail = document.getElementById('processing-pause-detail');
+            var banner = document.getElementById('processing-paused-banner');
+            var box = document.getElementById('processing-pause-box');
+            if (!toggle || !label || !detail || !banner || !box) return;
+
+            var paused = !!data.paused;
+            toggle.disabled = false;
+            toggle.checked = !paused;
+            label.textContent = paused ? 'Paused' : 'Running';
+            if (paused) {
+                detail.textContent = data.paused_at
+                    ? ('Paused since ' + data.paused_at + '. Database changes are waiting.')
+                    : 'Database changes are waiting.';
+                banner.classList.remove('d-none');
+                box.classList.add('border', 'border-danger');
+            } else {
+                detail.textContent = 'Hive, Lightning, and other database changes are processed as they arrive.';
+                banner.classList.add('d-none');
+                box.classList.remove('border', 'border-danger');
+            }
+        }
+
+        function refreshProcessingPause() {
+            if (processingPauseBusy) return;
+            var modalEl = document.getElementById('processingPauseModal');
+            if (modalEl && modalEl.classList.contains('show')) return;
+            fetch('/admin/api/processing-pause')
+                .then(function (resp) {
+                    if (!resp.ok) throw new Error('status ' + resp.status);
+                    return resp.json();
+                })
+                .then(renderProcessingPause)
+                .catch(function () {
+                    var detail = document.getElementById('processing-pause-detail');
+                    if (detail) detail.textContent = 'Could not read the processing pause flag.';
+                });
+        }
+
+        function sendProcessingPause(paused) {
+            var toggle = document.getElementById('processing-pause-toggle');
+            processingPauseBusy = true;
+            if (toggle) toggle.disabled = true;
+            fetch('/admin/api/processing-pause', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paused: paused })
+            })
+                .then(function (resp) {
+                    if (!resp.ok) throw new Error('status ' + resp.status);
+                    return resp.json();
+                })
+                .then(function (data) {
+                    processingPauseBusy = false;
+                    renderProcessingPause(data);
+                    showAlert(paused
+                        ? 'Processing is paused. Database changes will wait.'
+                        : 'Processing resumed. Database changes will be picked up.');
+                })
+                .catch(function (err) {
+                    processingPauseBusy = false;
+                    showAlert('Could not update processing pause: ' + err, 'danger');
+                    refreshProcessingPause();
+                });
+        }
+
+        var processingPauseToggle = document.getElementById('processing-pause-toggle');
+        if (processingPauseToggle) {
+            processingPauseToggle.addEventListener('change', function () {
+                if (processingPauseBusy) return;
+                if (!processingPauseToggle.checked) {
+                    processingPauseToggle.checked = true;
+                    var modalEl = document.getElementById('processingPauseModal');
+                    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                    return;
+                }
+                sendProcessingPause(false);
+            });
+        }
+
+        var processingPauseConfirm = document.getElementById('processing-pause-confirm');
+        if (processingPauseConfirm) {
+            processingPauseConfirm.addEventListener('click', function () {
+                var modalEl = document.getElementById('processingPauseModal');
+                bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                sendProcessingPause(true);
+            });
+        }
+
+        refreshProcessingPause();
+        setInterval(refreshProcessingPause, 5000);
 
         // Form validation helper
         function validateForm(formId) {

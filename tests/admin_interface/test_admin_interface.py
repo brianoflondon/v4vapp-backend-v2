@@ -647,6 +647,46 @@ class TestAdminLedgerCache:
         mocked_archive.assert_called_once_with(older_than_days=8)
 
 
+class TestProcessingPause:
+    """Admin control for the db_monitor processing pause flag."""
+
+    def test_toggle_is_rendered_under_sanity_checks(self, admin_client):
+        response = admin_client.get("/admin/users")
+        assert response.status_code == 200
+        content = response.text
+        sanity_at = content.index('id="sanity-sidebar-placeholder"')
+        toggle_at = content.index('id="processing-pause-toggle"')
+        assert toggle_at > sanity_at
+        assert "Are you sure you want to pause all processing?" in content
+
+    def test_get_pause_state(self, admin_client, mocker):
+        mocker.patch(
+            "v4vapp_backend_v2.admin.admin_app.get_processing_pause",
+            return_value={"paused": True, "paused_at": "2026-10-28 12:00:00 UTC"},
+        )
+        response = admin_client.get("/admin/api/processing-pause")
+        assert response.status_code == 200
+        assert response.json() == {
+            "paused": True,
+            "paused_at": "2026-10-28 12:00:00 UTC",
+        }
+
+    def test_post_pause_publishes_the_requested_state(self, admin_client, mocker):
+        mocked = mocker.patch(
+            "v4vapp_backend_v2.admin.admin_app.set_processing_paused",
+            return_value={"paused": True, "paused_at": "2026-10-28 12:00:00 UTC"},
+        )
+        response = admin_client.post("/admin/api/processing-pause", json={"paused": True})
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        assert response.json()["paused"] is True
+        mocked.assert_called_once_with(True)
+
+    def test_post_pause_rejects_a_non_boolean(self, admin_client):
+        response = admin_client.post("/admin/api/processing-pause", json={"paused": "yes"})
+        assert response.status_code == 400
+
+
 class TestAdminErrorHandling:
     """Test error handling and edge cases"""
 

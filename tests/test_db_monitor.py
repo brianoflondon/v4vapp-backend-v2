@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from pymongo.errors import OperationFailure
@@ -7,6 +7,18 @@ from pymongo.errors import OperationFailure
 # the monitor lives at the workspace root, not inside the package
 import db_monitor
 from db_monitor import ResumeToken
+from v4vapp_backend_v2.process.processing_pause import (
+    reset_processing_pause_for_tests,
+    set_local_pause,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_pause_state():
+    """Keep a pause flag from one test from holding the next change stream."""
+    reset_processing_pause_for_tests()
+    yield
+    reset_processing_pause_for_tests()
 
 
 class DummyCollection:
@@ -41,7 +53,7 @@ class DummyDB:
         return self._col
 
 
-test_results: Dict[str, Any] = {}
+test_results: dict[str, Any] = {}
 
 
 def fake_create_task(coro, name=None):
@@ -392,3 +404,159 @@ def test_pipeline_filters_ignored_updates():
         filtered.append(e)
 
     assert filtered == [evt_allowed]
+
+
+class _PauseStream:
+    """Change stream whose first session yields one change and whose second is chosen by the test."""
+
+    def __init__(self, changes: list[dict]):
+        self.changes = changes
+        self.closed = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        return False
+
+    async def close(self):
+        self.closed = True
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self.closed or not self.changes:
+            raise StopAsyncIteration
+        return self.changes.pop(0)
+
+
+class _SequenceCollection:
+    def __init__(self, sessions: list[list[dict]]):
+        self.sessions = sessions
+        self.watch_calls = 0
+
+    async def watch(self, **kwargs):
+        changes = self.sessions[self.watch_calls] if self.watch_calls < len(self.sessions) else []
+        self.watch_calls += 1
+        return _PauseStream(changes)
+
+
+class _SingleDB:
+    def __init__(self, collection):
+        self._col = collection
+
+    def __getitem__(self, name: str):
+        return self._col
+
+
+@pytest.mark.asyncio
+async def test_paused_change_is_left_for_later(monkeypatch):
+    """A change that arrives while processing is paused is not handled and does not move the resume token."""
+    db_monitor.shutdown_event.clear()
+    paused_change = {"_id": {"_data": "paused-change"}, "fullDocument": {"group_id": "hold"}}
+    later_change = {"_id": {"_data": "later-change"}, "fullDocument": {"group_id": "go"}}
+    collection = _SequenceCollection([[paused_change], [later_change]])
+    monkeypatch.setattr(db_monitor.InternalConfig, "db", _SingleDB(collection))
+    monkeypatch.setattr(ResumeToken, "token", property(lambda self: None))
+
+    tokens: list = []
+    processed: list = []
+
+    def fake_set_token(self, token_data):
+        tokens.append(token_data)
+
+    async def fake_process_op(change, collection):
+        processed.append(change["_id"]["_data"])
+
+    async def fake_wait(shutdown_event, collection_name):
+        assert collection_name == "payments"
+        set_local_pause(False, reason="unpause event")
+
+    monkeypatch.setattr(ResumeToken, "set_token", fake_set_token)
+    monkeypatch.setattr(db_monitor, "process_op", fake_process_op)
+    monkeypatch.setattr(db_monitor, "wait_while_paused", fake_wait)
+
+    # Deliver the first change only after the pause flag is set, so the
+    # watch loop must refuse it.
+    original_anext = _PauseStream.__anext__
+    seen = {"count": 0}
+
+    async def anext_that_pauses_first(self):
+        if self.changes and seen["count"] == 0:
+            seen["count"] += 1
+            set_local_pause(True, reason="pause event")
+        return await original_anext(self)
+
+    monkeypatch.setattr(_PauseStream, "__anext__", anext_that_pauses_first)
+
+    await asyncio.wait_for(
+        db_monitor.subscribe_stream(collection_name="payments", pipeline=None, use_resume=True),
+        timeout=2,
+    )
+    await asyncio.sleep(0)
+
+    assert collection.watch_calls == 2
+    assert processed == ["later-change"]
+    assert tokens == [{"_data": "later-change"}]
+
+
+def test_operation_start_time_is_kept_until_a_resume_token_is_saved(monkeypatch):
+    """A pause before the first resume token must reopen at the original start time."""
+
+    class MemRedis:
+        def __init__(self):
+            self.store: dict[str, str] = {}
+
+        def get(self, key):
+            return self.store.get(key)
+
+        def set(self, key, value):
+            self.store[key] = value
+
+        def delete(self, key):
+            self.store.pop(key, None)
+
+    # Build the key first. InternalConfig() may replace the redis client during setup.
+    token = ResumeToken(collection="payments")
+    fake = MemRedis()
+    monkeypatch.setattr(db_monitor.InternalConfig, "redis", fake)
+
+    first = token.operation_start_time()
+    second = token.operation_start_time()
+    assert first == second
+    assert fake.store[token.start_key] == str(first)
+
+    token.set_token({"_data": "saved"})
+    assert token.start_key not in fake.store
+    assert token.redis_key in fake.store
+
+
+@pytest.mark.asyncio
+async def test_stream_stays_closed_until_unpause(monkeypatch):
+    """A monitor that starts paused does not open a change stream until unpause."""
+    db_monitor.shutdown_event.clear()
+    set_local_pause(True, reason="test")
+    collection = _SequenceCollection([[]])
+    monkeypatch.setattr(db_monitor.InternalConfig, "db", _SingleDB(collection))
+    monkeypatch.setattr(ResumeToken, "token", property(lambda self: None))
+    order: list[str] = []
+
+    async def fake_wait(shutdown_event, collection_name):
+        order.append("wait")
+        set_local_pause(False, reason="unpause event")
+
+    original_watch = collection.watch
+
+    async def watch(**kwargs):
+        order.append("watch")
+        return await original_watch(**kwargs)
+
+    monkeypatch.setattr(collection, "watch", watch)
+    monkeypatch.setattr(db_monitor, "wait_while_paused", fake_wait)
+
+    await asyncio.wait_for(
+        db_monitor.subscribe_stream(collection_name="hive_ops", pipeline=None, use_resume=True),
+        timeout=2,
+    )
+    assert order == ["wait", "watch"]

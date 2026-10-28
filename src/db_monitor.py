@@ -49,6 +49,13 @@ from v4vapp_backend_v2.process.overwatch_flows import FLOW_DEFINITIONS
 from v4vapp_backend_v2.process.process_overwatch import Overwatch
 from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
+from v4vapp_backend_v2.process.processing_pause import (
+    apply_pause_flag_from_redis,
+    is_processing_paused,
+    wait_until_paused_or_shutdown,
+    wait_while_paused,
+    watch_processing_pause,
+)
 
 ICON = "🏆"
 # Only Hive transfers that produce no ledger entries should cancel Overwatch
@@ -94,7 +101,12 @@ async def health_check() -> dict[str, Any]:
         f"{ICON} DB Monitor Health check passed",
         extra={"notification": False, "error_code_clear": "db_monitor_task_failure"},
     )
-    return {"status": "OK", "name": __name__, "version": __version__}
+    return {
+        "status": "OK",
+        "name": __name__,
+        "version": __version__,
+        "processing_paused": is_processing_paused(),
+    }
 
 
 # Define a global flag to track shutdown
@@ -150,6 +162,7 @@ class ResumeToken(BaseModel):
     )
     collection: str = Field("", description="Collection name for the change stream")
     redis_key: str = Field("", description="Redis key for storing the resume token")
+    start_key: str = Field("", description="Redis key for the watch start time used before a resume token exists")
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -168,6 +181,10 @@ class ResumeToken(BaseModel):
             f"resume_token:{logger.name}:{dbs_config.default_connection}:"
             f"{dbs_config.default_name}:{self.collection}"
         )
+        # Used only until the first resume token is saved. A pause before that
+        # token exists reopens the watch at this time, so early events are not
+        # dropped.
+        self.start_key = f"watch_start:{self.redis_key}"
 
     def set_token(self, token_data: Mapping[str, Any]):
         """
@@ -183,6 +200,7 @@ class ResumeToken(BaseModel):
         try:
             # Use the sync_redis client to store the token in Redis
             redis_client.set(self.redis_key, serialized_token)
+            redis_client.delete(self.start_key)
         except Exception as e:
             logger.error(
                 f"{ICON} Error setting resume token for collection '{self.collection}': {e}",
@@ -197,6 +215,7 @@ class ResumeToken(BaseModel):
         redis_client = InternalConfig.redis
         try:
             redis_client.delete(self.redis_key)
+            redis_client.delete(self.start_key)
             logger.info(f"{ICON} Resume token deleted for collection '{self.collection}'")
         except Exception as e:
             logger.error(
@@ -232,6 +251,26 @@ class ResumeToken(BaseModel):
                 extra={"notification": False},
             )
             return None
+
+    def operation_start_time(self) -> int:
+        """Return the operation time a fresh watch should start from.
+
+        The first call stores ``now - 60s``. Later calls return that stored
+        time until a resume token replaces it.
+        """
+        unix_ts = int(datetime.now(tz=UTC).timestamp()) - 60
+        try:
+            redis_client = InternalConfig.redis
+            existing = redis_client.get(self.start_key)
+            if existing:
+                return int(existing)
+            redis_client.set(self.start_key, str(unix_ts))
+        except Exception as exc:
+            logger.error(
+                f"{ICON} Error storing watch start for '{self.collection}': {exc}",
+                extra={"notification": False},
+            )
+        return unix_ts
 
 
 def ignore_changes(change: Mapping[str, Any], collection_name: str) -> bool:
@@ -363,22 +402,50 @@ async def subscribe_stream(
     error_count: int = 0,
     error_code: str = "",
 ) -> str | None:
-    """
-    Asynchronously subscribes to a stream and logs updates.
+    """Watch one collection, and reopen that watch after a processing pause.
 
-    Args:
-        collection (str): The name of the collection to subscribe to.
-        pipeline (Sequence[Mapping[str, Any]]): The aggregation pipeline to use for the stream.
+    While the Redis pause flag is set this task stays alive and does not pull
+    change-stream events. The resume token is left on the last processed
+    change, so Hive, Lightning, and other events that land during the pause
+    are delivered again after the unpause event.
 
     Returns:
-        None
+        None when the watch ends, or an error code when a connection retry was scheduled.
     """
+    while True:
+        if is_processing_paused():
+            await wait_while_paused(shutdown_event, collection_name)
+            if shutdown_event.is_set():
+                return None
+        outcome = await _consume_change_stream(
+            collection_name=collection_name,
+            pipeline=pipeline,
+            use_resume=use_resume,
+            error_count=error_count,
+            error_code=error_code,
+        )
+        if outcome is True:
+            continue
+        return outcome
+
+
+async def _consume_change_stream(
+    collection_name: str = "invoices",
+    pipeline: Sequence[Mapping[str, Any]] | None = None,
+    use_resume=True,
+    error_count: int = 0,
+    error_code: str = "",
+) -> str | None | bool:
+    """Open one change stream. Return True when it closed because processing is paused."""
     logger.info(f"{ICON} Subscribing to {collection_name} stream...")
 
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
     collection = InternalConfig.db[collection_name]
     resume = ResumeToken(collection=collection_name)
+    # Set by the pause closer or the change loop. The saved resume token is
+    # not moved, so the next session replays anything we did not process.
+    pause_stop = {"stopped": False}
     try:
         if use_resume:
             resume_token = resume.token
@@ -392,12 +459,13 @@ async def subscribe_stream(
         if resume_token:
             watch_kwargs["resume_after"] = resume_token
         else:
-            # Get the unix timestamp for 60 seconds ago
-            unix_ts = int(datetime.now(tz=UTC).timestamp()) - 60
-            # The second argument (increment) is usually 0 for new watches
+            # The second argument (increment) is usually 0 for new watches.
+            # operation_start_time keeps the first anchor so a pause before any
+            # resume token is saved still replays the events that arrived.
+            unix_ts = resume.operation_start_time()
             watch_kwargs["start_at_operation_time"] = bson.Timestamp(unix_ts, 0)
             logger.warning(
-                f"{ICON} {collection_name} stream started from 60s ago.",
+                f"{ICON} {collection_name} stream started from operation time {unix_ts}.",
                 extra={"notification": False},
             )
 
@@ -416,13 +484,30 @@ async def subscribe_stream(
                 with suppress(Exception):
                     await stream.close()
 
+            async def _close_on_pause():
+                await wait_until_paused_or_shutdown(shutdown_event)
+                if is_processing_paused():
+                    pause_stop["stopped"] = True
+                    with suppress(Exception):
+                        await stream.close()
+
             closer = asyncio.create_task(_close_on_shutdown())
+            pause_closer = asyncio.create_task(_close_on_pause())
 
             try:
                 async for change in stream:
                     if shutdown_event.is_set():
                         logger.info(
                             f"{ICON} Shutdown requested; exiting {collection_name} stream loop."
+                        )
+                        break
+                    if is_processing_paused():
+                        # Leave the resume token on the previous change so this
+                        # one is still waiting when the watch opens again.
+                        pause_stop["stopped"] = True
+                        logger.info(
+                            f"{ICON} {collection_name} change left unprocessed while processing is paused.",
+                            extra={"notification": False},
                         )
                         break
                     full_document = change.get("fullDocument") or {}
@@ -442,11 +527,28 @@ async def subscribe_stream(
                             f"{ICON} Shutdown requested; exiting {collection_name} stream loop."
                         )
                         break
+                    if is_processing_paused():
+                        pause_stop["stopped"] = True
+                        break
                     continue
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                if is_processing_paused() or pause_stop["stopped"]:
+                    pause_stop["stopped"] = True
+                    logger.info(
+                        f"{ICON} {collection_name} change stream closed for processing pause: {exc}",
+                        extra={"notification": False},
+                    )
+                else:
+                    raise
             finally:
                 closer.cancel()
+                pause_closer.cancel()
                 with suppress(asyncio.CancelledError):
                     await closer
+                with suppress(asyncio.CancelledError):
+                    await pause_closer
 
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {collection_name} {e}")
@@ -548,6 +650,10 @@ async def subscribe_stream(
             f"{ICON} Closed connection to {collection_name} stream. Error:{error_code} {error_count}"
         )
 
+    if pause_stop["stopped"] or is_processing_paused():
+        return True
+    return None
+
 
 async def subscribe_overwatch():
     """
@@ -648,9 +754,18 @@ async def main_async_start(use_resume: bool = True, use_overwatch: bool = False)
     db_pipelines = db_monitor_pipelines()
     try:
         logger.info(f"{ICON} Database Monitor App started.")
+        # Read the pause flag before any change stream opens. A flag that is
+        # already set keeps the streams from pulling events that should wait.
+        await apply_pause_flag_from_redis(reason="startup")
         # Start streams once and wait for shutdown_event; then cancel streams
         tasks = []
         tasks.append(asyncio.create_task(status_api.start(), name="status_api"))
+        tasks.append(
+            asyncio.create_task(
+                watch_processing_pause(shutdown_event),
+                name="processing_pause_watch",
+            )
+        )
         for name, pipeline in db_pipelines.items():
             task = asyncio.create_task(
                 subscribe_stream(
