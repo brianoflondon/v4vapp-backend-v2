@@ -497,7 +497,7 @@ class DBConn:
 
         fcv = fcv_doc.get("featureCompatibilityVersion", {})
         set_name = status.get("set", "")
-        logger.info(
+        logger.debug(
             f"{DATABASE_ICON} Replica set {set_name} "
             f"featureCompatibilityVersion {fcv.get('version')}",
             extra={"set": set_name, "fcv": fcv.get("version"), "fcv_doc": fcv},
@@ -517,18 +517,22 @@ class DBConn:
                 member.get("name", "unknown"): {
                     "state": member.get("stateStr", "unknown"),
                     "health": member.get("health", "unknown"),
+                    "fcv": fcv.get("version"),
+                    "fcv_doc": fcv,
                 }
                 for member in members
             }
         }
         if any(member.get("health") != 1.0 for member in members):
             logger.warning(
-                f"{DATABASE_ICON} Replica set member health: {health_summary}",
+                f"{DATABASE_ICON} Replica set member health: {health_summary} "
+                f"featureCompatibilityVersion {fcv.get('version')}",
                 extra=member_summary_extra,
             )
         else:
             logger.info(
-                f"{DATABASE_ICON} Replica set member health: {health_summary}",
+                f"{DATABASE_ICON} Replica set member health: {health_summary} "
+                f"featureCompatibilityVersion {fcv.get('version')}",
                 extra=member_summary_extra,
             )
 

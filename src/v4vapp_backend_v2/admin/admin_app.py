@@ -33,6 +33,10 @@ from v4vapp_backend_v2.process.hold_release_keepsats import (
     archive_old_hold_release_keepsats_entries,
 )
 from v4vapp_backend_v2.process.process_pending_hive import resend_pending_custom_jsons
+from v4vapp_backend_v2.process.processing_pause import (
+    get_processing_pause,
+    set_processing_paused,
+)
 
 
 @asynccontextmanager
@@ -302,6 +306,15 @@ class AdminApp:
             else:
                 response_status = status.HTTP_200_OK
 
+            try:
+                pause_state = await get_processing_pause()
+            except Exception as exc:
+                logger.warning(
+                    f"Processing pause flag could not be read for health: {exc}",
+                    extra={"notification": False},
+                )
+                pause_state = {"paused": None, "paused_at": None}
+
             payload = {
                 "status": "FAIL" if sanity_results.failed else "OK",
                 "admin_version": __version__,
@@ -312,9 +325,45 @@ class AdminApp:
                 "lnd_reachability": get_lnd_reachability_summary(sanity_results),
                 # encode the sanity object into JSON-serializable data
                 "sanity_checks": jsonable_encoder(sanity_results.model_dump()),
+                "processing_paused": pause_state["paused"],
+                "processing_paused_at": pause_state["paused_at"],
                 "load_time": timer() - start,
             }
             return JSONResponse(content=payload, status_code=response_status)
+
+        @self.app.get("/admin/api/processing-pause")
+        async def get_processing_pause_state() -> JSONResponse:
+            """Return the Redis pause flag that db_monitor watches."""
+            try:
+                return JSONResponse(await get_processing_pause())
+            except Exception as exc:
+                logger.exception(
+                    "Error reading the processing pause flag: %s",
+                    exc,
+                    extra={"notification": False},
+                )
+                raise HTTPException(status_code=500, detail=f"Could not read processing pause: {exc}")
+
+        @self.app.post("/admin/api/processing-pause")
+        async def set_processing_pause_state(request: Request) -> JSONResponse:
+            """Set or clear the pause flag and publish the matching control event."""
+            try:
+                body = await request.json()
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Expected JSON: {exc}")
+            paused = body.get("paused") if isinstance(body, dict) else None
+            if not isinstance(paused, bool):
+                raise HTTPException(status_code=400, detail="paused must be true or false")
+            try:
+                state = await set_processing_paused(paused)
+            except Exception as exc:
+                logger.exception(
+                    "Error updating the processing pause flag: %s",
+                    exc,
+                    extra={"notification": True},
+                )
+                raise HTTPException(status_code=500, detail=f"Could not update processing pause: {exc}")
+            return JSONResponse({"success": True, **state})
 
         @self.app.post("/admin/ledger-cache/flush")
         async def flush_ledger_cache() -> JSONResponse:

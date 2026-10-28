@@ -42,6 +42,7 @@ from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import find_short_id, from_snake_case
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
+from v4vapp_backend_v2.process.processing_pause import is_processing_paused
 
 ICON = "🌟"
 
@@ -581,6 +582,9 @@ class Overwatch:
     superset_grace_period: ClassVar[timedelta] = DEFAULT_SUPERSET_GRACE_PERIOD
     trigger_only_timeout: ClassVar[timedelta] = DEFAULT_TRIGGER_ONLY_TIMEOUT
     stall_log_interval: ClassVar[timedelta] = DEFAULT_STALL_LOG_INTERVAL
+    # While db_monitor is paused, active flows age without new events.
+    # Stall checks stay quiet through the pause and for one stall_timeout after.
+    _suppress_stalls_until: ClassVar[datetime | None] = None
     _loaded_from_redis: ClassVar[bool] = False
 
     # ---- completion report deduplication ----
@@ -1395,6 +1399,9 @@ class Overwatch:
         Returns the list of flows whose status was changed.
         """
         now = now or datetime.now(tz=timezone.utc)
+        suppress_until = self._suppress_stalls_until
+        if suppress_until is not None and now < suppress_until:
+            return []
         newly_stalled: List[FlowInstance] = []
 
         # Rule 1: cancel superset candidates past their grace period
@@ -1514,17 +1521,33 @@ class Overwatch:
             f"{ICON} Overwatch report loop started (interval={interval}s)",
             extra={"notification": False},
         )
+        stalls_suspended = False
         while True:
             if shutdown_event and shutdown_event.is_set():
                 break
-            try:
-                await self.check_stalls()
-                self._log_report()
-            except Exception as e:
-                logger.error(
-                    f"{ICON} Error in overwatch report loop: {e}",
-                    extra={"error_code": "overwatch_report_error"},
-                )
+            if is_processing_paused():
+                if not stalls_suspended:
+                    logger.info(
+                        f"{ICON} Stall checks are paused while database processing is paused.",
+                        extra={"notification": False},
+                    )
+                    stalls_suspended = True
+            else:
+                if stalls_suspended:
+                    stalls_suspended = False
+                    self._suppress_stalls_until = datetime.now(tz=timezone.utc) + self.stall_timeout
+                    logger.info(
+                        f"{ICON} Processing resumed. Stall alerts stay quiet for {self.stall_timeout}.",
+                        extra={"notification": False},
+                    )
+                try:
+                    await self.check_stalls()
+                    self._log_report()
+                except Exception as e:
+                    logger.error(
+                        f"{ICON} Error in overwatch report loop: {e}",
+                        extra={"error_code": "overwatch_report_error"},
+                    )
             # Sleep in small increments so we can break promptly on shutdown
             for _ in range(int(interval)):
                 if shutdown_event and shutdown_event.is_set():
@@ -1588,6 +1611,7 @@ class Overwatch:
         cls.superset_grace_period = DEFAULT_SUPERSET_GRACE_PERIOD
         cls.trigger_only_timeout = DEFAULT_TRIGGER_ONLY_TIMEOUT
         cls.stall_log_interval = DEFAULT_STALL_LOG_INTERVAL
+        cls._suppress_stalls_until = None
         cls._loaded_from_redis = False
         cls._instance = None
         # Cancel any in-flight completion report tasks
