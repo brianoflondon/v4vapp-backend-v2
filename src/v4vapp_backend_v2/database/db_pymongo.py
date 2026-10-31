@@ -483,7 +483,11 @@ class DBConn:
     async def _log_replica_set_versions_with_admin_client(
         self, admin_client: AsyncMongoClient[dict[str, Any]]
     ) -> None:
-        """Log each replica-set member mongod version and FCV."""
+        """Log each replica-set member mongod version and FCV.
+
+        ``buildInfo`` is run on a direct connection to that member so the
+        version is the process on that host.
+        """
         if not InternalConfig().config.dbs_config.connections[self.db_conn].replica_set:
             return
 
@@ -504,70 +508,77 @@ class DBConn:
         )
 
         members = status.get("members", [])
-        health_summary = ", ".join(
-            (
-                f"{member.get('name', 'unknown')} "
-                f"{member.get('stateStr', 'unknown')} "
-                f"health={member.get('health', 'unknown')}"
-            )
-            for member in members
-        )
-        member_summary_extra = {
-            "members": {
-                member.get("name", "unknown"): {
-                    "state": member.get("stateStr", "unknown"),
-                    "health": member.get("health", "unknown"),
-                    "fcv": fcv.get("version"),
-                    "fcv_doc": fcv,
-                }
-                for member in members
-            }
-        }
-        if any(member.get("health") != 1.0 for member in members):
-            logger.warning(
-                f"{DATABASE_ICON} Replica set member health: {health_summary} "
-                f"featureCompatibilityVersion {fcv.get('version')}",
-                extra=member_summary_extra,
-            )
-        else:
-            logger.info(
-                f"{DATABASE_ICON} Replica set member health: {health_summary} "
-                f"featureCompatibilityVersion {fcv.get('version')}",
-                extra=member_summary_extra,
-            )
+        version_by_host: dict[str, Any] = {}
+        build_info_by_host: dict[str, dict[str, Any]] = {}
+        version_error_by_host: dict[str, PyMongoError] = {}
 
         for member in members:
-            host = member["name"]
-            state = member.get("stateStr", "")
-            health = member.get("health")
-
-            if health != 1:
-                member_details = ReplicaSetMemberDetailsLog(host=host, state=state, health=health)
-                logger.info(
-                    f"{DATABASE_ICON} {host} {state} health {health} version unknown",
-                    extra=member_details.to_log_extra(),
-                )
-                continue
-
+            host = member.get("name", "unknown")
             parts = urlsplit(self.admin_uri)
             userinfo, sep, _hosts = parts.netloc.rpartition("@")
             netloc = f"{userinfo}@{host}" if sep else host
-            direct_uri = urlunsplit((
-                "mongodb",
-                netloc,
-                "/",
-                "authSource=admin&directConnection=true",
-                "",
-            ))
-            direct: AsyncMongoClient = AsyncMongoClient(
-                direct_uri,
-                tz_aware=True,
-                serverSelectionTimeoutMS=5_000,
-                connectTimeoutMS=5_000,
-                appName=InternalConfig().app_name,
+            direct_uri = urlunsplit(
+                (
+                    "mongodb",
+                    netloc,
+                    "/",
+                    "authSource=admin&directConnection=true",
+                    "",
+                )
             )
+            info: dict[str, Any] | None = None
             try:
-                info = await direct["admin"].command("buildInfo")
+                async with AsyncMongoClient(
+                    direct_uri,
+                    tz_aware=True,
+                    serverSelectionTimeoutMS=5_000,
+                    connectTimeoutMS=5_000,
+                    directConnection=True,
+                    appName=InternalConfig().app_name,
+                ) as direct:
+                    info = await direct["admin"].command("buildInfo")
+            except PyMongoError as exc:
+                version_error_by_host[host] = exc
+            if info is None:
+                version_by_host[host] = None
+                continue
+            build_info_by_host[host] = info
+            version_by_host[host] = info.get("version")
+
+        member_summary: dict[str, dict[str, Any]] = {}
+        member_bits: list[str] = []
+        for member in members:
+            host = member.get("name", "unknown")
+            state = member.get("stateStr", "unknown")
+            health = member.get("health", "unknown")
+            version = version_by_host.get(host)
+            member_summary[host] = {
+                "state": state,
+                "health": health,
+                "fcv": fcv.get("version"),
+                "version": version,
+                "fcv_doc": fcv,
+            }
+            shown_version = version or "unknown"
+            member_bits.append(f"{host} {state} health={health} version={shown_version}")
+
+        health_summary = ", ".join(member_bits)
+        member_summary_extra = {"members": member_summary}
+        summary = (
+            f"{DATABASE_ICON} Replica set member health: {health_summary} "
+            f"featureCompatibilityVersion {fcv.get('version')}"
+        )
+        if any(member.get("health") != 1.0 for member in members):
+            logger.warning(summary, extra=member_summary_extra)
+        else:
+            logger.info(summary, extra=member_summary_extra)
+
+        for member in members:
+            host = member.get("name", "unknown")
+            state = member.get("stateStr", "")
+            health = member.get("health")
+            info = build_info_by_host.get(host)
+            if info is not None:
                 member_details = ReplicaSetMemberDetailsLog(
                     host=host,
                     state=state,
@@ -581,14 +592,21 @@ class DBConn:
                     f"{DATABASE_ICON} {host} {state} MongoDB {info.get('version')}",
                     extra={"member_details": member_details.to_log_extra()},
                 )
-            except PyMongoError as exc:
-                member_details = ReplicaSetMemberDetailsLog(host=host, state=state, health=health)
-                logger.warning(
-                    f"{DATABASE_ICON} {host} {state} version unread: {exc}",
+                continue
+
+            member_details = ReplicaSetMemberDetailsLog(host=host, state=state, health=health)
+            if health != 1:
+                logger.info(
+                    f"{DATABASE_ICON} {host} {state} health {health} version unknown",
                     extra=member_details.to_log_extra(),
                 )
-            finally:
-                await direct.close()
+                continue
+
+            exc = version_error_by_host.get(host)
+            logger.warning(
+                f"{DATABASE_ICON} {host} {state} version unread: {exc}",
+                extra=member_details.to_log_extra(),
+            )
 
     # MARK: Database setup methods Sync
 
