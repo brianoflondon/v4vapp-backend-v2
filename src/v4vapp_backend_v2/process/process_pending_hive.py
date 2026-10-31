@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from typing import List
 
 from colorama import Fore, Style
@@ -13,12 +14,41 @@ from v4vapp_backend_v2.hive.hive_extras import (  # Assuming this function exist
     send_pending,
 )
 from v4vapp_backend_v2.hive_models.pending_transaction_class import (
+    PendingBase,
     PendingCustomJson,
     PendingTransaction,
 )
 
+# A live send inserts its pending row before Hive returns. Resume catch-up calls
+# resend after every hive op, so that row must not be broadcast a second time.
+# A row still marked in-flight after this grace period was abandoned by a dead
+# process and can be resent.
+PENDING_IN_FLIGHT_GRACE = timedelta(minutes=5)
+
 # icon with a clock
 ICON = "🕒"
+
+
+def pending_resend_blocked(pending: PendingBase, now: datetime | None = None) -> bool:
+    """True when a pending row is still owned by a live Hive broadcast."""
+    if not pending.in_flight:
+        return False
+    since = pending.in_flight_since
+    if since is None:
+        return True
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=UTC)
+    current = now or datetime.now(tz=UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    return current - since < PENDING_IN_FLIGHT_GRACE
+
+
+def _skip_in_flight(pending: PendingBase) -> None:
+    logger.debug(
+        f"{ICON} Skipping in-flight pending {pending.unique_key}; original send has not finished.",
+        extra={"notification": False},
+    )
 
 
 async def resend_transactions() -> None:
@@ -46,7 +76,17 @@ async def resend_pending_transactions() -> None:
     if len(all_pending) == 0:
         logger.debug(f"{ICON} No pending Hive transactions to resend.")
         return
-    logger.debug(f"{ICON} Resending pending Hive transaction {len(all_pending)}")
+
+    eligible: list[PendingTransaction] = []
+    for pending in all_pending:
+        if pending_resend_blocked(pending):
+            _skip_in_flight(pending)
+            continue
+        eligible.append(pending)
+    if not eligible:
+        logger.debug(f"{ICON} Pending Hive transactions are in flight. Not resending.")
+        return
+    logger.debug(f"{ICON} Resending pending Hive transaction {len(eligible)}")
 
     server_id = InternalConfig().server_id
     server_balance = account_hive_balances(hive_accname=server_id)
@@ -54,7 +94,7 @@ async def resend_pending_transactions() -> None:
 
     sending: List[PendingTransaction] = []
 
-    for pending in all_pending:
+    for pending in eligible:
         if pending.amount.symbol == "HIVE":
             if server_balance.get("HIVE", Amount("0.000 HIVE")) < pending.amount:
                 logger.warning(
@@ -117,14 +157,21 @@ async def resend_pending_custom_jsons(resend_vsc_calls: bool = False) -> None:
     if len(all_pending_cj) == 0:
         logger.debug(f"{ICON} No pending custom JSONs to resend.")
         return
-    logger.debug(f"{ICON} Resending {len(all_pending_cj)} pending custom JSONs.")
 
     sending_cj: List[PendingCustomJson] = []
 
     # Process custom JSONs (no balance checks needed)
     for pending in all_pending_cj:
-        if pending.active:  # Assuming only active custom JSONs should be sent
-            sending_cj.append(pending)
+        if not pending.active:
+            continue
+        if pending_resend_blocked(pending):
+            _skip_in_flight(pending)
+            continue
+        sending_cj.append(pending)
+    if not sending_cj:
+        logger.debug(f"{ICON} Pending custom JSONs are in flight or inactive. Not resending.")
+        return
+    logger.debug(f"{ICON} Resending {len(sending_cj)} pending custom JSONs.")
 
     # Use a default hive_client (assuming nobroadcast=False for custom JSONs)
     nobroadcast = any(pending.nobroadcast for pending in sending_cj)

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any, Dict, Self, TypeVar
 
 from bson import ObjectId
@@ -24,6 +24,11 @@ class PendingBase(BaseModel):
         default="pending_base"
     )  # Renamed from 'type' to avoid keyword conflict
     resend_attempt: int = 0  # Track number of resend attempts
+    # Set while the process that inserted the row is still inside the Hive broadcast.
+    # Resend must not broadcast that row again until the send finishes or the grace
+    # period shows the sender is gone.
+    in_flight: bool = False
+    in_flight_since: datetime | None = None
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,6 +92,24 @@ class PendingBase(BaseModel):
             lambda: InternalConfig.db["pending"].delete_one({"_id": self.id}),
             error_code="db_delete_error_pending",
             context=f"pending:{self.timestamp} ({self.pending_type})",  # Updated reference
+        )
+
+    async def set_in_flight(self, in_flight: bool) -> None:
+        """Mark or clear the live-send claim. ``save`` does not update an existing row."""
+        self.in_flight = in_flight
+        self.in_flight_since = datetime.now(tz=UTC) if in_flight else None
+        if self.id is None:
+            return
+        pending_id = self.id
+        in_flight_value = self.in_flight
+        since_value = self.in_flight_since
+        await mongo_call(
+            lambda: InternalConfig.db["pending"].update_one(
+                {"_id": pending_id},
+                {"$set": {"in_flight": in_flight_value, "in_flight_since": since_value}},
+            ),
+            error_code="db_update_error_pending",
+            context=f"pending:{self.timestamp} ({self.pending_type})",
         )
 
 
