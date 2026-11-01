@@ -7,6 +7,7 @@ import pytest
 from tests.load_data import load_hive_events
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 from v4vapp_backend_v2.hive_models.stream_ops import stream_ops_async, virtual_blocks_to_fetch
+from v4vapp_backend_v2.hive_models.virtual_ops_range import virtual_op_filter_mask
 
 
 @pytest.fixture(autouse=True)
@@ -215,3 +216,126 @@ async def test_stream_one_block_step_fetches_only_the_lag_block(mocker):
         pass
 
     assert virtual_starts == [99]
+
+
+def _raw_producer_reward(block_num: int) -> dict:
+    return {
+        "trx_id": "0000000000000000000000000000000000000000",
+        "block": block_num,
+        "trx_in_block": 4294967295,
+        "op_in_trx": 1,
+        "virtual_op": True,
+        "timestamp": "2026-08-01T12:00:00",
+        "op": {
+            "type": "producer_reward_operation",
+            "value": {
+                "producer": "alice",
+                "vesting_shares": {
+                    "amount": "1000",
+                    "precision": 6,
+                    "nai": "@@000000037",
+                },
+            },
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_catchup_virtuals_come_from_enum_virtual_ops(mocker):
+    """Far behind head, virtual ops are read in one filtered range.
+
+    The per-block virtual stream must not run, and the yielded order stays
+    the same as the slow path: the real op, then virtuals for the lag blocks.
+    """
+    # all_ops_log.jsonl is not filtered by OpTypes, so build the real ops here.
+    first = {
+        "type": "update_proposal_votes",
+        "approve": True,
+        "extensions": [],
+        "proposal_ids": [340],
+        "voter": "detlev",
+        "timestamp": "2026-08-01T12:00:00",
+        "block_num": 100,
+        "trx_num": 1,
+        "trx_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    }
+    second = first.copy()
+    second["block_num"] = 102
+    second["trx_id"] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    rewards = {99: _raw_producer_reward(99), 100: _raw_producer_reward(100)}
+
+    class FakeRpc:
+        url = "https://mock.hive.node"
+
+        def __init__(self) -> None:
+            self.enum_calls: list[dict] = []
+            self.block_calls: list[int] = []
+
+        def enum_virtual_ops(self, params: dict) -> dict:
+            self.enum_calls.append(params)
+            begin = params["block_range_begin"]
+            end = params["block_range_end"]
+            ops = [rewards[n] for n in range(begin, end) if n in rewards]
+            return {
+                "ops": ops,
+                "next_block_range_begin": end,
+                "next_operation_begin": 0,
+            }
+
+        def get_ops_in_block(self, params: dict) -> dict:
+            self.block_calls.append(params["block_num"])
+            op = rewards.get(params["block_num"])
+            return {"ops": [op] if op else []}
+
+    fake_rpc = FakeRpc()
+    fake_hive = mocker.Mock(rpc=fake_rpc, keys=None)
+    fake_hive.set_default_nodes.return_value = None
+
+    def fake_stream(*args, **kwargs):
+        if kwargs.get("only_virtual_ops"):
+            raise AssertionError("catch-up must not open a per-block virtual stream")
+        return iter([first, second])
+
+    fake_blockchain = mocker.Mock()
+    fake_blockchain.get_current_block_num.return_value = 20_000
+    fake_blockchain.stream.side_effect = fake_stream
+
+    mocker.patch(
+        "v4vapp_backend_v2.hive_models.stream_ops.TrackedBaseModel.update_quote",
+        return_value=None,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.hive_models.stream_ops.make_stream_hive",
+        return_value=fake_hive,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.hive_models.stream_ops.close_hive_client",
+        return_value=None,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.hive_models.stream_ops.get_blockchain_instance",
+        return_value=fake_blockchain,
+    )
+
+    results = []
+    async for op in stream_ops_async(
+        start=100,
+        stop=102,
+        opNames=["update_proposal_votes", "producer_reward"],
+        hive=fake_hive,
+    ):
+        producer = op.producer if op.op_type == "producer_reward" else None
+        results.append((op.op_type, op.block_num, producer))
+
+    assert results == [
+        ("update_proposal_votes", 100, None),
+        ("producer_reward", 99, "alice"),
+        ("producer_reward", 100, "alice"),
+        ("update_proposal_votes", 102, None),
+    ]
+    assert len(fake_rpc.enum_calls) == 1
+    assert fake_rpc.enum_calls[0]["block_range_begin"] == 99
+    assert fake_rpc.enum_calls[0]["filter"] == virtual_op_filter_mask(
+        ["update_proposal_votes", "producer_reward"]
+    )
+    assert 99 in fake_rpc.block_calls

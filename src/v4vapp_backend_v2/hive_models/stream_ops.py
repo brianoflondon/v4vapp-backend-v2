@@ -17,6 +17,10 @@ Critical design notes (learned the hard way):
   fetched **sequentially** between real-op events (same pattern as the stable
   pre-dual-client design). A second permanent client + per-block stream was
   the main overnight EMFILE (Errno 24) amplifier in production.
+- Far behind head, those per-block virtual reads go through
+  ``account_history_api.enum_virtual_ops`` (one filtered range per window).
+  The first blocks of each window must match ``get_ops_in_block`` or the
+  stream drops back to the per-block path. Near head always uses that path.
 - All recovery RPCs run via ``asyncio.to_thread`` with a hard asyncio budget.
 - Virtual ops of block N are read when block N+2 arrives. A real-stream jump
   (the skipped block had no tracked real op) must also read the block just
@@ -48,6 +52,10 @@ from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_data
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, OpBase, op_realm
 from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
+from v4vapp_backend_v2.hive_models.virtual_ops_range import (
+    VIRTUAL_WINDOW_BLOCKS,
+    VirtualOpRangeFetcher,
+)
 
 ICON = "🔗"
 
@@ -66,6 +74,9 @@ MIN_REBUILD_INTERVAL_SECONDS = 20
 # supports it. Live / near-head always uses max_batch_size=None.
 CATCHUP_BATCH_SIZE = 50
 CATCHUP_NEAR_HEAD_BLOCKS = 50
+# Refresh head while approaching the live window so a stale head does not
+# keep the filtered range path on after the chain has caught up.
+HEAD_CACHE_REFRESH_SECONDS = 20
 QUOTE_REFRESH_MIN_INTERVAL_SECONDS = 30
 
 
@@ -264,6 +275,9 @@ async def stream_ops_async(
     stream_ended_cleanly = False
     # After virtual-ops trouble, skip virtual fetch for a few blocks.
     virtual_ops_skip_until_block = 0
+    head_cache = current_block
+    head_cache_at = time_now
+    virtual_fetcher = VirtualOpRangeFetcher(op_names=list(opNames))
 
     async def maybe_refresh_quote() -> None:
         nonlocal last_quote_refresh_at
@@ -285,6 +299,7 @@ async def stream_ops_async(
         last_quote_refresh_at = now
 
     async def choose_batch_size() -> int | None:
+        nonlocal head_cache, head_cache_at
         if batch_disabled or only_virtual_ops:
             return None
         try:
@@ -295,10 +310,65 @@ async def stream_ops_async(
             )
         except Exception:  # noqa: BLE001 — fall back to unbatched stream
             return None
+        head_cache = head_now
+        head_cache_at = datetime.now(tz=UTC)
         gap = head_now - start_block
         if gap >= CATCHUP_NEAR_HEAD_BLOCKS:
             return CATCHUP_BATCH_SIZE
         return None
+
+    async def virtual_range_events(block_nums: range) -> list[dict[str, Any]] | None:
+        """Filtered virtual ops for these blocks, or None to use the per-block stream."""
+        nonlocal head_cache, head_cache_at
+        if not block_nums or virtual_fetcher.disabled or not virtual_fetcher.mask:
+            return None
+        last_needed = block_nums[-1]
+        age = (datetime.now(tz=UTC) - head_cache_at).total_seconds()
+        if age >= HEAD_CACHE_REFRESH_SECONDS and head_cache - last_needed < (
+            CATCHUP_NEAR_HEAD_BLOCKS + VIRTUAL_WINDOW_BLOCKS
+        ):
+            try:
+                head_cache = await _run_sync(
+                    blockchain.get_current_block_num,
+                    timeout=min(15.0, SYNC_RPC_BUDGET_SECONDS),
+                    label="catchup_head",
+                )
+                head_cache_at = datetime.now(tz=UTC)
+            except Exception as exc:
+                logger.debug(
+                    f"{ICON} Head refresh skipped during catch-up: {exc}",
+                    extra={"notification": False},
+                )
+        if head_cache - last_needed < CATCHUP_NEAR_HEAD_BLOCKS:
+            return None
+
+        collected: list[dict[str, Any]] = []
+        pos = block_nums[0]
+        end = last_needed + 1
+        while pos < end:
+            try:
+                served = await _run_sync(
+                    virtual_fetcher.events_for,
+                    hive.rpc,
+                    pos,
+                    end,
+                    head_cache,
+                    CATCHUP_NEAR_HEAD_BLOCKS,
+                    timeout=SYNC_RPC_BUDGET_SECONDS,
+                    label="enum_virtual_ops",
+                )
+            except TimeoutError:
+                virtual_fetcher.disable(f"timed out after {SYNC_RPC_BUDGET_SECONDS:.0f}s")
+                return None
+            if served is None:
+                return None
+            events, next_pos = served
+            collected.extend(events)
+            if next_pos <= pos:
+                virtual_fetcher.disable("enum_virtual_ops did not advance")
+                return None
+            pos = next_pos
+        return collected
 
     async def close_async_stream(agen: Any) -> None:
         """Best-effort close; abandoned next() threads may still run until Nectar exits."""
@@ -462,15 +532,37 @@ async def stream_ops_async(
                             extra={"notification": False},
                         )
                     caught_up = True
-                    for virtual_block in virtual_blocks:
-                        if last_block < virtual_ops_skip_until_block:
-                            caught_up = False
-                            break
-                        async for op_virtual_base in yield_virtual_ops_for_block(virtual_block):
-                            yield op_virtual_base
-                        if last_block < virtual_ops_skip_until_block:
-                            caught_up = False
-                            break
+                    fast_events = await virtual_range_events(virtual_blocks)
+                    if fast_events is not None:
+                        for virtual_event in fast_events:
+                            try:
+                                op_virtual_base = op_any_or_base(virtual_event)
+                            except ValueError as e:
+                                logger.warning(
+                                    f"{ICON} ValidationError virtual "
+                                    f"{virtual_event.get('block_num')} "
+                                    f"{virtual_event.get('trx_id')}: {e}",
+                                    extra={
+                                        "notification": True,
+                                        "virtual_event": virtual_event,
+                                    },
+                                )
+                                continue
+                            op_in_trx_counter.op_in_trx_inc(op_virtual_base)
+                            if op_virtual_base.op_type in opNames:
+                                yield op_virtual_base
+                    else:
+                        for virtual_block in virtual_blocks:
+                            if last_block < virtual_ops_skip_until_block:
+                                caught_up = False
+                                break
+                            async for op_virtual_base in yield_virtual_ops_for_block(
+                                virtual_block
+                            ):
+                                yield op_virtual_base
+                            if last_block < virtual_ops_skip_until_block:
+                                caught_up = False
+                                break
                     # Advance before an unknown custom_json is dropped, so the
                     # next op in this block does not fetch the same virtuals again.
                     # A timeout leaves last_block put and the skip window in force.
