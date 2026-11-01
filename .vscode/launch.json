@@ -81,7 +81,8 @@
             "args": [
                 "--config-filename",
                 "devhive.config.yaml",
-                // "--start-block", // The block number to start from. Default or 0 will start from the last good block,
+                "--start-block", // The block number to start from. Default or 0 will start from the last good block,
+                // "111268745"
                 // "105588176" // The start of Magi BTC operations
                 // "105597734" // lord butterfly
                 // "105601374" // continue after manual restrict
@@ -199,16 +200,17 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
-            "name": "Hive Monitor v4vapp no Sale",
+            "name": "Production Hive Monitor v4vapp no Sale",
             "type": "debugpy",
-            "consoleName": "Hive Monitor v4vapp no SALE",
+            "consoleName": "Prod Hive Monitor v4vapp no SALE",
             "request": "launch",
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
             "args": [
                 "--config-filename",
-                "live-v4vapp-server-hive.config.yaml"
-                // "--watch-only",
-                // "--start-block",
+                "production.fromhome.config.yaml",
+                "--watch-only", // No HBD sales will happen
+                "--start-block",
+                "111268745"
                 // "101517700"
                 // "--time-delay",
                 // "2",
