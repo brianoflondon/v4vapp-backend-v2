@@ -102,7 +102,8 @@ def test_range_matches_get_ops_in_block_then_serves_from_cache():
     assert [op["producer"] for op in events] == ["alice", "bob"]
     assert rpc.block_calls == [99]
     assert len(rpc.enum_calls) == 1
-    assert rpc.enum_calls[0]["filter"] == _PRODUCER_REWARD
+    # No type bitmask. op_in_trx counts untracked virtual ops too.
+    assert "filter" not in rpc.enum_calls[0]
     assert rpc.enum_calls[0]["block_range_begin"] == 99
 
     second = fetcher.events_for(rpc, 100, 101, head=20_000, near_head_blocks=50)
@@ -156,6 +157,39 @@ def test_near_head_stays_on_the_slow_path():
     assert fetcher.events_for(rpc, 100, 101, head=140, near_head_blocks=50) is None
     assert rpc.enum_calls == []
     assert fetcher.disabled is False
+
+
+def _raw_curation(block_num: int) -> dict:
+    return {
+        "trx_id": "0000000000000000000000000000000000000000",
+        "block": block_num,
+        "trx_in_block": 4294967295,
+        "op_in_trx": 1,
+        "virtual_op": True,
+        "timestamp": "2026-08-01T12:00:00",
+        "op": {
+            "type": "curation_reward_operation",
+            "value": {"curator": "bob"},
+        },
+    }
+
+
+def test_untracked_virtual_ops_stay_in_the_range_for_op_in_trx():
+    """Curation rewards are not stored, but they share the zero trx id.
+
+    Dropping them here is what made catch-up assign a different op_in_trx
+    from the per-block stream.
+    """
+    reward = _raw_reward(10)
+    reward["op_in_trx"] = 64
+    rpc = _Rpc({10: [_raw_curation(10), reward]})
+    fetcher = VirtualOpRangeFetcher(["producer_reward"])
+    served = fetcher.events_for(rpc, 10, 11, head=10_000, near_head_blocks=50)
+    assert served is not None
+    events, _served_end = served
+    assert [op["type"] for op in events] == ["curation_reward", "producer_reward"]
+    assert "op_in_trx" not in events[1]
+    assert "filter" not in rpc.enum_calls[0]
 
 
 def test_identity_ignores_dict_key_order():

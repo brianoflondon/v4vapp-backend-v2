@@ -5,9 +5,14 @@ from pathlib import Path
 import pytest
 
 from tests.load_data import load_hive_events
+from v4vapp_backend_v2.hive_models.op_base import OpBase
+from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
-from v4vapp_backend_v2.hive_models.stream_ops import stream_ops_async, virtual_blocks_to_fetch
-from v4vapp_backend_v2.hive_models.virtual_ops_range import virtual_op_filter_mask
+from v4vapp_backend_v2.hive_models.stream_ops import (
+    counted_virtual_op,
+    stream_ops_async,
+    virtual_blocks_to_fetch,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -218,6 +223,37 @@ async def test_stream_one_block_step_fetches_only_the_lag_block(mocker):
     assert virtual_starts == [99]
 
 
+def test_counted_virtual_op_includes_untracked_ops_in_the_index():
+    """The index is the count of virtual ops with this trx id, not the tracked subset.
+
+    Chain op_in_trx is not used. On a real transaction it also counts signed ops,
+    which the per-block stream never did.
+    """
+    zero = "0000000000000000000000000000000000000000"
+    counter = OpInTrxCounter()
+    curation = OpBase(
+        type="curation_reward",
+        trx_id=zero,
+        block_num=10,
+        trx_num=4294967295,
+        timestamp="2026-08-01T12:00:00",
+    )
+    reward = OpBase(
+        type="producer_reward",
+        trx_id=zero,
+        block_num=10,
+        trx_num=4294967295,
+        timestamp="2026-08-01T12:00:00",
+        op_in_trx=64,
+    )
+    assert counted_virtual_op(counter, curation, ["producer_reward"]) is None
+    kept = counted_virtual_op(counter, reward, ["producer_reward"])
+    assert kept is reward
+    assert reward.op_in_trx == 2
+    assert reward.group_id == f"10_{zero}_2_{reward.realm}"
+    assert reward.group_id_query["op_in_trx"] == 2
+
+
 def _raw_producer_reward(block_num: int) -> dict:
     return {
         "trx_id": "0000000000000000000000000000000000000000",
@@ -242,10 +278,12 @@ def _raw_producer_reward(block_num: int) -> dict:
 
 @pytest.mark.asyncio
 async def test_catchup_virtuals_come_from_enum_virtual_ops(mocker):
-    """Far behind head, virtual ops are read in one filtered range.
+    """Far behind head, virtual ops are read in one unfiltered range.
 
     The per-block virtual stream must not run, and the yielded order stays
     the same as the slow path: the real op, then virtuals for the lag blocks.
+    An untracked curation reward before producer_reward still consumes an
+    op_in_trx slot. The chain value on that reward (64) is not the id.
     """
     # all_ops_log.jsonl is not filtered by OpTypes, so build the real ops here.
     first = {
@@ -262,7 +300,27 @@ async def test_catchup_virtuals_come_from_enum_virtual_ops(mocker):
     second = first.copy()
     second["block_num"] = 102
     second["trx_id"] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    rewards = {99: _raw_producer_reward(99), 100: _raw_producer_reward(100)}
+    reward_99 = _raw_producer_reward(99)
+    reward_99["op_in_trx"] = 64
+    rewards = {99: reward_99, 100: _raw_producer_reward(100)}
+    curation_99 = {
+        "trx_id": "0000000000000000000000000000000000000000",
+        "block": 99,
+        "trx_in_block": 4294967295,
+        "op_in_trx": 1,
+        "virtual_op": True,
+        "timestamp": "2026-08-01T12:00:00",
+        "op": {"type": "curation_reward_operation", "value": {"curator": "bob"}},
+    }
+
+    def raw_ops_for(block_num: int) -> list[dict]:
+        ops = []
+        if block_num == 99:
+            ops.append(curation_99)
+        reward = rewards.get(block_num)
+        if reward is not None:
+            ops.append(reward)
+        return ops
 
     class FakeRpc:
         url = "https://mock.hive.node"
@@ -275,7 +333,9 @@ async def test_catchup_virtuals_come_from_enum_virtual_ops(mocker):
             self.enum_calls.append(params)
             begin = params["block_range_begin"]
             end = params["block_range_end"]
-            ops = [rewards[n] for n in range(begin, end) if n in rewards]
+            ops = []
+            for block_num in range(begin, end):
+                ops.extend(raw_ops_for(block_num))
             return {
                 "ops": ops,
                 "next_block_range_begin": end,
@@ -284,8 +344,7 @@ async def test_catchup_virtuals_come_from_enum_virtual_ops(mocker):
 
         def get_ops_in_block(self, params: dict) -> dict:
             self.block_calls.append(params["block_num"])
-            op = rewards.get(params["block_num"])
-            return {"ops": [op] if op else []}
+            return {"ops": raw_ops_for(params["block_num"])}
 
     fake_rpc = FakeRpc()
     fake_hive = mocker.Mock(rpc=fake_rpc, keys=None)
@@ -325,17 +384,15 @@ async def test_catchup_virtuals_come_from_enum_virtual_ops(mocker):
         hive=fake_hive,
     ):
         producer = op.producer if op.op_type == "producer_reward" else None
-        results.append((op.op_type, op.block_num, producer))
+        results.append((op.op_type, op.block_num, producer, op.op_in_trx))
 
     assert results == [
-        ("update_proposal_votes", 100, None),
-        ("producer_reward", 99, "alice"),
-        ("producer_reward", 100, "alice"),
-        ("update_proposal_votes", 102, None),
+        ("update_proposal_votes", 100, None, 1),
+        ("producer_reward", 99, "alice", 2),
+        ("producer_reward", 100, "alice", 1),
+        ("update_proposal_votes", 102, None, 1),
     ]
     assert len(fake_rpc.enum_calls) == 1
     assert fake_rpc.enum_calls[0]["block_range_begin"] == 99
-    assert fake_rpc.enum_calls[0]["filter"] == virtual_op_filter_mask(
-        ["update_proposal_votes", "producer_reward"]
-    )
+    assert "filter" not in fake_rpc.enum_calls[0]
     assert 99 in fake_rpc.block_calls

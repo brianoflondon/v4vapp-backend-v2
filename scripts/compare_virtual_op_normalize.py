@@ -32,7 +32,10 @@ dicts), ``_id`` (nectar's ``Blockchain.hash_op``), ``timestamp`` (nectar's
 ``trx_id``.
 
 Neither side copies the chain's ``op_in_trx``. ``OpInTrxCounter`` assigns
-that after the model is built, on both paths.
+that after the model is built, on both paths. The catch-up fetcher must
+hand every virtual op to that counter, not only the types the monitor
+stores. The chain value is a different number: inside a user transaction
+it also counts the signed operations.
 
 Usage
 -----

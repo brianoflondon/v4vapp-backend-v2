@@ -18,9 +18,12 @@ Critical design notes (learned the hard way):
   pre-dual-client design). A second permanent client + per-block stream was
   the main overnight EMFILE (Errno 24) amplifier in production.
 - Far behind head, those per-block virtual reads go through
-  ``account_history_api.enum_virtual_ops`` (one filtered range per window).
-  The first blocks of each window must match ``get_ops_in_block`` or the
-  stream drops back to the per-block path. Near head always uses that path.
+  ``account_history_api.enum_virtual_ops`` (one range per window, every
+  virtual op). The first blocks of each window must match
+  ``get_ops_in_block`` or the stream drops back to the per-block path.
+  Near head always uses that path. Both paths count every virtual op into
+  ``op_in_trx`` before keeping the tracked types. That count is part of
+  ``group_id``.
 - All recovery RPCs run via ``asyncio.to_thread`` with a hard asyncio budget.
 - Virtual ops of block N are read when block N+2 arrives. A real-stream jump
   (the skipped block had no tracked real op) must also read the block just
@@ -78,6 +81,22 @@ CATCHUP_NEAR_HEAD_BLOCKS = 50
 # keep the filtered range path on after the chain has caught up.
 HEAD_CACHE_REFRESH_SECONDS = 20
 QUOTE_REFRESH_MIN_INTERVAL_SECONDS = 30
+
+
+def counted_virtual_op(counter: OpInTrxCounter, op: OpBase, op_names: list[str]) -> OpBase | None:
+    """Assign ``op_in_trx`` and return the op when the monitor stores it.
+
+    Call this for every virtual op in the block, including types that are
+    not in ``op_names``. For virtual ops the counter is the 1-based count of
+    ops seen so far in this block with the same ``trx_id``. ``group_id`` is
+    ``{block}_{trx_id}_{op_in_trx}_{realm}``, and ``save()`` upserts on that
+    key. Skipping an untracked op here makes catch-up and the per-block
+    stream write two hive_ops rows for one operation.
+    """
+    counter.op_in_trx_inc(op)
+    if op.op_type in op_names:
+        return op
+    return None
 
 
 def virtual_blocks_to_fetch(last_block: int, new_block: int) -> range:
@@ -415,8 +434,7 @@ async def stream_ops_async(
                             },
                         )
                         continue
-                    op_in_trx_counter.op_in_trx_inc(op_virtual_base)
-                    if op_virtual_base.op_type in opNames:
+                    if counted_virtual_op(op_in_trx_counter, op_virtual_base, opNames) is not None:
                         yield op_virtual_base
         except TimeoutError:
             virtual_ops_skip_until_block = last_block + VIRTUAL_OPS_SKIP_BLOCKS
@@ -548,8 +566,10 @@ async def stream_ops_async(
                                     },
                                 )
                                 continue
-                            op_in_trx_counter.op_in_trx_inc(op_virtual_base)
-                            if op_virtual_base.op_type in opNames:
+                            if (
+                                counted_virtual_op(op_in_trx_counter, op_virtual_base, opNames)
+                                is not None
+                            ):
                                 yield op_virtual_base
                     else:
                         for virtual_block in virtual_blocks:

@@ -4,15 +4,18 @@ Nectar's ``Blockchain.stream`` loads virtual ops with one ``get_ops_in_block``
 per block, and each of those calls also reads the head block. On a public node
 that is about two round trips per block (about 9s for 20 blocks).
 
-``enum_virtual_ops`` returns a filtered block range in one call. hive-nectar
-already routes that method name to ``account_history_api`` but does not use it
-while streaming. This module calls it directly and normalizes each op to the
-same dict ``Blockchain.stream`` yields, so the rest of the monitor is unchanged.
+``enum_virtual_ops`` returns a block range in one call. hive-nectar already
+routes that method name to ``account_history_api`` but does not use it while
+streaming. This module calls it directly and normalizes each op to the same
+dict ``Blockchain.stream`` yields, so the rest of the monitor is unchanged.
 
-The bitmask is Hive ``enum_vops_filter``: bit ``protocol_id - 57``
-(``fill_convert_request`` is protocol id 57 and bit 0). A window is used only
-after its first block matches ``get_ops_in_block``. Callers keep the per-block
-stream near head and after this fetcher disables itself.
+The call is not filtered by op type. ``op_in_trx`` (and therefore ``group_id``)
+counts every virtual op that shares a transaction id, including types this app
+does not store. A bitmask would drop those and give catch-up a different id
+from the per-block stream. The bitmask helper remains only as a gate: an
+unknown op name keeps this fetcher off. A window is used only after its first
+block matches ``get_ops_in_block``. Callers keep the per-block stream near head
+and after this fetcher disables itself.
 """
 
 from __future__ import annotations
@@ -70,12 +73,16 @@ def virtual_op_filter_mask(op_names: list[str]) -> int | None:
     return mask
 
 
-def normalize_virtual_op(raw: dict[str, Any], op_names: set[str]) -> dict[str, Any] | None:
+def normalize_virtual_op(raw: dict[str, Any], op_names: set[str] | None) -> dict[str, Any] | None:
     """Flatten one ``enum_virtual_ops`` / ``get_ops_in_block`` wrapper.
 
     The shape matches ``Blockchain.stream`` (non-raw): operation fields plus
     ``type``, ``_id``, ``timestamp``, ``block_num``, ``trx_num``, and ``trx_id``.
-    Untracked types return ``None``.
+    The chain's ``op_in_trx`` is left off. The stream assigns that later by
+    counting virtual ops, and for a real transaction the chain value also
+    counts the signed ops. ``op_names`` drops types that are not in the set.
+    ``None`` keeps every well-formed op, which is what the catch-up counter
+    has to see.
     """
     if not isinstance(raw, dict):
         return None
@@ -87,7 +94,7 @@ def normalize_virtual_op(raw: dict[str, Any], op_names: set[str]) -> dict[str, A
     if not isinstance(op_type, str) or not isinstance(value, dict):
         return None
     op_type = op_type.removesuffix("_operation")
-    if op_type not in op_names:
+    if op_names is not None and op_type not in op_names:
         return None
     block_num = raw.get("block", raw.get("block_num"))
     if not isinstance(block_num, int):
@@ -135,7 +142,7 @@ def virtual_op_identity(event: dict[str, Any]) -> str:
 
 
 class VirtualOpRangeFetcher:
-    """Fetch and cache filtered virtual ops for blocks far behind head.
+    """Fetch and cache every virtual op for blocks far behind head.
 
     ``events_for`` returns ``None`` when the caller must use the per-block
     stream. A returned ``(events, next_block)`` pair covers ``[begin, next_block)``
@@ -221,7 +228,8 @@ class VirtualOpRangeFetcher:
             logger.info(
                 f"{ICON} Catch-up virtual ops via enum_virtual_ops "
                 f"blocks {window.begin:,}–{window.end - 1:,} "
-                f"(filter={self.mask}) instead of per-block get_ops_in_block",
+                "(every virtual op; tracked types are kept after op_in_trx) "
+                "instead of per-block get_ops_in_block",
                 extra={"notification": False},
             )
         served_end = min(end, window.end)
@@ -240,13 +248,16 @@ class VirtualOpRangeFetcher:
         cursor = begin
         operation_begin = 0
         for _page in range(VIRTUAL_ENUM_MAX_PAGES):
+            # No ``filter``. The bitmask would omit untracked virtual ops, and
+            # op_in_trx counts those. group_id would then differ from the
+            # per-block stream. self.mask only decides whether this path is safe
+            # to turn on.
             result = rpc.enum_virtual_ops(
                 {
                     "block_range_begin": cursor,
                     "block_range_end": end,
                     "operation_begin": operation_begin,
                     "limit": VIRTUAL_ENUM_LIMIT,
-                    "filter": self.mask,
                     "include_reversible": True,
                     "group_by_block": False,
                 }
@@ -257,7 +268,7 @@ class VirtualOpRangeFetcher:
             if not isinstance(raw_ops, list):
                 raise TypeError("enum_virtual_ops ops is not a list")
             for raw in raw_ops:
-                event = normalize_virtual_op(raw, self.op_names)
+                event = normalize_virtual_op(raw, None)
                 if event is None:
                     continue
                 by_block.setdefault(event["block_num"], []).append(event)
@@ -277,7 +288,7 @@ class VirtualOpRangeFetcher:
         )
 
     def _verify_window(self, rpc: Any, window: VirtualOpWindow) -> bool:
-        """True when the filtered range matches ``get_ops_in_block`` on a sample."""
+        """True when the full virtual-op range matches ``get_ops_in_block`` on a sample."""
         # One matching block is enough. Scan a few in case the first is empty.
         for block_num in range(window.begin, min(window.end, window.begin + VERIFY_BLOCKS)):
             slow = self._slow_block_events(rpc, block_num)
@@ -311,7 +322,7 @@ class VirtualOpRangeFetcher:
             raise TypeError(f"get_ops_in_block returned {type(result).__name__}")
         events: list[dict[str, Any]] = []
         for raw in raw_ops:
-            event = normalize_virtual_op(raw, self.op_names)
+            event = normalize_virtual_op(raw, None)
             if event is not None:
                 events.append(event)
         return events
