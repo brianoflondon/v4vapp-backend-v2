@@ -18,6 +18,9 @@ Critical design notes (learned the hard way):
   pre-dual-client design). A second permanent client + per-block stream was
   the main overnight EMFILE (Errno 24) amplifier in production.
 - All recovery RPCs run via ``asyncio.to_thread`` with a hard asyncio budget.
+- Virtual ops of block N are read when block N+2 arrives. A real-stream jump
+  (the skipped block had no tracked real op) must also read the block just
+  left, or a same-block fill there is never seen.
 """
 
 from __future__ import annotations
@@ -64,6 +67,26 @@ MIN_REBUILD_INTERVAL_SECONDS = 20
 CATCHUP_BATCH_SIZE = 50
 CATCHUP_NEAR_HEAD_BLOCKS = 50
 QUOTE_REFRESH_MIN_INTERVAL_SECONDS = 30
+
+
+def virtual_blocks_to_fetch(last_block: int, new_block: int) -> range:
+    """Block numbers whose virtual ops to read when the real stream moves.
+
+    A one-block step from A to A+1 fetches A-1. Virtual ops of block N are
+    therefore read when block N+2 arrives. That lag is unchanged.
+
+    A jump from A to B (B > A+1) means one or more blocks had no tracked real
+    op. Also fetch A through B-2. The block just left is where a same-block
+    fill lives, and a single fetch of A-1 never comes back for it.
+    """
+    if new_block <= last_block:
+        return range(0)
+    start = max(1, last_block - 1)
+    # Exclusive end. Last included block is new_block - 2.
+    end = new_block - 1
+    if end <= start:
+        return range(0)
+    return range(start, end)
 
 
 def _is_rate_limit_error(error: BaseException) -> bool:
@@ -419,18 +442,40 @@ async def stream_ops_async(
                     async_stream_real = None
                     raise
 
-                # Interleave virtual ops for the previous block (same client, sequential).
+                # Interleave virtual ops (same client, sequential).
+                # One-block step: fetch last_block-1. A jump also fetches the
+                # block just left and any further skipped blocks.
+                new_block = hive_event["block_num"]
                 if (
                     not only_virtual_ops
-                    and hive_event["block_num"] > last_block
-                    and hive_event["block_num"] <= stop_block
+                    and new_block > last_block
+                    and new_block <= stop_block
                     and last_block >= virtual_ops_skip_until_block
                 ):
                     start_block = last_block
-                    virtual_block = last_block - 1
-                    async for op_virtual_base in yield_virtual_ops_for_block(virtual_block):
-                        last_block = hive_event.get("block_num", start_block)
-                        yield op_virtual_base
+                    virtual_blocks = virtual_blocks_to_fetch(last_block, new_block)
+                    if len(virtual_blocks) > 1:
+                        logger.info(
+                            f"{ICON} Real stream jumped {last_block:,} → {new_block:,}; "
+                            f"fetching virtual ops for blocks "
+                            f"{virtual_blocks[0]:,}–{virtual_blocks[-1]:,}",
+                            extra={"notification": False},
+                        )
+                    caught_up = True
+                    for virtual_block in virtual_blocks:
+                        if last_block < virtual_ops_skip_until_block:
+                            caught_up = False
+                            break
+                        async for op_virtual_base in yield_virtual_ops_for_block(virtual_block):
+                            yield op_virtual_base
+                        if last_block < virtual_ops_skip_until_block:
+                            caught_up = False
+                            break
+                    # Advance before an unknown custom_json is dropped, so the
+                    # next op in this block does not fetch the same virtuals again.
+                    # A timeout leaves last_block put and the skip window in force.
+                    if caught_up:
+                        last_block = new_block
 
                 # Filter unknown custom_json only. custom_json_test_data() returns
                 # None for transfers/etc. (no cj id) — must not treat that as "drop".
