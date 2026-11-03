@@ -85,10 +85,20 @@ class _Ledger:
     def __init__(self, docs: list[dict]):
         self.docs = docs
         self.filters: list[dict] = []
+        self.projections: list[dict | None] = []
 
     def find(self, filter=None, projection=None):
         self.filters.append(filter)
+        self.projections.append(projection)
         return _Cursor(self.docs)
+
+    async def find_one(self, filter=None, projection=None):
+        self.filters.append(filter)
+        group_id = (filter or {}).get("group_id")
+        for doc in self.docs:
+            if doc.get("group_id") == group_id:
+                return doc
+        return None
 
 
 def _patch_ledger(monkeypatch: pytest.MonkeyPatch, docs: list[dict]) -> _Ledger:
@@ -179,6 +189,7 @@ async def test_op_1_when_four_other_indexes_are_booked_is_dropped(
     assert await process_hive_op(_gated_op(1, realm="virtual")) == []
     assert ledger.filters
     assert ledger.filters[0] == hive_ledger_trx_filter(op)
+    assert ledger.projections[0] == {"group_id": 1}
     warning = caplog.text
     assert op.trx_id in warning
     assert "op_in_trx is 1" in warning
@@ -211,10 +222,20 @@ async def test_real_op_does_not_count_virtual_ops_in_the_same_trx(
     assert await find_existing_hive_ledger_entry(_op(1, realm="virtual")) is None
 
 
-async def test_historical_op_zero_blocks_an_incoming_op_one(monkeypatch: pytest.MonkeyPatch):
-    _patch_ledger(monkeypatch, [_row(0)])
+async def test_arrival_behind_a_later_booked_op_is_dropped(monkeypatch: pytest.MonkeyPatch):
+    """A batch already contains op 4, so op 3 is not the next live operation."""
+    _patch_ledger(monkeypatch, [_row(1, realm="virtual"), _row(4, realm="virtual")])
     with pytest.raises(HiveLedgerOrderMismatch):
-        await find_existing_hive_ledger_entry(_op(1))
+        await find_existing_hive_ledger_entry(_op(3, realm="virtual"))
+
+
+async def test_historical_op_zero_is_the_same_first_slot(monkeypatch: pytest.MonkeyPatch):
+    stored = _row(0)
+    _patch_ledger(monkeypatch, [stored])
+    found = await find_existing_hive_ledger_entry(_op(1))
+    assert found == stored
+    with pytest.raises(LedgerEntryDuplicateException):
+        await process_hive_op(_gated_op(1))
 
 
 async def test_invalid_existing_document_raises_creation_exception(
@@ -244,4 +265,4 @@ async def test_sequential_op_does_not_warn(
     _patch_ledger(monkeypatch, [_row(1)])
     assert await process_hive_op(_gated_op(2)) == []
     assert seen == [2]
-    assert "read order does not match" not in caplog.text
+    assert "already processed past this operation" not in caplog.text

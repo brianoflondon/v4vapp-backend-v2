@@ -49,17 +49,15 @@ class HiveLedgerOrderMismatch(Exception):
 HiveLedgerOp = TransferBase | LimitOrderCreate | FillOrder | LimitOrderCancelled | CustomJson
 
 
-def hive_ledger_trx_filter(op: HiveLedgerOp) -> dict[str, str | dict[str, str]]:
+def hive_ledger_trx_filter(op: HiveLedgerOp) -> dict[str, dict[str, str]]:
     """Mongo filter for ledger rows of this Hive operation's transaction.
 
     ``group_id`` is ``{block}_{trx_id}_{op_in_trx}_{realm}``, and a fill adds
-    ``_{ledger_type}``. Ledger documents do not store ``block_num``, ``trx_id``,
-    or ``op_in_trx`` at the top level, so ``op.group_id_query`` does not match
-    them. The anchored prefix uses the ``group_id`` index and stays inside one
-    block, one trx, and one realm. Realm stays in the key because a limit
-    order's real op and its virtual fills share a trx id and each start at 1.
-    Block stays in the key because the all-zero trx id is shared by every pure
-    virtual op.
+    ``_{ledger_type}``. The anchored prefix is a range on the unique
+    ``group_id`` index, so this reads one transaction, not the ledger. Realm
+    stays in the key because a limit order's real op and its virtual fills
+    share a trx id and each start at 1. Block stays in the key because the
+    all-zero trx id is shared by every pure virtual op.
     """
     prefix = f"{op.block_num}_{op.trx_id}_"
     realm = f"{op.realm}"
@@ -87,54 +85,67 @@ def booked_op_in_trx(group_id: str, op: HiveLedgerOp) -> int | None:
     return int(op_text)
 
 
-async def find_existing_hive_ledger_entry(op: HiveLedgerOp) -> dict | None:
-    """Look up this Hive op in the ledger and check the rest of its transaction.
+def _ledger_op_slot(op_in_trx: int) -> int:
+    """Map a stored or incoming index onto the 1-based sequence.
 
-    Replaces ``LedgerEntry.collection().find_one(filter=op.group_id_query)``.
-
-    Returns the raw ledger document when this ``op_in_trx`` is already stored,
-    including a row whose ``group_id`` is ``{op.group_id}_{ledger_type}``.
-    The caller raises ``LedgerEntryDuplicateException``.
-
-    Returns None when the number of distinct booked indexes is at most
-    ``op_in_trx - 1``. That is normal sequential processing (``op_in_trx`` 2
-    with one earlier op) and it is also a gap left by an operation that
-    created no ledger row.
-
-    When more indexes are already booked than this op can follow, for example
-    ``op_in_trx`` 1 while four other indexes are stored, logs a warning and
-    raises ``HiveLedgerOrderMismatch``. A stored index of 0 counts as one
-    booked op, so an incoming 1 against a lone historical 0 is the same
-    mismatch.
+    Older rows used ``0`` for the first operation in a transaction. That is
+    the same slot as ``1``.
     """
-    cursor = LedgerEntry.collection().find(filter=hive_ledger_trx_filter(op))
+    return 1 if op_in_trx == 0 else op_in_trx
+
+
+async def find_existing_hive_ledger_entry(op: HiveLedgerOp) -> dict | None:
+    """Decide whether this Hive op is new, already booked, or behind the trx.
+
+    One prefix read of ``group_id``. A transaction has a handful of ledger
+    rows, and the field is only the id, so this stays a short index range
+    even though every Hive op pays for it.
+
+    New work arrives one operation at a time, so every index already stored
+    for this block, trx, and realm must be lower than the one arriving now.
+    A gap is allowed: an earlier operation may have created no ledger row.
+    Returns None in that case.
+
+    Returns the stored ledger document when this same slot is already
+    booked, including ``{group_id}_{ledger_type}``. A historical index of
+    ``0`` occupies slot 1. The caller raises ``LedgerEntryDuplicateException``.
+
+    A transaction that was processed in bulk already has its later
+    operations stored. Seeing an earlier ``op_in_trx`` then means this read
+    is behind that batch. Logs a warning and raises
+    ``HiveLedgerOrderMismatch``.
+    """
+    cursor = LedgerEntry.collection().find(
+        filter=hive_ledger_trx_filter(op),
+        projection={"group_id": 1},
+    )
     docs = await cursor.to_list(length=None)
-    booked: dict[int, dict] = {}
+    incoming = _ledger_op_slot(op.op_in_trx)
+    same_slot: list[str] = []
+    later: list[int] = []
     for doc in docs:
         op_index = booked_op_in_trx(doc.get("group_id", ""), op)
-        if op_index is None or op_index in booked:
+        if op_index is None:
             continue
-        booked[op_index] = doc
-    if op.op_in_trx in booked:
-        exact = next(
-            (
-                doc
-                for doc in docs
-                if doc.get("group_id") == op.group_id
-                and booked_op_in_trx(doc.get("group_id", ""), op) == op.op_in_trx
-            ),
-            booked[op.op_in_trx],
-        )
-        return exact
+        slot = _ledger_op_slot(op_index)
+        group_id = doc.get("group_id")
+        if not isinstance(group_id, str):
+            continue
+        if slot == incoming:
+            same_slot.append(group_id)
+        elif slot > incoming:
+            later.append(slot)
+    if same_slot:
+        group_id = op.group_id if op.group_id in same_slot else same_slot[0]
+        return await LedgerEntry.collection().find_one(filter={"group_id": group_id})
 
-    expected_prior = max(op.op_in_trx - 1, 0)
-    if len(booked) > expected_prior:
+    if later:
         realm = f"{op.realm}"
         message = (
-            f"Hive trx {op.trx_id} block {op.block_num} {realm} has "
-            f"{len(booked)} ledger op(s) already booked {sorted(booked)}, "
+            f"Hive trx {op.trx_id} block {op.block_num} {realm} already has "
+            f"later ledger op(s) {sorted(set(later))} booked, "
             f"but incoming op_in_trx is {op.op_in_trx} ({op.group_id}). "
-            "Dropping: the read order does not match the booked order."
+            "Dropping: this transaction was already processed past this operation."
         )
         logger.warning(
             message,
@@ -152,9 +163,9 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> list[Led
     This method handles various types of transfers, including those between the server account,
     treasury account, funding account, exchange account, and customer accounts. It ensures that
     appropriate debit and credit accounts are assigned based on the transfer type. If this
-    operation is already booked, raises LedgerEntryDuplicateException. If the same block,
-    transaction, and realm already have more booked op indexes than this op_in_trx can follow,
-    logs a warning and returns an empty list.
+    operation is already booked, raises LedgerEntryDuplicateException. If a later operation
+    in the same block, transaction, and realm is already booked, logs a warning and returns
+    an empty list.
 
     Args:
         op (TrackedAny): The operation to process, which can be a transfer, limit order, fill order, or custom JSON.
@@ -163,6 +174,12 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> list[Led
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
+    # These operations are the ones that create ledger rows. Their group_id
+    # uses op_in_trx from the reader, and that number counts every virtual op
+    # seen in the transaction, not only this tuple. Adding or removing one,
+    # especially a virtual op, changes those numbers. Do not replay or re-scan
+    # history after changing this set: a higher index is booked again.
+    # HiveLedgerOp must stay the same tuple.
     if not isinstance(
         op,
         (TransferBase, LimitOrderCreate, FillOrder, LimitOrderCancelled, CustomJson),
