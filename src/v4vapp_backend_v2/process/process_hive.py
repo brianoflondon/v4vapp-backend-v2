@@ -1,6 +1,5 @@
 import re
-from datetime import datetime, timezone
-from typing import List
+from datetime import UTC, datetime
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
@@ -41,15 +40,121 @@ BALANCE_ADJUSTMENT_MEMO = "Balance adjustment"
 BALANCE_ADJUSTMENT_ACCOUNT = "v4v-app"
 
 
-async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[LedgerEntry]:
+class HiveLedgerOrderMismatch(Exception):
+    """Incoming op_in_trx does not follow the ops already booked for this Hive trx."""
+
+
+# Same set process_hive_op accepts before the ledger check. TransferBase covers
+# transfer, recurrent_transfer, and fill_recurrent_transfer.
+HiveLedgerOp = TransferBase | LimitOrderCreate | FillOrder | LimitOrderCancelled | CustomJson
+
+
+def hive_ledger_trx_filter(op: HiveLedgerOp) -> dict[str, str | dict[str, str]]:
+    """Mongo filter for ledger rows of this Hive operation's transaction.
+
+    ``group_id`` is ``{block}_{trx_id}_{op_in_trx}_{realm}``, and a fill adds
+    ``_{ledger_type}``. Ledger documents do not store ``block_num``, ``trx_id``,
+    or ``op_in_trx`` at the top level, so ``op.group_id_query`` does not match
+    them. The anchored prefix uses the ``group_id`` index and stays inside one
+    block, one trx, and one realm. Realm stays in the key because a limit
+    order's real op and its virtual fills share a trx id and each start at 1.
+    Block stays in the key because the all-zero trx id is shared by every pure
+    virtual op.
+    """
+    prefix = f"{op.block_num}_{op.trx_id}_"
+    realm = f"{op.realm}"
+    pattern = rf"^{re.escape(prefix)}\d+_{re.escape(realm)}($|_)"
+    return {"group_id": {"$regex": pattern}}
+
+
+def booked_op_in_trx(group_id: str, op: HiveLedgerOp) -> int | None:
+    """Return the op index stored in ``group_id``, ignoring a ledger-type suffix.
+
+    One fill writes a buy row and a sell row. Both end with the same
+    ``op_in_trx`` and must count as one booked operation.
+    """
+    if not isinstance(group_id, str):
+        return None
+    prefix = f"{op.block_num}_{op.trx_id}_"
+    if not group_id.startswith(prefix):
+        return None
+    op_text, sep, tail = group_id[len(prefix) :].partition("_")
+    if not sep or not op_text.isdecimal():
+        return None
+    realm = f"{op.realm}"
+    if tail != realm and not tail.startswith(f"{realm}_"):
+        return None
+    return int(op_text)
+
+
+async def find_existing_hive_ledger_entry(op: HiveLedgerOp) -> dict | None:
+    """Look up this Hive op in the ledger and check the rest of its transaction.
+
+    Replaces ``LedgerEntry.collection().find_one(filter=op.group_id_query)``.
+
+    Returns the raw ledger document when this ``op_in_trx`` is already stored,
+    including a row whose ``group_id`` is ``{op.group_id}_{ledger_type}``.
+    The caller raises ``LedgerEntryDuplicateException``.
+
+    Returns None when the number of distinct booked indexes is at most
+    ``op_in_trx - 1``. That is normal sequential processing (``op_in_trx`` 2
+    with one earlier op) and it is also a gap left by an operation that
+    created no ledger row.
+
+    When more indexes are already booked than this op can follow, for example
+    ``op_in_trx`` 1 while four other indexes are stored, logs a warning and
+    raises ``HiveLedgerOrderMismatch``. A stored index of 0 counts as one
+    booked op, so an incoming 1 against a lone historical 0 is the same
+    mismatch.
+    """
+    cursor = LedgerEntry.collection().find(filter=hive_ledger_trx_filter(op))
+    docs = await cursor.to_list(length=None)
+    booked: dict[int, dict] = {}
+    for doc in docs:
+        op_index = booked_op_in_trx(doc.get("group_id", ""), op)
+        if op_index is None or op_index in booked:
+            continue
+        booked[op_index] = doc
+    if op.op_in_trx in booked:
+        exact = next(
+            (
+                doc
+                for doc in docs
+                if doc.get("group_id") == op.group_id
+                and booked_op_in_trx(doc.get("group_id", ""), op) == op.op_in_trx
+            ),
+            booked[op.op_in_trx],
+        )
+        return exact
+
+    expected_prior = max(op.op_in_trx - 1, 0)
+    if len(booked) > expected_prior:
+        realm = f"{op.realm}"
+        message = (
+            f"Hive trx {op.trx_id} block {op.block_num} {realm} has "
+            f"{len(booked)} ledger op(s) already booked {sorted(booked)}, "
+            f"but incoming op_in_trx is {op.op_in_trx} ({op.group_id}). "
+            "Dropping: the read order does not match the booked order."
+        )
+        logger.warning(
+            message,
+            extra={"notification": True, **op.log_extra},
+        )
+        raise HiveLedgerOrderMismatch(message)
+    return None
+
+
+async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> list[LedgerEntry]:
     """
     Processes the transfer operation and creates a ledger entry if applicable.
     Returns a list of entries even though this is likely to be only one.
 
     This method handles various types of transfers, including those between the server account,
     treasury account, funding account, exchange account, and customer accounts. It ensures that
-    appropriate debit and credit accounts are assigned based on the transfer type. If a ledger
-    entry with the same group_id already exists, the operation is skipped.
+    appropriate debit and credit accounts are assigned based on the transfer type. If this
+    operation is already booked, raises LedgerEntryDuplicateException. If the same block,
+    transaction, and realm already have more booked op indexes than this op_in_trx can follow,
+    logs a warning and returns an empty list.
 
     Args:
         op (TrackedAny): The operation to process, which can be a transfer, limit order, fill order, or custom JSON.
@@ -58,8 +163,20 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
-    # Check if a ledger entry with the same group_id already exists
-    existing_entry = await LedgerEntry.collection().find_one(filter=op.group_id_query)
+    if not isinstance(
+        op,
+        (TransferBase, LimitOrderCreate, FillOrder, LimitOrderCancelled, CustomJson),
+    ):
+        logger.warning(
+            f"Unsupported operation type: {type(op)} {op}",
+            extra={"notification": False, **op.log_extra},
+        )
+        return []
+
+    try:
+        existing_entry = await find_existing_hive_ledger_entry(op)
+    except HiveLedgerOrderMismatch:
+        return []
     if existing_entry:
         logger.info(f"Ledger entry for group_id {op.group_id} already exists. Skipping.")
         try:
@@ -88,11 +205,7 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
 
             ledger_entry = await process_transfer_op(hive_transfer=op, nobroadcast=nobroadcast)
             return [ledger_entry] if ledger_entry else []
-        elif (
-            isinstance(op, LimitOrderCreate)
-            or isinstance(op, FillOrder)
-            or isinstance(op, LimitOrderCancelled)
-        ):
+        elif isinstance(op, (LimitOrderCreate, FillOrder, LimitOrderCancelled)):
             ledger_entries = await process_create_fill_order_op(
                 limit_fill_order=op, nobroadcast=nobroadcast
             )
@@ -105,7 +218,11 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
         return []
 
     except CustomJsonRetryError as e:
-        raise e
+        logger.warning(
+            f"Custom JSON retry error: {e}",
+            extra={"notification": True, **op.log_extra},
+        )
+        raise
 
     except LedgerEntryException as e:
         if "Transfer between untracked accounts" in str(e):
@@ -178,7 +295,7 @@ async def process_transfer_op(
         short_id=hive_transfer.short_id,
         op_type=hive_transfer.op_type,
         user_memo=hive_transfer.user_memo,
-        timestamp=datetime.now(tz=timezone.utc),
+        timestamp=datetime.now(tz=UTC),
         link=hive_transfer.link,
     )
     processed_d_memo = lightning_memo(hive_transfer.d_memo)
@@ -460,7 +577,7 @@ async def suspicious_account_transfer_accounting(hive_transfer: TrackedTransfer)
             short_id=hive_transfer.short_id,
             op_type=hive_transfer.op_type,
             user_memo=hive_transfer.user_memo,
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             link=hive_transfer.link,
             description=f"{hive_transfer.d_memo}",
             credit=LiabilityAccount(name="VSC Liability", sub="v4vapp.sus"),
