@@ -1,8 +1,8 @@
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from timeit import default_timer as timer
-from typing import ClassVar, Deque, Tuple
+from typing import ClassVar
 
 from nectar.hive import Hive
 
@@ -13,8 +13,8 @@ from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 
 TIME_DIFFERENCE_CHECK = timedelta(seconds=120)
 
-BLOCK_MARKER_NORMAL_MIN = 5
-BLOCK_MARKER_CATCHUP_MIN = 1
+BLOCK_MARKER_NORMAL_MINUTES = 5
+BLOCK_MARKER_CATCHUP_MINUTES = 5
 
 
 @dataclass
@@ -31,8 +31,8 @@ class OpInTrxCounter:
 
     # Class variables: Two separate deques for REAL and VIRTUAL transactions,
     # limited to 50 IDs each
-    real_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
-    virtual_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
+    real_trx_id_stack: ClassVar[deque[str]] = deque(maxlen=50)
+    virtual_trx_id_stack: ClassVar[deque[str]] = deque(maxlen=50)
 
     def op_in_trx_inc(self, op: OpBase) -> int:
         """
@@ -119,7 +119,7 @@ class BlockCounter:
         except Exception:
             return "No RPC"
 
-    def _marker_node_urls(self) -> Tuple[str, str]:
+    def _marker_node_urls(self) -> tuple[str, str]:
         """
         Optionally rotate node for marker logging; never raise into the stream loop.
 
@@ -183,7 +183,7 @@ class BlockCounter:
         """
         return self.time_diff > TIME_DIFFERENCE_CHECK
 
-    def inc(self, hive_event: dict, notification: bool = False) -> Tuple[bool, bool]:
+    def inc(self, hive_event: dict, notification: bool = False) -> tuple[bool, bool]:
         """
         Increment the block counter and handle marker updates based on the provided hive event.
 
@@ -206,7 +206,7 @@ class BlockCounter:
         new_block = False
         marker = False
         if self.last_good_block < self.current_block:
-            timestamp = hive_event.get("timestamp", datetime.now(tz=timezone.utc))
+            timestamp = hive_event.get("timestamp", datetime.now(tz=UTC))
             self.block_count += self.current_block - self.last_good_block
             self.last_good_block = self.current_block
             new_block = True
@@ -227,9 +227,9 @@ class BlockCounter:
                 ) / last_marker_time
 
                 self.marker_point = int(
-                    (BLOCK_MARKER_CATCHUP_MIN * 60 / HIVE_BLOCK_TIME)
+                    (BLOCK_MARKER_CATCHUP_MINUTES * 60 / HIVE_BLOCK_TIME)
                     if self.is_catching_up
-                    else (BLOCK_MARKER_NORMAL_MIN * 60 / HIVE_BLOCK_TIME)
+                    else (BLOCK_MARKER_NORMAL_MINUTES * 60 / HIVE_BLOCK_TIME)
                 )
                 self.next_marker += self.marker_point
 
