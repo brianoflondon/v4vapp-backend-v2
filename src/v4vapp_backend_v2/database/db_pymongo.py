@@ -517,15 +517,13 @@ class DBConn:
             parts = urlsplit(self.admin_uri)
             userinfo, sep, _hosts = parts.netloc.rpartition("@")
             netloc = f"{userinfo}@{host}" if sep else host
-            direct_uri = urlunsplit(
-                (
-                    "mongodb",
-                    netloc,
-                    "/",
-                    "authSource=admin&directConnection=true",
-                    "",
-                )
-            )
+            direct_uri = urlunsplit((
+                "mongodb",
+                netloc,
+                "/",
+                "authSource=admin&directConnection=true",
+                "",
+            ))
             info: dict[str, Any] | None = None
             try:
                 async with AsyncMongoClient(
