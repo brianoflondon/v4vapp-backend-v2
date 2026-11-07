@@ -403,10 +403,12 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         producer_reward = ProducerReward.model_validate(last_good_event)
         await producer_reward.get_witness_details()
         time_diff = check_time_diff(producer_reward.timestamp)
+        witness_version = producer_reward.witness.version if producer_reward.witness else "unknown"
         logger.info(
             f"{ICON} Last recorded witness producer block: "
             f"{producer_reward.block_num:,} "
             f"for {producer_reward.producer} "
+            f"(v{witness_version}) "
             f"{producer_reward.timestamp} "
             f"{time_diff} "
             f"{producer_reward.log_str}",
