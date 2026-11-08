@@ -149,7 +149,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
         ):
             # Magi skips inside try so finally → perform_finalize can migrate
             # identity fields on the keeper without re-running accounting.
-            logger.debug(
+            logger.info(
                 f"Process time already set for {tracked_op.short_id} already processed.",
                 extra={"notification": False},
             )

@@ -81,7 +81,8 @@
             "args": [
                 "--config-filename",
                 "devhive.config.yaml",
-                // "--start-block", // The block number to start from. Default or 0 will start from the last good block,
+                "--start-block", // The block number to start from. Default or 0 will start from the last good block,
+                "111479200",
                 // "111328496",
                 // "111284596",
                 // "111268745"
