@@ -94,6 +94,125 @@ def _ledger_op_slot(op_in_trx: int) -> int:
     return 1 if op_in_trx == 0 else op_in_trx
 
 
+def _norm_id(value: object) -> object:
+    """Compare order ids whether Mongo stored them as int or decimal string."""
+    if isinstance(value, str) and value.isdecimal():
+        return int(value)
+    return value
+
+
+def _amount_id(amount: object) -> tuple[str, str] | None:
+    """Identity of a Hive amount: integer string plus NAI, not a float."""
+    if isinstance(amount, dict):
+        raw = amount.get("amount")
+        nai = amount.get("nai")
+    else:
+        raw = getattr(amount, "amount", None)
+        nai = getattr(amount, "nai", None)
+    if raw is None or nai is None:
+        return None
+    return (str(raw), str(nai))
+
+
+def fill_exchange_identity(op: FillOrder) -> tuple | None:
+    """Identity of one market fill, independent of ``op_in_trx``.
+
+    One Hive transaction can contain several ``fill_order`` virtual ops.
+    They arrive together and ``db_monitor`` handles each change in its own
+    task, so a later index can be booked first. The fill is still a
+    different trade when the order ids, accounts, or amounts differ.
+    A rescan that stores the same fill under a new index matches this key
+    and is not booked again.
+    """
+    try:
+        current = _amount_id(op.current_pays)
+        opened = _amount_id(op.open_pays)
+        current_orderid = op.current_orderid
+        open_orderid = op.open_orderid
+        current_owner = op.current_owner
+        open_owner = op.open_owner
+    except AttributeError:
+        return None
+    if current is None or opened is None:
+        return None
+    return (
+        _norm_id(current_orderid),
+        _norm_id(open_orderid),
+        current_owner,
+        open_owner,
+        current,
+        opened,
+    )
+
+
+def _stored_fill_identity(doc: dict) -> tuple | None:
+    current = _amount_id(doc.get("current_pays"))
+    opened = _amount_id(doc.get("open_pays"))
+    if current is None or opened is None:
+        return None
+    if "current_orderid" not in doc or "open_orderid" not in doc:
+        return None
+    return (
+        _norm_id(doc.get("current_orderid")),
+        _norm_id(doc.get("open_orderid")),
+        doc.get("current_owner"),
+        doc.get("open_owner"),
+        current,
+        opened,
+    )
+
+
+async def _fill_booked_under_other_index(
+    op: FillOrder, other_slots: dict[int, str]
+) -> dict | None:
+    """Return the ledger row when this fill is already booked at another index.
+
+    ``other_slots`` maps a booked slot to one of its ledger ``group_id``s.
+    The hive_ops row for that slot carries the order ids and amounts.
+    Missing hive_ops means we cannot prove it is the same fill, so the
+    caller books the incoming op instead of dropping it.
+    """
+    incoming = fill_exchange_identity(op)
+    if incoming is None or not other_slots:
+        return None
+    cursor = FillOrder.collection().find(
+        {
+            "block_num": op.block_num,
+            "trx_id": op.trx_id,
+            "realm": f"{op.realm}",
+            "type": "fill_order",
+        },
+        projection={
+            "op_in_trx": 1,
+            "current_orderid": 1,
+            "open_orderid": 1,
+            "current_owner": 1,
+            "open_owner": 1,
+            "current_pays": 1,
+            "open_pays": 1,
+        },
+    )
+    hive_docs = await cursor.to_list(length=None)
+    incoming_slot = _ledger_op_slot(op.op_in_trx)
+    for hive_doc in hive_docs:
+        if _stored_fill_identity(hive_doc) != incoming:
+            continue
+        try:
+            slot = _ledger_op_slot(int(hive_doc.get("op_in_trx")))
+        except (TypeError, ValueError):
+            continue
+        if slot == incoming_slot or slot not in other_slots:
+            continue
+        group_id = other_slots[slot]
+        logger.info(
+            f"Fill already booked for {op.trx_id} as {group_id}; "
+            f"incoming {op.group_id} is the same exchange fill.",
+            extra={"notification": False, **op.log_extra},
+        )
+        return await LedgerEntry.collection().find_one(filter={"group_id": group_id})
+    return None
+
+
 async def find_existing_hive_ledger_entry(op: HiveLedgerOp) -> dict | None:
     """Decide whether this Hive op is new, already booked, or behind the trx.
 
@@ -101,18 +220,22 @@ async def find_existing_hive_ledger_entry(op: HiveLedgerOp) -> dict | None:
     rows, and the field is only the id, so this stays a short index range
     even though every Hive op pays for it.
 
-    New work arrives one operation at a time, so every index already stored
-    for this block, trx, and realm must be lower than the one arriving now.
-    A gap is allowed: an earlier operation may have created no ledger row.
-    Returns None in that case.
-
     Returns the stored ledger document when this same slot is already
     booked, including ``{group_id}_{ledger_type}``. A historical index of
     ``0`` occupies slot 1. The caller raises ``LedgerEntryDuplicateException``.
 
-    A transaction that was processed in bulk already has its later
-    operations stored. Seeing an earlier ``op_in_trx`` then means this read
-    is behind that batch. Logs a warning and raises
+    A ``fill_order`` is bookkeeping for a match that already happened on
+    Hive. Virtual fills of one transaction are handled concurrently, so a
+    higher ``op_in_trx`` can be stored before a lower one. That is not a
+    duplicate. The same fill is a duplicate only when its slot is booked,
+    or when the same orders, accounts, and amounts are already booked
+    under another index of this block, trx, and realm. A rescan then does
+    not ingest the exchange again, and a fill that was skipped is still
+    booked.
+
+    Other Hive ops keep the order check. A transfer can cause an outbound
+    payment, and a later booked index still means this read is behind a
+    batch that already ran. Logs a warning and raises
     ``HiveLedgerOrderMismatch``.
     """
     cursor = LedgerEntry.collection().find(
@@ -123,6 +246,7 @@ async def find_existing_hive_ledger_entry(op: HiveLedgerOp) -> dict | None:
     incoming = _ledger_op_slot(op.op_in_trx)
     same_slot: list[str] = []
     later: list[int] = []
+    other_slots: dict[int, str] = {}
     for doc in docs:
         op_index = booked_op_in_trx(doc.get("group_id", ""), op)
         if op_index is None:
@@ -133,11 +257,19 @@ async def find_existing_hive_ledger_entry(op: HiveLedgerOp) -> dict | None:
             continue
         if slot == incoming:
             same_slot.append(group_id)
-        elif slot > incoming:
-            later.append(slot)
+        else:
+            other_slots.setdefault(slot, group_id)
+            if slot > incoming:
+                later.append(slot)
     if same_slot:
         group_id = op.group_id if op.group_id in same_slot else same_slot[0]
         return await LedgerEntry.collection().find_one(filter={"group_id": group_id})
+
+    if isinstance(op, FillOrder):
+        already = await _fill_booked_under_other_index(op, other_slots)
+        if already is not None:
+            return already
+        return None
 
     if later:
         realm = f"{op.realm}"
@@ -163,9 +295,11 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> list[Led
     This method handles various types of transfers, including those between the server account,
     treasury account, funding account, exchange account, and customer accounts. It ensures that
     appropriate debit and credit accounts are assigned based on the transfer type. If this
-    operation is already booked, raises LedgerEntryDuplicateException. If a later operation
-    in the same block, transaction, and realm is already booked, logs a warning and returns
-    an empty list.
+    operation is already booked, raises LedgerEntryDuplicateException. A fill_order is
+    booked whenever that fill is not already stored, including when a higher op_in_trx
+    of the same transaction landed first. For every other Hive op, a later index already
+    booked in the same block, transaction, and realm logs a warning and raises
+    HiveLedgerOrderMismatch.
 
     Args:
         op (TrackedAny): The operation to process, which can be a transfer, limit order, fill order, or custom JSON.
@@ -173,12 +307,21 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> list[Led
 
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
+
+    Raises:
+        HiveLedgerOrderMismatch: A non-fill op arrived behind a later booked
+            index of the same transaction. The caller records the drop and
+            does not log it as a successful booking.
+        LedgerEntryDuplicateException: This slot, or this same market fill, is
+            already booked.
     """
     # These operations are the ones that create ledger rows. Their group_id
     # uses op_in_trx from the reader, and that number counts every virtual op
     # seen in the transaction, not only this tuple. Adding or removing one,
     # especially a virtual op, changes those numbers. Do not replay or re-scan
-    # history after changing this set: a higher index is booked again.
+    # history after changing this set: a higher index of a non-fill is booked
+    # again. A fill_order rescan is matched on the fill itself as well as the
+    # slot, so a renumbered fill is not booked twice.
     # HiveLedgerOp must stay the same tuple.
     if not isinstance(
         op,
@@ -190,10 +333,7 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> list[Led
         )
         return []
 
-    try:
-        existing_entry = await find_existing_hive_ledger_entry(op)
-    except HiveLedgerOrderMismatch:
-        return []
+    existing_entry = await find_existing_hive_ledger_entry(op)
     if existing_entry:
         logger.info(f"Ledger entry for group_id {op.group_id} already exists. Skipping.")
         try:
