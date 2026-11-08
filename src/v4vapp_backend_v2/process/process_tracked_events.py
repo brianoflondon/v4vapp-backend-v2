@@ -73,7 +73,7 @@ from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockSt
 from v4vapp_backend_v2.process.process_dash import process_dash_invoice
 from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError
 from v4vapp_backend_v2.process.process_forward_events import process_forward
-from v4vapp_backend_v2.process.process_hive import process_hive_op
+from v4vapp_backend_v2.process.process_hive import HiveLedgerOrderMismatch, process_hive_op
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
 from v4vapp_backend_v2.process.process_magi import process_magi_btc_transfer_event
 from v4vapp_backend_v2.process.process_payment import process_payment_success
@@ -242,6 +242,18 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
 
                 return ledger_entries
 
+        except HiveLedgerOrderMismatch:
+            # The mismatch is already logged. Do not also emit the success line.
+            # Still stamp process_time so db_monitor does not retry the drop.
+            finalize = False
+            await perform_finalize(
+                tracked_op=tracked_op,
+                start=start,
+                ledger_entries=[],
+                dropped=True,
+            )
+            return []
+
         except CustomJsonRetryError as e:
             attempts += 1
             logger.warning(f"{ICON} CustomJson processing retry error: {e}")
@@ -296,7 +308,10 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> li
 
 
 async def perform_finalize(
-    tracked_op: TrackedAny, start: float, ledger_entries: list[LedgerEntry]
+    tracked_op: TrackedAny,
+    start: float,
+    ledger_entries: list[LedgerEntry],
+    dropped: bool = False,
 ):
     """
     Finalizes the processing of a tracked operation by calculating the processing time,
@@ -332,13 +347,19 @@ async def perform_finalize(
             f"{ICON} {entry.log_str}",
             extra={"notification": False, **ledger_log_extra},
         )
-    logger.info(
-        f"{SUCCESS_ICON} {process_time:>7,.2f} s {tracked_op.log_str}",
-        extra={
-            "notification": False,
-            "ledger_items": ledger_entries_log_extra,
-        },
-    )
+    if dropped:
+        logger.warning(
+            f"{FAILURE_ICON} dropped {process_time:>7,.2f} s {tracked_op.log_str}",
+            extra={"notification": False, "ledger_items": ledger_entries_log_extra},
+        )
+    else:
+        logger.info(
+            f"{SUCCESS_ICON} {process_time:>7,.2f} s {tracked_op.log_str}",
+            extra={
+                "notification": False,
+                "ledger_items": ledger_entries_log_extra,
+            },
+        )
     logger.debug(f"{ICON} {'+++' * 10} {cust_id} {'+++' * 10}")
 
 
