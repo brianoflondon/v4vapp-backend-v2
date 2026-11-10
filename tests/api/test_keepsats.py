@@ -31,7 +31,7 @@ def test_transfer_keepsats_insufficient(monkeypatch):
     assert r.status_code == 402
     data = r.json()
     detail = data.get("detail")
-    assert detail["message"] == "Insufficient funds"
+    assert "Insufficient funds" in detail["message"]
     # balance should be serialized as a plain int
     assert isinstance(detail["balance"], int)
     assert detail["balance"] == 0
@@ -53,7 +53,7 @@ def test_convert_keepsats_insufficient(monkeypatch):
     assert r.status_code == 402
     data = r.json()
     detail = data.get("detail")
-    assert detail["message"] == "Insufficient funds"
+    assert "Insufficient funds" in detail["message"]
     assert isinstance(detail["balance"], int)
     assert detail["balance"] == 0
     assert detail["requested"] == 1000

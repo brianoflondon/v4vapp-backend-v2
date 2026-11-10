@@ -489,7 +489,7 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
         message = "Minimum is 0 sats"
 
     if transfer.sats and net_msats // Decimal(1000) < transfer.sats:
-        message = "Insufficient funds"
+        message = f"Insufficient funds {transfer.hive_accname_from}"
 
     if message:
         # Convert Decimal results to plain ints so the exception detail can be
@@ -568,7 +568,7 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
-                "message": "Insufficient funds",
+                "message": f"Insufficient funds {convert.hive_accname}",
                 "balance": balance,
                 "requested": requested,
                 "deficit": deficit,
