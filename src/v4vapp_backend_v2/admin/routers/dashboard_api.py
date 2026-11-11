@@ -7,6 +7,7 @@ browser to fetch them in parallel and render as they arrive.
 """
 
 import asyncio
+import json
 from asyncio import TaskGroup
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
@@ -21,6 +22,8 @@ from v4vapp_backend_v2.accounting.ledger_checkpoints import (
     PeriodType,
     latest_period_create_checkpoint,
 )
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
 from v4vapp_backend_v2.accounting.sanity_checks import (
     SanityCheckResult,
@@ -31,12 +34,17 @@ from v4vapp_backend_v2.accounting.trading_pnl import generate_trading_pnl_report
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.exchange_protocol import (
     ExchangeConnectionError,
+    format_base_asset,
+    format_quote_asset,
     get_exchange_adapter,
 )
+from v4vapp_backend_v2.conversion.exchange_rebalance import PendingRebalance
 from v4vapp_backend_v2.dash.amounts import DUFFS_PER_DASH
 from v4vapp_backend_v2.dash.settings import dash_connection
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
-from v4vapp_backend_v2.hive.hive_extras import account_hive_balances_async
+from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.hive.hive_extras import account_hive_balances_async, get_transfer_cust_id
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.magi.magi_balances import get_magi_btc_balance_by_account
 from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
@@ -377,3 +385,394 @@ async def dashboard_sanity() -> JSONResponse:
             "pending_transactions": pending_transactions,
         }
     )
+
+
+def _ratio_pct(amount: Decimal, minimum: Decimal) -> Decimal | None:
+    """Percent of a minimum already accumulated. None when that minimum is unset."""
+    if minimum <= 0:
+        return None
+    if amount <= 0:
+        return Decimal(0)
+    return (amount / minimum) * Decimal(100)
+
+
+def _binding_pct(record: PendingRebalance) -> Decimal:
+    """Progress toward execution. Both minimums must be met, so the smaller one binds."""
+    measured = [
+        pct
+        for pct in (
+            _ratio_pct(record.pending_qty, record.min_qty_threshold),
+            _ratio_pct(record.pending_quote_value, record.min_notional_threshold),
+        )
+        if pct is not None
+    ]
+    if not measured:
+        return Decimal(100) if record.pending_qty > 0 else Decimal(0)
+    return min(measured)
+
+
+def _pct_number(value: Decimal | None) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), 1)
+
+
+def _needs_text(record: PendingRebalance) -> str:
+    can_execute, reason = record.can_execute()
+    if can_execute:
+        return "Ready to execute"
+    if record.pending_qty <= 0:
+        return "Nothing accumulated"
+    shortfalls: list[str] = []
+    if record.min_qty_threshold > 0 and record.pending_qty < record.min_qty_threshold:
+        shortfalls.append(
+            format_base_asset(record.min_qty_threshold - record.pending_qty, record.base_asset)
+        )
+    if (
+        record.min_notional_threshold > 0
+        and record.pending_quote_value < record.min_notional_threshold
+    ):
+        shortfalls.append(
+            format_quote_asset(
+                record.min_notional_threshold - record.pending_quote_value,
+                record.quote_asset,
+            )
+        )
+    if shortfalls:
+        return "Needs " + " and ".join(shortfalls)
+    return reason
+
+
+# Conversion rows share the pending rebalance short id and carry the customer account
+# plus the amount that was added to the buy or sell.
+_ORDER_LEDGER_RANK = {
+    LedgerType.CONV_HIVE_TO_KEEPSATS: 0,
+    LedgerType.CONV_KEEPSATS_TO_HIVE: 0,
+    LedgerType.CONV_DASH_TO_SATS: 0,
+    LedgerType.CONV_CUSTOMER: 1,
+}
+_HIVE_UNITS = {Currency.HIVE, Currency.HBD, Currency.DASH, Currency.DUFFS}
+
+
+def _format_order_amount(amount: Decimal, unit: Currency) -> str:
+    if unit == Currency.MSATS:
+        sats = (amount / Decimal(1000)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+        return f"{int(sats):,} sats"
+    if unit == Currency.SATS:
+        return f"{int(amount):,} sats"
+    if unit == Currency.DUFFS:
+        return f"{amount / DUFFS_PER_DASH:,.3f} DASH"
+    if unit in (Currency.HIVE, Currency.HBD, Currency.DASH):
+        return f"{amount:,.3f} {unit.value.upper()}"
+    return f"{amount} {unit.value}"
+
+
+def _ledger_order_amount(entry: LedgerEntry) -> tuple[Decimal, Currency]:
+    """Amount of the customer order that was added to this rebalance."""
+    if entry.ledger_type == LedgerType.CONV_HIVE_TO_KEEPSATS:
+        return entry.credit_amount, entry.credit_unit
+    if entry.ledger_type in (LedgerType.CONV_KEEPSATS_TO_HIVE, LedgerType.CONV_DASH_TO_SATS):
+        return entry.debit_amount, entry.debit_unit
+    for amount, unit in (
+        (entry.debit_amount, entry.debit_unit),
+        (entry.credit_amount, entry.credit_unit),
+    ):
+        if unit in _HIVE_UNITS and amount:
+            return amount, unit
+    if entry.debit_unit in (Currency.MSATS, Currency.SATS) and entry.debit_amount:
+        return entry.debit_amount, entry.debit_unit
+    return entry.credit_amount, entry.credit_unit
+
+
+def _ledger_account(entry: LedgerEntry) -> str:
+    for value in (entry.cust_id, entry.cust_id_to, entry.cust_id_from):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def choose_order_entry(entries: list[LedgerEntry]) -> LedgerEntry | None:
+    """Prefer the conversion row over the later customer deposit for the same short id."""
+    ranked = [
+        entry
+        for entry in entries
+        if entry.reversed is None and entry.ledger_type in _ORDER_LEDGER_RANK
+    ]
+    if not ranked:
+        return None
+    return min(ranked, key=lambda entry: _ORDER_LEDGER_RANK[entry.ledger_type])
+
+
+def describe_ledger_order(entry: LedgerEntry) -> dict[str, str]:
+    amount, unit = _ledger_order_amount(entry)
+    value_fmt = _format_order_amount(amount, unit) if amount else ""
+    return {"account": _ledger_account(entry), "value_fmt": value_fmt}
+
+
+def describe_hive_op(doc: dict[str, Any]) -> dict[str, str]:
+    """Hive account and amount from a hive_ops document when no ledger row exists."""
+    op_type = str(doc.get("type") or doc.get("op_type") or "")
+    if op_type == "custom_json":
+        payload = doc.get("json") or {}
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except Exception:
+                payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        account = str(
+            payload.get("from_account") or payload.get("to_account") or doc.get("cust_id") or ""
+        )
+        if payload.get("msats") is not None:
+            value_fmt = _format_order_amount(Decimal(str(payload["msats"])), Currency.MSATS)
+        elif payload.get("sats") is not None:
+            value_fmt = _format_order_amount(Decimal(str(payload["sats"])), Currency.SATS)
+        else:
+            value_fmt = ""
+        return {"account": account, "value_fmt": value_fmt}
+
+    value_fmt = ""
+    amount = doc.get("amount")
+    if isinstance(amount, dict) and amount.get("amount") is not None:
+        try:
+            parsed = AmountPyd.model_validate(amount)
+            value_fmt = f"{parsed.amount_decimal:,.3f} {parsed.symbol}"
+        except Exception:
+            value_fmt = ""
+    from_acc = str(doc.get("from") or "")
+    to_acc = str(doc.get("to") or "")
+    account = from_acc or to_acc
+    if from_acc and to_acc:
+        try:
+            account = str(get_transfer_cust_id(from_acc, to_acc))
+        except Exception:
+            account = from_acc
+    return {"account": account, "value_fmt": value_fmt}
+
+
+def _orders_payload(
+    transaction_ids: list[str],
+    order_details: dict[str, dict[str, str]] | None,
+) -> list[dict[str, str]]:
+    details = order_details or {}
+    orders: list[dict[str, str]] = []
+    for short_id in transaction_ids:
+        detail = details.get(short_id) or {}
+        orders.append(
+            {
+                "short_id": short_id,
+                "account": detail.get("account") or "",
+                "value_fmt": detail.get("value_fmt") or "",
+            }
+        )
+    return orders
+
+
+def _empty_side(direction: str, base_asset: str, quote_asset: str) -> dict[str, Any]:
+    return {
+        "present": False,
+        "direction": direction,
+        "pending_qty_fmt": format_base_asset(Decimal(0), base_asset),
+        "pending_quote_fmt": format_quote_asset(Decimal(0), quote_asset),
+        "min_qty_fmt": "—",
+        "min_notional_fmt": "—",
+        "qty_pct": None,
+        "notional_pct": None,
+        "progress_pct": 0.0,
+        "transaction_count": 0,
+        "transaction_ids": [],
+        "orders": [],
+        "can_execute": False,
+        "status": "No orders",
+    }
+
+
+def _side_payload(
+    record: PendingRebalance,
+    order_details: dict[str, dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    can_execute, _reason = record.can_execute()
+    transaction_ids = list(record.transaction_ids)
+    return {
+        "present": True,
+        "direction": record.direction.value,
+        "pending_qty_fmt": format_base_asset(record.pending_qty, record.base_asset),
+        "pending_quote_fmt": format_quote_asset(record.pending_quote_value, record.quote_asset),
+        "min_qty_fmt": format_base_asset(record.min_qty_threshold, record.base_asset),
+        "min_notional_fmt": format_quote_asset(record.min_notional_threshold, record.quote_asset),
+        "qty_pct": _pct_number(_ratio_pct(record.pending_qty, record.min_qty_threshold)),
+        "notional_pct": _pct_number(
+            _ratio_pct(record.pending_quote_value, record.min_notional_threshold)
+        ),
+        "progress_pct": _pct_number(_binding_pct(record)),
+        "transaction_count": record.transaction_count,
+        "transaction_ids": transaction_ids,
+        "orders": _orders_payload(transaction_ids, order_details),
+        "can_execute": can_execute,
+        "status": _needs_text(record),
+    }
+
+
+def _merged_side(records: list[PendingRebalance]) -> PendingRebalance | None:
+    """Sum every pending document for one side of a pair."""
+    if not records:
+        return None
+    if len(records) == 1:
+        return records[0]
+    latest = max(records, key=lambda record: record.updated_at)
+    return PendingRebalance(
+        base_asset=latest.base_asset,
+        quote_asset=latest.quote_asset,
+        direction=latest.direction,
+        exchange=latest.exchange,
+        pending_qty=sum((record.pending_qty for record in records), Decimal(0)),
+        pending_quote_value=sum(
+            (record.pending_quote_value for record in records),
+            Decimal(0),
+        ),
+        min_qty_threshold=max(record.min_qty_threshold for record in records),
+        min_notional_threshold=max(record.min_notional_threshold for record in records),
+        transaction_count=sum(record.transaction_count for record in records),
+        transaction_ids=[
+            transaction_id for record in records for transaction_id in record.transaction_ids
+        ],
+        updated_at=latest.updated_at,
+    )
+
+
+def summarize_pending_rebalances(
+    records: list[PendingRebalance],
+    order_details: dict[str, dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Group pending rebalances into buy and sell sums with progress to the next order.
+
+    A side executes on its own once its quantity and notional both reach the
+    minimums stored on the pending record.
+    """
+    grouped: dict[tuple[str, str, str], dict[str, list[PendingRebalance]]] = {}
+    for record in records:
+        key = (record.exchange, record.base_asset, record.quote_asset)
+        sides = grouped.setdefault(key, {"buy": [], "sell": []})
+        sides[record.direction.value].append(record)
+
+    pairs: list[dict[str, Any]] = []
+    closest: dict[str, Any] | None = None
+    for exchange, base_asset, quote_asset in sorted(grouped):
+        sides = grouped[(exchange, base_asset, quote_asset)]
+        buy_record = _merged_side(sides["buy"])
+        sell_record = _merged_side(sides["sell"])
+        buy = (
+            _side_payload(buy_record, order_details)
+            if buy_record is not None
+            else _empty_side("buy", base_asset, quote_asset)
+        )
+        sell = (
+            _side_payload(sell_record, order_details)
+            if sell_record is not None
+            else _empty_side("sell", base_asset, quote_asset)
+        )
+        pair = {
+            "exchange": exchange,
+            "base_asset": base_asset,
+            "quote_asset": quote_asset,
+            "symbol": f"{base_asset}/{quote_asset}",
+            "buy": buy,
+            "sell": sell,
+        }
+        pairs.append(pair)
+        for side in (buy, sell):
+            if not side["present"]:
+                continue
+            if side["progress_pct"] <= 0 and not side["can_execute"]:
+                continue
+            candidate = {
+                "symbol": pair["symbol"],
+                "exchange": exchange,
+                "direction": side["direction"],
+                "label": f"{side['direction'].upper()} {pair['symbol']}",
+                "progress_pct": side["progress_pct"],
+                "can_execute": side["can_execute"],
+                "status": side["status"],
+            }
+            if closest is None or (
+                candidate["can_execute"],
+                candidate["progress_pct"],
+            ) > (
+                closest["can_execute"],
+                closest["progress_pct"],
+            ):
+                closest = candidate
+
+    return {"pairs": pairs, "closest": closest, "error": None}
+
+
+async def lookup_rebalance_orders(short_ids: list[str]) -> dict[str, dict[str, str]]:
+    """Map each pending short id to the Hive account and order value that created it."""
+    ids = list(dict.fromkeys(short_id for short_id in short_ids if short_id))
+    if not ids:
+        return {}
+
+    grouped: dict[str, list[LedgerEntry]] = {}
+    cursor = LedgerEntry.collection().find(
+        {
+            "short_id": {"$in": ids},
+            "ledger_type": {"$in": [ledger_type.value for ledger_type in _ORDER_LEDGER_RANK]},
+        }
+    )
+    async for doc in cursor:
+        try:
+            entry = LedgerEntry.model_validate(doc)
+        except Exception as e:
+            logger.warning(
+                f"Skipping ledger row for rebalance order: {e}",
+                extra={"notification": False},
+            )
+            continue
+        grouped.setdefault(entry.short_id, []).append(entry)
+
+    details: dict[str, dict[str, str]] = {}
+    missing: list[str] = []
+    for short_id in ids:
+        chosen = choose_order_entry(grouped.get(short_id, []))
+        if chosen is None:
+            missing.append(short_id)
+            continue
+        details[short_id] = describe_ledger_order(chosen)
+
+    if missing:
+        hive_cursor = InternalConfig.db["hive_ops"].find({"short_id": {"$in": missing}})
+        async for doc in hive_cursor:
+            short_id = str(doc.get("short_id") or "")
+            if not short_id or short_id in details:
+                continue
+            details[short_id] = describe_hive_op(doc)
+    return details
+
+
+async def list_pending_rebalances() -> list[PendingRebalance]:
+    """Read every pending rebalance document, including sides waiting at zero."""
+    collection = PendingRebalance.collection()
+    cursor = collection.find({})
+    results: list[PendingRebalance] = []
+    async for doc in cursor:
+        results.append(PendingRebalance.model_validate(doc))
+    return results
+
+
+@router.get("/pending-rebalances")
+async def dashboard_pending_rebalances() -> JSONResponse:
+    """Buy and sell sums from pending_rebalances, and how close each side is to an order."""
+    try:
+        records = await list_pending_rebalances()
+    except Exception as e:
+        logger.warning(f"Pending rebalances failed: {e}", extra={"notification": False})
+        return JSONResponse({"pairs": [], "closest": None, "error": str(e)})
+    short_ids = [short_id for record in records for short_id in record.transaction_ids]
+    try:
+        order_details = await lookup_rebalance_orders(short_ids)
+    except Exception as e:
+        logger.warning(f"Rebalance order lookup failed: {e}", extra={"notification": False})
+        order_details = {}
+    return JSONResponse(summarize_pending_rebalances(records, order_details))

@@ -15,36 +15,21 @@
 
 {% block content %}
 <div class="row">
-    <!-- Quick Stats -->
-    <div class="col-md-4 mb-4">
+    <div class="col-12 mb-4">
         <div class="card">
-            <div class="card-body text-center">
-                <div class="h1 text-primary mb-2">👥</div>
-                <h5 class="card-title">Account Balances</h5>
-                <p class="card-text text-muted">View and manage account balances</p>
-                <a href="/admin/accounts" class="btn btn-primary btn-sm">View Accounts</a>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h5 class="mb-0">⚖️ Pending Rebalances</h5>
+                    <div class="text-muted small">Buy and sell sums from pending orders. Each side places an order
+                        when its quantity and notional both reach the exchange minimum.</div>
+                </div>
+                <span class="text-muted small text-nowrap ms-3" id="pending-rebalances-status">Loading&hellip;</span>
             </div>
-        </div>
-    </div>
-
-    <div class="col-md-4 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <div class="h1 text-info mb-2">📊</div>
-                <h5 class="card-title">Financial Reports</h5>
-                <p class="card-text text-muted">Generate and view financial reports</p>
-                <a href="/admin/financial-reports" class="btn btn-info btn-sm" target="_blank">View Reports</a>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-4 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <div class="h1 text-success mb-2">❤️</div>
-                <h5 class="card-title">System Health</h5>
-                <p class="card-text text-muted">Check system status</p>
-                <a href="/admin/health" class="btn btn-success btn-sm" target="_blank">Health Check</a>
+            <div class="card-body" id="pending-rebalances-section">
+                <div class="d-flex align-items-center text-muted small">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    Loading pending rebalances&hellip;
+                </div>
             </div>
         </div>
     </div>
@@ -126,6 +111,42 @@
                         Loading&hellip;
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick links -->
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="h1 text-primary mb-2">👥</div>
+                <h5 class="card-title">Account Balances</h5>
+                <p class="card-text text-muted">View and manage account balances</p>
+                <a href="/admin/accounts" class="btn btn-primary btn-sm">View Accounts</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="h1 text-info mb-2">📊</div>
+                <h5 class="card-title">Financial Reports</h5>
+                <p class="card-text text-muted">Generate and view financial reports</p>
+                <a href="/admin/financial-reports" class="btn btn-info btn-sm" target="_blank">View Reports</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="h1 text-success mb-2">❤️</div>
+                <h5 class="card-title">System Health</h5>
+                <p class="card-text text-muted">Check system status</p>
+                <a href="/admin/health" class="btn btn-success btn-sm" target="_blank">Health Check</a>
             </div>
         </div>
     </div>
@@ -271,6 +292,97 @@
             + '</div>';
     }
 
+    function renderRebalanceSide(side, title) {
+        const pct = Number(side.progress_pct);
+        const barPct = Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 0));
+        const barClass = side.can_execute ? 'bg-success' : (barPct >= 75 ? 'bg-warning' : 'bg-primary');
+        const qtyPct = side.qty_pct == null ? 'no minimum' : (Number(side.qty_pct).toFixed(0) + '%');
+        const notionalPct = side.notional_pct == null
+            ? 'no minimum'
+            : (Number(side.notional_pct).toFixed(0) + '%');
+        const orders = Number(side.transaction_count) || 0;
+        const orderLabel = orders === 1 ? '1 order' : (orders + ' orders');
+        const statusClass = side.can_execute ? 'text-success' : 'text-body-secondary';
+        const orderRows = Array.isArray(side.orders) && side.orders.length
+            ? side.orders
+            : (Array.isArray(side.transaction_ids) ? side.transaction_ids : []).map(function (id) {
+                return { short_id: id, account: '', value_fmt: '' };
+            });
+        let idHtml = '';
+        if (orderRows.length) {
+            const shown = orderRows.slice(0, 20);
+            idHtml = '<details class="small mt-2"><summary class="text-muted">Orders</summary><ul class="mb-0 ps-3">';
+            for (const order of shown) {
+                const shortId = typeof order === 'string' ? order : (order.short_id || '');
+                const valueFmt = typeof order === 'string' ? '' : (order.value_fmt || '');
+                const account = typeof order === 'string' ? '' : (order.account || '');
+                let extra = '';
+                if (valueFmt) extra += ' · ' + escHtml(valueFmt);
+                if (account) extra += ' · ' + escHtml(account);
+                idHtml += '<li><code>' + escHtml(String(shortId)) + '</code>' + extra + '</li>';
+            }
+            if (orderRows.length > shown.length) {
+                idHtml += '<li class="text-muted">+' + (orderRows.length - shown.length) + ' more</li>';
+            }
+            idHtml += '</ul></details>';
+        }
+        return '<div class="h-100">'
+            + '<div class="d-flex justify-content-between align-items-baseline mb-1">'
+            + '<h6 class="mb-0">' + title + ' sum</h6>'
+            + '<span class="small ' + statusClass + '">' + escHtml(side.status || '') + '</span></div>'
+            + '<div class="fs-5">' + escHtml(side.pending_qty_fmt || '—') + '</div>'
+            + '<div class="text-muted small mb-2">' + escHtml(side.pending_quote_fmt || '—')
+            + ' · ' + orderLabel + '</div>'
+            + '<div class="progress mb-1" style="height: 8px;" role="progressbar"'
+            + ' aria-valuenow="' + barPct.toFixed(1) + '" aria-valuemin="0" aria-valuemax="100"'
+            + ' aria-label="' + title + ' progress">'
+            + '<div class="progress-bar ' + barClass + '" style="width: ' + barPct.toFixed(1) + '%"></div></div>'
+            + '<div class="small text-muted">Qty ' + escHtml(qtyPct) + ' of ' + escHtml(side.min_qty_fmt || '—')
+            + '<br>Notional ' + escHtml(notionalPct) + ' of ' + escHtml(side.min_notional_fmt || '—')
+            + '</div>'
+            + idHtml
+            + '</div>';
+    }
+
+    function renderPendingRebalances(data) {
+        const section = document.getElementById('pending-rebalances-section');
+        const statusEl = document.getElementById('pending-rebalances-status');
+        if (data.error) {
+            if (statusEl) statusEl.textContent = 'Unavailable';
+            section.innerHTML = '<div class="text-danger small">Failed to load: '
+                + escHtml(String(data.error)) + '</div>';
+            return;
+        }
+        const pairs = data.pairs || [];
+        const closest = data.closest;
+        if (statusEl) {
+            if (!closest) {
+                statusEl.textContent = pairs.length ? 'Nothing accumulated' : 'None waiting';
+            } else if (closest.can_execute) {
+                statusEl.textContent = 'Ready: ' + closest.label;
+            } else {
+                statusEl.textContent = 'Closest: ' + closest.label + ' · '
+                    + Number(closest.progress_pct).toFixed(0) + '%';
+            }
+        }
+        if (pairs.length === 0) {
+            section.innerHTML = '<div class="text-muted">No pending rebalances.</div>';
+            return;
+        }
+        let html = '';
+        for (const pair of pairs) {
+            html += '<div class="border rounded p-3 mb-3">'
+                + '<div class="d-flex justify-content-between align-items-baseline mb-3">'
+                + '<strong>' + escHtml(pair.symbol || '') + '</strong>'
+                + '<span class="text-muted small">' + escHtml(pair.exchange || '') + '</span></div>'
+                + '<div class="row g-3">'
+                + '<div class="col-md-6">' + renderRebalanceSide(pair.buy || {}, 'Buy') + '</div>'
+                + '<div class="col-md-6">' + renderRebalanceSide(pair.sell || {}, 'Sell') + '</div>'
+                + '</div></div>';
+        }
+        section.innerHTML = html;
+    }
+
     function renderFinancialSummary(data) {
         const section = document.getElementById('financial-summary-section');
         const pl = data.profit_loss_usd != null ? data.profit_loss_usd : 0;
@@ -397,6 +509,15 @@
         }
         return response.json();
     }
+
+    const pendingRebalancePromise = fetchJsonOrThrow('/admin/api/dashboard/pending-rebalances')
+        .then(renderPendingRebalances)
+        .catch(err => {
+            const statusEl = document.getElementById('pending-rebalances-status');
+            if (statusEl) statusEl.textContent = 'Unavailable';
+            document.getElementById('pending-rebalances-section').innerHTML =
+                '<div class="text-danger small">Failed to load: ' + escHtml(String(err)) + '</div>';
+        });
 
     const hivePromise = fetchJsonOrThrow('/admin/api/dashboard/hive-balances')
         .then(renderHiveBalances)
