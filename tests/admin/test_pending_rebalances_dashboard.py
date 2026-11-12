@@ -11,7 +11,11 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.admin.routers import dashboard_api
 from v4vapp_backend_v2.conversion.exchange_rebalance import PendingRebalance, RebalanceDirection
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.currency_class import Currency
+
+ORDERED_AT = datetime(2026, 11, 11, 10, 30, tzinfo=UTC)
+AS_OF = datetime(2026, 11, 11, 12, 44, tzinfo=UTC)
 
 TEMPLATE = Path("src/v4vapp_backend_v2/admin/templates/dashboard.html.jinja")
 
@@ -140,7 +144,13 @@ def test_order_lines_carry_the_hive_account_and_value():
         order_details={"4521_ab12cd_0": {"account": "alice", "value_fmt": "12.345 HIVE"}},
     )
     assert summary["pairs"][0]["sell"]["orders"] == [
-        {"short_id": "4521_ab12cd_0", "account": "alice", "value_fmt": "12.345 HIVE"}
+        {
+            "short_id": "4521_ab12cd_0",
+            "account": "alice",
+            "value_fmt": "12.345 HIVE",
+            "age": "",
+            "rate_fmt": "",
+        }
     ]
 
 
@@ -165,10 +175,14 @@ def test_hive_to_keepsats_order_uses_the_hive_amount_and_account():
         credit_unit=Currency.HIVE,
         debit_amount=Decimal(12345000),
         debit_unit=Currency.MSATS,
+        timestamp=ORDERED_AT,
+        debit_conv=CryptoConv(sats_hive=Decimal("312.5")),
     )
-    assert dashboard_api.describe_ledger_order(entry) == {
+    assert dashboard_api.describe_ledger_order(entry, now=AS_OF) == {
         "account": "alice",
         "value_fmt": "12.345 HIVE",
+        "age": "2h 14m",
+        "rate_fmt": "312.5 sats/HIVE",
     }
 
 
@@ -180,11 +194,26 @@ def test_keepsats_to_hive_order_uses_the_hive_bought():
         debit_unit=Currency.HBD,
         credit_amount=Decimal(8500000),
         credit_unit=Currency.MSATS,
+        timestamp=ORDERED_AT,
+        debit_conv=CryptoConv(sats_hive=Decimal("81.565"), sats_hbd=Decimal(280)),
     )
-    assert dashboard_api.describe_ledger_order(entry) == {
-        "account": "bob",
-        "value_fmt": "8.500 HBD",
-    }
+    detail = dashboard_api.describe_ledger_order(entry, now=AS_OF)
+    assert detail["account"] == "bob"
+    assert detail["value_fmt"] == "8.500 HBD"
+    assert detail["age"] == "2h 14m"
+    assert detail["rate_fmt"] == "81.565 sats/HIVE"
+
+
+def test_order_age_uses_hours_and_minutes():
+    assert dashboard_api._format_order_age(AS_OF, now=AS_OF) == "<1m"
+    assert (
+        dashboard_api._format_order_age(datetime(2026, 11, 11, 11, 59, tzinfo=UTC), now=AS_OF)
+        == "45m"
+    )
+    assert (
+        dashboard_api._format_order_age(datetime(2026, 11, 11, 9, 44, tzinfo=UTC), now=AS_OF)
+        == "3h"
+    )
 
 
 def test_conversion_row_wins_over_the_customer_deposit():
@@ -212,10 +241,15 @@ def test_hive_op_fallback_names_the_customer_and_amount():
             "from": "alice",
             "to": "someaccount",
             "amount": {"amount": "12345", "nai": "@@000000021", "precision": 3},
-        }
+            "timestamp": "2026-11-11T12:00:00+00:00",
+            "conv": {"sats_hive": "300.25"},
+        },
+        now=AS_OF,
     )
     assert detail["account"] == "alice"
     assert detail["value_fmt"] == "12.345 HIVE"
+    assert detail["age"] == "44m"
+    assert detail["rate_fmt"] == "300.25 sats/HIVE"
 
 
 def test_summary_is_empty_when_nothing_is_pending():

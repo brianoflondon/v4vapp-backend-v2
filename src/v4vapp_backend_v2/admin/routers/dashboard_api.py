@@ -504,14 +504,106 @@ def choose_order_entry(entries: list[LedgerEntry]) -> LedgerEntry | None:
     return min(ranked, key=lambda entry: _ORDER_LEDGER_RANK[entry.ledger_type])
 
 
-def describe_ledger_order(entry: LedgerEntry) -> dict[str, str]:
+def _as_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _format_order_age(when: datetime | None, *, now: datetime | None = None) -> str:
+    """Age of an order as hours and minutes, for example '2h 14m' or '45m'."""
+    if when is None:
+        return ""
+    current = now or datetime.now(tz=UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    minutes = int((current - when).total_seconds() // 60)
+    if minutes < 1:
+        return "<1m"
+    hours, mins = divmod(minutes, 60)
+    if hours == 0:
+        return f"{mins}m"
+    if mins == 0:
+        return f"{hours}h"
+    return f"{hours}h {mins}m"
+
+
+def _format_sats_per_hive(rate: Decimal) -> str:
+    if rate <= 0:
+        return ""
+    quantized = rate.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    text = f"{quantized:,.3f}".rstrip("0").rstrip(".")
+    return f"{text} sats/HIVE"
+
+
+def _decimal_or_zero(value: Any) -> Decimal:
+    if value is None or value == "":
+        return Decimal(0)
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return Decimal(0)
+
+
+def _conv_sats_per_hive(entry: LedgerEntry) -> Decimal:
+    """Sats per HIVE from the quote stored on the conversion that booked this order."""
+    for conv in (entry.debit_conv, entry.credit_conv):
+        if conv is not None and conv.sats_hive > 0:
+            return conv.sats_hive
+    return Decimal(0)
+
+
+def _order_detail(
+    *,
+    account: str,
+    value_fmt: str,
+    when: datetime | None,
+    sats_per_hive: Decimal,
+    now: datetime | None = None,
+) -> dict[str, str]:
+    return {
+        "account": account,
+        "value_fmt": value_fmt,
+        "age": _format_order_age(when, now=now),
+        "rate_fmt": _format_sats_per_hive(sats_per_hive),
+    }
+
+
+def describe_ledger_order(entry: LedgerEntry, *, now: datetime | None = None) -> dict[str, str]:
     amount, unit = _ledger_order_amount(entry)
     value_fmt = _format_order_amount(amount, unit) if amount else ""
-    return {"account": _ledger_account(entry), "value_fmt": value_fmt}
+    return _order_detail(
+        account=_ledger_account(entry),
+        value_fmt=value_fmt,
+        when=_as_datetime(entry.timestamp),
+        sats_per_hive=_conv_sats_per_hive(entry),
+        now=now,
+    )
 
 
-def describe_hive_op(doc: dict[str, Any]) -> dict[str, str]:
+def _doc_sats_per_hive(doc: dict[str, Any]) -> Decimal:
+    for key in ("conv", "debit_conv", "credit_conv"):
+        conv = doc.get(key)
+        if isinstance(conv, dict):
+            rate = _decimal_or_zero(conv.get("sats_hive"))
+            if rate > 0:
+                return rate
+    return Decimal(0)
+
+
+def describe_hive_op(doc: dict[str, Any], *, now: datetime | None = None) -> dict[str, str]:
     """Hive account and amount from a hive_ops document when no ledger row exists."""
+    when = _as_datetime(doc.get("timestamp"))
+    sats_per_hive = _doc_sats_per_hive(doc)
     op_type = str(doc.get("type") or doc.get("op_type") or "")
     if op_type == "custom_json":
         payload = doc.get("json") or {}
@@ -531,7 +623,13 @@ def describe_hive_op(doc: dict[str, Any]) -> dict[str, str]:
             value_fmt = _format_order_amount(Decimal(str(payload["sats"])), Currency.SATS)
         else:
             value_fmt = ""
-        return {"account": account, "value_fmt": value_fmt}
+        return _order_detail(
+            account=account,
+            value_fmt=value_fmt,
+            when=when,
+            sats_per_hive=sats_per_hive,
+            now=now,
+        )
 
     value_fmt = ""
     amount = doc.get("amount")
@@ -549,7 +647,13 @@ def describe_hive_op(doc: dict[str, Any]) -> dict[str, str]:
             account = str(get_transfer_cust_id(from_acc, to_acc))
         except Exception:
             account = from_acc
-    return {"account": account, "value_fmt": value_fmt}
+    return _order_detail(
+        account=account,
+        value_fmt=value_fmt,
+        when=when,
+        sats_per_hive=sats_per_hive,
+        now=now,
+    )
 
 
 def _orders_payload(
@@ -565,6 +669,8 @@ def _orders_payload(
                 "short_id": short_id,
                 "account": detail.get("account") or "",
                 "value_fmt": detail.get("value_fmt") or "",
+                "age": detail.get("age") or "",
+                "rate_fmt": detail.get("rate_fmt") or "",
             }
         )
     return orders
