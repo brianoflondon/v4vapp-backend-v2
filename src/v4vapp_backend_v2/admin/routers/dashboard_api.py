@@ -507,9 +507,14 @@ def choose_order_entry(entries: list[LedgerEntry]) -> LedgerEntry | None:
 def _as_datetime(value: Any) -> datetime | None:
     if isinstance(value, datetime):
         parsed = value
-    elif isinstance(value, str) and value:
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if text.endswith(("Z", "z")):
+            text = f"{text[:-1]}+00:00"
         try:
-            parsed = datetime.fromisoformat(value)
+            parsed = datetime.fromisoformat(text)
         except ValueError:
             return None
     else:
