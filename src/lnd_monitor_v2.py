@@ -34,6 +34,7 @@ from v4vapp_backend_v2.grpc_models.lnd_events_group import (
     LndChannelName,
     LndEventsGroup,
 )
+from v4vapp_backend_v2.helpers.egress_health import start_egress_probe
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, get_in_flight_time
 from v4vapp_backend_v2.helpers.pub_key_alias import (
     decode_payment_request_and_attach,
@@ -1845,6 +1846,7 @@ async def main_async_start(connection_name: str) -> None:
     try:
         db_conn = DBConn()
         await db_conn.setup_database()
+        start_egress_probe(shutdown_event)
         await TrackedBaseModel.update_quote()
         # Get the current event loop
         loop = asyncio.get_event_loop()

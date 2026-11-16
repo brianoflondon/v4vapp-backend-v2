@@ -22,6 +22,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
     save_last_good_quote,
 )
 from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.egress_health import reset_for_tests
 
 
 class MemoryRedis:
@@ -56,6 +57,8 @@ def _good_quote(source: str = "Binance", age_s: float = 0) -> QuoteResponse:
 
 @pytest.fixture
 def memory_redis(monkeypatch: pytest.MonkeyPatch) -> MemoryRedis:
+    # A prior test can cache egress:down for two seconds in this process.
+    reset_for_tests()
     redis = MemoryRedis()
 
     def _keep_test_redis(self) -> None:
@@ -64,7 +67,8 @@ def memory_redis(monkeypatch: pytest.MonkeyPatch) -> MemoryRedis:
     # InternalConfig() replaces the client inside setup_redis. Keep the test store.
     monkeypatch.setattr(InternalConfig, "setup_redis", _keep_test_redis)
     monkeypatch.setattr(InternalConfig, "redis", redis)
-    return redis
+    yield redis
+    reset_for_tests()
 
 
 def _patch_sources(mocker, quote_for):

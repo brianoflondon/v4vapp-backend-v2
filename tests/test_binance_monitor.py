@@ -6,10 +6,12 @@ import pytest
 
 import binance_monitor
 from status.status_api import StatusAPIException
+from v4vapp_backend_v2.helpers.egress_health import reset_for_tests
 
 
 @pytest.fixture
 def reset_monitor_state():
+    reset_for_tests()
     previous_success = binance_monitor._last_success_monotonic
     previous_started = binance_monitor._monitor_started_monotonic
     binance_monitor._last_success_monotonic = None
@@ -17,6 +19,7 @@ def reset_monitor_state():
     yield
     binance_monitor._last_success_monotonic = previous_success
     binance_monitor._monitor_started_monotonic = previous_started
+    reset_for_tests()
 
 
 async def _hold_balance_task():
@@ -64,6 +67,31 @@ async def test_health_check_fails_when_poll_is_stale(reset_monitor_state):
 @pytest.mark.asyncio
 async def test_health_check_fails_when_balance_task_is_gone(reset_monitor_state):
     binance_monitor._last_success_monotonic = time.monotonic()
+    with pytest.raises(StatusAPIException, match="is not running"):
+        await binance_monitor.health_check()
+
+
+@pytest.mark.asyncio
+async def test_health_check_stays_up_while_outbound_is_down(reset_monitor_state, mocker):
+    holder = _BalanceTask()
+    try:
+        binance_monitor._last_success_monotonic = time.monotonic() - (
+            binance_monitor.HEALTH_MAX_STALE_S + 30
+        )
+        mocker.patch.object(binance_monitor, "egress_is_down", return_value=True)
+        result = await binance_monitor.health_check()
+        assert result["status"] == "DEGRADED"
+        assert result["message"] == "Outbound path down; Binance poll paused"
+        assert result["last_success_age_s"] > binance_monitor.HEALTH_MAX_STALE_S
+    finally:
+        await holder.stop()
+
+
+@pytest.mark.asyncio
+async def test_missing_balance_task_still_fails_while_outbound_is_down(
+    reset_monitor_state, mocker
+):
+    mocker.patch.object(binance_monitor, "egress_is_down", return_value=True)
     with pytest.raises(StatusAPIException, match="is not running"):
         await binance_monitor.health_check()
 

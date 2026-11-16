@@ -19,6 +19,7 @@ from v4vapp_backend_v2.database.db_retry import (
     summarize_write_result,  # optional pretty log
 )
 from v4vapp_backend_v2.helpers.binance_extras import get_client
+from v4vapp_backend_v2.helpers.egress_health import pause_outbound
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     convert_decimals_for_mongodb,
     format_time_delta,
@@ -728,7 +729,7 @@ class AllQuotes(BaseModel):
 
         return None
 
-    def _fallback_last_good(self) -> QuoteResponse:
+    def _fallback_last_good(self, *, announce: bool = True) -> QuoteResponse:
         """Serve the last good quote, or an error once it is past the staleness limit."""
         stored = load_last_good_quote()
         if stored is None:
@@ -742,16 +743,18 @@ class AllQuotes(BaseModel):
         self.source = stored.source or "last_good"
         if age_s <= LAST_GOOD_QUOTE_MAX_AGE_S:
             stored.error = ""
-            logger.warning(
-                f"{ICON} Serving last good quote, age {age_s:.0f}s, stale=True",
-                extra={"notification": False, "quote_age_s": age_s, "stale": True},
-            )
+            if announce:
+                logger.warning(
+                    f"{ICON} Serving last good quote, age {age_s:.0f}s, stale=True",
+                    extra={"notification": False, "quote_age_s": age_s, "stale": True},
+                )
         else:
             stored.error = PRICING_UNAVAILABLE
-            logger.warning(
-                f"{ICON} Last good quote is {age_s:.0f}s old; {PRICING_UNAVAILABLE}",
-                extra={"notification": False, "quote_age_s": age_s, "stale": True},
-            )
+            if announce:
+                logger.warning(
+                    f"{ICON} Last good quote is {age_s:.0f}s old; {PRICING_UNAVAILABLE}",
+                    extra={"notification": False, "quote_age_s": age_s, "stale": True},
+                )
         self.quote = stored
         return stored
 
@@ -818,6 +821,12 @@ class AllQuotes(BaseModel):
             logger.debug(
                 f"{ICON} Quotes fetched from main cache in {timer() - start:.4f} seconds",
             )
+            return
+        if pause_outbound("quotes", f"{ICON} Outbound path down; serving cached quotes"):
+            # use_cache=False still must not open the four quote sockets while
+            # the shared probe says the public path is down.
+            if not global_cache:
+                self.quote = self._fallback_last_good(announce=False)
             return
         all_services = enabled_quote_service_clients()
         self.fetch_date = datetime.now(tz=UTC)
