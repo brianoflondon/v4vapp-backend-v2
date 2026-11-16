@@ -28,7 +28,13 @@ from v4vapp_backend_v2.conversion.exchange_rebalance import (
     add_pending_rebalance,
 )
 from v4vapp_backend_v2.database.db_pymongo import DBConn, DBConnConnectionException
+from v4vapp_backend_v2.helpers.egress_health import (
+    egress_is_down,
+    pause_outbound,
+    start_egress_probe,
+)
 from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter
+from v4vapp_backend_v2.helpers.notification_outbox import start_notification_outbox
 
 ICON = "🅑"
 app = typer.Typer()
@@ -98,6 +104,13 @@ async def health_check():
         )
 
     now = time.monotonic()
+    if egress_is_down():
+        age = None if _last_success_monotonic is None else round(now - _last_success_monotonic, 1)
+        return {
+            "status": "DEGRADED",
+            "message": "Outbound path down; Binance poll paused",
+            "last_success_age_s": age,
+        }
     if _last_success_monotonic is None:
         started = _monitor_started_monotonic if _monitor_started_monotonic is not None else now
         age = now - started
@@ -113,9 +126,7 @@ async def health_check():
 
     age = now - _last_success_monotonic
     if age > HEALTH_MAX_STALE_S:
-        raise StatusAPIException(
-            f"{ICON} Binance Monitor last successful poll was {age:.0f}s ago"
-        )
+        raise StatusAPIException(f"{ICON} Binance Monitor last successful poll was {age:.0f}s ago")
     return {
         "status": "OK",
         "message": "Binance Monitor is running",
@@ -253,13 +264,18 @@ async def check_binance_balances():
         try:
             if shutdown_event.is_set():
                 raise asyncio.CancelledError("Docker Shutdown")
-            try:
-                polled = await poll_binance_balances(saved_balances)
-            except asyncio.CancelledError:
-                logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
-                raise
+            if pause_outbound("binance", f"{ICON} Outbound path down; skipping Binance poll"):
+                polled = None
+            else:
+                try:
+                    polled = await poll_binance_balances(saved_balances)
+                except asyncio.CancelledError:
+                    logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
+                    raise
             if polled is None:
-                send_message = True
+                # A paused poll is not a Binance failure, so it does not arm an alert.
+                if not egress_is_down():
+                    send_message = True
             else:
                 new_balances, hive_target, notification_str, log_str = polled
                 _last_success_monotonic = time.monotonic()
@@ -292,9 +308,7 @@ async def check_binance_balances():
                 start = timer()
 
 
-def generate_message(
-    saved_balances: dict, balances: dict, current_price_decimal: Decimal
-):
+def generate_message(saved_balances: dict, balances: dict, current_price_decimal: Decimal):
     """
     Generates a message summarizing the current and target balances of HIVE and SATS,
     along with any changes (delta) in balances since the last check.
@@ -442,10 +456,10 @@ async def main_async_start():
         # Register signal handlers for SIGTERM and SIGINT
         loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
         loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
+        start_egress_probe(shutdown_event)
+        start_notification_outbox(shutdown_event)
 
-        balance_task = asyncio.create_task(
-            check_binance_balances(), name=BALANCE_TASK_NAME
-        )
+        balance_task = asyncio.create_task(check_binance_balances(), name=BALANCE_TASK_NAME)
         balance_task.add_done_callback(_log_balance_task_done)
         tasks = [balance_task]
 

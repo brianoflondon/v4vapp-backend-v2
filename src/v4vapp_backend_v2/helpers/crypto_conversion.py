@@ -529,6 +529,60 @@ class CryptoConv(BaseModel):
         )
 
 
+class PricingUnavailableError(ValueError):
+    """Raised when a conversion would use a zero, missing, or too-old price."""
+
+    def __init__(self, detail: str = "pricing temporarily unavailable") -> None:
+        super().__init__(detail)
+
+
+def _decimal_rate(value: Any) -> Decimal:
+    """A price attribute as Decimal. Mocks and missing values are 0."""
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return Decimal(0)
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return Decimal(0)
+
+
+def _rate_attr(quote: QuoteResponse, name: str) -> Decimal:
+    try:
+        return _decimal_rate(getattr(quote, name))
+    except AttributeError:
+        return Decimal(0)
+
+
+def _quote_blocks_conversion(quote: QuoteResponse) -> bool:
+    """True when the quote itself says it must not be used."""
+    try:
+        error = quote.error
+    except AttributeError:
+        return False
+    return isinstance(error, str) and bool(error)
+
+
+def _source_price(conv_from: Currency, quote: QuoteResponse) -> Decimal:
+    """The rate required to turn conv_from into msats. 0 means refuse."""
+    if conv_from == Currency.HIVE:
+        return _rate_attr(quote, "sats_hive_p")
+    if conv_from == Currency.HBD:
+        return _rate_attr(quote, "sats_hbd_p")
+    if conv_from == Currency.USD:
+        return _rate_attr(quote, "sats_usd_p")
+    if conv_from in (Currency.DASH, Currency.DUFFS):
+        return _rate_attr(quote, "sats_per_dash_p")
+    if conv_from in (Currency.SATS, Currency.MSATS):
+        # The amount is already sats. BTC keeps USD from being stored as 0.
+        btc = _rate_attr(quote, "btc_usd")
+        if btc > 0:
+            return btc
+        return _rate_attr(quote, "sats_usd_p")
+    return Decimal(0)
+
+
 class CryptoConversion(BaseModel):
     """
     A Pydantic model for handling cryptocurrency conversions between various currencies,
@@ -649,37 +703,27 @@ class CryptoConversion(BaseModel):
         self._compute_conversions()
         self.fetch_date = self.quote.fetch_date
 
-    def _compute_conversions(self):
-        """Compute all currency conversions starting from msats."""
-        # Step 1: Convert the input value to msats
-        if self.quote is None:
-            logger.warning("CryptoConversion: quote is None, cannot compute conversions")
-            raise ValueError("Quote is not available or invalid")
+    def _refuse_unpriced(self, reason: str) -> None:
+        source = "" if self.quote is None else self.quote.source
+        logger.warning(
+            f"CryptoConversion: refusing conversion, pricing temporarily unavailable. "
+            f"{reason} Quote source: {source}",
+            extra={"notification": False},
+        )
+        raise PricingUnavailableError("pricing temporarily unavailable")
 
-        # Validate quote has required rates for conversion
-        if self.conv_from == Currency.HIVE and self.quote.sats_hive_p == Decimal(0):
-            logger.warning(
-                f"CryptoConversion: sats_hive_p is 0, cannot convert from HIVE. "
-                f"Quote source: {self.quote.source}"
-            )
-        if self.conv_from == Currency.HBD and self.quote.sats_hbd_p == Decimal(0):
-            logger.warning(
-                f"CryptoConversion: sats_hbd_p is 0, cannot convert from HBD. "
-                f"Quote source: {self.quote.source}"
-            )
-        if self.conv_from == Currency.USD and self.quote.sats_usd_p == Decimal(0):
-            logger.warning(
-                f"CryptoConversion: sats_usd_p is 0, cannot convert from USD. "
-                f"Quote source: {self.quote.source}"
-            )
-        if self.conv_from in (
-            Currency.DASH,
-            Currency.DUFFS,
-        ) and self.quote.sats_per_dash_p == Decimal(0):
-            logger.warning(
-                f"CryptoConversion: sats_per_dash_p is 0, cannot convert from "
-                f"{self.conv_from.value.upper()}. Quote source: {self.quote.source}"
-            )
+    def _compute_conversions(self):
+        """Compute all currency conversions starting from msats.
+
+        The source currency's price must be non-zero. Other outputs whose
+        price is missing stay 0. A locked Dash quote has BTC and DASH only,
+        so a duffs-to-sats post still runs and HIVE/HBD stay 0. A quote with
+        an error is never used.
+        """
+        if self.quote is None or _quote_blocks_conversion(self.quote):
+            self._refuse_unpriced("Quote is missing or unusable.")
+        if _source_price(self.conv_from, self.quote) <= 0:
+            self._refuse_unpriced(f"{self.conv_from} price is 0.")
 
         try:
             if self.conv_from == Currency.MSATS:
@@ -709,42 +753,24 @@ class CryptoConversion(BaseModel):
             # Step 3: Derive all other values from msats
             self.btc = self.msats / Decimal(100_000_000_000)  # msats to BTC (1 BTC = 10^11 msats)
 
-            # Check for zero divisors and warn before attempting division
-            if self.quote.sats_usd_p == 0:
-                logger.warning(
-                    f"CryptoConversion: sats_usd_p is 0, USD will be 0. "
-                    f"Quote source: {self.quote.source}"
-                )
+            usd_rate = _rate_attr(self.quote, "sats_usd_p")
+            if usd_rate <= 0:
                 self.usd = Decimal(0)
             else:
-                self.usd = Decimal(
-                    str(round(self.msats / (self.quote.sats_usd_p * Decimal(1000)), 6))
-                )
+                self.usd = Decimal(str(round(self.msats / (usd_rate * Decimal(1000)), 6)))
 
-            if self.quote.sats_hbd_p == 0:
-                if self.conv_from not in (Currency.DASH, Currency.DUFFS):
-                    logger.warning(
-                        f"CryptoConversion: sats_hbd_p is 0, HBD will be 0. "
-                        f"Quote source: {self.quote.source}",
-                        extra={"notification": False},
-                    )
+            hbd_rate = _rate_attr(self.quote, "sats_hbd_p")
+            if hbd_rate <= 0:
                 self.hbd = Decimal(0)
             else:
-                self.hbd = Decimal(
-                    str(round(self.msats / (self.quote.sats_hbd_p * Decimal(1000)), 6))
-                )
+                self.hbd = Decimal(str(round(self.msats / (hbd_rate * Decimal(1000)), 6)))
 
-            if self.quote.sats_hive_p == 0:
-                if self.conv_from not in (Currency.DASH, Currency.DUFFS):
-                    logger.warning(
-                        f"CryptoConversion: sats_hive_p is 0, HIVE will be 0. "
-                        f"Quote source: {self.quote.source}",
-                        extra={"notification": False},
-                    )
+            # Use Decimal.quantize with ROUND_HALF_UP to ensure .5 always rounds up
+            hive_rate = _rate_attr(self.quote, "sats_hive_p")
+            if hive_rate <= 0:
                 self.hive = Decimal(0)
             else:
-                # Use Decimal.quantize with ROUND_HALF_UP to ensure .5 always rounds up
-                hive_val = self.msats / (self.quote.sats_hive_p * Decimal(1000))
+                hive_val = self.msats / (hive_rate * Decimal(1000))
                 # 10 decimal places -> quantizer is 0.0000000001
                 quantizer = Decimal("0.0000000001")
                 self.hive = hive_val.quantize(quantizer, rounding=ROUND_HALF_UP)
@@ -758,21 +784,10 @@ class CryptoConversion(BaseModel):
                 else:
                     self.dash = self.msats / (self.quote.sats_per_dash_p * Decimal(1000))
                     self.duffs = self.dash * DUFFS_PER_DASH
-        except ZeroDivisionError as e:
-            # Handle division by zero if the quote is not available
-            logger.warning(
-                f"CryptoConversion: ZeroDivisionError during conversion. "
-                f"Quote source: {self.quote.source}, Error: {e}"
-            )
-            self.msats = Decimal(0)
-            self.sats = Decimal(0)
-            self.btc = Decimal(0)
-            self.usd = Decimal(0)
-            self.hbd = Decimal(0)
-            self.hive = Decimal(0)
-            self.dash = Decimal(0)
-            self.duffs = Decimal(0)
-            self.msats_fee = Decimal(0)
+        except PricingUnavailableError:
+            raise
+        except (ZeroDivisionError, ArithmeticError) as exc:
+            self._refuse_unpriced(f"Error: {exc}")
 
     @property
     def conversion(self) -> CryptoConv:

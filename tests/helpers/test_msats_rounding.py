@@ -38,7 +38,9 @@ def make_quote(sats_per_hive: str = "81.565") -> QuoteResponse:
     # hive_usd = sats_per_hive * btc_usd / 1e8
     target_sats = Decimal(sats_per_hive)
     derived_hive_usd = target_sats * btc_usd / Decimal("1e8")
-    return QuoteResponse(hive_usd=derived_hive_usd, btc_usd=btc_usd)
+    return QuoteResponse(
+        hive_usd=derived_hive_usd, hbd_usd=Decimal("1"), btc_usd=btc_usd
+    )
 
 
 # ---------------------------------------------------------------------------

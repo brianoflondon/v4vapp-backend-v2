@@ -2,22 +2,28 @@ import asyncio
 import json
 import random
 import re
-from collections import deque
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from telegram import Bot
-from telegram.error import BadRequest, InvalidToken, RetryAfter, TimedOut
+from telegram.error import BadRequest, InvalidToken, NetworkError, RetryAfter
 from telegram.request import HTTPXRequest
 
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
+from v4vapp_backend_v2.helpers.egress_health import egress_is_down
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     is_markdown,
     sanitize_filename,
     sanitize_markdown_v1,
     sanitize_markdown_v2,
     truncate_text,
+)
+from v4vapp_backend_v2.helpers.notification_outbox import (
+    claim_send,
+    classify_notification,
+    finish_send,
+    persistable_kwargs,
+    queue_failed_send,
 )
 
 BOT_CONFIG_EXTENSION = "_n_bot_config.json"
@@ -36,8 +42,6 @@ class NotificationBadTokenError(NotificationNotSetupError):
 class NotificationBot:
     bot: Bot
     config: NotificationBotConfig
-    _message_history: deque = deque(maxlen=1000)
-    _logged_patterns: set = set()  # Track patterns that have been logged as ignored
 
     def __init__(
         self,
@@ -123,53 +127,63 @@ class NotificationBot:
         except Exception as e:
             raise NotificationNotSetupError(e)
 
-    def _clean_message_history(self):
-        """Remove messages older than 60 seconds from the history and update logged patterns."""
-        now = datetime.now(tz=timezone.utc)
-        sixty_seconds_ago = now - timedelta(seconds=60)
-        # Collect patterns of messages that will remain
-        remaining_patterns = set()
-        # Remove old messages and track which patterns are still in history
-        while self._message_history and self._message_history[0]["timestamp"] < sixty_seconds_ago:
-            self._message_history.popleft()
-        # Add patterns of remaining messages to remaining_patterns
-        for msg in self._message_history:
-            remaining_patterns.add(msg["pattern"])
-        # Update _logged_patterns to only include patterns still in history
-        self._logged_patterns.intersection_update(remaining_patterns)
-
-    def _check_message_pattern(self, text: str) -> bool:
-        """
-        Check if the last 40 characters of the message have been sent more than 5 times
-        in the last 60 seconds. Returns True if the message should be sent, False if it should be ignored.
-        Logs a warning only the first time a pattern is ignored.
-        """
-        num_chars = 20
-        self._clean_message_history()
-        last_n_chars = text[-num_chars:] if len(text) >= num_chars else text
-
-        # Count messages with the same last 20 characters in the last 60 seconds
-        pattern_count = sum(1 for msg in self._message_history if msg["pattern"] == last_n_chars)
-
-        if pattern_count >= 5:
-            # Log only if this pattern hasn't been logged before
-            if last_n_chars not in self._logged_patterns:
-                logger.warning(
-                    f"Ignoring message with pattern '{last_n_chars}' - already sent {pattern_count} times in last 60s",
-                    extra={"notification": True, "pattern": last_n_chars},
-                )
-                self._logged_patterns.add(last_n_chars)
-            return False
-        return True
-
     @staticmethod
     def strip_ansi(text: str) -> str:
         """Strip ANSI escape sequences from text."""
         ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
         return ansi_escape.sub("", text)
 
-    async def send_message(self, text: str, retries: int = 3, **kwargs: Any) -> None:
-        """Send text messages, with pattern-based filtering and rate limiting."""
+    def _notification_identity(
+        self,
+        text: str,
+        dedupe_key: str | None,
+        category: str | None,
+    ) -> tuple[str, str]:
+        if dedupe_key:
+            fallback = classify_notification(text)[1]
+            return dedupe_key, category or fallback
+        key, detected = classify_notification(text)
+        return key, category or detected
+
+    def _queue_send(
+        self,
+        *,
+        text: str,
+        kwargs: dict[str, Any],
+        dedupe_key: str,
+        dedupe_token: str,
+        category: str,
+        hold_for_digest: bool,
+        attempt: int,
+        retries: int,
+    ) -> None:
+        queue_failed_send(
+            text=text,
+            chat_id=self.config.chat_id,
+            bot_name=getattr(self, "name", "") or "",
+            kwargs=persistable_kwargs(kwargs),
+            dedupe_key=dedupe_key,
+            dedupe_token=dedupe_token,
+            category=category,
+            hold_for_digest=hold_for_digest,
+            attempt=attempt,
+            retries=retries,
+        )
+
+    async def send_message(
+        self,
+        text: str,
+        retries: int = 3,
+        dedupe_key: str | None = None,
+        category: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Send a Telegram message. A network failure is queued, not dropped.
+
+        Replays of the same invoice (r_hash + state) or the same error_code are
+        skipped. While the outbound path is down the message is queued for the
+        outage digest and this call does not wait on Telegram.
+        """
         if not self.bot or not self.config.chat_id:
             raise NotificationNotSetupError(
                 "No chat ID set. Please start the bot first by sending /start"
@@ -178,18 +192,10 @@ class NotificationBot:
         text_original = text
         text = self.strip_ansi(text)
         text = truncate_text(text, 300)
-
-        # Check if the message should be sent based on pattern frequency
-        if not self._check_message_pattern(text):
+        dedupe_key, category = self._notification_identity(text, dedupe_key, category)
+        dedupe_token = claim_send(dedupe_key)
+        if dedupe_token is None:
             return
-
-        # Add the message to history before attempting to send
-        self._message_history.append(
-            {
-                "timestamp": datetime.now(tz=timezone.utc),
-                "pattern": text[-20:] if len(text) >= 20 else text,
-            }
-        )
 
         text_v2 = None
         if re.search(r"no_preview", text):
@@ -200,27 +206,45 @@ class NotificationBot:
             text = sanitize_markdown_v1(text)
 
         text = text + f" {InternalConfig().local_machine_name}"
+        try:
+            path_down = egress_is_down()
+        except Exception:
+            path_down = False
+        if path_down:
+            self._queue_send(
+                text=text,
+                kwargs=kwargs,
+                dedupe_key=dedupe_key,
+                dedupe_token=dedupe_token,
+                category=category,
+                hold_for_digest=True,
+                attempt=0,
+                retries=retries,
+            )
+            return
+
         attempt = 0
         while attempt < retries:
-            ans = None
             try:
-                ans = await self.bot.send_message(chat_id=self.config.chat_id, text=text, **kwargs)
+                await self.bot.send_message(chat_id=self.config.chat_id, text=text, **kwargs)
+                finish_send(dedupe_key, dedupe_token)
                 return
-            except TimedOut as e:
+            except NetworkError as e:
                 attempt += 1
                 if attempt >= retries:
-                    logger.error(
-                        f"Error sending [ {text} ] after {retries} retries: {e}",
-                        extra={
-                            "notification": False,
-                            "error": e,
-                            "attempt": attempt,
-                            "retries": retries,
-                        },
+                    self._queue_send(
+                        text=text,
+                        kwargs=kwargs,
+                        dedupe_key=dedupe_key,
+                        dedupe_token=dedupe_token,
+                        category=category,
+                        hold_for_digest=False,
+                        attempt=attempt,
+                        retries=retries,
                     )
                     return
-                logger.warning(
-                    f"Timed out while sending message {text}. Retrying {attempt}/{retries}...",
+                logger.debug(
+                    f"Timed out while sending message. Retrying {attempt}/{retries}",
                     extra={
                         "notification": False,
                         "error": e,
@@ -258,6 +282,7 @@ class NotificationBot:
                             "notification_text": text,
                         },
                     )
+                    finish_send(dedupe_key, dedupe_token)
                     return
                 except Exception as e:
                     attempt += 1
@@ -342,9 +367,7 @@ class NotificationBot:
                 self.config.chat_id = update.message.chat_id
                 self.save_config()
 
-            if update.message.text == "/start":
-                await self.send_menu()
-            elif update.message.text == "/menu":
+            if update.message.text == "/start" or update.message.text == "/menu":
                 await self.send_menu()
             elif update.message.text == "/status":
                 await self.send_message("Bot is running")

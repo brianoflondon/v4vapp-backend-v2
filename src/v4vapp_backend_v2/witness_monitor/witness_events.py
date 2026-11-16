@@ -8,6 +8,7 @@ from nectar.witness import Witness as NectarWitness
 
 from v4vapp_backend_v2.actions.tracked_any import TrackedProducer
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.egress_health import pause_outbound
 from v4vapp_backend_v2.hive.hive_extras import (
     get_verified_hive_client_for_accounts,
     witness_signing_key,
@@ -318,6 +319,8 @@ async def send_kuma_heartbeat(
     Returns:
         None
     """
+    if pause_outbound("kuma", f"{ICON} Outbound path down; skipping Kuma heartbeat"):
+        return
     witness_config = InternalConfig().config.hive_config.witness_configs.get(witness, None)
     if not witness_config:
         logger.warning(

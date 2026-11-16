@@ -25,6 +25,7 @@ from typing import Protocol
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.notification_bot import NotificationBot, NotificationNotSetupError
+from v4vapp_backend_v2.helpers.notification_outbox import identity_from_record
 
 
 class NotificationProtocol(Protocol):
@@ -32,7 +33,10 @@ class NotificationProtocol(Protocol):
         # If notifications have been disabled globally (e.g., Redis unreachable during
         # startup), skip sending to avoid cascading failures.
         if not getattr(InternalConfig, "notifications_enabled", True):
-            logger.warning("Notifications disabled; skipping sending notification.", extra={"notification": False})
+            logger.warning(
+                "Notifications disabled; skipping sending notification.",
+                extra={"notification": False},
+            )
             return
 
         InternalConfig.notification_lock = True
@@ -130,10 +134,11 @@ class BotNotification(NotificationProtocol):
         notification_str = getattr(record, "notification_str", None)
         if notification_str is not None:
             message = notification_str
+        dedupe_key, category = identity_from_record(message, record)
+        send_kwargs: dict = {"dedupe_key": dedupe_key, "category": category}
         if getattr(record, "silent", False):
-            await bot.send_message(message, disable_notification=True)
-        else:
-            await bot.send_message(message)
+            send_kwargs["disable_notification"] = True
+        await bot.send_message(message, **send_kwargs)
 
 
 class EmailNotification(NotificationProtocol):

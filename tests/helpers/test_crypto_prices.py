@@ -34,6 +34,38 @@ def enable_all_quote_services(mocker):
     )
 
 
+class _MemoryRedis:
+    """In-memory stand-in so quote tests do not write a last-good price to localhost."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, bytes] = {}
+
+    def get(self, key: str):
+        return self.store.get(key)
+
+    def set(self, name: str, value: bytes, ex: int | None = None):
+        self.store[name] = value
+        return True
+
+    def close(self) -> None:
+        return None
+
+    def ping(self) -> bool:
+        return True
+
+
+@pytest.fixture(autouse=True)
+def isolate_quote_redis(monkeypatch: pytest.MonkeyPatch) -> _MemoryRedis:
+    redis = _MemoryRedis()
+
+    def _keep_test_redis(self) -> None:
+        InternalConfig.redis = redis
+
+    monkeypatch.setattr(InternalConfig, "setup_redis", _keep_test_redis)
+    monkeypatch.setattr(InternalConfig, "redis", redis)
+    return redis
+
+
 @pytest.fixture(autouse=True)
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
@@ -153,6 +185,7 @@ def test_overlay_dash_usd_when_binance_has_none():
     all_quotes.quotes = {
         "Binance": QuoteResponse(
             hive_usd=Decimal("0.2"),
+            hbd_usd=Decimal("1"),
             btc_usd=Decimal(65000),
             dash_usd=Decimal(0),
             source="Binance",
@@ -478,7 +511,14 @@ async def test_get_all_quotes_skips_disabled_coingecko(mocker):
 
     async def fake_get_quote(self, use_cache=True):
         called.append(type(self).__name__)
-        return QuoteResponse(source=type(self).__name__)
+        return QuoteResponse(
+            source=type(self).__name__,
+            hive_usd=Decimal("0.2"),
+            hbd_usd=Decimal("1"),
+            btc_usd=Decimal("60000"),
+            hive_hbd=Decimal("0.2"),
+            fetch_date=datetime.now(tz=timezone.utc),
+        )
 
     for cls in (CoinGecko, Binance, CoinMarketCap, HiveInternalMarket):
         mocker.patch.object(cls, "get_quote", fake_get_quote)
@@ -540,7 +580,7 @@ async def test_get_all_quotes_global_timeout(mocker):
 
     all_quotes = AllQuotes()
     # use a very small timeout so we hit the boundary quickly
-    await all_quotes.get_all_quotes(timeout=0.01, store_db=False)
+    await all_quotes.get_all_quotes(timeout=0.01, store_db=False, use_cache=False)
 
     # we expect every service to have a timeout-style error rather than an
     # empty string (previous bug produced empty messages)
@@ -583,7 +623,7 @@ async def test_per_service_timeout(mocker, monkeypatch: pytest.MonkeyPatch):
     )
 
     all_quotes = AllQuotes()
-    await all_quotes.get_all_quotes(timeout=20, store_db=False)
+    await all_quotes.get_all_quotes(timeout=20, store_db=False, use_cache=False)
 
     assert "service timeout" in all_quotes.quotes["CoinGecko"].error.lower()
     # the other providers should have succeeded

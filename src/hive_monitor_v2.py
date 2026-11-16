@@ -27,11 +27,18 @@ from v4vapp_backend_v2.config.setup import (
     logger,
 )
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.egress_health import (
+    degraded_blocks_restart,
+    egress_is_down,
+    log_degraded,
+    start_egress_probe,
+)
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     check_time_diff,
     format_time_delta,
     seconds_only,
 )
+from v4vapp_backend_v2.helpers.notification_outbox import start_notification_outbox
 from v4vapp_backend_v2.hive.hive_extras import (
     close_hive_client,
     default_hive_nodes,
@@ -192,10 +199,19 @@ async def health_check() -> dict[str, Any]:
             startup_complete_event.is_set()
             and STATUS_OBJ.last_progress_age_s > HEALTH_STALE_PROGRESS_SECONDS
         ):
-            exceptions.append(
+            # A Docker restart cannot bring the public path back. Stay up and
+            # keep the stream loop retrying until egress:down clears.
+            stall_reason = (
                 f"no stream progress for {STATUS_OBJ.last_progress_age_s:.0f}s "
                 f"(limit {HEALTH_STALE_PROGRESS_SECONDS:.0f}s)"
             )
+            if egress_is_down():
+                log_degraded(
+                    "hive_health",
+                    f"{ICON} egress down; not failing health ({stall_reason})",
+                )
+            else:
+                exceptions.append(stall_reason)
     if STATUS_OBJ.fatal_reason:
         exceptions.append(f"fatal: {STATUS_OBJ.fatal_reason}")
 
@@ -866,18 +882,20 @@ async def all_ops_loop(
                 consecutive_empty_restarts = 0
 
             stall_s = timer() - last_progress_mono
+            restart_reason = ""
             if consecutive_empty_restarts >= MAX_CONSECUTIVE_EMPTY_STREAM_RESTARTS:
-                request_fatal_restart(
+                restart_reason = (
                     f"{consecutive_empty_restarts} consecutive stream restarts with no ops "
                     f"(limit {MAX_CONSECUTIVE_EMPTY_STREAM_RESTARTS})"
                 )
-                return  # noqa: B012
-            if consecutive_empty_restarts >= 2 and stall_s >= MAX_PROGRESS_STALL_SECONDS:
-                request_fatal_restart(
+            elif consecutive_empty_restarts >= 2 and stall_s >= MAX_PROGRESS_STALL_SECONDS:
+                restart_reason = (
                     f"no stream progress for {stall_s:.0f}s after "
                     f"{consecutive_empty_restarts} empty restarts "
                     f"(limit {MAX_PROGRESS_STALL_SECONDS:.0f}s)"
                 )
+            if restart_reason and not degraded_blocks_restart(restart_reason):
+                request_fatal_restart(restart_reason)
                 return  # noqa: B012
 
             previous_url = getattr(getattr(hive_client, "rpc", None), "url", "unknown")
@@ -1037,6 +1055,8 @@ async def main_async_start(
 
     db_conn = DBConn()
     await db_conn.setup_database()
+    start_egress_probe(shutdown_event)
+    start_notification_outbox(shutdown_event)
 
     loop = asyncio.get_running_loop()
 

@@ -15,6 +15,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse, quote_is_usable
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.opening_balances import (
     reset_exchange_opening_balance,
@@ -191,6 +192,14 @@ class TestResetLightningOpeningBalance:
         # Now add a second dummy entry so has_transactions returns True
         # (has_transactions requires combined_balance length > 1)
         quote = TrackedBaseModel.last_quote
+        if not quote_is_usable(quote):
+            quote = QuoteResponse(
+                hive_usd=Decimal("0.25"),
+                hbd_usd=Decimal("1"),
+                btc_usd=Decimal("80000"),
+                fetch_date=datetime.now(tz=timezone.utc),
+            )
+            TrackedBaseModel.last_quote = quote
         dummy_conv = CryptoConversion(
             conv_from=Currency.MSATS, value=Decimal(1000), quote=quote
         ).conversion

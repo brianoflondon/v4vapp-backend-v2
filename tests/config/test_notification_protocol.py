@@ -11,6 +11,7 @@ from v4vapp_backend_v2.config.notification_protocol import (
     NotificationProtocol,
 )
 from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.helpers.notification_outbox import identity_from_record
 
 # Test data from JSON
 TEST_JSON = {
@@ -107,7 +108,12 @@ async def test_bot_notification_send_message(mock_log_record):
         notifier = BotNotification()
         await notifier._send_notification(TEST_JSON["message"], mock_log_record)
 
-        bot_instance.send_message.assert_awaited_once_with(TEST_JSON["message"])
+        dedupe_key, category = identity_from_record(TEST_JSON["message"], mock_log_record)
+        bot_instance.send_message.assert_awaited_once_with(
+            TEST_JSON["message"],
+            dedupe_key=dedupe_key,
+            category=category,
+        )
 
 
 @pytest.mark.asyncio
@@ -121,8 +127,12 @@ async def test_bot_notification_silent_mode(mock_log_record):
         notifier = BotNotification()
         await notifier._send_notification(TEST_JSON["message"], mock_log_record)
 
+        dedupe_key, category = identity_from_record(TEST_JSON["message"], mock_log_record)
         bot_instance.send_message.assert_awaited_once_with(
-            TEST_JSON["message"], disable_notification=True
+            TEST_JSON["message"],
+            dedupe_key=dedupe_key,
+            category=category,
+            disable_notification=True,
         )
 
 
@@ -137,8 +147,32 @@ async def test_bot_notification_different_notification_str(mock_log_record):
         notifier = BotNotification()
         await notifier._send_notification(TEST_JSON["message"], mock_log_record)
 
+        sent = "Completely different notification message"
+        dedupe_key, category = identity_from_record(sent, mock_log_record)
         bot_instance.send_message.assert_awaited_once_with(
-            "Completely different notification message"
+            sent,
+            dedupe_key=dedupe_key,
+            category=category,
+        )
+
+
+@pytest.mark.asyncio
+async def test_bot_notification_passes_invoice_identity(mock_log_record):
+    """Replayed invoices dedupe on r_hash and state, not on the message tail."""
+    payment_hash = "ab" * 32
+    mock_log_record.invoice = {"r_hash": payment_hash, "state": "SETTLED"}
+    message = f"Invoice settled {payment_hash} at 04:37:01"
+    with patch("v4vapp_backend_v2.config.notification_protocol.NotificationBot") as mock_bot:
+        bot_instance = mock_bot.return_value
+        bot_instance.send_message = AsyncMock()
+
+        notifier = BotNotification()
+        await notifier._send_notification(message, mock_log_record)
+
+        bot_instance.send_message.assert_awaited_once_with(
+            message,
+            dedupe_key=f"invoice:{payment_hash}:SETTLED",
+            category="invoice",
         )
 
 
@@ -178,14 +212,16 @@ def test_send_notification_error_handling(mock_internal_config, mock_log_record,
     notifier = BotNotification()
     rand_int = randint(1, 999999)
     error_text = f"Test error {rand_int}"
-    with patch.object(
-        notifier, "_send_notification", new=AsyncMock(side_effect=Exception(error_text))
-    ) as mock_send:
-        with patch(
+    with (
+        patch.object(
+            notifier, "_send_notification", new=AsyncMock(side_effect=Exception(error_text))
+        ) as mock_send,
+        patch(
             "v4vapp_backend_v2.config.notification_protocol.logger.exception",
             new=MagicMock(),
-        ) as mock_log:
-            caplog.set_level(logging.WARNING)
-            notifier.send_notification(TEST_JSON["message"], mock_log_record)
-            assert error_text in mock_log.call_args[0][0]
-            assert mock_send.call_count == 1
+        ) as mock_log,
+    ):
+        caplog.set_level(logging.WARNING)
+        notifier.send_notification(TEST_JSON["message"], mock_log_record)
+        assert error_text in mock_log.call_args[0][0]
+        assert mock_send.call_count == 1
