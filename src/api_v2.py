@@ -7,6 +7,8 @@ from typing import Any
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, status
 from fastapi.concurrency import asynccontextmanager
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
@@ -31,8 +33,12 @@ from v4vapp_backend_v2.dash.lifespan import start_dash, stop_dash
 from v4vapp_backend_v2.dash.routers import router as dash_router
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion, PricingUnavailableError
+from v4vapp_backend_v2.helpers.crypto_prices import (
+    PRICING_UNAVAILABLE,
+    AllQuotes,
+    quote_is_usable,
+)
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.service_fees import (
     calculate_fee_estimate_msats,
@@ -291,27 +297,55 @@ async def magisats_fee_in(
 # MARK: Legacy v1 Cryptoprices calls
 
 
+def _pricing_unavailable(all_quotes: AllQuotes) -> JSONResponse | None:
+    """503 with the last quote when it cannot be used. A fresh or in-limit quote is None."""
+    if quote_is_usable(all_quotes.quote):
+        return None
+    body = all_quotes.legacy_api_format()
+    body["error"] = PRICING_UNAVAILABLE
+    body["stale"] = True
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=jsonable_encoder(body),
+    )
+
+
 @crypto_v1_router.get("/")
 async def get_prices(use_cache: bool = Query(True, description="Use cached quotes if available")):
     all_quotes = AllQuotes()
     await all_quotes.get_all_quotes(store_db=False, use_cache=use_cache)
+    unavailable = _pricing_unavailable(all_quotes)
+    if unavailable is not None:
+        return unavailable
     return all_quotes.legacy_api_format()
 
 
-@crypto_v1_router.post("/")
+@crypto_v1_router.post("/", response_model=None)
 async def conversion(
     sats: int | None = Query(
         None, description="The amount of sats"
     ),  # Replace Field with Query for query parameters in a POST endpoint
     use_cache: bool = Query(True, description="Use cached quotes if available"),
-) -> dict[str, Any]:
+) -> dict[str, Any] | JSONResponse:
     all_quotes = AllQuotes()
     await all_quotes.get_all_quotes(store_db=False, use_cache=use_cache)
+    unavailable = _pricing_unavailable(all_quotes)
+    if unavailable is not None:
+        return unavailable
     answer = all_quotes.legacy_api_format()
     if sats:
-        conv = CryptoConversion(
-            conv_from=Currency.SATS, value=sats, quote=all_quotes.quote
-        ).conversion
+        try:
+            conv = CryptoConversion(
+                conv_from=Currency.SATS, value=sats, quote=all_quotes.quote
+            ).conversion
+        except PricingUnavailableError:
+            failure = _pricing_unavailable(all_quotes)
+            if failure is not None:
+                return failure
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=PRICING_UNAVAILABLE,
+            )
         answer["conversion"] = conv.model_dump()
         answer["conversion"]["HBD"] = conv.hbd
         answer["conversion"]["HIVE"] = conv.hive
@@ -344,15 +378,21 @@ async def fixed_quote(
     Returns:
         FixedHiveQuote: An object containing the fixed quote for Hive/HBD and BTC/Sats vs USD.
     """
-    return await FixedHiveQuote.create_quote(
-        hive=HIVE,
-        hbd=HBD,
-        usd=USD,
-        sats=SATS,
-        magisats=MAGISATS,
-        cache_time=cache_time,
-        use_cache=use_cache,
-    )
+    try:
+        return await FixedHiveQuote.create_quote(
+            hive=HIVE,
+            hbd=HBD,
+            usd=USD,
+            sats=SATS,
+            magisats=MAGISATS,
+            cache_time=cache_time,
+            use_cache=use_cache,
+        )
+    except PricingUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=PRICING_UNAVAILABLE,
+        ) from exc
 
 
 @crypto_v1_router.get("/binance/")
@@ -374,7 +414,7 @@ async def binance() -> dict[str, str | int | float]:
 
 async def sats_to_hive(
     sats: int = Query(..., description="The amount of sats to convert to Hive"),
-) -> dict[str, Any]:
+) -> dict[str, Any] | JSONResponse:
     """
     Convert a specified amount of Bitcoin Satoshis (sats) to Hive using current exchange rates.
 
@@ -387,6 +427,9 @@ async def sats_to_hive(
     try:
         all_quotes = AllQuotes()
         await all_quotes.get_all_quotes(store_db=False, use_cache=True)
+        unavailable = _pricing_unavailable(all_quotes)
+        if unavailable is not None:
+            return unavailable
         conv = CryptoConversion(
             conv_from=Currency.SATS, value=sats, quote=all_quotes.quote
         ).conversion
@@ -395,8 +438,16 @@ async def sats_to_hive(
             "HBD": conv.hbd,
             "DASH": conv.dash,
             "details": conv.model_dump(),
+            "stale": bool(all_quotes.quote.stale),
+            "quote_age_s": all_quotes.quote.get_age(),
         }
         return answer
+    except PricingUnavailableError as exc:
+        logger.warning(f"Pricing unavailable converting sats to Hive: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=PRICING_UNAVAILABLE,
+        ) from exc
     except Exception as e:
         logger.error(f"Error converting sats to Hive: {e}")
         raise HTTPException(status_code=500, detail="Error converting sats to Hive")

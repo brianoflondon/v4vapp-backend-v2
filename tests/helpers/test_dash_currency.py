@@ -61,6 +61,27 @@ def test_hive_conversion_fills_dash_when_quote_has_dash_usd():
     assert conv.duffs > 0
 
 
+def test_dash_only_snapshot_converts_duffs_and_leaves_hive_zero():
+    """A locked invoice quote has BTC and DASH. HIVE and HBD are not priced."""
+    quote = QuoteResponse(
+        hive_usd=Decimal(0),
+        hbd_usd=Decimal(0),
+        btc_usd=Decimal(83000),
+        dash_usd=Decimal("32.5"),
+        source="test",
+        fetch_date=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    conv = CryptoConversion(conv_from=Currency.DUFFS, value=DUFFS_PER_DASH, quote=quote)
+    assert conv.sats > 0
+    assert conv.msats > 0
+    assert conv.usd > 0
+    assert conv.hive == Decimal(0)
+    assert conv.hbd == Decimal(0)
+    fee = CryptoConversion(conv_from=Currency.MSATS, value=Decimal(150000), quote=quote)
+    assert fee.msats == Decimal(150000)
+    assert fee.hive == Decimal(0)
+
+
 def test_missing_dash_usd_does_not_break_hive_conversion():
     quote = QuoteResponse(
         hive_usd=Decimal("0.24"),

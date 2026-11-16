@@ -460,7 +460,12 @@ async def test_account_balance_printout_includes_opening_only_currency_rows(monk
         account,
         line_items=True,
         ledger_account_details=ledger_account_details,
-        quote=QuoteResponse(),
+        quote=QuoteResponse(
+            hive_usd=Decimal("0.25"),
+            hbd_usd=Decimal("1"),
+            btc_usd=Decimal("80000"),
+            fetch_date=datetime.now(tz=timezone.utc),
+        ),
         period_start=period_start,
     )
     assert "Unit: HBD" in result
@@ -549,7 +554,12 @@ async def test_account_balance_printout_ksats_positive_and_negative():
         LiabilityAccount(name="VSC Liability", sub="custA"),
         line_items=False,
         ledger_account_details=ledger_details,
-        quote=QuoteResponse(),
+        quote=QuoteResponse(
+            hive_usd=Decimal("0.25"),
+            hbd_usd=Decimal("1"),
+            btc_usd=Decimal("80000"),
+            fetch_date=datetime.now(tz=timezone.utc),
+        ),
     )
 
     assert "Unit: KSATS" in result
@@ -580,7 +590,12 @@ async def test_account_balance_printout_ksats_positive_and_negative():
         LiabilityAccount(name="VSC Liability", sub="custB"),
         line_items=False,
         ledger_account_details=ledger_details_neg,
-        quote=QuoteResponse(),
+        quote=QuoteResponse(
+            hive_usd=Decimal("0.25"),
+            hbd_usd=Decimal("1"),
+            btc_usd=Decimal("80000"),
+            fetch_date=datetime.now(tz=timezone.utc),
+        ),
     )
 
     assert "Unit: KSATS" in result_neg
@@ -632,7 +647,12 @@ async def test_account_balance_printout_keeps_sats_when_below_threshold():
         LiabilityAccount(name="VSC Liability", sub="custC"),
         line_items=False,
         ledger_account_details=ledger_details,
-        quote=QuoteResponse(),
+        quote=QuoteResponse(
+            hive_usd=Decimal("0.25"),
+            hbd_usd=Decimal("1"),
+            btc_usd=Decimal("80000"),
+            fetch_date=datetime.now(tz=timezone.utc),
+        ),
     )
 
     # Should display SATS, not KSATS

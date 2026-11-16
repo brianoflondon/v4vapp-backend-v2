@@ -53,6 +53,16 @@ CACHE_TIMES = {
     "Global": 60,
 }
 
+# Written and read under one name. The previous reader used a shorter key, so a
+# failed fetch could store an empty quote that nothing then refused to use.
+GLOBAL_QUOTE_REDIS_KEY = "cryptoprices:cryptoprices:all_quote_class_quote"
+LEGACY_GLOBAL_QUOTE_REDIS_KEY = "all_quote_class_quote"
+# Kept without the short global TTL. Callers decide from fetched_at.
+LAST_GOOD_QUOTE_REDIS_KEY = "cryptoprices:cryptoprices:last_good_quote"
+# Serve this quote while a live fetch is down. Older than this, refuse to convert.
+LAST_GOOD_QUOTE_MAX_AGE_S = 15 * 60
+PRICING_UNAVAILABLE = "pricing temporarily unavailable"
+
 HBD_PRICE_WARNING_DELTA = Decimal("0.92")  # Example warning level for HBD price
 
 # Collection name for storing rates in the database
@@ -317,6 +327,8 @@ class QuoteResponse(BaseModel):
     fetch_date: datetime = datetime(1970, 1, 1, tzinfo=UTC)
     error: str = ""
     error_details: dict[str, Any] = {}
+    # True when this quote is the last good fetch, not a live one.
+    stale: bool = False
 
     @field_validator("hive_usd", "hbd_usd", "btc_usd", "hive_hbd", "dash_usd", mode="before")
     @classmethod
@@ -355,6 +367,7 @@ class QuoteResponse(BaseModel):
         fetch_date: datetime = datetime(1970, 1, 1, tzinfo=UTC),
         error: str = "",
         error_details: dict[str, Any] = {},
+        stale: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -369,6 +382,7 @@ class QuoteResponse(BaseModel):
         self.fetch_date = _parse_iso_datetime(fetch_date)
         self.error = error
         self.error_details = error_details
+        self.stale = bool(stale)
 
     @property
     def is_unset(self) -> bool:
@@ -508,6 +522,81 @@ class QuoteResponse(BaseModel):
         return {"quote_response": self.model_dump(exclude={"raw_response"}, exclude_none=True)}
 
 
+def quote_prices_present(quote: QuoteResponse | None) -> bool:
+    """True when BTC, HIVE and HBD prices are all present and non-zero."""
+    if quote is None:
+        return False
+    return quote.btc_usd > 0 and quote.hive_usd > 0 and quote.hbd_usd > 0
+
+
+def quote_is_usable(quote: QuoteResponse | None) -> bool:
+    """A quote a conversion may use: real prices and no error.
+
+    A stale last-good quote is usable while its age is inside the limit.
+    Past that limit the quote carries an error and this returns False.
+    """
+    if quote is None or quote.error:
+        return False
+    return quote_prices_present(quote)
+
+
+def _redis_get_bytes(key: str) -> bytes | None:
+    try:
+        value = InternalConfig.redis.get(key)
+    except Exception as exc:
+        logger.warning(
+            f"{ICON} Redis read failed for {key}: {exc}",
+            extra={"notification": False},
+        )
+        return None
+    if not isinstance(value, (bytes, bytearray)) or not value:
+        return None
+    return bytes(value)
+
+
+def load_last_good_quote() -> QuoteResponse | None:
+    """Return the stored last good quote, or None when it is missing or empty."""
+    raw = _redis_get_bytes(LAST_GOOD_QUOTE_REDIS_KEY)
+    if raw is None:
+        return None
+    try:
+        payload = pickle.loads(raw)
+    except Exception:
+        logger.warning(
+            f"{ICON} Could not read the last good quote",
+            extra={"notification": False},
+        )
+        return None
+    if not isinstance(payload, dict) or not isinstance(payload.get("quote"), dict):
+        return None
+    try:
+        quote = QuoteResponse.model_validate(payload["quote"])
+    except Exception:
+        return None
+    quote.fetch_date = _parse_iso_datetime(payload.get("fetched_at") or quote.fetch_date)
+    if not quote_prices_present(quote):
+        return None
+    return quote
+
+
+def save_last_good_quote(quote: QuoteResponse) -> None:
+    """Store a fresh usable quote with no short TTL. Age is checked on read."""
+    if not quote_is_usable(quote) or quote.stale:
+        return
+    fetched_at = _parse_iso_datetime(quote.fetch_date)
+    payload = {
+        "quote": quote.model_dump(exclude={"raw_response"}),
+        "fetched_at": fetched_at.isoformat(),
+    }
+    try:
+        InternalConfig.redis.set(name=LAST_GOOD_QUOTE_REDIS_KEY, value=pickle.dumps(payload))
+    except Exception as exc:
+        logger.warning(
+            f"{ICON} Could not store the last good quote: {exc}",
+            extra={"notification": False},
+        )
+
+
 class AllQuotes(BaseModel):
     """
     AllQuotes class is responsible for fetching and aggregating cryptocurrency quotes
@@ -558,11 +647,11 @@ class AllQuotes(BaseModel):
         """
         Get the authoritative quote based on rules.
 
-        This method retrieves the authoritative quote from available sources based on
-        predefined rules. If a valid quote from Binance is available, it is returned.
-        If HiveInternalMarket is also available, its hive_hbd attribute is included in
-        the response. If no valid quote from Binance is found, an average quote is
-        calculated and returned.
+        A live Binance quote wins. Otherwise an average of the other live sources
+        is used. When every live source has failed or returned a zero price, the
+        last good quote is returned with stale=True if it is still within
+        LAST_GOOD_QUOTE_MAX_AGE_S. Older than that, the quote is an error and
+        must not be used for a conversion.
 
         Returns:
             QuoteResponse: The authoritative quote or an error message if no valid
@@ -571,6 +660,15 @@ class AllQuotes(BaseModel):
         Side Effect:
             Updates the self.quote object
         """
+        live = self._select_live_quote()
+        if live is not None and quote_is_usable(live):
+            live.stale = False
+            self.quote = live
+            return live
+        return self._fallback_last_good()
+
+    def _select_live_quote(self) -> QuoteResponse | None:
+        """Pick a live Binance quote, or an average. None when nothing live is usable."""
         if self.quotes:
             if Binance.__name__ in self.quotes and not self.quotes[Binance.__name__].error:
                 quote = self.quotes[Binance.__name__]
@@ -615,19 +713,47 @@ class AllQuotes(BaseModel):
                             )
                     quote = QuoteResponse.model_validate(quote_dict)
                 quote = self._overlay_dash_usd(quote)
-                self.quote = quote
-                self.source = Binance.__name__
-                return quote
-            else:
-                # If Binance is not available, calculate average from other sources
-                avg_quote = self.calculate_average_quote()
-                if avg_quote:
-                    avg_quote = self._overlay_dash_usd(avg_quote)
+                if quote_is_usable(quote):
+                    self.quote = quote
+                    self.source = Binance.__name__
+                    return quote
+            # Binance is missing, errored, or priced at zero. Average the rest.
+            avg_quote = self.calculate_average_quote()
+            if avg_quote and quote_is_usable(avg_quote):
+                avg_quote = self._overlay_dash_usd(avg_quote)
+                if quote_is_usable(avg_quote):
                     self.quote = avg_quote
                     self.source = "Average"
                     return avg_quote
 
-        return QuoteResponse(error="No valid quote found")
+        return None
+
+    def _fallback_last_good(self) -> QuoteResponse:
+        """Serve the last good quote, or an error once it is past the staleness limit."""
+        stored = load_last_good_quote()
+        if stored is None:
+            self.source = "failure"
+            quote = QuoteResponse(error="No valid quote found")
+            self.quote = quote
+            return quote
+
+        age_s = stored.get_age()
+        stored.stale = True
+        self.source = stored.source or "last_good"
+        if age_s <= LAST_GOOD_QUOTE_MAX_AGE_S:
+            stored.error = ""
+            logger.warning(
+                f"{ICON} Serving last good quote, age {age_s:.0f}s, stale=True",
+                extra={"notification": False, "quote_age_s": age_s, "stale": True},
+            )
+        else:
+            stored.error = PRICING_UNAVAILABLE
+            logger.warning(
+                f"{ICON} Last good quote is {age_s:.0f}s old; {PRICING_UNAVAILABLE}",
+                extra={"notification": False, "quote_age_s": age_s, "stale": True},
+            )
+        self.quote = stored
+        return stored
 
     def _overlay_dash_usd(self, quote: QuoteResponse) -> QuoteResponse:
         """If Binance (or average) has no DASHUSDT, fill dash_usd from CG/CMC."""
@@ -771,23 +897,26 @@ class AllQuotes(BaseModel):
                     f"{ICON} Error in quote from {quote.source}: {quote.error[:20]}",
                     extra={"notification": False, **quote.log_extra},
                 )
-        self.get_one_quote()
+        self.quote = self.get_one_quote()
         self.fetch_date = self.quote.fetch_date
         AllQuotes.fetch_date_class = self.fetch_date
-        self.quote = self.get_one_quote()
         self.redis_hit = False
-        redis_client = InternalConfig.redis
-        cache_data_pickle = pickle.dumps(self.global_quote_pack())
-        cache_times = (
-            TESTING_CACHE_TIMES if InternalConfig().config.development.enabled else CACHE_TIMES
-        )
-        redis_client.set(
-            name="cryptoprices:cryptoprices:all_quote_class_quote",
-            value=cache_data_pickle,
-            ex=cache_times["Global"],
-        )
-        if store_db:
-            await self.db_store_quote()
+        # A failed fetch must not replace a good cache with an empty quote set.
+        if quote_is_usable(self.quote) and not self.quote.stale:
+            self._write_global_cache()
+            save_last_good_quote(self.quote)
+            if store_db:
+                await self.db_store_quote()
+        else:
+            logger.warning(
+                f"{ICON} No fresh usable quote; leaving the cached quote in place",
+                extra={
+                    "notification": False,
+                    "stale": self.quote.stale,
+                    "error": self.quote.error,
+                    "quote_age_s": self.quote.get_age(),
+                },
+            )
 
     def global_quote_pack(self) -> dict[str, Any]:
         """
@@ -801,6 +930,30 @@ class AllQuotes(BaseModel):
             "fetch_date": self.fetch_date.isoformat() if self.fetch_date else None,
             "source": self.source,
         }
+
+    def _write_global_cache(self) -> None:
+        """Write the short-lived global cache. Never write an empty quote set."""
+        packed = self.global_quote_pack()
+        if not packed.get("quotes"):
+            logger.warning(
+                f"{ICON} Not writing the global quote cache; the quote set is empty",
+                extra={"notification": False},
+            )
+            return
+        cache_times = (
+            TESTING_CACHE_TIMES if InternalConfig().config.development.enabled else CACHE_TIMES
+        )
+        try:
+            InternalConfig.redis.set(
+                name=GLOBAL_QUOTE_REDIS_KEY,
+                value=pickle.dumps(packed),
+                ex=cache_times["Global"],
+            )
+        except Exception as exc:
+            logger.warning(
+                f"{ICON} Could not write the global quote cache: {exc}",
+                extra={"notification": False},
+            )
 
     def all_quotes_filtered(self) -> dict[str, dict[str, Any]]:
         """
@@ -842,21 +995,34 @@ class AllQuotes(BaseModel):
         Returns:
             bool: True if the global cache is valid, False otherwise.
         """
-        redis_client = InternalConfig.redis
-        cache_data_pickle = redis_client.get("all_quote_class_quote")
-        if cache_data_pickle:
-            cache_data = pickle.loads(cache_data_pickle)
-            # Handle fetch_date conversion
-            if "fetch_date" in cache_data:
-                # Normalize whatever form was stored in cache (str or datetime)
-                self.fetch_date = _parse_iso_datetime(cache_data.get("fetch_date"))
-            self.quotes = self.unpack_quotes(cache_data)
-            self.get_one_quote()
-            self.source = cache_data["source"]
-            self.redis_hit = True
-            return True
-        self.redis_hit = False
-        return False
+        raw = _redis_get_bytes(GLOBAL_QUOTE_REDIS_KEY)
+        if raw is None:
+            raw = _redis_get_bytes(LEGACY_GLOBAL_QUOTE_REDIS_KEY)
+        if not raw:
+            self.redis_hit = False
+            return False
+        try:
+            cache_data = pickle.loads(raw)
+        except Exception:
+            self.redis_hit = False
+            return False
+        if not isinstance(cache_data, dict) or not cache_data.get("quotes"):
+            self.redis_hit = False
+            return False
+        # Handle fetch_date conversion
+        if "fetch_date" in cache_data:
+            # Normalize whatever form was stored in cache (str or datetime)
+            self.fetch_date = _parse_iso_datetime(cache_data.get("fetch_date"))
+        self.quotes = self.unpack_quotes(cache_data)
+        live = self._select_live_quote()
+        if live is None or not quote_is_usable(live):
+            self.redis_hit = False
+            return False
+        live.stale = False
+        self.quote = live
+        self.source = cache_data.get("source") or self.source
+        self.redis_hit = True
+        return True
 
     def legacy_api_format(self) -> dict[str, Any]:
         """
@@ -897,6 +1063,8 @@ class AllQuotes(BaseModel):
             "fetch_error": fetch_errors,
             "last_fetch": quote.fetch_date.isoformat(),
             "fetch_time": age,  # Using age as a proxy for fetch time
+            "quote_age_s": quote.get_age(),
+            "stale": bool(quote.stale),
             "conversion": None,  # Add conversion logic if needed
             "redis_hit": self.redis_hit,
         }
