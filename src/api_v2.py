@@ -41,6 +41,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
 )
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.egress_health import start_egress_probe
+from v4vapp_backend_v2.helpers.notification_outbox import start_notification_outbox
 from v4vapp_backend_v2.helpers.service_fees import (
     calculate_fee_estimate_msats,
     calculate_fee_msats,
@@ -65,6 +66,7 @@ def create_lifespan(config_filename: str):
         await db_conn.setup_database()
         await start_dash(app)
         probe = start_egress_probe()
+        outbox = start_notification_outbox()
         logger.info(
             f"{ICON} API v2 Started. Version: {__version__}", extra={"notification": False}
         )
@@ -73,6 +75,8 @@ def create_lifespan(config_filename: str):
         finally:
             if probe is not None:
                 probe.cancel()
+            if outbox is not None:
+                outbox.cancel()
             await stop_dash(app)
 
     return lifespan

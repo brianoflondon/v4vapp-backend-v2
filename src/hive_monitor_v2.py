@@ -38,6 +38,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
     seconds_only,
 )
+from v4vapp_backend_v2.helpers.notification_outbox import start_notification_outbox
 from v4vapp_backend_v2.hive.hive_extras import (
     close_hive_client,
     default_hive_nodes,
@@ -1055,6 +1056,7 @@ async def main_async_start(
     db_conn = DBConn()
     await db_conn.setup_database()
     start_egress_probe(shutdown_event)
+    start_notification_outbox(shutdown_event)
 
     loop = asyncio.get_running_loop()
 

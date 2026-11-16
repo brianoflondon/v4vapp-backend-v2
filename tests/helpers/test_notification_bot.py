@@ -1,19 +1,44 @@
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from telegram.error import InvalidToken, TimedOut
 
-from v4vapp_backend_v2.config.setup import NotificationBotConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig
+from v4vapp_backend_v2.helpers.egress_health import reset_for_tests as reset_egress
 from v4vapp_backend_v2.helpers.notification_bot import (
     BOT_CONFIG_EXTENSION,
     NotificationBadTokenError,
     NotificationBot,
     NotificationNotSetupError,
 )
+from v4vapp_backend_v2.helpers.notification_outbox import (
+    Outbox,
+    redis_client,
+)
+from v4vapp_backend_v2.helpers.notification_outbox import (
+    reset_for_tests as reset_outbox,
+)
 
 # # Mark the test module as async
 # pytestmark = pytest.mark.asyncio
+
+
+class _EmptyRedis:
+    def get(self, key):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _clear_outbox(monkeypatch):
+    """Keep dedupe and the egress flag from leaking between tests."""
+    reset_outbox()
+    reset_egress()
+    monkeypatch.setattr(InternalConfig, "redis", _EmptyRedis(), raising=False)
+    yield
+    reset_outbox()
+    reset_egress()
 
 
 # Mock InternalConfig for consistent base_config_path
@@ -78,9 +103,9 @@ def test_init_no_token_no_name_no_configs(mock_internal_config, mock_bot):
             "v4vapp_backend_v2.helpers.notification_bot.NotificationBot.names_list",
             return_value=[],
         ),
+        pytest.raises(NotificationNotSetupError, match="No token or name set for bot."),
     ):
-        with pytest.raises(NotificationNotSetupError, match="No token or name set for bot."):
-            NotificationBot()
+        NotificationBot()
 
 
 # Test get_bot_name
@@ -139,6 +164,83 @@ async def test_send_message_timed_out(notification_bot, mocker):
     ]
     await notification_bot.send_message("test message", retries=2)
     assert notification_bot.bot.send_message.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_timeout_queues_instead_of_dropping(notification_bot, mocker, caplog):
+    """The give-up after the short retries is a WARNING with an outbox id, not an ERROR."""
+    mocker.patch("v4vapp_backend_v2.helpers.notification_bot.asyncio.sleep", new=AsyncMock())
+    mocker.patch("v4vapp_backend_v2.helpers.notification_bot.random.random", return_value=0)
+    notification_bot.bot.send_message.side_effect = TimedOut("Timed out")
+    with caplog.at_level(logging.DEBUG, logger="backend"):
+        await notification_bot.send_message("hello outage", retries=3)
+
+    assert notification_bot.bot.send_message.call_count == 3
+    retries = [record for record in caplog.records if "Retrying" in record.message]
+    assert retries
+    assert all(record.levelno == logging.DEBUG for record in retries)
+    queued = [record for record in caplog.records if "queued" in record.message]
+    assert len(queued) == 1
+    assert queued[0].levelno == logging.WARNING
+    assert queued[0].outbox_id
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    stored = Outbox(redis_client()).all_items()
+    assert len(stored) == 1
+    assert stored[0]["id"] == queued[0].outbox_id
+    assert stored[0]["hold_for_digest"] is False
+
+
+@pytest.mark.asyncio
+async def test_egress_down_queues_without_calling_telegram(notification_bot, mocker):
+    mocker.patch(
+        "v4vapp_backend_v2.helpers.notification_bot.egress_is_down",
+        return_value=True,
+    )
+    await notification_bot.send_message("price quote failed")
+    notification_bot.bot.send_message.assert_not_called()
+    stored = Outbox(redis_client()).all_items()
+    assert len(stored) == 1
+    assert stored[0]["hold_for_digest"] is True
+
+
+@pytest.mark.asyncio
+async def test_same_invoice_dedupes_when_the_tail_changes(notification_bot):
+    """The old guard looked at the last 20 characters, so a new timestamp was a new alert."""
+    payment_hash = "ab" * 32
+    await notification_bot.send_message(f"Invoice settled {payment_hash} at 04:37:01")
+    await notification_bot.send_message(f"Invoice settled {payment_hash} at 06:45:11")
+    assert notification_bot.bot.send_message.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_invoice_state_is_part_of_the_dedupe_key(notification_bot):
+    payment_hash = "cd" * 32
+    await notification_bot.send_message(
+        "opened",
+        dedupe_key=f"invoice:{payment_hash}:OPEN",
+        category="invoice",
+    )
+    await notification_bot.send_message(
+        "settled",
+        dedupe_key=f"invoice:{payment_hash}:SETTLED",
+        category="invoice",
+    )
+    assert notification_bot.bot.send_message.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_error_code_dedupes(notification_bot):
+    await notification_bot.send_message(
+        "Giving up get_balances after 3 tries at 04:23",
+        dedupe_key="error:binance_api_error",
+        category="binance",
+    )
+    await notification_bot.send_message(
+        "Giving up get_balances after 3 tries at 04:47",
+        dedupe_key="error:binance_api_error",
+        category="binance",
+    )
+    assert notification_bot.bot.send_message.call_count == 1
 
 
 # Test handle_update sets chat_id

@@ -34,6 +34,7 @@ from v4vapp_backend_v2.helpers.egress_health import (
     start_egress_probe,
 )
 from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter
+from v4vapp_backend_v2.helpers.notification_outbox import start_notification_outbox
 
 ICON = "🅑"
 app = typer.Typer()
@@ -456,6 +457,7 @@ async def main_async_start():
         loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
         loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
         start_egress_probe(shutdown_event)
+        start_notification_outbox(shutdown_event)
 
         balance_task = asyncio.create_task(check_binance_balances(), name=BALANCE_TASK_NAME)
         balance_task.add_done_callback(_log_balance_task_done)
