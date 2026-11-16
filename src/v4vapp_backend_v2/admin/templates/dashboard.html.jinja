@@ -313,13 +313,18 @@
             const shown = orderRows.slice(0, 20);
             idHtml = '<details class="small mt-2"><summary class="text-muted">Orders</summary><ul class="mb-0 ps-3">';
             for (const order of shown) {
-                const shortId = typeof order === 'string' ? order : (order.short_id || '');
-                const valueFmt = typeof order === 'string' ? '' : (order.value_fmt || '');
-                const account = typeof order === 'string' ? '' : (order.account || '');
-                let extra = '';
-                if (valueFmt) extra += ' · ' + escHtml(valueFmt);
-                if (account) extra += ' · ' + escHtml(account);
-                idHtml += '<li><code>' + escHtml(String(shortId)) + '</code>' + extra + '</li>';
+                const row = typeof order === 'string'
+                    ? { age: '', rate_fmt: '', value_fmt: '', account: '', short_id: order }
+                    : order;
+                const parts = [];
+                if (row.age) parts.push(escHtml(row.age));
+                if (row.rate_fmt) parts.push(escHtml(row.rate_fmt));
+                if (row.value_fmt) parts.push(escHtml(row.value_fmt));
+                if (row.account) parts.push(escHtml(row.account));
+                const title = row.short_id
+                    ? ' title="' + escHtml(String(row.short_id)).replace(/"/g, '&quot;') + '"'
+                    : '';
+                idHtml += '<li' + title + '>' + (parts.join(' · ') || escHtml(String(row.short_id || ''))) + '</li>';
             }
             if (orderRows.length > shown.length) {
                 idHtml += '<li class="text-muted">+' + (orderRows.length - shown.length) + ' more</li>';
