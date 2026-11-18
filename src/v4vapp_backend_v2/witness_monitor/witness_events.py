@@ -1,6 +1,6 @@
 import os
 from timeit import default_timer as timer
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 from colorama import Fore, Style
@@ -163,6 +163,7 @@ async def check_witness_heartbeat(
         )
         if result is None:
             # Failure is detected
+            result = {"status": "failure"}
             machine.working = False
             failures += 1
             if machine.primary or witness_disabled:
@@ -196,7 +197,7 @@ async def check_witness_heartbeat(
 
         logger.debug(
             f"{ICON} {machine}",
-            extra={"notification": False, "machine": machine},
+            extra={"notification": False, "machine": machine, "result": result},
         )
 
     avg_execution_time = sum(
@@ -550,7 +551,7 @@ async def update_witness_properties_switch_machine(
             f"{ICON} Could not get Hive client for {witness_name}.", extra={"notification": False}
         )
         return
-    witness_info: Dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
+    witness_info: dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
     if not witness_info or "props" not in witness_info:
         logger.warning(
             f"{ICON} Could not retrieve witness info for {witness_name}.",
