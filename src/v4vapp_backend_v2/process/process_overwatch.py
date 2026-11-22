@@ -363,7 +363,7 @@ class FlowEvent(BaseModel):
                 val = getattr(self.op, "log_str", None)
                 if val:
                     return val
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
         # Fallback: construct a useful string from the event's own fields
         parts: list[str] = []
@@ -728,7 +728,7 @@ class Overwatch:
             return
         try:
             await r.hdel(_REDIS_ACTIVE_KEY, self._redis_flow_key(flow))
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     async def load_from_redis(self) -> int:
@@ -1175,7 +1175,7 @@ class Overwatch:
                         extra={"notification": False},
                     )
                     return None
-            except Exception: #
+            except Exception: #  # noqa: S110
                 pass  # config unavailable — proceed normally
 
         first_result: str | None = None
