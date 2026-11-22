@@ -60,6 +60,19 @@ jobs:
           mongodb-replica-set: rsPytest
           mongodb-port: 37017
 
+      # Local pytest uses the tailscale host "dot" in tests/data/config/config.yaml.
+      # This runner publishes Redis on localhost:6379 and Mongo on localhost:37017.
+      - name: Point test Redis and Mongo at localhost
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("tests/data/config/config.yaml")
+          text = path.read_text()
+          text = text.replace("host: dot\n", "host: localhost\n")
+          text = text.replace("- dot:37017\n", "- localhost:37017\n")
+          path.write_text(text)
+          PY
+
       # Fail-fast: unit first, then the small integration suite on the same
       # runner / venv / Redis / Mongo. No second job.
       - name: Run unit/fast tests

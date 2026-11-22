@@ -101,7 +101,9 @@ dbs_config:
                 - root
     conn_1:
       hosts:
-        - localhost:37017
+        # Local pytest services are on the tailscale host "dot".
+        # GitHub Actions rewrites "dot" to localhost before the suite.
+        - dot:37017
       replica_set: rsPytest
       admin_dbs:
         admin: # The Database name
@@ -113,7 +115,7 @@ dbs_config:
                 - readWrite
     conn_2:
       hosts:
-        - localhost:37017
+        - dot:37017
       replica_set:
       admin_dbs:
         admin: # The Database name
@@ -235,7 +237,9 @@ dbs_config:
 ########### TEST CONFIG NO SECRETS #################
 
 redis:
-  host: localhost
+  # Local pytest services are on the tailscale host "dot".
+  # GitHub Actions rewrites "dot" to localhost before the suite.
+  host: dot
   port: 6379
   db: 0
 ########### TEST CONFIG NO SECRETS #################

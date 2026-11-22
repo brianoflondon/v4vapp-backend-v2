@@ -99,8 +99,14 @@ def _rebalance_sender_names() -> set[str]:
     Reads ``exchange_config`` hive accounts (exchange hot wallets) and the
     Hive-role exchange and treasury accounts. Account names are never
     hardcoded.
+
+    Does not construct ``InternalConfig``. Startup reconfigures logging, and
+    the app has already initialized config before overwatch runs. A test stub
+    assigned over ``InternalConfig`` is still called.
     """
     names: set[str] = set()
+    if isinstance(InternalConfig, type) and getattr(InternalConfig, "_instance", None) is None:
+        return names
     try:
         config = InternalConfig().config
     except Exception as exc:
@@ -1569,13 +1575,14 @@ class Overwatch:
         Returns the list of flows whose status was changed.
         """
         now = now or datetime.now(tz=UTC)
+        # The post-unpause quiet window must not scan flows at all.
+        suppress_until = self._suppress_stalls_until
+        if suppress_until is not None and now < suppress_until:
+            return []
         # Drop exchange/treasury rebalances before any stall rule. This also
         # clears candidates that were opened before the ledger entry arrived
         # and copies reloaded from Redis. Customer flows are left untouched.
         await self._drop_known_rebalance_flows()
-        suppress_until = self._suppress_stalls_until
-        if suppress_until is not None and now < suppress_until:
-            return []
         newly_stalled: list[FlowInstance] = []
 
         # Rule 1: cancel superset candidates past their grace period
