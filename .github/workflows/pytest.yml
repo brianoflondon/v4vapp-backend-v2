@@ -66,11 +66,12 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path("tests/data/config/config.yaml")
-          text = path.read_text()
-          text = text.replace("host: dot\n", "host: localhost\n")
-          text = text.replace("- dot:37017\n", "- localhost:37017\n")
-          path.write_text(text)
+          for config_file in ["tests/data/config/config.yaml", "tests/data/config/alternate.config.yaml"]:
+            path = Path(config_file)
+            text = path.read_text()
+            text = text.replace("host: dot\n", "host: localhost\n")
+            text = text.replace("- dot:37017\n", "- localhost:37017\n")
+            path.write_text(text)
           PY
 
       # Fail-fast: unit first, then the small integration suite on the same
