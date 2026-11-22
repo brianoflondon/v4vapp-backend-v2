@@ -29,9 +29,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Any, ClassVar, Dict, List, Literal
+from typing import Any, ClassVar, Literal
 
 from colorama import Fore
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -83,6 +83,57 @@ _FAILED_FLOW_MEMO_MARKERS = (
 def _memo_closes_failed_flow(memo: str) -> bool:
     """True when a notification memo is a terminal failure reply."""
     return any(marker in memo for marker in _FAILED_FLOW_MEMO_MARKERS)
+
+
+# Ledger types that mean the Hive transfer is an internal exchange/treasury
+# move, not a customer deposit. Customer payment flows must not track these.
+_REBALANCE_LEDGER_TYPES = frozenset({
+    LedgerType.EXCHANGE_TO_TREASURY,
+    LedgerType.TREASURY_TO_EXCHANGE,
+})
+
+
+def _rebalance_sender_names() -> set[str]:
+    """Hive accounts whose outgoing transfers are exchange or treasury moves.
+
+    Reads ``exchange_config`` hive accounts (exchange hot wallets) and the
+    Hive-role exchange and treasury accounts. Account names are never
+    hardcoded.
+    """
+    names: set[str] = set()
+    try:
+        config = InternalConfig().config
+    except Exception as exc:
+        logger.debug(f"{ICON} exchange rebalance config unavailable: {exc}")
+        return names
+    exchange_config = getattr(config, "exchange_config", None)
+    if exchange_config is not None:
+        try:
+            names.update(exchange_config.all_hive_exchange_accounts())
+        except Exception as exc:
+            logger.debug(f"{ICON} exchange hive accounts unavailable: {exc}")
+    hive_config = getattr(config, "hive_config", None)
+    if hive_config is not None:
+        try:
+            names.update(hive_config.exchange_account_names)
+            names.update(hive_config.treasury_account_names)
+            exchange_account = hive_config.exchange_account
+            if exchange_account is not None:
+                names.update(getattr(exchange_account, "alternate_names", []) or [])
+        except Exception as exc:
+            logger.debug(f"{ICON} hive exchange/treasury accounts unavailable: {exc}")
+    return {name for name in names if name}
+
+
+def _transfer_amount_text(op: Any) -> str:
+    """Best-effort amount string from a transfer op."""
+    amount_str = getattr(op, "amount_str", None)
+    if amount_str:
+        return str(amount_str)
+    amount = getattr(op, "amount", None)
+    if amount not in (None, ""):
+        return str(amount)
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -212,17 +263,17 @@ class FlowDefinition(BaseModel):
     name: str = Field(..., description="Flow type identifier (e.g. 'hive_to_keepsats')")
     description: str = Field("", description="Human-readable description")
     trigger_op_type: str = Field(..., description="The op_type that initiates this flow")
-    stages: List[FlowStage] = Field(
+    stages: list[FlowStage] = Field(
         default_factory=list, description="Ordered list of expected stages"
     )
 
     @property
-    def required_stages(self) -> List[FlowStage]:
+    def required_stages(self) -> list[FlowStage]:
         """Return only the stages marked as required."""
         return [s for s in self.stages if s.required]
 
     @property
-    def stage_names(self) -> List[str]:
+    def stage_names(self) -> list[str]:
         """Return names of all stages."""
         return [s.name for s in self.stages]
 
@@ -241,7 +292,7 @@ class FlowEvent(BaseModel):
 
     event_type: Literal["ledger", "op"] = Field(..., description="Type of event")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc),
+        default_factory=lambda: datetime.now(tz=UTC),
         description="When the event was recorded",
     )
     ledger_entry: LedgerEntry | None = Field(
@@ -291,7 +342,7 @@ class FlowEvent(BaseModel):
 
         return cls(
             event_type="op",
-            timestamp=getattr(op, "timestamp", datetime.now(tz=timezone.utc)),
+            timestamp=getattr(op, "timestamp", datetime.now(tz=UTC)),
             ledger_entry=None,
             op=op,
             group_id=getattr(op, "group_id", ""),
@@ -352,7 +403,7 @@ class FlowInstance(BaseModel):
         return str(value)
 
     started_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc),
+        default_factory=lambda: datetime.now(tz=UTC),
         description="When the flow was initiated",
     )
     completed_at: datetime | None = Field(None, description="When the flow completed")
@@ -364,7 +415,7 @@ class FlowInstance(BaseModel):
         None,
         description="Name of the sibling flow whose completion triggered the superset grace period",
     )
-    events: List[FlowEvent] = Field(
+    events: list[FlowEvent] = Field(
         default_factory=list, description="Recorded events in this flow"
     )
     flow_value: str = Field("", description="Optional value for logging or notifications")
@@ -381,7 +432,7 @@ class FlowInstance(BaseModel):
         status: FlowStatus = FlowStatus.PENDING,
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
-        events: List[FlowEvent] | None = None,
+        events: list[FlowEvent] | None = None,
         flow_value: str = "",
         **data: Any,
     ) -> None:
@@ -405,7 +456,7 @@ class FlowInstance(BaseModel):
             trigger_short_id=trigger_short_id,
             cust_id=cust_id,
             status=status,
-            started_at=started_at or datetime.now(tz=timezone.utc),
+            started_at=started_at or datetime.now(tz=UTC),
             completed_at=completed_at,
             events=events or [],
             flow_value=flow_value,
@@ -436,7 +487,7 @@ class FlowInstance(BaseModel):
                     self.flow_value = event.event_value
 
                 if not self.cust_id and event.op and hasattr(event.op, "cust_id"):
-                    self.cust_id = getattr(event.op, "cust_id")
+                    self.cust_id = event.op.cust_id
 
                 # Check completeness after adding — only record completed_at
                 # the first time so late-event absorption doesn't push the
@@ -468,7 +519,7 @@ class FlowInstance(BaseModel):
         return matched
 
     @property
-    def missing_stages(self) -> List[FlowStage]:
+    def missing_stages(self) -> list[FlowStage]:
         """Return required stages that have not yet been fulfilled."""
         matched = self.matched_stage_names
         return [s for s in self.flow_definition.required_stages if s.name not in matched]
@@ -511,7 +562,7 @@ class FlowInstance(BaseModel):
         return self.log_str
 
     @property
-    def log_extra(self) -> Dict[str, Any]:
+    def log_extra(self) -> dict[str, Any]:
         """
         Return extra fields for logging this flow instance.
         """
@@ -576,7 +627,7 @@ class Overwatch:
     _instance: ClassVar[Overwatch | None] = None
 
     # ---- state (in-memory cache, synced to Redis) ----
-    flow_instances: ClassVar[List[FlowInstance]] = []
+    flow_instances: ClassVar[list[FlowInstance]] = []
     _flow_definitions: ClassVar[dict[str, FlowDefinition]] = {}
     stall_timeout: ClassVar[timedelta] = DEFAULT_STALL_TIMEOUT
     superset_grace_period: ClassVar[timedelta] = DEFAULT_SUPERSET_GRACE_PERIOD
@@ -586,6 +637,11 @@ class Overwatch:
     # Stall checks stay quiet through the pause and for one stall_timeout after.
     _suppress_stalls_until: ClassVar[datetime | None] = None
     _loaded_from_redis: ClassVar[bool] = False
+    # group_ids already classified as exchange/treasury rebalances, and the
+    # short_id/group_id keys we have already logged for. One classification
+    # line per transfer.
+    _rebalance_group_ids: ClassVar[set[str]] = set()
+    _rebalance_logged: ClassVar[set[str]] = set()
 
     # ---- completion report deduplication ----
     # Maps trigger_group_id -> list of completed FlowInstances waiting to be reported.
@@ -823,6 +879,13 @@ class Overwatch:
             f"{ICON} {ledger_entry.short_id} {ledger_entry.log_str}",
             extra={"notification": False, **ledger_entry.log_extra},
         )
+        if ledger_entry.ledger_type in _REBALANCE_LEDGER_TYPES:
+            await self._classify_and_drop_rebalance(
+                group_id=ledger_entry.group_id,
+                short_id=ledger_entry.short_id,
+                sender=self._rebalance_sender_for_ledger(ledger_entry),
+                amount=ledger_entry.formatted_amount(),
+            )
         return await self._dispatch(event)
 
     async def ingest_op(
@@ -843,9 +906,14 @@ class Overwatch:
             extra={"notification": False, **op.log_extra},
         )
 
+        # Exchange/treasury rebalances are not customer payments. Still
+        # dispatch so an in-flight customer flow matches exactly as before,
+        # but do not open a customer flow for the rebalance itself.
+        is_rebalance = await self._handle_exchange_rebalance_op(op, event)
+
         # Auto-create a flow instance when a trigger op arrives
         matched = await self._dispatch(event)
-        if matched is None:
+        if matched is None and not is_rebalance:
             matched = await self._try_create_flow(event, op)
 
         # --- Detect payment-failure notifications that terminate flows ---
@@ -956,7 +1024,7 @@ class Overwatch:
         # Only consider flows that completed within _LATE_EVENT_WINDOW to
         # avoid greedily absorbing unrelated events from new transactions.
         if first_result is None:
-            now = datetime.now(tz=timezone.utc)
+            now = datetime.now(tz=UTC)
             for flow in self.completed_flows:
                 if (
                     flow.completed_at is not None
@@ -1083,6 +1151,11 @@ class Overwatch:
             )
             return None
 
+        # Exchange hot-wallet and treasury transfers are internal rebalances.
+        # Callers that skip ingest_op (tests, replays) hit this path directly.
+        if await self._handle_exchange_rebalance_op(op, event):
+            return None
+
         # Skip transfers originating from internal/system accounts.
         # These are payouts, refunds, change returns, or internal moves —
         # never customer-initiated deposit flows.  Customer flows are always
@@ -1102,7 +1175,7 @@ class Overwatch:
                         extra={"notification": False},
                     )
                     return None
-            except Exception:
+            except Exception: #
                 pass  # config unavailable — proceed normally
 
         first_result: str | None = None
@@ -1277,7 +1350,7 @@ class Overwatch:
                 # cancelled automatically if no distinguishing events arrive.
                 if winner_is_proper_subset and candidate.superset_grace_expires is None:
                     candidate.superset_grace_expires = (
-                        datetime.now(tz=timezone.utc) + self.superset_grace_period
+                        datetime.now(tz=UTC) + self.superset_grace_period
                     )
                     candidate.superset_winner_name = winner.flow_definition.name
                     await self._persist_flow(candidate)
@@ -1342,6 +1415,103 @@ class Overwatch:
             extra={"notification": False, **flow.log_extra},
         )
 
+    def _rebalance_sender_for_ledger(self, ledger_entry: LedgerEntry) -> str:
+        """Hive sender for a rebalance ledger, preferring an open flow's cust_id."""
+        group_id = ledger_entry.group_id
+        short_id = ledger_entry.short_id
+        for flow in self.active_flows:
+            same_group = bool(group_id) and flow.trigger_group_id == group_id
+            same_short = bool(short_id) and flow.trigger_short_id == short_id
+            if (same_group or same_short) and flow.cust_id:
+                return flow.cust_id
+        return str(ledger_entry.cust_id or "")
+
+    async def _handle_exchange_rebalance_op(self, op: Any, event: FlowEvent) -> bool:
+        """Classify a transfer as an exchange/treasury rebalance.
+
+        Returns True when the transfer must not open a customer payment flow.
+        Logs one INFO line per transfer (short_id, sender, amount) and drops
+        any customer candidates already opened for it.
+        """
+        op_type = event.op_type or getattr(op, "op_type", None)
+        if op_type != "transfer":
+            return False
+        group_id = event.group_id or getattr(op, "group_id", "") or ""
+        short_id = event.short_id or getattr(op, "short_id", "") or ""
+        sender = getattr(op, "from_account", "") or ""
+        known_group = bool(group_id) and group_id in self._rebalance_group_ids
+        known_sender = bool(sender) and sender in _rebalance_sender_names()
+        if not known_group and not known_sender:
+            return False
+        await self._classify_and_drop_rebalance(
+            group_id=group_id,
+            short_id=short_id,
+            sender=sender,
+            amount=_transfer_amount_text(op) or event.event_value,
+        )
+        return True
+
+    async def _classify_and_drop_rebalance(
+        self,
+        *,
+        group_id: str,
+        short_id: str,
+        sender: str,
+        amount: str,
+    ) -> int:
+        """Drop customer flows for one rebalance and log the classification once."""
+        if group_id:
+            self._rebalance_group_ids.add(group_id)
+        log_key = short_id or group_id
+        if not log_key or log_key not in self._rebalance_logged:
+            if log_key:
+                self._rebalance_logged.add(log_key)
+            logger.info(
+                f"{ICON} Classified exchange rebalance {short_id} sender {sender} amount {amount}",
+                extra={"notification": False},
+            )
+        return await self._drop_rebalance_flows(group_id, short_id)
+
+    async def _drop_rebalance_flows(self, group_id: str, short_id: str) -> int:
+        """Cancel customer candidates for this transfer, same as a sibling win."""
+        matching = [
+            flow
+            for flow in list(self.active_flows)
+            if (group_id and flow.trigger_group_id == group_id)
+            or (short_id and flow.trigger_short_id == short_id)
+        ]
+        for flow in matching:
+            flow.status = FlowStatus.FAILED
+            if flow in self.flow_instances:
+                self.flow_instances.remove(flow)
+            await self._remove_active_flow(flow)
+            logger.info(
+                f"{ICON} 🗑️ Removed candidate '{flow.flow_definition.name}' "
+                f"({flow.trigger_short_id}) — exchange rebalance",
+                extra={"notification": False, **flow.log_extra},
+            )
+        return len(matching)
+
+    async def _drop_known_rebalance_flows(self) -> None:
+        """Drop active flows whose cust_id is an exchange or treasury account."""
+        senders = _rebalance_sender_names()
+        if not senders:
+            return
+        seen: set[str] = set()
+        for flow in list(self.active_flows):
+            if flow.cust_id not in senders:
+                continue
+            key = flow.trigger_group_id or flow.trigger_short_id
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            await self._classify_and_drop_rebalance(
+                group_id=flow.trigger_group_id,
+                short_id=flow.trigger_short_id,
+                sender=flow.cust_id,
+                amount=flow.flow_value or "",
+            )
+
     async def cancel_flows_for_trigger(self, trigger_group_id: str) -> int:
         """Cancel all candidate flows for a trigger that produced no ledger entries.
 
@@ -1369,7 +1539,7 @@ class Overwatch:
     # ---- queries ----
 
     @property
-    def active_flows(self) -> List[FlowInstance]:
+    def active_flows(self) -> list[FlowInstance]:
         """Return flow instances that are not yet completed or failed."""
         return [
             f
@@ -1378,18 +1548,18 @@ class Overwatch:
         ]
 
     @property
-    def completed_flows(self) -> List[FlowInstance]:
+    def completed_flows(self) -> list[FlowInstance]:
         """Return completed flow instances."""
         return [f for f in self.flow_instances if f.status == FlowStatus.COMPLETED]
 
     @property
-    def stalled_flows(self) -> List[FlowInstance]:
+    def stalled_flows(self) -> list[FlowInstance]:
         """Return stalled flow instances."""
         return [f for f in self.flow_instances if f.status == FlowStatus.STALLED]
 
     # ---- stall detection ----
 
-    async def check_stalls(self, now: datetime | None = None) -> List[FlowInstance]:
+    async def check_stalls(self, now: datetime | None = None) -> list[FlowInstance]:
         """Mark active flows that haven't received events recently as STALLED.
 
         Also cancels superset candidates whose grace period has expired —
@@ -1398,11 +1568,15 @@ class Overwatch:
 
         Returns the list of flows whose status was changed.
         """
-        now = now or datetime.now(tz=timezone.utc)
+        now = now or datetime.now(tz=UTC)
+        # Drop exchange/treasury rebalances before any stall rule. This also
+        # clears candidates that were opened before the ledger entry arrived
+        # and copies reloaded from Redis. Customer flows are left untouched.
+        await self._drop_known_rebalance_flows()
         suppress_until = self._suppress_stalls_until
         if suppress_until is not None and now < suppress_until:
             return []
-        newly_stalled: List[FlowInstance] = []
+        newly_stalled: list[FlowInstance] = []
 
         # Rule 1: cancel superset candidates past their grace period
         for flow in list(self.active_flows):
@@ -1535,7 +1709,7 @@ class Overwatch:
             else:
                 if stalls_suspended:
                     stalls_suspended = False
-                    self._suppress_stalls_until = datetime.now(tz=timezone.utc) + self.stall_timeout
+                    self._suppress_stalls_until = datetime.now(tz=UTC) + self.stall_timeout
                     logger.info(
                         f"{ICON} Processing resumed. Stall alerts stay quiet for {self.stall_timeout}.",
                         extra={"notification": False},
@@ -1561,8 +1735,11 @@ class Overwatch:
 
     def _log_report(self) -> None:
         """Emit a single log line summarising current state."""
-        active = self.active_flows
-        stalled = self.stalled_flows
+        # Rebalance transfers are not customer payments and must not get
+        # the hourly stall reminder. Customer flows are unchanged.
+        senders = _rebalance_sender_names()
+        active = [flow for flow in self.active_flows if flow.cust_id not in senders]
+        stalled = [flow for flow in self.stalled_flows if flow.cust_id not in senders]
         completed = self.completed_flows
 
         if not active and not stalled:
@@ -1583,7 +1760,7 @@ class Overwatch:
                 extra={"notification": False, **flow.log_extra},
             )
         for flow in stalled:
-            now = datetime.now(tz=timezone.utc)
+            now = datetime.now(tz=UTC)
             # Throttle stall log lines: only log once per stall_log_interval
             if (
                 flow.last_stall_reported_at is not None
@@ -1613,6 +1790,8 @@ class Overwatch:
         cls.stall_log_interval = DEFAULT_STALL_LOG_INTERVAL
         cls._suppress_stalls_until = None
         cls._loaded_from_redis = False
+        cls._rebalance_group_ids = set()
+        cls._rebalance_logged = set()
         cls._instance = None
         # Cancel any in-flight completion report tasks
         for task in cls._completion_report_tasks.values():
