@@ -4,3 +4,10 @@ logging:
   log_config_file: 2-stderr-json-file.json
   default_log_level: DEBUG
   log_folder: logs
+
+redis:
+  # Local pytest services are on the tailscale host "dot".
+  # GitHub Actions rewrites "dot" to localhost before the suite.
+  host: dot
+  port: 6379
+  db: 0
