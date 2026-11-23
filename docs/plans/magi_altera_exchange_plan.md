@@ -99,12 +99,12 @@ Altera has no deposit address. The signer **is** the wallet.
 
 Do **not** trade from production `v4vapp` (server). That Magi address is the customer hot wallet (`#magisats` in and out). The ledger can split Exchange Holdings from VSC Liability; the chain cannot.
 
-Use a dedicated Hive account, same pattern as `bdhivesteem` / `devexc`:
+Use a **new** dedicated Hive account, same pattern as `bdhivesteem` / `devexc`. Do not reuse `v4vapp.vsc`.
 
-| Env | Suggested Magi exchange account | Server (untouched) |
+| Env | Magi exchange account | Server (untouched) |
 |---|---|---|
-| production | `v4vapp.vsc` (or a new `v4vapp.magi`) | `v4vapp` |
-| dev | new `devexc.magi` or reuse a watched account with `role: exchange` | `devser.v4vapp` |
+| production | `v4vapp.magi` | `v4vapp` |
+| dev | `devmagi.v4vapp` | `devser.v4vapp` |
 
 Give it `role: exchange`, list it first in `exchange_config.magi_vsc.hive_accounts`, and watch it.
 
@@ -296,7 +296,7 @@ exchange_config:
   magi_vsc:
     exchange_mode: mainnet
     hive_accounts:
-      - v4vapp.vsc                   # signer / MagiSats inventory
+      - v4vapp.magi                  # signer / MagiSats inventory
     mainnet:
       no_trade: true                 # quotes only until go-live
     router:
@@ -320,12 +320,13 @@ exchange_config:
 
 ### Phase 0 — Accounts and config
 
-- Pick the Magi exchange Hive account; fund a small HBD/HIVE float from treasury.
-- Add `role: exchange`, `watch_users`, `magi_vsc.hive_accounts`.
+- Create Hive account `v4vapp.magi` (prod) and `devmagi.v4vapp` (dev). Store active + memo keys in config like other exchange accounts.
+- Fund a small HBD/HIVE float from treasury.
+- Add `role: exchange`, `watch_users`, `magi_vsc.hive_accounts: [v4vapp.magi]`.
 - Keep `no_trade: true`.
-- MagiAdapter `get_balance` reads this account for BTC and Hive.
+- MagiAdapter `get_balance` reads `v4vapp.magi` / `devmagi.v4vapp` for BTC and Hive.
 
-**Done when:** admin balance sheet can show MagiSats and HIVE/HBD on that account; no swaps sent.
+**Done when:** the account exists on Hive, keys are in config, admin balance sheet can show MagiSats and HIVE/HBD on it; no swaps sent.
 
 ### Phase 1 — Quote engine (no broadcast)
 
@@ -463,9 +464,12 @@ Live: quote script on mainnet indexer (read-only). One tiny HBD sell on the dedi
 
 ---
 
-## Open choices (lock in phase 0)
+## Decisions
 
-1. Production Magi exchange account: reuse `v4vapp.vsc` or create `v4vapp.magi`.
-2. Referral: omit, or `beneficiary: hive:v4vapp` at 25 bps.
-3. Shadow week length before first prod fill.
-4. Whether MagiSats from Magi sells are allowed to sit as Magi inventory, or must be bridged to Lightning before counting as a Hive→Keepsats hedge.
+1. **Magi exchange account:** new `v4vapp.exc` (prod) and but probably no `devexc.v4vapp` (dev). Not `v4vapp.vsc`.
+
+## Open choices
+
+1. Referral: omit, or `beneficiary: hive:v4vapp` at 25 bps.
+2. Shadow week length before first prod fill.
+3. Whether MagiSats from Magi sells are allowed to sit as Magi inventory, or must be bridged to Lightning before counting as a Hive→Keepsats hedge.
