@@ -143,6 +143,10 @@ def mock_db(mocker):
         return_value=empty_sanity_results,
     )
     mocker.patch(
+        "v4vapp_backend_v2.admin.routers.users.run_all_sanity_checks",
+        return_value=empty_sanity_results,
+    )
+    mocker.patch(
         "v4vapp_backend_v2.admin.routers.users.get_limit_entries",
         return_value=[],
     )
@@ -248,6 +252,34 @@ class TestAdminEndpoints:
         # Check for users page specific content
         assert "VSC Liability Users" in content
         assert "User" in content
+
+    def test_users_page_shows_sanity_sidebar(self, admin_client, mocker):
+        """Sidebar sanity block renders when the users page has check results."""
+        from v4vapp_backend_v2.accounting.sanity_checks import (
+            SanityCheckResult,
+            SanityCheckResults,
+        )
+
+        result = SanityCheckResult(
+            name="server_account_balances",
+            is_valid=True,
+            details="Server account balances\nall good",
+        )
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.users.run_all_sanity_checks",
+            return_value=SanityCheckResults(
+                passed=[("server_account_balances", result)],
+                failed=[],
+                results=[("server_account_balances", result)],
+            ),
+        )
+
+        response = admin_client.get("/admin/users")
+        assert response.status_code == 200
+        content = response.text
+        assert "Sanity Checks" in content
+        assert "<strong>Server account balances</strong>" in content
+        assert "all good" in content
 
     def test_user_balance_endpoint_invalid_user(self, admin_client, mocker):
         """Test user balance endpoint with invalid user"""

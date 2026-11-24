@@ -25,7 +25,7 @@ from v4vapp_backend_v2.accounting.pipelines.fee_aggregation_pipelines import (
     FeeAggregationResult,
     fee_aggregation_pipeline,
 )
-from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults
+from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
@@ -264,13 +264,22 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
 
 @router.get("/", response_class=HTMLResponse)
 async def users_page(request: Request):
-    """Main users page showing VSC Liability accounts - renders quickly with async data loading"""
+    """Main users page showing VSC Liability accounts.
+
+    User rows load asynchronously. Sanity checks are rendered with the page
+    shell so the sidebar matches the other admin pages.
+    """
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
 
     nav_items = nav_manager.get_navigation_items("/admin/users")
+    async with asyncio.TaskGroup() as tg:
+        sanity_task = tg.create_task(run_all_sanity_checks())
+        pending_task = tg.create_task(PendingTransaction.list_all_str())
+    sanity_results = sanity_task.result()
+    pending_transactions = pending_task.result()
 
-    # Return page with empty data - actual data will be loaded via JavaScript
+    # Return page with empty user data - actual rows load via JavaScript
     return templates.TemplateResponse(
         request,
         "users/users.html.jinja",
@@ -280,7 +289,7 @@ async def users_page(request: Request):
             "nav_items": nav_items,
             "users_data": [],  # Empty initially
             "limit_entries": get_limit_entries(),
-            "pending_transactions": await PendingTransaction.list_all_str(),
+            "pending_transactions": pending_transactions,
             "now": datetime.now(tz=timezone.utc),
             "summary": {
                 "total_users": 0,
@@ -293,9 +302,7 @@ async def users_page(request: Request):
                 {"name": "Admin", "url": "/admin"},
                 {"name": "Users", "url": "/admin/users"},
             ],
-            # Provide a minimal empty sanity results model so templates that expect
-            # `sanity_results` (base.html) don't fail when it's not provided.
-            "sanity_results": SanityCheckResults(),
+            "sanity_results": sanity_results,
         },
     )
 
