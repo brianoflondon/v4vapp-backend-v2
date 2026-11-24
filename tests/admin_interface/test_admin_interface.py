@@ -231,6 +231,10 @@ class TestAdminEndpoints:
         # Verify the async loading placeholders are present:
         assert "hive-balances-section" in content
         assert "exchange-balances-section" in content
+        assert "magi-exchange-section" in content
+        assert "Magi SATS" in content
+        assert "Magi HIVE" in content
+        assert "Magi HBD" in content
         assert "lnd-info-section" in content
         assert "financial-summary-section" in content
         assert "server-balance-check" in content

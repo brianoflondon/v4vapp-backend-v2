@@ -149,6 +149,52 @@ async def dashboard_magi_balances() -> JSONResponse:
     return JSONResponse({"balances": balances})
 
 
+async def magi_exchange_rows() -> list[dict[str, str | None]]:
+    """HIVE, HBD, and Magi sats for each account on the Magi exchange provider."""
+    accounts = list(InternalConfig().config.exchange_config.magi.hive_accounts)
+
+    async def _one(account: str) -> dict[str, str | None]:
+        row: dict[str, str | None] = {
+            "account": account,
+            "HIVE": "N/A",
+            "HBD": "N/A",
+            "SATS": "N/A",
+            "error": None,
+        }
+        errors: list[str] = []
+        try:
+            balances = await account_hive_balances_async(account)
+            row["HIVE"] = str(balances.get("HIVE_fmt", "0.000"))
+            row["HBD"] = str(balances.get("HBD_fmt", "0.000"))
+        except Exception as exc:
+            logger.warning(
+                f"Magi exchange Hive balance for {account} failed: {exc}",
+                extra={"notification": False},
+            )
+            errors.append(str(exc))
+        try:
+            magi_balance = await get_magi_btc_balance_by_account(account)
+            if magi_balance.error:
+                errors.append(magi_balance.error)
+            else:
+                row["SATS"] = f"{int(magi_balance.balance_sats):,}"
+        except Exception as exc:
+            logger.warning(
+                f"Magi exchange sats for {account} failed: {exc}",
+                extra={"notification": False},
+            )
+            errors.append(str(exc))
+        if errors:
+            row["error"] = "; ".join(errors)
+        return row
+
+    if not accounts:
+        return []
+    async with TaskGroup() as tg:
+        tasks = [tg.create_task(_one(account)) for account in accounts]
+    return [task.result() for task in tasks]
+
+
 @router.get("/lnd-info")
 async def dashboard_lnd_info() -> JSONResponse:
     """Fetch LND node balances and ledger details."""
@@ -267,6 +313,14 @@ async def dashboard_exchange_balances() -> JSONResponse:
             info["treasury_dash"] = f"{float(dash_amt):,.3f}"
     except Exception as e:
         logger.warning(f"Treasury Dash lookup failed: {e}", extra={"notification": False})
+
+    try:
+        info["magi"] = await magi_exchange_rows()
+    except Exception as e:
+        logger.warning(f"Magi exchange balances failed: {e}", extra={"notification": False})
+        info["magi"] = [
+            {"account": "", "HIVE": "N/A", "HBD": "N/A", "SATS": "N/A", "error": str(e)}
+        ]
 
     return JSONResponse({"exchange": info})
 

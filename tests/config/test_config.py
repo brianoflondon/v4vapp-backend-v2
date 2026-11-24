@@ -150,6 +150,41 @@ def test_alternate_config_file():
         assert False
 
 
+def test_exchange_config_loads_magi_account_and_legacy_key():
+    """The Magi provider is `magi`. Older configs that still say `magi_vsc` load too."""
+    from v4vapp_backend_v2.config.setup import ExchangeConfig
+
+    cfg = ExchangeConfig.model_validate(
+        {
+            "default_exchange": "binance",
+            "magi": {
+                "hive_accounts": ["v4vapp.exc"],
+                "exchange_mode": "mainnet",
+                "mainnet": {"no_trade": True},
+            },
+        }
+    )
+    assert cfg.magi.hive_accounts == ["v4vapp.exc"]
+    assert cfg.magi.active_network.no_trade is True
+    assert cfg.get_provider("magi") is cfg.magi
+
+    legacy = ExchangeConfig.model_validate(
+        {"magi_vsc": {"hive_accounts": ["v4vapp.exc"], "exchange_mode": "mainnet"}}
+    )
+    assert legacy.magi.hive_accounts == ["v4vapp.exc"]
+
+
+def test_dev_configs_point_magi_at_v4vapp_exc():
+    from v4vapp_backend_v2.config.setup import ExchangeConfig
+
+    for name in ("devhive.config.yaml", "devdocker.config.yaml", "devlegion.config.yaml"):
+        raw = safe_load(Path("config", name).read_text())
+        cfg = ExchangeConfig.model_validate(raw["exchange_config"])
+        assert cfg.magi.hive_accounts == ["v4vapp.exc"]
+        assert cfg.magi.exchange_mode.value == "mainnet"
+        assert cfg.magi.mainnet.no_trade is True
+
+
 def test_exchange_config_all_hive_exchange_accounts():
     InternalConfig()
     exchange_config = InternalConfig().config.exchange_config

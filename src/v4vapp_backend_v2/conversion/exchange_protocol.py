@@ -404,6 +404,8 @@ def get_exchange_adapter(provider_name: str | None = None) -> BaseExchangeAdapte
 
     # Use provided name or default from config
     provider_name = provider_name or exchange_config.default_exchange
+    if provider_name == "magi_vsc":
+        provider_name = "magi"
 
     # Get the provider config
     provider = exchange_config.get_provider(provider_name)
@@ -420,7 +422,7 @@ def get_exchange_adapter(provider_name: str | None = None) -> BaseExchangeAdapte
 
         return BinanceAdapter(testnet=testnet)
 
-    elif provider_name == "magi_vsc":
+    elif provider_name == "magi":
         from v4vapp_backend_v2.conversion.magi_adapter import MagiAdapter
 
         return MagiAdapter(testnet=testnet)

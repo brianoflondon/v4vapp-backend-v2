@@ -29,6 +29,7 @@ from v4vapp_backend_v2.conversion.exchange_protocol import (
     format_base_asset,
     format_quote_asset,
 )
+from v4vapp_backend_v2.conversion.magi_shadow import log_magi_rebalance_shadow
 from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 
@@ -505,6 +506,46 @@ class RebalanceResult(BaseModel):
         await mongo_call(lambda: collection.insert_one(data))
 
 
+async def _log_magi_shadow(
+    *,
+    base_asset: str,
+    quote_asset: str,
+    direction: RebalanceDirection,
+    qty: Decimal,
+    stage: str,
+    reason: str,
+    min_qty: Decimal,
+    min_notional: Decimal,
+    transaction_id: str | None,
+    exchange: str,
+    binance_order: ExchangeOrderResult | None = None,
+    binance_error: str | None = None,
+) -> None:
+    """Magi telemetry for one rebalance decision. Swallows its own failures."""
+    if qty <= 0:
+        return
+    try:
+        await log_magi_rebalance_shadow(
+            base_asset=base_asset,
+            quote_asset=quote_asset,
+            direction=direction.value,
+            qty=qty,
+            stage=stage,
+            reason=reason,
+            min_qty=min_qty,
+            min_notional=min_notional,
+            transaction_id=transaction_id,
+            exchange=exchange,
+            binance_order=binance_order,
+            binance_error=binance_error,
+        )
+    except Exception as exc:
+        logger.warning(
+            f"{ICON} Magi shadow quote failed: {exc}",
+            extra={"notification": False, "magi_shadow": True, "stage": stage, "error": str(exc)},
+        )
+
+
 async def add_pending_rebalance(
     exchange_adapter: BaseExchangeAdapter,
     base_asset: str,
@@ -533,6 +574,8 @@ async def add_pending_rebalance(
     Returns:
         RebalanceResult with execution details
     """
+    pending: PendingRebalance | None = None
+    traded = False
     try:
         # Get or create pending rebalance record
         pending = await PendingRebalance.get_or_create(
@@ -570,6 +613,18 @@ async def add_pending_rebalance(
         can_execute, reason = pending.can_execute()
 
         if not can_execute:
+            await _log_magi_shadow(
+                base_asset=pending.base_asset,
+                quote_asset=pending.quote_asset,
+                direction=pending.direction,
+                qty=pending.pending_qty,
+                stage="below_minimum",
+                reason=reason,
+                min_qty=pending.min_qty_threshold,
+                min_notional=pending.min_notional_threshold,
+                transaction_id=transaction_id,
+                exchange=pending.exchange,
+            )
             await pending.save()
             return RebalanceResult(
                 executed=False,
@@ -581,6 +636,20 @@ async def add_pending_rebalance(
         order_result = await execute_rebalance_trade(
             exchange_adapter=exchange_adapter,
             pending=pending,
+        )
+        traded = True
+        await _log_magi_shadow(
+            base_asset=pending.base_asset,
+            quote_asset=pending.quote_asset,
+            direction=pending.direction,
+            qty=pending.pending_qty,
+            stage="binance_send",
+            reason=reason,
+            min_qty=pending.min_qty_threshold,
+            min_notional=pending.min_notional_threshold,
+            transaction_id=transaction_id,
+            exchange=pending.exchange,
+            binance_order=order_result,
         )
 
         # Update pending record after execution
@@ -603,6 +672,20 @@ async def add_pending_rebalance(
 
     except ExchangeBelowMinimumError as e:
         logger.warning(f"{ICON} Rebalance below minimum: {e}")
+        if pending is not None and not traded:
+            await _log_magi_shadow(
+                base_asset=pending.base_asset,
+                quote_asset=pending.quote_asset,
+                direction=pending.direction,
+                qty=pending.pending_qty,
+                stage="binance_rejected",
+                reason=str(e),
+                min_qty=pending.min_qty_threshold,
+                min_notional=pending.min_notional_threshold,
+                transaction_id=transaction_id,
+                exchange=pending.exchange,
+                binance_error=str(e),
+            )
         return RebalanceResult(
             executed=False,
             reason=str(e),
@@ -610,6 +693,20 @@ async def add_pending_rebalance(
         )
     except ExchangeConnectionError as e:
         logger.error(f"{ICON} Exchange connection error during rebalance: {e}")
+        if pending is not None and not traded:
+            await _log_magi_shadow(
+                base_asset=pending.base_asset,
+                quote_asset=pending.quote_asset,
+                direction=pending.direction,
+                qty=pending.pending_qty,
+                stage="binance_rejected",
+                reason="Exchange connection error",
+                min_qty=pending.min_qty_threshold,
+                min_notional=pending.min_notional_threshold,
+                transaction_id=transaction_id,
+                exchange=pending.exchange,
+                binance_error=str(e),
+            )
         return RebalanceResult(
             executed=False,
             reason="Exchange connection error",
@@ -617,6 +714,20 @@ async def add_pending_rebalance(
         )
     except Exception as e:
         logger.error(f"{ICON} Unexpected error during rebalance: {e}", exc_info=True)
+        if pending is not None and not traded:
+            await _log_magi_shadow(
+                base_asset=pending.base_asset,
+                quote_asset=pending.quote_asset,
+                direction=pending.direction,
+                qty=pending.pending_qty,
+                stage="binance_rejected",
+                reason="Unexpected error",
+                min_qty=pending.min_qty_threshold,
+                min_notional=pending.min_notional_threshold,
+                transaction_id=transaction_id,
+                exchange=pending.exchange,
+                binance_error=str(e),
+            )
         return RebalanceResult(
             executed=False,
             reason="Unexpected error",
@@ -708,10 +819,25 @@ async def force_execute_pending(
             pending_notional=pending.pending_quote_value,
         )
 
+    traded = False
     try:
         order_result = await execute_rebalance_trade(
             exchange_adapter=exchange_adapter,
             pending=pending,
+        )
+        traded = True
+        await _log_magi_shadow(
+            base_asset=pending.base_asset,
+            quote_asset=pending.quote_asset,
+            direction=pending.direction,
+            qty=pending.pending_qty,
+            stage="binance_send",
+            reason="Forced execution",
+            min_qty=pending.min_qty_threshold,
+            min_notional=pending.min_notional_threshold,
+            transaction_id=pending.transaction_ids[-1] if pending.transaction_ids else None,
+            exchange=pending.exchange,
+            binance_order=order_result,
         )
 
         pending.reset_after_execution(order_result.executed_qty)
@@ -727,6 +853,20 @@ async def force_execute_pending(
         await result.save()
         return result
     except Exception as e:
+        if not traded:
+            await _log_magi_shadow(
+                base_asset=pending.base_asset,
+                quote_asset=pending.quote_asset,
+                direction=pending.direction,
+                qty=pending.pending_qty,
+                stage="binance_rejected",
+                reason=f"Forced execution failed: {e}",
+                min_qty=pending.min_qty_threshold,
+                min_notional=pending.min_notional_threshold,
+                transaction_id=pending.transaction_ids[-1] if pending.transaction_ids else None,
+                exchange=pending.exchange,
+                binance_error=str(e),
+            )
         return RebalanceResult(
             executed=False,
             reason=f"Forced execution failed: {e}",
@@ -882,6 +1022,19 @@ async def execute_net_rebalance(
     )
 
     if not net_position.can_execute:
+        if net_position.net_direction is not None:
+            await _log_magi_shadow(
+                base_asset=base_asset,
+                quote_asset=quote_asset,
+                direction=net_position.net_direction,
+                qty=net_position.abs_net_qty,
+                stage="below_minimum",
+                reason=net_position.reason,
+                min_qty=net_position.min_qty_threshold,
+                min_notional=net_position.min_notional_threshold,
+                transaction_id=None,
+                exchange=net_position.exchange,
+            )
         return RebalanceResult(
             executed=False,
             reason=net_position.reason,
@@ -903,6 +1056,7 @@ async def execute_net_rebalance(
     net_direction = net_position.net_direction
 
     # Execute the net trade
+    traded = False
     try:
         abs_net_qty = net_position.abs_net_qty
 
@@ -918,6 +1072,20 @@ async def execute_net_rebalance(
                 quote_asset=quote_asset,
                 quantity=abs_net_qty,
             )
+        traded = True
+        await _log_magi_shadow(
+            base_asset=base_asset,
+            quote_asset=quote_asset,
+            direction=net_direction,
+            qty=abs_net_qty,
+            stage="binance_send",
+            reason=net_position.reason,
+            min_qty=net_position.min_qty_threshold,
+            min_notional=net_position.min_notional_threshold,
+            transaction_id=None,
+            exchange=exchange_adapter.exchange_name,
+            binance_order=order_result,
+        )
 
         logger.info(order_result.log_str, extra={"notification": True, **order_result.log_extra})
 
@@ -942,6 +1110,20 @@ async def execute_net_rebalance(
 
     except ExchangeBelowMinimumError as e:
         logger.warning(f"{ICON} Net rebalance below minimum: {e}")
+        if not traded:
+            await _log_magi_shadow(
+                base_asset=base_asset,
+                quote_asset=quote_asset,
+                direction=net_direction,
+                qty=net_position.abs_net_qty,
+                stage="binance_rejected",
+                reason=str(e),
+                min_qty=net_position.min_qty_threshold,
+                min_notional=net_position.min_notional_threshold,
+                transaction_id=None,
+                exchange=exchange_adapter.exchange_name,
+                binance_error=str(e),
+            )
         return RebalanceResult(
             executed=False,
             reason=str(e),
@@ -950,6 +1132,20 @@ async def execute_net_rebalance(
         )
     except ExchangeConnectionError as e:
         logger.error(f"{ICON} Exchange connection error during net rebalance: {e}")
+        if not traded:
+            await _log_magi_shadow(
+                base_asset=base_asset,
+                quote_asset=quote_asset,
+                direction=net_direction,
+                qty=net_position.abs_net_qty,
+                stage="binance_rejected",
+                reason="Exchange connection error",
+                min_qty=net_position.min_qty_threshold,
+                min_notional=net_position.min_notional_threshold,
+                transaction_id=None,
+                exchange=exchange_adapter.exchange_name,
+                binance_error=str(e),
+            )
         return RebalanceResult(
             executed=False,
             reason="Exchange connection error",
@@ -958,6 +1154,20 @@ async def execute_net_rebalance(
         )
     except Exception as e:
         logger.error(f"{ICON} Unexpected error during net rebalance: {e}", exc_info=True)
+        if not traded:
+            await _log_magi_shadow(
+                base_asset=base_asset,
+                quote_asset=quote_asset,
+                direction=net_direction,
+                qty=net_position.abs_net_qty,
+                stage="binance_rejected",
+                reason="Unexpected error",
+                min_qty=net_position.min_qty_threshold,
+                min_notional=net_position.min_notional_threshold,
+                transaction_id=None,
+                exchange=exchange_adapter.exchange_name,
+                binance_error=str(e),
+            )
         return RebalanceResult(
             executed=False,
             reason="Unexpected error",

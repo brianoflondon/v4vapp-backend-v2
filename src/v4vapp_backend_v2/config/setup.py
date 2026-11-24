@@ -13,7 +13,7 @@ from typing import Any, ClassVar, Literal, Protocol
 
 from dotenv import load_dotenv
 from packaging import version
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AliasChoices, BaseModel, Field, model_validator
 from pymongo import AsyncMongoClient, MongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.database import Database
@@ -457,7 +457,10 @@ class ExchangeConfig(BaseConfig):
 
     default_exchange: str = "binance"
     binance: ExchangeProviderConfig = ExchangeProviderConfig()
-    magi_vsc: ExchangeProviderConfig = ExchangeProviderConfig()
+    magi: ExchangeProviderConfig = Field(
+        default_factory=ExchangeProviderConfig,
+        validation_alias=AliasChoices("magi", "magi_vsc"),
+    )
 
     def get_provider(self, name: str | None = None) -> ExchangeProviderConfig:
         """Get provider config by name, defaults to default_exchange."""

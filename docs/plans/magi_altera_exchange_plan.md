@@ -60,23 +60,47 @@ Units are integers with no decimal point: HIVE/HBD × 10³, BTC in sats. `transf
 
 Omit `destination_chain`. That field unwraps to L1 Bitcoin. MagiSats stay on Magi.
 
-Quote is local from pool reserves (Altera wallet function `ly`). Indexer: `https://indexer.magi.milohpr.com/v1/graphql` (`dex_pool_liquidity`, `dex_pool_swap_events`). Confirmation: `dex_pool_swap_events` by `indexer_tx_hash`, plus `btc_mapping_transfer_events` when BTC moves.
+This is not the public SDK `buildQuickSwap` path. That path deposits HIVE/HBD to `vsc.gateway` and sets `destination_chain`, which lands BTC on an L1 address. Rebalance sends one `vsc.call` `execute` with `transfer.allow` and no `destination_chain`.
 
-### AMM (must match Altera)
+Quote is local from pool reserves. Source of truth is [altera-app `swapCalc.ts`](https://github.com/vsc-eco/altera-app/blob/main/src/lib/pools/swapCalc.ts) `calculateSwap` with `SLIP_FEE_RULE = "off"`. Indexer: `https://indexer.magi.milohpr.com/v1/graphql` (`dex_pool_liquidity`, `dex_pool_swap_events`). Confirmation: `dex_pool_swap_events` by `indexer_tx_hash`, plus `btc_mapping_transfer_events` when BTC moves.
 
-Constants from Altera JS: `fee_bps = 8`, `L2 = 20000`, `pg = 10000`, `F2 = 625`, mode `OA = "off"`.
+Do not port `@vsc.eco/crosschain-core` `calculateSwap`. That copy drops the stabilizer and the CLP scale, so the same fixture quotes 91,164 sats instead of 108,027.
+
+### AMM (must match current Altera)
+
+Post-2026-06-19 contract (`go-vsc-node` `incentive-pendulum/wasm/applier.go`): the pendulum multiplier `m` (range 1–2) applies only to the 8 bps protocol leg. The CLP leg is scaled by a constant 625 / 10000 (1/16) and is not multiplied by `m`. The pre-fix curve multiplied the CLP leg by `m` as well and charged about 2× price impact. The minified `ly` names (`L2`, `pg`, `F2`, `OA`) are that older bundle.
+
+Integer division truncates toward zero. Amounts are smallest units.
 
 ```
-gross     = Y * dx / (X + dx)                         # constant product
-baseFee   = max(gross * 8 / 10000, 1) * L2 / pg       # ~16 bps of gross
-clpFee    = max(dx² * Y / (X+dx)², 1) * F2 / pg       # impact
-expected  = max(gross - baseFee - clpFee, 0)
-minOut    = expected * (10000 - slippage_bps) / 10000
+grossOut     = Y - (X * Y) / (X + x)                 # not Y * x / (X + x); those differ by at most 1
+baseProtocol = max(grossOut * 8 / 10000, 1)
+baseClp      = max(x² * Y / (X + x)², 1)
+protocolFee  = baseProtocol * 20000 / 10000          # quote m = 2.0, the cap
+clpFee       = baseClp * 625 / 10000
+expected     = max(grossOut - protocolFee - clpFee, 0)
+minOut       = expected * (10000 - slippage_bps) / 10000
 ```
 
-Abort when implied fee bps > 300 (3%), or when `dx * 2 > X` (more than half the input reserve).
+`expected` is a floor. A real `m` below 2 pays more and must not pay less. `min_amount_out` and venue comparison both use this floor.
 
-Two-hop: run hop 1 with slippage 0, feed `expected` into hop 2 with the user slippage.
+The 3% guard uses the structural fee, with the floor-at-1 left out, so dust is not blocked by the 1-unit minimum:
+
+```
+structural = (grossOut * 8 / 10000) * 2 + (x² * Y / (X + x)²) * 625 / 10000
+fee_bps    = structural * 10000 / grossOut
+```
+
+Abort when `fee_bps > 300`, or when `x * 2 > X`. On a two-hop, `fee_bps` is the sum of the hops, and hop 2 is sized from hop 1 `expected`. Slippage is 0 on hop 1 and the user slippage on hop 2.
+
+Under rule `off`, one hop reaches the 50% reserve abort before the 3% fee abort. The fee abort still fires when the two hops' fees sum past 300 bps, and it matters if the slip rule moves to `on` or `both`.
+
+Golden fixture from Altera (pre-swap state of tx `9a6ad6c7…`, 100 HBD into the BTC pool, slippage 100 bps): `x = 100000`, `X = 504685`, `Y = 661105`.
+
+| | gross | protocol | clp | expected | minOut |
+|---|---:|---:|---:|---:|---:|
+| Altera `off` (use this) | 109,331 | 174 | 1,130 | 108,027 | 106,946 |
+| SDK without scale (do not use) | 109,331 | 87 | 18,080 | 91,164 | |
 
 ---
 
@@ -103,10 +127,10 @@ Use a **new** dedicated Hive account, same pattern as `bdhivesteem` / `devexc`. 
 
 | Env | Magi exchange account | Server (untouched) |
 |---|---|---|
-| production | `v4vapp.magi` | `v4vapp` |
-| dev | `devmagi.v4vapp` | `devser.v4vapp` |
+| production | `v4vapp.exc` | `v4vapp` |
+| dev | none in v1. A later dev fill reuses `devexc` | `devser.v4vapp` |
 
-Give it `role: exchange`, list it first in `exchange_config.magi_vsc.hive_accounts`, and watch it.
+Give it `role: exchange`, list it first in `exchange_config.magi.hive_accounts`, and watch it.
 
 Flow:
 
@@ -116,9 +140,9 @@ magi exchange account  --vsc.call execute-->  MagiSats on hive:<exchange>
 hive:<exchange>  --VSC transfer, when server Magi is low-->  hive:<server>
 ```
 
-Hive legs already book `TREASURY_TO_EXCHANGE` / `SERVER_TO_EXCHANGE` / `EXCHANGE_TO_TREASURY` via `process_hive.py` once the account is in `magi_vsc.hive_accounts`. MagiSats refill of the server is a VSC `transfer` (existing Magi send path), not a DEX swap.
+Hive legs already book `TREASURY_TO_EXCHANGE` / `SERVER_TO_EXCHANGE` / `EXCHANGE_TO_TREASURY` via `process_hive.py` once the account is in `magi.hive_accounts`. MagiSats refill of the server is a VSC `transfer` (existing Magi send path), not a DEX swap.
 
-A tiny signed test from the server account is allowed in phase 1 only, with a hard size cap. Production path is the exchange account.
+Do not sign a swap from the server account. The first live fill is on `v4vapp.exc`, or on `devexc` if it is a dev fill, with a hard size cap.
 
 ---
 
@@ -127,8 +151,8 @@ A tiny signed test from the server account is allowed in phase 1 only, with a ha
 | Piece | State |
 |---|---|
 | `MagiAdapter` | Stub. BTC balance for `server_id` works. HIVE/HBD return 0. Price, minimums, `market_sell` / `market_buy` raise. |
-| `get_exchange_adapter("magi_vsc")` | Wired. `exchange_name = "MagiSwap"`. |
-| Config `exchange_config.magi_vsc` | Present. Devhive `mainnet.no_trade: true`. |
+| `get_exchange_adapter("magi")` | Wired. `exchange_name = "MagiSwap"`. |
+| Config `exchange_config.magi` | Present. Devhive `mainnet.no_trade: true`. |
 | `VSCSwapPayload` / `VSCCall` execute | Parse only. Nothing sends an execute call. |
 | `send_magi_transfer_custom_json` | Transfer action only. Checks Magi BTC balance and `.sats` / `.parent_id`. Unusable as-is for swaps. |
 | `process_magi_btc_transfer_event` | Handles `action == "transfer"` only. A pool→address BTC credit with no transfer payload must **not** be booked as `magisats_inbound`. |
@@ -179,7 +203,7 @@ Implement the full `BaseExchangeAdapter` surface. Keep methods sync to match the
 | `get_balance("HIVE"/"HBD")` | Native Hive `Account` balances of that same account |
 | `get_current_price` | Spot from reserves (`Y/X` oriented), two-hop chained for HIVE/BTC |
 | `get_min_order_requirements` | Soft floor (20 HIVE or 1 HBD) + notional from 3% fee abort; hard cap 10% of input reserve (config) |
-| `market_sell` / `market_buy` | Quote `ly`, refuse on abort rules, broadcast execute, wait for `dex_pool_swap_events`, return `ExchangeOrderResult` |
+| `market_sell` / `market_buy` | Quote `calculate_swap`, refuse on abort rules, broadcast execute, wait for `dex_pool_swap_events`, return `ExchangeOrderResult` |
 
 Payload builder lives next to Magi send, not inside the adapter:
 
@@ -200,7 +224,7 @@ Keep pending rows as they are (`exchange=binance_convert`). When `can_execute`, 
 
 ```
 binance_quote = BinanceSwapAdapter.send_quote_request(...)   # do not accept yet
-magi_quote    = MagiAdapter.preview_swap(...)                # ly() only
+magi_quote    = MagiAdapter.preview_swap(...)                # calculate_swap only
 fair          = AllQuotes triangle
 
 log VenueQuote × 3
@@ -236,7 +260,7 @@ v2: for Magi-eligible sells, pass `base_asset="HBD"` when the customer paid HBD 
 Reuse `exchange_accounting()`. Magi fill:
 
 - `EXCHANGE_CONVERSION` both legs on `Exchange Holdings / MagiSwap` (HIVE or HBD vs MSATS)
-- `EXCHANGE_FEES` if `fee_msats > 0` (`gross − expected` from `ly`, or fill `amount_in/out` vs quote)
+- `EXCHANGE_FEES` if `fee_msats > 0` (`gross − expected` from `calculate_swap`, or fill `amount_in/out` vs quote)
 
 `order_id` = Hive `trx_id`. `client_order_id` = triggering `short_id`.
 
@@ -258,7 +282,7 @@ Every router decision writes one document (Mongo `exchange_quotes` or Redis list
 | `side` | sell / buy |
 | `base_asset` | HIVE or HBD |
 | `qty` | size quoted |
-| `magi_sats_per_base` | Magi `ly` |
+| `magi_sats_per_base` | Magi `calculate_swap` floor (`m = 2`) |
 | `binance_sats_per_base` | Convert `toAmount` |
 | `fair_sats_per_base` | USDT triangle |
 | `edge_bps_vs_binance` | Magi − Binance |
@@ -272,31 +296,32 @@ A background task (hive_monitor or a small loop in `binance_monitor` / new `exch
 
 v1 is observe-only. Auto-arb (trade Magi and the opposite leg on Binance) is v3, and only after bridge costs and inventory are in the edge calc.
 
-Snapshot at plan time (2026-11-23), 50 HIVE sell:
+Snapshot (2026-11-23, indexer reserves, public Binance book mid, Altera `off` quote):
 
-| Venue | sats / HIVE |
+| | |
 |---|---|
-| Fair (HIVEUSDT/BTCUSDT) | 54.75 |
-| Magi `ly` | 56.52 (~+3.2%) |
-| Binance HIVEBTC last | 111, **empty book** — ignore |
-| Magi BTC pool | 0.0235 BTC / 1,526 HBD |
-| Magi BTC/HBD 24h | 4 swaps |
+| HBD/HIVE pool | 2,270.294 HBD / 61,375.943 HIVE |
+| BTC/HBD pool | 0.02350142 BTC / 1,526.257 HBD |
+| Fair | 56.10 sats/HIVE (HIVE mid 0.03520, BTC mid 62,744.78). HBD fair uses the $1 peg already in `QuoteResponse`, about 1,594 sats/HBD |
+| Magi 50 HIVE sell | 2,836 sats, 56.72 sats/HIVE, 24 bps structural fee, about +110 bps vs fair |
+| Magi 1 HIVE sell | 52 sats. The integer fee floor dominates, about −730 bps vs fair |
+| Magi 1 HBD sell | 1,537 sats, about −360 bps vs the $1 peg |
 
-`hive:sbi-tokens` already fills this pool both ways. Assume the edge is competed and size-capped.
+The earlier +3.2% reading is stale. On these reserves a 50 HIVE sell is about +110 bps versus fair, which would clear a 50 bps edge if Binance Convert is near fair. Convert was not quoted for this snapshot; the HIVEBTC spot book stays unused. A 1 HIVE sell does not. HBD sells on this pool lose to the peg. `hive:sbi-tokens` already fills the pool both ways. Assume the edge is competed and size-capped.
 
 ---
 
 ## Config
 
-Extend `ExchangeProviderConfig` / `magi_vsc` (names indicative):
+Extend `ExchangeProviderConfig` / `magi` (names indicative):
 
 ```yaml
 exchange_config:
   default_exchange: binance          # customer queue still Binance-keyed
-  magi_vsc:
+  magi:
     exchange_mode: mainnet
     hive_accounts:
-      - v4vapp.magi                  # signer / MagiSats inventory
+      - v4vapp.exc                   # signer / MagiSats inventory
     mainnet:
       no_trade: true                 # quotes only until go-live
     router:
@@ -320,27 +345,31 @@ exchange_config:
 
 ### Phase 0 — Accounts and config
 
-- Create Hive account `v4vapp.magi` (prod) and `devmagi.v4vapp` (dev). Store active + memo keys in config like other exchange accounts.
+- Create Hive account `v4vapp.exc` (prod). Store active + memo keys in config like other exchange accounts. Do not create `devexc.v4vapp` or `devmagi.v4vapp`.
 - Fund a small HBD/HIVE float from treasury.
-- Add `role: exchange`, `watch_users`, `magi_vsc.hive_accounts: [v4vapp.magi]`.
+- Add `role: exchange`, `watch_users`, `magi.hive_accounts: [v4vapp.exc]`.
 - Keep `no_trade: true`.
-- MagiAdapter `get_balance` reads `v4vapp.magi` / `devmagi.v4vapp` for BTC and Hive.
+- MagiAdapter `get_balance` reads `v4vapp.exc` for BTC and Hive. Dev quotes do not need a signer.
 
-**Done when:** the account exists on Hive, keys are in config, admin balance sheet can show MagiSats and HIVE/HBD on it; no swaps sent.
+**Done when:** `v4vapp.exc` exists on Hive, keys are in config, admin balance sheet can show MagiSats and HIVE/HBD on it; no swaps sent.
 
 ### Phase 1 — Quote engine (no broadcast)
 
 New module `src/v4vapp_backend_v2/conversion/magi_quote.py`:
 
 - Fetch `dex_pool_registry` + `dex_pool_liquidity` (indexer), cache ~5s.
-- `Ph` / `oV` / `ly` / two-hop `iV` ported with Decimal/int, covered by tests against Altera constants.
-- `preview_swap(asset_in, asset_out, amount_in, slippage_bps) -> VenueQuote`.
-- Binance Convert `send_quote_request` already exists; wrap it as `VenueQuote`.
-- Fair USDT triangle from `AllQuotes`.
+- `calculate_swap` / two-hop ported with integer math from current Altera `swapCalc.ts` (rule `off`), covered by the golden fixture above.
+- `preview_swap(asset_in, asset_out, amount_in, slippage_bps) -> VenueQuote`. An abort still returns the quote, with the reason in `raw["abort"]`, so the arb log can store it. Unknown pairs return empty.
+- Binance Convert amounts wrap through `sell_venue_quote` (venue `binance_convert`). The script does not call Convert; that quote is accepted nowhere in this phase.
+- Fair USDT triangle is `fair_sell_quote`. HBD uses the $1 peg from `QuoteResponse`, not the Hive internal market.
 
-Tests: golden vectors for 1/10/50/100 HIVE and 1/10/50 HBD; abort on 50% reserve and fee > 3%; HIVE routes via HBD; HBD is one hop.
+Tests: golden vectors for 1/10/50/100 HIVE and 1/10/50 HBD against the 2026-11-23 reserves; abort on 50% reserve and on summed fee > 3%; HIVE routes via HBD; HBD is one hop. The Altera fixture is a separate unit test, not those live reserves.
 
-**Done when:** a script prints Magi vs Binance vs fair for a size, no chain writes. Put it next to `scripts/test_binance_swap.py` as `scripts/test_magi_swap_quote.py`.
+**Done when:** `scripts/test_magi_swap_quote.py` prints Magi vs the public USDT fair value for a size, no chain writes.
+
+**Status:** quote module, tests, and the read-only script are in the tree. `MagiAdapter` still does not price or trade. `v4vapp.exc` is not created.
+
+**Shadow telemetry:** `magi_shadow.py` runs on the live Binance rebalance decision, including pending rows under the Binance minimum (the HIVE floor is the exchange minimum, currently 50). Each decision writes one `Magi shadow` status line with `notification: false` and a `magi_shadow_detail` object: Magi sats per base, fee, hops, abort, pool reserves, USDT fair value, the Binance fill when one was sent, and a `would_take_magi` label using the planned 50 bps / 300 bps / 10% gates. Positive edge means Magi is the better price for that side. It does not broadcast, does not request a Convert quote, and does not change the Binance decision. `no_trade` stays true.
 
 ### Phase 2 — MagiAdapter protocol
 
@@ -348,7 +377,7 @@ Tests: golden vectors for 1/10/50/100 HIVE and 1/10/50 HBD; abort on 50% reserve
 - `market_sell` / `market_buy` still raise while `no_trade`, **or** they run quote + abort checks and return without sending (for unit tests).
 - Tests extend `tests/conversions/test_magi_adapter.py`.
 
-**Done when:** `get_exchange_adapter("magi_vsc")` can price and size-check HIVE/BTC and HBD/BTC.
+**Done when:** `get_exchange_adapter("magi")` can price and size-check HIVE/BTC and HBD/BTC.
 
 ### Phase 3 — Execute and confirm
 
@@ -356,7 +385,7 @@ Tests: golden vectors for 1/10/50/100 HIVE and 1/10/50 HBD; abort on 50% reserve
 - Payload `action=execute`, JSON-string payload, `transfer.allow` intent in Hive amount units (`15.000` not `15000`).
 - `ExchangeOrderResult` from fill `amount_in` / `amount_out`.
 - Guard `process_magi_btc_transfer_event` so DEX credits to the exchange account are ignored.
-- Manual live test: 1–5 HBD sell on **dev** exchange account, `nobroadcast` then tiny mainnet with `no_trade: false` on that env only.
+- Manual live test: 1–5 HBD sell from `devexc`, `nobroadcast` then a tiny mainnet broadcast with `no_trade: false` on that env only. Prod signer is `v4vapp.exc`.
 
 **Done when:** one live fill is in `rebalance_results`, `EXCHANGE_CONVERSION` on `MagiSwap`, MagiSats on `hive:<exchange>`, server Magi balance unchanged.
 
@@ -399,16 +428,16 @@ Out of v1.
 
 | File | Change |
 |---|---|
-| `conversion/magi_quote.py` | **New.** Indexer fetch, `ly`, routing, `VenueQuote` |
+| `conversion/magi_quote.py` | **New.** Indexer fetch, `calculate_swap`, routing, `VenueQuote` |
 | `conversion/magi_adapter.py` | Full protocol; balances from exchange Hive account |
-| `conversion/exchange_protocol.py` | Factory already has `magi_vsc`; maybe `preview_swap` on protocol if Binance gets one too |
+| `conversion/exchange_protocol.py` | Factory already has `magi`; maybe `preview_swap` on protocol if Binance gets one too |
 | `conversion/exchange_process.py` | Router inside execute path; quote log |
 | `conversion/exchange_rebalance.py` | Pass size into router; do not change pending key in v1 |
 | `hive_models/magi_json_data.py` | Optional beneficiary/ref_bps; helper to dump execute payload as JSON string |
 | `process/hive_notification.py` | `send_magi_swap_custom_json` |
 | `process/process_magi.py` | Ignore DEX fills / execute calls for inbound |
 | `magi/magi_balances.py` | GraphQL for `dex_pool_*` (or a sibling `magi_dex.py`) |
-| `config/setup.py` | `magi_vsc.router` fields |
+| `config/setup.py` | `magi.router` fields |
 | `config/*.yaml` | `hive_accounts`, `no_trade`, router knobs |
 | `scripts/test_magi_swap_quote.py` | **New.** Live quote compare |
 | `tests/conversions/test_magi_quote.py` | **New.** AMM vectors |
@@ -425,14 +454,14 @@ Out of v1.
 - Never set `destination_chain: BTC` on the rebalance path.
 - Magi send failure does not auto-fire Binance.
 - Hive `active` key for the exchange account only; server keys stay on customer Magi transfers.
-- BTC pool at plan time is ~0.023 BTC. A 100 HBD sell already moves the price ~12%. Treat Magi as a small-ticket venue.
-- `sbi-tokens` and others arb this pool. Our quote can go stale between `ly` and Hive inclusion (~3s+ Magi consensus). `min_amount_out` is the protection; a fail is logged, pending stays.
+- BTC pool at plan time is 0.0235 BTC / 1,526 HBD. A 100 HBD sell is about 6% of the HBD side (143,728 sats out). Treat Magi as a small-ticket venue.
+- `sbi-tokens` and others arb this pool. Our quote can go stale between `calculate_swap` and Hive inclusion (~3s+ Magi consensus). `min_amount_out` is the protection; a fail is logged, pending stays.
 
 ---
 
 ## Tests
 
-- `ly` integer vectors vs the formula above (gross, baseFee, clpFee, expected, minOut).
+- `calculate_swap` integer vectors vs the Altera fixture (gross, protocol fee, clp fee, expected, minOut, structural fee bps).
 - Routing: HIVE-BTC uses two pools; HBD-BTC one; unknown pair returns empty.
 - Abort: `dx*2 > X`; fee bps > 300.
 - Adapter: HIVE/HBD from Hive account mock; BTC from Magi balance mock; `server_id` is not used.
@@ -459,14 +488,15 @@ Live: quote script on mainnet indexer (read-only). One tiny HBD sell on the dedi
 - L1 Bitcoin unwrap (`destination_chain: BTC`).
 - ETH/USDC/lassecash pools.
 - Changing customer `#magisats` / Keepsats flows.
-- Switching `default_exchange` to `magi_vsc`.
+- Switching `default_exchange` to `magi`.
 - Netting buy vs sell ([net_rebalance_plan.md](net_rebalance_plan.md)) — independent; do not block on it.
 
 ---
 
 ## Decisions
 
-1. **Magi exchange account:** new `v4vapp.exc` (prod) and but probably no `devexc.v4vapp` (dev). Not `v4vapp.vsc`.
+1. **Magi exchange account:** new Hive account `v4vapp.exc` in production. Not `v4vapp.vsc` and not `v4vapp.magi`.
+2. **Dev signer:** do not create `devexc.v4vapp`. v1 dev work quotes mainnet pools and does not sign. A later dev fill reuses existing `devexc`.
 
 ## Open choices
 
