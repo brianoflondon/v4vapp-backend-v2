@@ -31,6 +31,21 @@ from v4vapp_backend_v2.conversion.exchange_rebalance import (
 )
 
 
+@pytest.fixture(autouse=True)
+def magi_shadow_calls(monkeypatch):
+    """Keep rebalance tests off the Magi indexer and the public book."""
+    calls = []
+
+    async def fake(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.conversion.exchange_rebalance.log_magi_rebalance_shadow",
+        fake,
+    )
+    return calls
+
+
 class TestRebalanceDirection:
     """Tests for RebalanceDirection enum."""
 
@@ -559,7 +574,9 @@ class TestAddPendingRebalance:
     """Tests for add_pending_rebalance function."""
 
     @pytest.mark.asyncio
-    async def test_add_pending_below_threshold(self, mock_exchange, mock_pending_collection):
+    async def test_add_pending_below_threshold(
+        self, mock_exchange, mock_pending_collection, magi_shadow_calls
+    ):
         """Test adding pending amount below threshold."""
         mock_exchange.set_minimums(
             min_qty=Decimal("100"),
@@ -580,9 +597,14 @@ class TestAddPendingRebalance:
         assert "below minimum" in result.reason.lower() or "pending" in result.reason.lower()
         # Should NOT have executed a trade
         assert len(mock_exchange.sell_calls) == 0
+        assert magi_shadow_calls[0]["stage"] == "below_minimum"
+        assert magi_shadow_calls[0]["qty"] == Decimal("50")
+        assert magi_shadow_calls[0]["binance_order"] is None
 
     @pytest.mark.asyncio
-    async def test_add_pending_exceeds_threshold(self, mock_exchange, mock_pending_collection):
+    async def test_add_pending_exceeds_threshold(
+        self, mock_exchange, mock_pending_collection, magi_shadow_calls
+    ):
         """Test adding pending amount that exceeds threshold triggers trade."""
         mock_exchange.set_minimums(
             min_qty=Decimal("1"),
@@ -602,9 +624,13 @@ class TestAddPendingRebalance:
         assert result.executed is True
         assert result.order_result is not None
         assert len(mock_exchange.sell_calls) == 1
+        assert magi_shadow_calls[0]["stage"] == "binance_send"
+        assert magi_shadow_calls[0]["binance_order"] is result.order_result
 
     @pytest.mark.asyncio
-    async def test_add_pending_with_exchange_error(self, mock_exchange, mock_pending_collection):
+    async def test_add_pending_with_exchange_error(
+        self, mock_exchange, mock_pending_collection, magi_shadow_calls
+    ):
         """Test handling exchange error during trade execution."""
         mock_exchange.set_minimums(
             min_qty=Decimal("100"),
@@ -630,6 +656,8 @@ class TestAddPendingRebalance:
         assert result.executed is False
         assert result.error is not None
         assert "connection" in result.error.lower()
+        assert magi_shadow_calls[0]["stage"] == "binance_rejected"
+        assert "Connection lost" in magi_shadow_calls[0]["binance_error"]
 
     @pytest.mark.asyncio
     async def test_add_pending_with_below_minimum_error(

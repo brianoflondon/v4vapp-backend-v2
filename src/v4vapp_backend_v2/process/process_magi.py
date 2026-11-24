@@ -34,7 +34,7 @@ from v4vapp_backend_v2.models.payment_models import Payment
 from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
 
 
-def magi_exchange_adapter(provider_name: str = "magi_vsc") -> BaseExchangeAdapter:
+def magi_exchange_adapter(provider_name: str = "magi") -> BaseExchangeAdapter:
     """
     Helper function to get the exchange adapter for Magi VSC transfers.
 
@@ -43,7 +43,7 @@ def magi_exchange_adapter(provider_name: str = "magi_vsc") -> BaseExchangeAdapte
     during initialization.
 
     Args:
-        provider_name: The name of the exchange provider to retrieve (default: "magi_vsc").
+        provider_name: The name of the exchange provider to retrieve (default: "magi").
 
     Returns:
         The initialized exchange adapter instance, or None if initialization fails.

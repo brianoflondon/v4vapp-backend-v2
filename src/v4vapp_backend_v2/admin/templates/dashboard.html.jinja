@@ -80,6 +80,13 @@
                             Loading exchange balances&hellip;
                         </div>
                     </div>
+                    <div class="col-md-4" id="magi-exchange-section">
+                        <h6 class="text-muted">Magi</h6>
+                        <div class="d-flex align-items-center text-muted small">
+                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                            Loading Magi balances&hellip;
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -274,6 +281,29 @@
             + '</span><br><strong>' + escHtml(info.treasury_dash || 'N/A') + '</strong> DASH</div>'
             + '</div>';
         const section = document.getElementById('exchange-balances-section');
+        if (section) section.innerHTML = html;
+        renderMagiExchange(info);
+    }
+
+    function renderMagiExchange(info) {
+        const magiRows = Array.isArray(info.magi) ? info.magi : [];
+        let html = '<h6 class="text-muted">Magi</h6><div class="small">';
+        if (magiRows.length === 0) {
+            html += '<div class="text-muted">No Magi exchange account configured.</div>';
+        }
+        for (const row of magiRows) {
+            html += '<div><span class="text-muted">Magi'
+                + (row.account ? ' (' + escHtml(row.account) + ')' : '')
+                + '</span></div>';
+            if (row.error) {
+                html += '<div class="text-danger small mb-1">' + escHtml(String(row.error)) + '</div>';
+            }
+            html += '<div><span class="text-muted">Magi SATS</span> <strong>' + escHtml(row.SATS || 'N/A') + '</strong></div>'
+                + '<div><span class="text-muted">Magi HIVE</span> <strong>' + escHtml(row.HIVE || 'N/A') + '</strong></div>'
+                + '<div><span class="text-muted">Magi HBD</span> <strong>' + escHtml(row.HBD || 'N/A') + '</strong></div>';
+        }
+        html += '</div>';
+        const section = document.getElementById('magi-exchange-section');
         if (section) section.innerHTML = html;
     }
 
@@ -548,6 +578,12 @@
             if (section) {
                 section.innerHTML =
                     '<h6 class="text-muted">Exchange / Dash</h6>'
+                    + '<div class="text-danger small">Failed to load: ' + escHtml(String(err)) + '</div>';
+            }
+            const magiSection = document.getElementById('magi-exchange-section');
+            if (magiSection) {
+                magiSection.innerHTML =
+                    '<h6 class="text-muted">Magi</h6>'
                     + '<div class="text-danger small">Failed to load: ' + escHtml(String(err)) + '</div>';
             }
         });
