@@ -175,14 +175,20 @@ def test_exchange_config_loads_magi_account_and_legacy_key():
 
 
 def test_dev_configs_point_magi_at_v4vapp_exc():
+    """Local dev configs name the Magi account. Those files are gitignored."""
     from v4vapp_backend_v2.config.setup import ExchangeConfig
 
-    for name in ("devhive.config.yaml", "devdocker.config.yaml", "devlegion.config.yaml"):
+    names = ("devhive.config.yaml", "devdocker.config.yaml", "devlegion.config.yaml")
+    present = [name for name in names if Path("config", name).is_file()]
+    if not present:
+        pytest.skip("local dev configs are not in this checkout")
+
+    for name in present:
         raw = safe_load(Path("config", name).read_text())
         cfg = ExchangeConfig.model_validate(raw["exchange_config"])
-        assert cfg.magi.hive_accounts == ["v4vapp.exc"]
-        assert cfg.magi.exchange_mode.value == "mainnet"
-        assert cfg.magi.mainnet.no_trade is True
+        assert cfg.magi.hive_accounts == ["v4vapp.exc"], name
+        assert cfg.magi.exchange_mode.value == "mainnet", name
+        assert cfg.magi.mainnet.no_trade is True, name
 
 
 def test_exchange_config_all_hive_exchange_accounts():
